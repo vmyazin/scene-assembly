@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { downloadRemoteMedia, sniffMediaMime } from '../lib/media-download';
+import { downloadRemoteMedia, remoteVideoBlob, sniffMediaMime } from '../lib/media-download';
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 const JPEG_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0]);
 const HTML_BYTES = new TextEncoder().encode('<!doctype html><title>nope</title>');
+const MP4_BYTES = new Uint8Array([0, 0, 0, 0x18, ...new TextEncoder().encode('ftypisom'), 1, 2, 3, 4]);
 
 const RESULT_URL = 'https://tempfile.example.com/result';
 
@@ -147,5 +148,68 @@ describe('downloadRemoteMedia', () => {
     });
     // A failed cross-origin fetch must not fall back to an anchor navigation.
     expect(clickSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('remoteVideoBlob', () => {
+  it('reads the CDN directly when it answers the browser', async () => {
+    const fetchMock = vi.fn(async () => response(MP4_BYTES, 'video/mp4'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const blob = await remoteVideoBlob(RESULT_URL);
+
+    expect(blob.type).toBe('video/mp4');
+    expect(blob.size).toBe(MP4_BYTES.byteLength);
+    // No server bandwidth spent on a CDN that was willing to talk.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks the app for the bytes when the CDN refuses the browser', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === RESULT_URL) throw new TypeError('Failed to fetch');
+      return response(MP4_BYTES, 'video/mp4');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const blob = await remoteVideoBlob(RESULT_URL);
+
+    expect(blob.size).toBe(MP4_BYTES.byteLength);
+    const [endpoint, init] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
+    expect(endpoint).toBe('/api/download-video');
+    expect(init.method).toBe('POST');
+    // The provider URL travels in the body, never in a query string.
+    const fields = Object.fromEntries(new URLSearchParams(String(init.body)));
+    expect(fields).toEqual({ url: RESULT_URL, filenameBase: 'video' });
+  });
+
+  it('types the proxied bytes by what they are, not by a generic label', async () => {
+    // A blob typed application/octet-stream is one no <video> element will play,
+    // which is the difference between a readable frame and a decode error.
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === RESULT_URL) throw new TypeError('Failed to fetch');
+      return response(MP4_BYTES, 'application/octet-stream');
+    }));
+
+    expect((await remoteVideoBlob(RESULT_URL)).type).toBe('video/mp4');
+  });
+
+  it('refuses a document the proxy hands back in place of a clip', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(HTML_BYTES, 'application/octet-stream')));
+
+    await expect(remoteVideoBlob(RESULT_URL)).rejects.toThrow();
+  });
+
+  it('does not spend server bandwidth on a request the caller abandoned', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn(async () => {
+      controller.abort();
+      throw new DOMException('Download aborted', 'AbortError');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const caught = await remoteVideoBlob(RESULT_URL, controller.signal).catch((error) => error);
+
+    expect((caught as DOMException).name).toBe('AbortError');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

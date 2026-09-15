@@ -31,6 +31,12 @@ const OPAQUE_MIMES = new Set(['', 'application/octet-stream', 'binary/octet-stre
 /** Server-side image fetch, used when the CDN will not answer the browser. */
 const IMAGE_PROXY_ENDPOINT = '/api/fetch-image';
 const VIDEO_DOWNLOAD_ENDPOINT = '/api/download-video';
+/**
+ * The video route names its response for a save dialog, so it insists on a
+ * filename even when the caller only wants the bytes. Reads that hand the body
+ * to JS never surface this name.
+ */
+const PROXY_READ_FILENAME_BASE = 'video';
 
 export class RemoteMediaTooLarge extends Error {
   constructor() {
@@ -279,6 +285,64 @@ export async function downloadRemoteMedia(args: {
 }
 
 /**
+ * The request the video route accepts, shared by its form and fetch callers.
+ * Empty fields are dropped rather than sent blank, because the route reads a
+ * missing hint and an empty one differently.
+ */
+function videoProxyFields(args: { url: string; filenameBase: string; mimeType?: string }) {
+  const fields: Record<string, string> = {
+    url: args.url,
+    filenameBase: args.filenameBase,
+  };
+  if (args.mimeType) fields.mimeType = args.mimeType;
+  return fields;
+}
+
+/**
+ * Video bytes in the browser's own hands, whatever the CDN thinks of the page.
+ *
+ * The direct fetch is what normally runs and costs the app nothing. When it
+ * fails — no CORS headers, hotlink protection, a bot-challenge page in place of
+ * the file — the same streaming route the download button falls back to is
+ * asked for the bytes instead. `fetch` reads that response as a body no matter
+ * what its attachment disposition says, so one route serves both callers.
+ *
+ * The blob comes back typed by what the bytes actually are: a store that labels
+ * every object `application/octet-stream` would otherwise hand back a blob that
+ * no `<video>` element will play.
+ */
+export async function remoteVideoBlob(url: string, signal?: AbortSignal): Promise<Blob> {
+  const abortSignal = signal ?? new AbortController().signal;
+
+  try {
+    const response = await fetch(url, { signal });
+    if (!response.ok) {
+      void response.body?.cancel();
+      throw new Error('Remote video request failed');
+    }
+    return await verifiedMediaBlob(response, 'video', undefined, abortSignal);
+  } catch (error) {
+    // An abort is the caller's decision and a too-large file is a settled
+    // answer; neither is worth spending server bandwidth to re-litigate.
+    if (isAbort(error) || error instanceof RemoteMediaTooLarge) throw error;
+  }
+
+  const proxied = await fetch(VIDEO_DOWNLOAD_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(
+      videoProxyFields({ url, filenameBase: PROXY_READ_FILENAME_BASE })
+    ),
+    signal,
+  });
+  if (!proxied.ok) {
+    void proxied.body?.cancel();
+    throw new Error('Proxied video request failed');
+  }
+  return verifiedMediaBlob(proxied, 'video', undefined, abortSignal);
+}
+
+/**
  * Native form submission lets the browser stream a Content-Disposition response
  * directly to disk instead of buffering a potentially large video in JS. The
  * hidden frame contains any JSON error response, so a failed proxy cannot take
@@ -301,12 +365,7 @@ function submitProxiedVideoDownload(args: {
   form.target = frameName;
   form.hidden = true;
 
-  const fields: Record<string, string | undefined> = {
-    url: args.url,
-    filenameBase: args.filenameBase,
-    mimeType: args.mimeType,
-  };
-  for (const [name, value] of Object.entries(fields)) {
+  for (const [name, value] of Object.entries(videoProxyFields(args))) {
     if (!value) continue;
     const input = document.createElement('input');
     input.type = 'hidden';

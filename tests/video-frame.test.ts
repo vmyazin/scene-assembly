@@ -144,6 +144,8 @@ describe('seekToLastFrame', () => {
 });
 
 describe('extractLastFrame guards', () => {
+  const CLIP_URL = 'https://v3.fal.media/files/tiger/clip.mp4';
+
   afterEach(() => vi.unstubAllGlobals());
 
   it('refuses a URL it would not download', async () => {
@@ -157,17 +159,32 @@ describe('extractLastFrame guards', () => {
   });
 
   it.each([
-    ['a failed response', new Response('nope', { status: 404 })],
+    ['a failed response', () => new Response('nope', { status: 404 })],
     [
       'a non-video body',
-      new Response('<html></html>', { status: 200, headers: { 'Content-Type': 'text/html' } }),
+      () => new Response('<html></html>', { status: 200, headers: { 'Content-Type': 'text/html' } }),
     ],
-  ])('refuses %s', async (_label, response) => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
+  ])('refuses %s from both the CDN and the app', async (_label, makeResponse) => {
+    vi.stubGlobal('fetch', vi.fn(async () => makeResponse()));
 
-    await expect(extractLastFrame('https://v3.fal.media/files/tiger/clip.mp4')).rejects.toThrow(
-      FRAME_EXTRACTION_ERROR
-    );
+    await expect(extractLastFrame(CLIP_URL)).rejects.toThrow(FRAME_EXTRACTION_ERROR);
+  });
+
+  /**
+   * The bug this covers: a cross-origin clip with no CORS headers plays in the
+   * preview element and cannot be read by `fetch`, so the button failed only on
+   * the deployed origin. The app's own route has to be asked for the bytes.
+   */
+  it('falls back to the app route when the CDN refuses the browser', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === CLIP_URL) throw new TypeError('Failed to fetch');
+      // Empty, so the decode this cannot do in jsdom is never reached.
+      return new Response('', { status: 200, headers: { 'Content-Type': 'video/mp4' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(extractLastFrame(CLIP_URL)).rejects.toThrow(FRAME_EXTRACTION_ERROR);
+    expect(String(fetchMock.mock.calls[1][0])).toBe('/api/download-video');
   });
 });
 

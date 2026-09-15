@@ -1,8 +1,7 @@
 import {
-  boundedMediaBlob,
   isDownloadableMediaUrl,
   MAX_REMOTE_VIDEO_BYTES,
-  normalizedMimeType,
+  remoteVideoBlob,
 } from '@/lib/media-download';
 
 /**
@@ -172,20 +171,32 @@ export async function extractLastFrameFromBlob(
   }
 }
 
+/**
+ * Read the final frame of a clip that lives on a provider CDN.
+ *
+ * The bytes come through `remoteVideoBlob`, which falls back to the app's own
+ * streaming route when the CDN refuses the browser. Without that fallback this
+ * worked on a local checkout and failed on the deployed origin against the very
+ * same clip: a `<video>` element plays a cross-origin file with no CORS headers
+ * at all, so the preview above the button kept playing while the fetch behind it
+ * could not read a byte.
+ */
 export async function extractLastFrame(
   url: string,
   options: { signal?: AbortSignal; epsilonSeconds?: number } = {}
 ): Promise<Blob> {
   if (!isDownloadableMediaUrl(url)) throw new Error(FRAME_EXTRACTION_ERROR);
 
-  const signal = options.signal ?? new AbortController().signal;
-  const response = await fetch(url, { signal });
-  if (!response.ok) throw new Error(FRAME_EXTRACTION_ERROR);
+  let blob: Blob;
+  try {
+    blob = await remoteVideoBlob(url, options.signal);
+  } catch (caught) {
+    // An abort is the caller cancelling and must stay distinguishable; every
+    // other transport failure reads the same to the person waiting on a frame.
+    if (caught instanceof DOMException && caught.name === 'AbortError') throw caught;
+    throw new Error(FRAME_EXTRACTION_ERROR);
+  }
 
-  const mimeType = normalizedMimeType(response.headers.get('Content-Type'));
-  if (!mimeType.startsWith('video/')) throw new Error(FRAME_EXTRACTION_ERROR);
-
-  const blob = await boundedMediaBlob(response, mimeType, signal, MAX_REMOTE_VIDEO_BYTES);
   return extractLastFrameFromBlob(blob, options);
 }
 
