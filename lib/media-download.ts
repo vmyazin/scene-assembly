@@ -101,6 +101,26 @@ export function isDownloadableMediaUrl(value: string) {
   }
 }
 
+/**
+ * Our own routes, named relatively or absolutely.
+ *
+ * A cloud clip is addressed as `/api/account/assets/<id>/content`, which
+ * `isDownloadableMediaUrl` rejects out of hand: it parses an absolute URL and a
+ * relative path has none to parse. Same-origin requests carry the session
+ * cookie and negotiate no CORS, so they are read directly and never proxied —
+ * the proxy is a different server identity, and the account gateway would
+ * answer it with a 401.
+ */
+export function isSameOriginMediaUrl(value: string) {
+  if (typeof window === 'undefined') return false;
+  try {
+    const url = new URL(value, window.location.href);
+    return url.origin === window.location.origin && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
 export async function boundedMediaBlob(
   response: Response,
   mimeType: string,
@@ -313,6 +333,7 @@ function videoProxyFields(args: { url: string; filenameBase: string; mimeType?: 
  */
 export async function remoteVideoBlob(url: string, signal?: AbortSignal): Promise<Blob> {
   const abortSignal = signal ?? new AbortController().signal;
+  const sameOrigin = isSameOriginMediaUrl(url);
 
   try {
     const response = await fetch(url, { signal });
@@ -323,8 +344,9 @@ export async function remoteVideoBlob(url: string, signal?: AbortSignal): Promis
     return await verifiedMediaBlob(response, 'video', undefined, abortSignal);
   } catch (error) {
     // An abort is the caller's decision and a too-large file is a settled
-    // answer; neither is worth spending server bandwidth to re-litigate.
-    if (isAbort(error) || error instanceof RemoteMediaTooLarge) throw error;
+    // answer; neither is worth spending server bandwidth to re-litigate. Our
+    // own route has no CORS to route around, so its failure is the answer.
+    if (isAbort(error) || error instanceof RemoteMediaTooLarge || sameOrigin) throw error;
   }
 
   const proxied = await fetch(VIDEO_DOWNLOAD_ENDPOINT, {

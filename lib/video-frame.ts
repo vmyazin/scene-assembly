@@ -1,5 +1,6 @@
 import {
   isDownloadableMediaUrl,
+  isSameOriginMediaUrl,
   MAX_REMOTE_VIDEO_BYTES,
   remoteVideoBlob,
 } from '@/lib/media-download';
@@ -172,20 +173,27 @@ export async function extractLastFrameFromBlob(
 }
 
 /**
- * Read the final frame of a clip that lives on a provider CDN.
+ * Read the final frame of a finished clip, wherever it is addressed.
  *
- * The bytes come through `remoteVideoBlob`, which falls back to the app's own
- * streaming route when the CDN refuses the browser. Without that fallback this
- * worked on a local checkout and failed on the deployed origin against the very
- * same clip: a `<video>` element plays a cross-origin file with no CORS headers
- * at all, so the preview above the button kept playing while the fetch behind it
- * could not read a byte.
+ * Two shapes of address reach here and both are legitimate: a provider CDN's
+ * absolute https URL, and the relative `/api/account/assets/<id>/content` that
+ * every cloud-library card passes. The relative one used to be refused before a
+ * single request was made — `isDownloadableMediaUrl` parses an absolute URL, so
+ * a path with no origin simply returned false — which is why "Save last frame"
+ * failed on every clip in the cloud library while the card's own preview played.
+ *
+ * The bytes then come through `remoteVideoBlob`, which falls back to the app's
+ * own streaming route when a CDN refuses the browser: a `<video>` element plays
+ * a cross-origin file with no CORS headers at all, so the preview above the
+ * button keeps playing while the fetch behind it cannot read a byte.
  */
 export async function extractLastFrame(
   url: string,
   options: { signal?: AbortSignal; epsilonSeconds?: number } = {}
 ): Promise<Blob> {
-  if (!isDownloadableMediaUrl(url)) throw new Error(FRAME_EXTRACTION_ERROR);
+  if (!isSameOriginMediaUrl(url) && !isDownloadableMediaUrl(url)) {
+    throw new Error(FRAME_EXTRACTION_ERROR);
+  }
 
   let blob: Blob;
   try {

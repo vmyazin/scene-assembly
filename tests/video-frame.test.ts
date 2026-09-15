@@ -145,6 +145,7 @@ describe('seekToLastFrame', () => {
 
 describe('extractLastFrame guards', () => {
   const CLIP_URL = 'https://v3.fal.media/files/tiger/clip.mp4';
+  const CLOUD_PATH = '/api/account/assets/asset-1/content';
 
   afterEach(() => vi.unstubAllGlobals());
 
@@ -168,6 +169,36 @@ describe('extractLastFrame guards', () => {
     vi.stubGlobal('fetch', vi.fn(async () => makeResponse()));
 
     await expect(extractLastFrame(CLIP_URL)).rejects.toThrow(FRAME_EXTRACTION_ERROR);
+  });
+
+  /**
+   * The bug this covers: every cloud-library card addresses its clip by the
+   * relative `/api/account/assets/<id>/content`, and the downloadable-URL guard
+   * parses an absolute URL — so a path with no origin was refused before any
+   * request went out, and "Save last frame" failed on every cloud clip.
+   */
+  it('reads a cloud clip addressed by a relative app route', async () => {
+    const fetchMock = vi.fn(async () => new Response('', {
+      status: 200,
+      headers: { 'Content-Type': 'video/mp4' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    // Rejected at the decode, in jsdom, which is past the guard that used to
+    // refuse this address outright.
+    await expect(extractLastFrame(CLOUD_PATH)).rejects.toThrow(FRAME_EXTRACTION_ERROR);
+    const [requested] = fetchMock.mock.calls[0] as unknown as [string];
+    expect(String(requested)).toBe(CLOUD_PATH);
+  });
+
+  it('does not proxy its own route, which would arrive without the session', async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(extractLastFrame(CLOUD_PATH)).rejects.toThrow(FRAME_EXTRACTION_ERROR);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   /**
