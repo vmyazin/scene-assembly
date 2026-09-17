@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
@@ -88,6 +88,34 @@ export default function StudioHeader({
     void usePromptLibraryStore.persist.rehydrate();
   }, []);
 
+  /**
+   * Publish this header's height so panels below it can stick under it.
+   *
+   * The header is `sticky top-0`, so anything else that parks at the top of the
+   * viewport — the generation workspace's setup and prompt columns — has to
+   * start below its bottom edge. The number is measured rather than written
+   * down twice: the header sizes from its content, so it is 71px at one
+   * breakpoint and 75px at another, and a literal in the consumer would go
+   * quietly wrong the next time this row's padding or type changes. The CSS
+   * fallback in `globals.css` covers the first paint.
+   */
+  const headerRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const element = headerRef.current;
+    if (!element) return;
+    const publish = () => {
+      document.documentElement.style.setProperty(
+        '--app-header-height',
+        `${element.getBoundingClientRect().height}px`,
+      );
+    };
+    publish();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(publish);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
   const apiKey = useAppStore((s) => s.apiKey);
   const kieApiKey = useAppStore((s) => s.kieApiKey);
   const falApiKey = useAppStore((s) => s.falApiKey);
@@ -115,7 +143,7 @@ export default function StudioHeader({
   return (
     <>
       {/* Header — sticky, hairline border, backdrop blur (Linear/Vercel nav) */}
-      <header className="sticky top-0 z-50 shrink-0 border-b border-[var(--border)] bg-[hsl(var(--tint-hue)_38%_5%/0.72)] backdrop-blur-xl">
+      <header ref={headerRef} className="sticky top-0 z-50 shrink-0 border-b border-[var(--border)] bg-[hsl(var(--tint-hue)_38%_5%/0.72)] backdrop-blur-xl">
         <div
           className={`w-full px-6 py-3.5 sm:px-8 md:px-12 md:py-4 lg:px-16 ${
             fullBleed ? '' : `${columnWidth} mx-auto`

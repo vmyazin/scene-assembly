@@ -52,6 +52,17 @@
   --radius: 11px;
   --radius-sm: 8px;
 
+  /* Where a panel that sticks below the app header has to start. The header is
+     `sticky top-0`, so anything else parking at the top of the viewport has to
+     clear its height or it slides under the blur. The literal here is only a
+     first-paint fallback: `StudioHeader` measures itself and overwrites
+     --app-header-height, because the header sizes from its content and a hard
+     number here would drift silently the next time its padding or type changes.
+     --workspace-sticky-top adds the gutter so the stuck panel does not touch
+     the header's hairline. */
+  --app-header-height: 4.6875rem;
+  --workspace-sticky-top: calc(var(--app-header-height) + 0.875rem);
+
   /* Control density. Measured against manus.im, whose whole app runs on a
      14px UI face with 32/36px controls — our 16px text and ~44px controls
      read a full size-step larger than any tool in this category.
@@ -97,7 +108,13 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   position: relative;
-  overflow-x: hidden;
+  /* `clip`, never `hidden`. A `hidden` on one axis computes the other axis to
+     `auto`, which makes this element a scroll container — and every
+     `position: sticky` inside then measures itself against *that* box instead
+     of the viewport, so it never sticks. That is why the header, marked
+     `sticky top-0` since it was written, scrolled away like any other row.
+     `clip` refuses the overflow without creating the scrollport. */
+  overflow-x: clip;
 }
 
 /* Ambient atmosphere — a subtle static grid + a single soft top glow.

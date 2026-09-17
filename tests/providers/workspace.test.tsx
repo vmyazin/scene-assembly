@@ -60,7 +60,10 @@ describe('ProviderVideoWorkspace', () => {
 
     expect(promptSection).not.toBeNull();
     expect(resultSection).not.toBeNull();
-    expect(promptSection?.parentElement).toBe(resultSection?.parentElement);
+    // Same column, not the same parent: the prompt and its Generate button now
+    // sit inside the sticky scrim that results scroll under, so the column is
+    // the result section's parent and the prompt lives one level inside it.
+    expect(resultSection!.parentElement!.contains(promptSection!)).toBe(true);
     expect(
       promptSection!.compareDocumentPosition(resultSection!)
       & Node.DOCUMENT_POSITION_FOLLOWING

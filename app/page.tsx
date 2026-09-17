@@ -31,7 +31,11 @@ export const metadata: Metadata = {
  */
 export default function Home() {
   return (
-    <div className="relative min-h-screen w-full overflow-x-hidden">
+    /* `overflow-x-clip`, not `-hidden`: a hidden axis turns this wrapper into a
+       scroll container and silently disables every `position: sticky` inside it
+       — the header and the generation workspace's stuck columns all measure
+       against the viewport. Same reason as the rule on `body`. */
+    <div className="relative min-h-screen w-full overflow-x-clip">
       <Suspense fallback={null}>
         <Studio />
       </Suspense>

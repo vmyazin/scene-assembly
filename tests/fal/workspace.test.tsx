@@ -149,7 +149,10 @@ describe('FalGenerationWorkspace', () => {
 
     expect(promptSection).not.toBeNull();
     expect(jobsSection).not.toBeNull();
-    expect(promptSection?.parentElement).toBe(jobsSection?.parentElement);
+    // Same column, not the same parent: the prompt and its Generate button now
+    // sit inside the sticky scrim that jobs scroll under, so the column is the
+    // jobs section's parent and the prompt lives one level inside it.
+    expect(jobsSection!.parentElement!.contains(promptSection!)).toBe(true);
     expect(
       promptSection!.compareDocumentPosition(jobsSection!)
       & Node.DOCUMENT_POSITION_FOLLOWING

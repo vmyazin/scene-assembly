@@ -237,6 +237,13 @@
       "request": "launch",
       "command": "ACCOUNT_WORKER_PORT=8861 DEV_FAKE_GENERATION=1 npm run dev -- --port 3161",
       "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Sticky workspace columns smoke test",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "ACCOUNT_WORKER_PORT=8863 DEV_FAKE_GENERATION=1 npm run dev -- --port 3163",
+      "cwd": "${workspaceFolder}"
     }
   ]
 }
