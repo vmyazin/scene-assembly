@@ -30,6 +30,13 @@ export interface ResultActionsProps {
   onAddToTimeline?: () => void | Promise<void>;
   /** Tightens the row where it sits under a card rather than a full panel. */
   dense?: boolean;
+  /**
+   * Turn the row into a column once the enclosing `@container` is wide enough.
+   * For hosts that park these actions in a narrow side column beside the
+   * result instead of a full-width strip beneath it — side by side, two
+   * buttons sharing 13rem would each be a truncated sliver.
+   */
+  stack?: boolean;
 }
 
 type Action = 'reference' | 'first-frame' | 'timeline';
@@ -54,6 +61,7 @@ export default function ResultActions({
   onUseAsFirstFrame,
   onAddToTimeline,
   dense = false,
+  stack = false,
 }: ResultActionsProps) {
   const [pending, setPending] = useState<Action | null>(null);
   // Resolved bytes, keyed by source. Extraction is the expensive step, so using
@@ -119,11 +127,11 @@ export default function ResultActions({
   const size = dense ? 13 : 15;
   const buttonClass = `btn-secondary flex flex-1 items-center justify-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-50 ${
     dense ? 'px-2 py-1 text-xs' : 'py-2 text-xs'
-  }`;
+  }${stack ? ' @lg:w-full @lg:flex-none' : ''}`;
   const spinner = <Loader2 className="animate-spin motion-reduce:animate-none" size={size} aria-hidden="true" />;
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className={`flex flex-wrap gap-2${stack ? ' @lg:flex-col @lg:flex-nowrap' : ''}`}>
       <button
         type="button"
         onClick={() => void applyAsReference()}

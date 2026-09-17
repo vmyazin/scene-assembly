@@ -66,6 +66,21 @@ export const DEFAULT_MAX_RESULTS = 4;
 const FRAME_CLASS =
   'relative flex aspect-video items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--background-elevated)]';
 
+/**
+ * A loaded result stops pretending to be 16:9 once there is room beside it.
+ *
+ * The pending and empty frames keep `aspect-video`, because a fixed box is what
+ * stops the panel jumping while a job runs. A finished image has no such
+ * excuse: a portrait result letterboxed into 16:9 spent most of the card on
+ * empty bars, so here the frame shrinks to the picture and the actions take the
+ * width that was being wasted.
+ *
+ * Keyed off the panel's own width via `@container`, not the viewport: this card
+ * lives in a workspace column that is narrow on a wide screen, and a `md:`
+ * breakpoint would have split the card while the column was still too tight.
+ */
+const IMAGE_FRAME_CLASS = `${FRAME_CLASS} group/img @lg:aspect-auto @lg:h-auto @lg:w-fit @lg:max-w-full @lg:min-h-48 @lg:min-w-48`;
+
 export default function ResultStack({
   items,
   max = DEFAULT_MAX_RESULTS,
@@ -86,7 +101,7 @@ export default function ResultStack({
   const openItem = visible.find((item) => item.id === openId) ?? null;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="@container flex flex-col gap-3">
       {isGenerating && (
         <div className={FRAME_CLASS}>
           <div className="flex flex-col items-center gap-4">
@@ -108,9 +123,9 @@ export default function ResultStack({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.98 }}
             transition={{ duration: 0.2 }}
-            className="flex flex-col gap-2"
+            className="flex flex-col gap-2 @lg:flex-row @lg:items-start @lg:gap-3"
           >
-            <div className={`${FRAME_CLASS} group/img`}>
+            <div className={IMAGE_FRAME_CLASS}>
               {/* A failed image is left in place rather than dropped: a provider
                   URL can expire while the page is open, and removing a result
                   the user just generated reads as data loss. */}
@@ -118,7 +133,7 @@ export default function ResultStack({
                 src={item.src}
                 alt={index === 0 ? 'Generated' : `Generated, ${index + 1} of ${visible.length}`}
                 onClick={() => setOpenId(item.id)}
-                className="h-full w-full cursor-zoom-in object-contain"
+                className="h-full w-full cursor-zoom-in object-contain @lg:h-auto @lg:max-h-104 @lg:w-auto @lg:max-w-full"
               />
               <button
                 type="button"
@@ -134,30 +149,36 @@ export default function ResultStack({
                 </span>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => void onDownload(item)}
-              className="btn-secondary flex w-full items-center justify-center gap-2 py-2 text-sm"
-            >
-              {downloadingId === item.id ? (
-                <Loader2 className="animate-spin" size={16} />
-              ) : (
-                <Download size={16} />
-              )}
-              {downloadingId === item.id ? 'Preparing download…' : downloadLabel}
-            </button>
-            {/* The row that makes a result something other than a dead end.
-                Every image panel composes this component, so putting it here
-                rather than in each caller is what gives all three the same
-                handoffs at once. */}
-            <ResultActions
-              kind="image"
-              src={item.src}
-              filenameBase={filenameBase?.(item) ?? item.id}
-              referenceLimit={referenceLimit}
-              onUseAsFirstFrame={onUseAsFirstFrame}
-              dense
-            />
+            {/* Beneath the image on a narrow panel, beside it on a wide one —
+                one column either way, so the buttons keep their order and the
+                markup stays a single source. */}
+            <div className="flex flex-col gap-2 @lg:min-w-44 @lg:flex-1">
+              <button
+                type="button"
+                onClick={() => void onDownload(item)}
+                className="btn-secondary flex w-full items-center justify-center gap-2 py-2 text-sm"
+              >
+                {downloadingId === item.id ? (
+                  <Loader2 className="animate-spin" size={16} />
+                ) : (
+                  <Download size={16} />
+                )}
+                {downloadingId === item.id ? 'Preparing download…' : downloadLabel}
+              </button>
+              {/* The row that makes a result something other than a dead end.
+                  Every image panel composes this component, so putting it here
+                  rather than in each caller is what gives all three the same
+                  handoffs at once. */}
+              <ResultActions
+                kind="image"
+                src={item.src}
+                filenameBase={filenameBase?.(item) ?? item.id}
+                referenceLimit={referenceLimit}
+                onUseAsFirstFrame={onUseAsFirstFrame}
+                dense
+                stack
+              />
+            </div>
           </motion.div>
         ))}
       </AnimatePresence>
