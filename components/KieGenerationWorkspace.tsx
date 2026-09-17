@@ -159,7 +159,20 @@ export default function KieGenerationWorkspace({
     mediaType === 'image'
       ? matchingJobs.flatMap((job) =>
           job.state === 'success' && job.resultUrls[0]
-            ? [{ id: job.id, src: job.resultUrls[0] }]
+            ? [
+                {
+                  id: job.id,
+                  src: job.resultUrls[0],
+                  provider: 'kie',
+                  modelId: job.modelId,
+                  createdAt: job.createdAt,
+                  // `updatedAt` is the poll that saw it finish, so this is
+                  // submit-to-result including queue time. Kie reports no cost
+                  // per task — only a credit balance — so the footer omits it.
+                  startedAt: job.createdAt,
+                  finishedAt: job.updatedAt,
+                },
+              ]
             : []
         )
       : [];

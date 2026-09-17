@@ -552,7 +552,21 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
   // Latest generate call, so a queued retry re-runs the button's own path.
   const generateRef = useRef<() => void>(() => {});
 
+  /**
+   * When the run that is about to produce a result began.
+   *
+   * A ref set in `onMutate` rather than a duration measured inside
+   * `mutationFn`, so an auto-retry restamps it and the card reports the attempt
+   * that actually succeeded instead of the whole retry sequence. Unlike the two
+   * job panels there is nothing persisted to derive this from: a direct
+   * generation is one request, and the elapsed time is only knowable here.
+   */
+  const startedAtRef = useRef<number | undefined>(undefined);
+
   const generateMutation = useMutation({
+    onMutate: () => {
+      startedAtRef.current = Date.now();
+    },
     mutationFn: async (): Promise<{ dataUrl: string; ext: string; mimeType: string; usage?: EngineUsage; cost?: number }> => {
       const finalPrompt = featureImagePrompt(feature.id, prompt, images.length);
 
@@ -659,6 +673,12 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
           id: `result-${resultIdRef.current}`,
           src: result.dataUrl,
           mimeType: result.mimeType,
+          provider: activeEngine.id,
+          modelId: activeModelId,
+          cost: result.cost,
+          startedAt: startedAtRef.current,
+          finishedAt: Date.now(),
+          createdAt: Date.now(),
         },
         // Kept whole rather than sliced here: ResultStack owns the display cap,
         // and the library holds everything regardless.

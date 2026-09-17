@@ -6,6 +6,7 @@ import { Download, Loader2, Maximize2 } from 'lucide-react';
 
 import ImageLightbox from '@/components/ImageLightbox';
 import ResultActions from '@/components/ResultActions';
+import ResultMeta from '@/components/ResultMeta';
 
 /**
  * Generated images, newest on top, instead of one that each job overwrites.
@@ -28,6 +29,17 @@ export interface ResultStackItem {
   mimeType?: string;
   /** Model name, shown per card where the panel tracks one. */
   label?: string;
+  /**
+   * What this result is, for the footer under its actions. Every field is
+   * optional because the three panels know different amounts — see `ResultMeta`
+   * on why a fact is dropped rather than blanked.
+   */
+  provider?: string;
+  modelId?: string;
+  cost?: number;
+  startedAt?: number;
+  finishedAt?: number;
+  createdAt?: number;
 }
 
 interface ResultStackProps {
@@ -96,6 +108,9 @@ export default function ResultStack({
   onUseAsFirstFrame,
 }: ResultStackProps) {
   const [openId, setOpenId] = useState<string | null>(null);
+  // Read off the decoded image rather than asked of the caller: it is the one
+  // fact none of the three panels record, and the browser knows it for free.
+  const [sizes, setSizes] = useState<Record<string, { width: number; height: number }>>({});
 
   const visible = items.slice(0, max);
   const openItem = visible.find((item) => item.id === openId) ?? null;
@@ -133,6 +148,16 @@ export default function ResultStack({
                 src={item.src}
                 alt={index === 0 ? 'Generated' : `Generated, ${index + 1} of ${visible.length}`}
                 onClick={() => setOpenId(item.id)}
+                onLoad={(event) => {
+                  const { naturalWidth, naturalHeight } = event.currentTarget;
+                  if (!naturalWidth || !naturalHeight) return;
+                  setSizes((current) =>
+                    current[item.id]?.width === naturalWidth &&
+                    current[item.id]?.height === naturalHeight
+                      ? current
+                      : { ...current, [item.id]: { width: naturalWidth, height: naturalHeight } }
+                  );
+                }}
                 className="h-full w-full cursor-zoom-in object-contain @lg:h-auto @lg:max-h-104 @lg:w-auto @lg:max-w-full"
               />
               <button
@@ -152,7 +177,7 @@ export default function ResultStack({
             {/* Beneath the image on a narrow panel, beside it on a wide one —
                 one column either way, so the buttons keep their order and the
                 markup stays a single source. */}
-            <div className="flex flex-col gap-2 @lg:min-w-44 @lg:flex-1">
+            <div className="flex flex-col gap-2 @lg:min-w-44 @lg:flex-1 @lg:self-stretch">
               <button
                 type="button"
                 onClick={() => void onDownload(item)}
@@ -177,6 +202,22 @@ export default function ResultStack({
                 onUseAsFirstFrame={onUseAsFirstFrame}
                 dense
                 stack
+              />
+              {/* Pinned to the foot of the column — `@lg:mt-auto` against the
+                  stretched height — so it lines up with the bottom of the
+                  picture it describes instead of floating under the buttons.
+                  Below the threshold the column is not stretched and it simply
+                  follows them. */}
+              <ResultMeta
+                provider={item.provider}
+                modelId={item.modelId}
+                cost={item.cost}
+                startedAt={item.startedAt}
+                finishedAt={item.finishedAt}
+                createdAt={item.createdAt}
+                width={sizes[item.id]?.width}
+                height={sizes[item.id]?.height}
+                className="@lg:mt-auto"
               />
             </div>
           </motion.div>
