@@ -20,7 +20,7 @@ import {
   geminiGenerateVideo,
   geminiPollVideoOperation,
 } from '../../lib/engines/gemini';
-import { geminiVideoDuration, resolveGeminiVideoModel } from '../../lib/engines/gemini-video-catalog';
+import { geminiVideoDuration, geminiVideoDurationOptions, resolveGeminiVideoModel } from '../../lib/engines/gemini-video-catalog';
 
 const VIDEO_URI = 'https://generativelanguage.googleapis.com/v1beta/files/abc:download?alt=media';
 
@@ -36,6 +36,8 @@ describe('gemini video catalog', () => {
     expect(geminiVideoDuration(model, 4, '720p')).toBe(4);
     expect(geminiVideoDuration(model, 4, '1080p')).toBe(8);
     expect(geminiVideoDuration(model, 6, '1080p')).toBe(8);
+    expect(geminiVideoDurationOptions(model, '720p')).toEqual([4, 6, 8]);
+    expect(geminiVideoDurationOptions(model, '1080p')).toEqual([8]);
   });
 });
 

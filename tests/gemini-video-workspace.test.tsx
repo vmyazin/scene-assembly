@@ -1,5 +1,5 @@
 // tests/gemini-video-workspace.test.tsx
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { toast } from 'sonner';
@@ -130,6 +130,74 @@ describe('Gemini video workspace image-to-video', () => {
     expect(screen.queryByText(/coming in the next update/i)).toBeNull();
     expect(screen.queryByText(/use other providers for video generation/i)).toBeNull();
     expect(screen.getByRole('button', { name: /Generate video/ })).toHaveTextContent(/~\$0\.40/);
+  });
+
+  it('renders duration and resolution through the shared fal-style controls', () => {
+    renderTextWorkspace();
+
+    const resolution = screen.getByRole('radiogroup', { name: 'Resolution' });
+    expect(resolution.className).toContain('flex');
+    expect(within(resolution).getAllByRole('radio').map((choice) => choice.textContent)).toEqual([
+      '720p',
+      '1080p',
+    ]);
+    expect(screen.queryByRole('combobox', { name: 'Resolution' })).toBeNull();
+    expect(screen.getByRole('radio', { name: '720p' })).toHaveAttribute('aria-checked', 'true');
+
+    const duration = screen.getByRole('combobox', { name: 'Duration' });
+    expect([...duration.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
+      '4',
+      '6',
+      '8',
+    ]);
+    expect(duration).toHaveDisplayValue('8');
+    expect(screen.getByRole('combobox', { name: 'Aspect ratio' })).toHaveDisplayValue('16:9');
+
+    fireEvent.click(screen.getByRole('radio', { name: '1080p' }));
+
+    expect(screen.getByRole('radio', { name: '1080p' })).toHaveAttribute('aria-checked', 'true');
+    expect(
+      [...screen.getByRole('combobox', { name: 'Duration' }).querySelectorAll('option')].map(
+        (option) => option.textContent
+      )
+    ).toEqual(['8']);
+    expect(screen.getByRole('combobox', { name: 'Duration' })).toHaveDisplayValue('8');
+  });
+
+  it('submits a catalog duration chosen from the compact select', async () => {
+    renderTextWorkspace();
+
+    const duration = screen.getByRole('combobox', { name: 'Duration' }) as HTMLSelectElement;
+    const fourSeconds = within(duration).getAllByRole('option') as HTMLOptionElement[];
+    fireEvent.change(duration, { target: { value: fourSeconds[0].value } });
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A moonlit ocean' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Generate video/ }));
+
+    await waitFor(() => expect(geminiGenerateVideoMock).toHaveBeenCalledOnce());
+    expect(geminiGenerateVideoMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({ resolution: '720p', durationSeconds: 4, aspectRatio: '16:9' }),
+      })
+    );
+  });
+
+  it('forces 8s when generating at 1080p', async () => {
+    renderTextWorkspace();
+
+    const duration = screen.getByRole('combobox', { name: 'Duration' }) as HTMLSelectElement;
+    fireEvent.change(duration, {
+      target: { value: (within(duration).getAllByRole('option') as HTMLOptionElement[])[0].value },
+    });
+    fireEvent.click(screen.getByRole('radio', { name: '1080p' }));
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A moonlit ocean' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Generate video/ }));
+
+    await waitFor(() => expect(geminiGenerateVideoMock).toHaveBeenCalledOnce());
+    expect(geminiGenerateVideoMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({ resolution: '1080p', durationSeconds: 8 }),
+      })
+    );
   });
 
   it('attaches an uploaded still and requires it before generating in image-to-video', async () => {
