@@ -217,13 +217,21 @@
   throws: the generation it describes has already succeeded. Spec:
   `docs/superpowers/specs/2026-09-03-spend-dashboard-design.md`.
 - **A PR that changes user-visible UI** → take a screenshot of the worked-on UI
-  from the running app and put it in the PR description under **UI screenshot**.
-  Crop to the changed control when that is the whole change. Reviewers should
-  not have to check out the branch to see selected-state color, density, or
-  alignment — a class-name diff cannot show those. Skip only when there is
-  nothing to look at (docs, rates, Worker-only API). This is not the changelog
-  screenshot gate further down, which stays conservative; a UI PR still needs
-  the picture even if the changelog would skip it.
+  from the running app and **embed it inline** in the PR description under
+  **UI screenshot**, using markdown image syntax
+  `![descriptive alt text](https://…actual-image-url…)`. Host the PNG where
+  GitHub can fetch it without a Cursor login: commit it on the PR branch
+  (e.g. `docs/pr-screenshots/`) and use
+  `https://raw.githubusercontent.com/<owner>/<repo>/<branch-or-sha>/…/file.png`,
+  or a `user-images.githubusercontent.com` / `github.com/user-attachments`
+  URL. Crop to the changed control when that is the whole change. **Do not**
+  use Cursor agent artifact page links (`cursor.com/agents/…/artifacts?path=…`)
+  as a substitute — GitHub renders those as text links, not images. Reviewers
+  should not have to check out the branch to see selected-state color, density,
+  or alignment. Skip only when there is nothing to look at (docs, rates,
+  Worker-only API). This is not the changelog screenshot gate further down,
+  which stays conservative; a UI PR still needs the picture even if the
+  changelog would skip it.
 
 ## Session workflow (worktree → smoke-test → ship → wipe)
 
@@ -338,11 +346,17 @@ inventing fake people or orgs beyond the seed, skip it.
 ## Pull requests
 
 - **When a PR changes user-visible UI, include a screenshot of the worked-on UI
-  in the PR description.** Crop to the changed control when that is the whole
-  change; embed it under a **UI screenshot** heading so reviewers see the screen
-  without digging through commits. A layout or selected-state change that only
-  exists in class names cannot be reviewed from the diff. Skip only for changes
-  with nothing to look at (docs, rates, Worker-only API).
+  in the PR description as an inline embedded image.** Use markdown
+  `![descriptive alt text](https://…actual-image-url…)`, not `[label](url)`
+  text links. The URL must be GitHub-visible without Cursor login: a committed
+  PNG on the PR branch via
+  `https://raw.githubusercontent.com/<owner>/<repo>/<branch-or-sha>/…/file.png`,
+  or a GitHub attachment host (`user-images.githubusercontent.com`,
+  `github.com/user-attachments`). **Do not** use Cursor agent artifact page
+  links (`cursor.com/agents/…/artifacts?path=…`) — GitHub does not render those
+  as images. Crop to the changed control when that is the whole change; put the
+  embed under a **UI screenshot** heading. Skip only for changes with nothing
+  to look at (docs, rates, Worker-only API).
 
 ## Commits
 
