@@ -16,6 +16,17 @@
 
 ## Auto-load routing
 
+- **Gemini / Veo video generation** → first read
+  `docs/cursor/specs/2026-09-21-gemini-veo-video-generation.md`. Start, poll, and
+  download live in `lib/engines/gemini.ts` (`generateVideos`,
+  `getVideosOperation`, then GET `video.uri` with the API key). Catalog
+  constraints belong to `gemini-video-catalog.ts`; rates stay in
+  `lib/spend/rates.ts`. The browser BYOK UI is `GeminiVideoWorkspace`. Do not add
+  Veo to `CLOUD_GENERATION_PROVIDERS` until the live check in
+  `docs/superpowers/plans/2026-09-05-cloud-provider-enablement.md` — video is a
+  long-running operation, not the synchronous image adapter, and
+  `ai.files.download({ downloadPath })` is Node-only.
+
 - **Generate button placement** → first read `docs/codex/specs/2026-09-11-generate-under-prompt.md`. Use `GenerationWorkspaceLayout`’s `actions` slot for the button, cost, progress, execution notice and submission/retry feedback, because the shared prompt → actions → results order keeps submission next to the text being edited at every screen width. Setup holds only model, media and controls.
 
 - **Edit an existing video** → first read `docs/codex/specs/2026-09-11-edit-video.md`. For P-Video-Edit, also read `docs/codex/specs/2026-09-11-p-video-edit.md`; edit limits and Draft pricing belong to `videoEdit` capabilities, because P-Video-Edit has fixed output dimensions and must not inherit Seedance resolution controls. Source clips use `sourceVideoId` in account requests and `inputs.video` at Runware, never the image reference array, because their validation, duration and retention differ. Edit rates live on the catalog capability; normal generation rates undercharge edits. The existing clip library picker accepts `onPickVideo` so selection cannot accidentally place a clip on the timeline.

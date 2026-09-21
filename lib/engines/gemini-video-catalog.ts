@@ -94,8 +94,19 @@ export function geminiVideoResolution(model: GeminiVideoModel, resolution: strin
  * The chosen duration if this model supports it, else its first supported
  * duration. Never returns a duration the model would reject.
  */
-export function geminiVideoDuration(model: GeminiVideoModel, duration: number | undefined): number {
-  return duration && model.durations.includes(duration) ? duration : model.durations[0];
+export function geminiVideoDuration(
+  model: GeminiVideoModel,
+  duration: number | undefined,
+  resolution?: string
+): number {
+  const requested =
+    duration && model.durations.includes(duration) ? duration : model.durations[0];
+  // Google's Veo 3.1 Lite (and the 3.1 family) only accepts 8s at 1080p/4k.
+  // Sending 4 or 6 is a paid rejection, so this helper never returns it.
+  if ((resolution === '1080p' || resolution === '4k') && model.durations.includes(8)) {
+    return 8;
+  }
+  return requested;
 }
 
 /**

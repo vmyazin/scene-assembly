@@ -25,6 +25,7 @@ import {
   resolveFalRun,
   resolveFree,
   resolveGemini,
+  resolveGeminiVideo,
   resolveHelper,
   resolveKieDelta,
   resolveRunware,
@@ -233,6 +234,41 @@ export function captureProviderJob(provider: ProviderId, job: ProviderJob, task:
         resolveCatalogRate(findModel(provider, job.modelId), typeof duration === 'number' ? duration : undefined, 1, {
           audio: job.controlValues?.audio === true,
           size: typeof job.controlValues?.size === 'string' ? job.controlValues.size : undefined,
+        })
+      )
+    );
+  } catch {
+    // See file().
+  }
+}
+
+export interface GeminiVideoCapture {
+  modelId: string;
+  prompt: string;
+  inputMode: 'text' | 'image';
+  resolution: string;
+  durationSeconds: number;
+  galleryRecordId?: string;
+}
+
+export function captureGeminiVideo(args: GeminiVideoCapture): void {
+  try {
+    file(
+      withFigure(
+        {
+          id: mintId('gemini-video'),
+          at: Date.now(),
+          provider: 'gemini',
+          modelId: args.modelId,
+          kind: 'video',
+          inputMode: args.inputMode,
+          promptExcerpt: excerpt(args.prompt),
+          ...(args.galleryRecordId ? { galleryRecordId: args.galleryRecordId } : {}),
+        },
+        resolveGeminiVideo({
+          modelId: args.modelId,
+          resolution: args.resolution,
+          durationSeconds: args.durationSeconds,
         })
       )
     );

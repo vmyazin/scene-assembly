@@ -1,3 +1,4 @@
+// tests/spend/resolve.test.ts
 import { describe, expect, it } from 'vitest';
 
 import type { KieJob } from '@/lib/kie/types';
@@ -9,6 +10,7 @@ import {
   resolveFalRun,
   resolveFree,
   resolveGemini,
+  resolveGeminiVideo,
   resolveHelper,
   resolveKieDelta,
   resolveRunware,
@@ -46,6 +48,30 @@ describe('resolveGemini', () => {
       confidence: 'estimated',
       source: 'catalog-rate',
     });
+  });
+});
+
+describe('resolveGeminiVideo', () => {
+  it('prices Veo 3.1 Lite from the published per-second table', () => {
+    expect(
+      resolveGeminiVideo({
+        modelId: 'veo-3.1-lite-generate-preview',
+        resolution: '720p',
+        durationSeconds: 8,
+      })
+    ).toEqual({
+      costUsd: 0.4,
+      confidence: 'estimated',
+      source: 'catalog-rate',
+      quantity: { unit: 'second', value: 8 },
+    });
+    expect(
+      resolveGeminiVideo({
+        modelId: 'veo-3.1-lite-generate-preview',
+        resolution: '1080p',
+        durationSeconds: 8,
+      }).costUsd
+    ).toBeCloseTo(0.64, 6);
   });
 });
 

@@ -1,3 +1,4 @@
+// tests/spend/capture.test.ts
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { estimateFalJobCost, fetchKieCredits } = vi.hoisted(() => ({
@@ -11,6 +12,7 @@ import type { FalJob } from '@/lib/fal/types';
 import type { KieJob } from '@/lib/kie/types';
 import {
   captureFalJob,
+  captureGeminiVideo,
   captureHelper,
   captureImageResult,
   captureKieJob,
@@ -57,6 +59,28 @@ describe('captureImageResult', () => {
       source: 'usage-metadata',
       promptExcerpt: 'A harbour at dusk',
       galleryRecordId: 'result-1',
+    });
+  });
+
+  it('files a Gemini Veo clip from the catalog rate', () => {
+    captureGeminiVideo({
+      modelId: 'veo-3.1-lite-generate-preview',
+      prompt: 'A moonlit ocean',
+      inputMode: 'text',
+      resolution: '720p',
+      durationSeconds: 8,
+      galleryRecordId: 'gemini-video-1',
+    });
+    expect(entries()[0]).toMatchObject({
+      provider: 'gemini',
+      modelId: 'veo-3.1-lite-generate-preview',
+      kind: 'video',
+      inputMode: 'text',
+      costUsd: 0.4,
+      confidence: 'estimated',
+      source: 'catalog-rate',
+      quantity: { unit: 'second', value: 8 },
+      galleryRecordId: 'gemini-video-1',
     });
   });
 

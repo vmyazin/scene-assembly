@@ -13,6 +13,7 @@ import {
   falPublishedCost,
   geminiResolutionCost,
   geminiTokenCost,
+  geminiVideoCost,
   KIE_USD_PER_CREDIT,
   type FalRunControls,
 } from './rates';
@@ -55,6 +56,25 @@ export function resolveGemini(args: {
     confidence: 'estimated',
     source: 'catalog-rate',
     quantity: { unit: 'image', value: outputImages },
+  };
+}
+
+/** Catalog rate for a Veo clip: USD/s × duration. No usage metadata on video. */
+export function resolveGeminiVideo(args: {
+  modelId?: string;
+  resolution?: string;
+  durationSeconds?: number;
+}): SpendFigure {
+  const durationSeconds = args.durationSeconds;
+  const costUsd = geminiVideoCost(args.modelId, args.resolution, durationSeconds);
+  if (!(costUsd > 0) || durationSeconds === undefined || !Number.isFinite(durationSeconds) || !(durationSeconds > 0)) {
+    return unknownFigure('catalog-rate');
+  }
+  return {
+    costUsd,
+    confidence: 'estimated',
+    source: 'catalog-rate',
+    quantity: { unit: 'second', value: durationSeconds },
   };
 }
 
