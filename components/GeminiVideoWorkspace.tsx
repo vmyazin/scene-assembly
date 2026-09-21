@@ -2,25 +2,42 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ImagePlus, Loader2, Sparkles } from 'lucide-react';
+import { Download, ImagePlus, Loader2, Sparkles, Video } from 'lucide-react';
 import { toast } from 'sonner';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import ConnectionGate, { isGated } from '@/components/ConnectionGate';
 import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
+import JobElapsed from '@/components/JobElapsed';
+import LastFrameActions from '@/components/LastFrameActions';
 import PromptPanel from '@/components/PromptPanel';
 import ProviderLogo from '@/components/ProviderLogo';
 import ReferenceStack from '@/components/ReferenceStack';
 import StoredImagePicker from '@/components/StoredImagePicker';
 import SubmissionError from '@/components/SubmissionError';
+import VideoPlayer from '@/components/video/VideoPlayer';
 import { prepareReferences } from '@/lib/draft/ingest';
+import { downloadFilenameBase } from '@/lib/download-name';
 import { useFileDrop } from '@/lib/drop/use-file-drop';
-import { geminiGenerateVideo } from '@/lib/engines/gemini';
+import {
+  GEMINI_VIDEO_TIMEOUT_MS,
+  geminiDownloadVideo,
+  geminiGenerateVideo,
+  geminiPollVideoOperation,
+  geminiVideoWait,
+} from '@/lib/engines/gemini';
 import { GEMINI_VIDEO_MODELS } from '@/lib/engines/gemini-video-catalog';
 import { keepUploadedImages } from '@/lib/gallery/keep-upload';
+import { extensionForMedia } from '@/lib/media-download';
+import { requestPromptSlug } from '@/lib/micro-ai/browser';
+import { playGenerationChime } from '@/lib/notify/chime';
+import { isRetryableFailure, useAutoRetry } from '@/lib/providers/auto-retry';
+import { captureGeminiVideo } from '@/lib/spend/capture';
 import { geminiVideoCost, geminiVideoRateLabel } from '@/lib/spend/rates';
 import { FRAME_EXTRACTION_ERROR, isVideoFile, lastFrameAsImageFile } from '@/lib/video-frame';
 import { useAppStore } from '@/store/useAppStore';
 import { useDraftStore } from '@/store/useDraftStore';
+import { useGalleryStore } from '@/store/useGalleryStore';
+import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
 import { useSeedFrameStore } from '@/store/useSeedFrameStore';
 import type { EngineId } from '@/lib/engines/registry';
 
@@ -28,12 +45,26 @@ interface GeminiVideoWorkspaceProps {
   inputMode: 'text' | 'image';
   onBack: () => void;
   onOpenConnections: (provider?: EngineId) => void;
+  /** Switch this workspace to image-to-video, for continuing from a last frame. */
+  onContinueFromFrame?: () => void;
 }
 
 /** Veo image-to-video takes one still; the shared picker and stack enforce it. */
 const MAX_INPUT_IMAGES = 1;
 
-/** References are held as Files; the stub (and later the SDK) wants bare base64. */
+interface GeminiClip {
+  id: string;
+  src: string;
+  blob: Blob;
+  prompt: string;
+  slug?: string;
+  modelId: string;
+  startedAt: number;
+  finishedAt: number;
+  costUsd: number;
+}
+
+/** References are held as Files; the SDK wants bare base64. */
 function fileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -48,9 +79,19 @@ function bareBase64(dataUrl: string): string {
   return comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
 }
 
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 export default function GeminiVideoWorkspace({
   inputMode,
   onOpenConnections,
+  onContinueFromFrame,
 }: GeminiVideoWorkspaceProps) {
   const apiKey = useAppStore((state) => state.apiKey);
   const geminiVideoModel = useAppStore((state) => state.geminiVideoModel);
@@ -61,18 +102,29 @@ export default function GeminiVideoWorkspace({
 
   const [resolution, setResolution] = useState<'720p' | '1080p'>('720p');
   const [duration, setDuration] = useState<4 | 6 | 8>(8);
+  const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16'>('16:9');
   const [error, setError] = useState<string | null>(null);
   const [isReadingFrame, setIsReadingFrame] = useState(false);
+  const [phase, setPhase] = useState<'start' | 'poll' | 'download' | null>(null);
+  const [startedAt, setStartedAt] = useState<number | undefined>(undefined);
+  const [clips, setClips] = useState<GeminiClip[]>([]);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const addReferencesRef = useRef<(files: File[]) => Promise<void>>(async () => {});
   const mountedRef = useRef(true);
+  const generateRef = useRef<() => void>(() => {});
+  const runTokenRef = useRef(0);
+  const autoRetry = useAutoRetry();
 
   const needsKey = !apiKey;
   const gated = isGated(needsKey, false);
   const currentModel = GEMINI_VIDEO_MODELS.find((m) => m.id === geminiVideoModel) || GEMINI_VIDEO_MODELS[0];
-  const costEstimate = geminiVideoCost(geminiVideoModel, resolution, duration);
+  const effectiveDuration = resolution === '1080p' ? 8 : duration;
+  const durationOptions = resolution === '1080p' ? currentModel.durations.filter((value) => value === 8) : currentModel.durations;
+  const costEstimate = geminiVideoCost(geminiVideoModel, resolution, effectiveDuration);
   const rateLabel = geminiVideoRateLabel(geminiVideoModel, resolution);
   const isImageMode = inputMode === 'image';
+  const isGenerating = phase !== null;
 
   // Claims the prompt field for motion, so a still-image prompt is not left
   // sitting in this workspace after a tab switch.
@@ -101,6 +153,7 @@ export default function GeminiVideoWorkspace({
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      runTokenRef.current += 1;
     };
   }, []);
 
@@ -181,28 +234,141 @@ export default function GeminiVideoWorkspace({
       setError('Add the image this clip should start from.');
       return;
     }
+    if (needsKey) {
+      setError('A Gemini API key is required.');
+      return;
+    }
 
+    const submittedPrompt = prompt.trim();
+    const runToken = runTokenRef.current + 1;
+    runTokenRef.current = runToken;
+    const isCurrent = () => mountedRef.current && runTokenRef.current === runToken;
+    const started = Date.now();
     setError(null);
+    setPhase('start');
+    setStartedAt(started);
+
+    let startedOperation = false;
     try {
       let image: string | undefined;
+      let imageMimeType: string | undefined;
       if (isImageMode && references[0]) {
         image = bareBase64(await fileAsDataUrl(references[0].file));
+        imageMimeType = references[0].file.type || 'image/png';
       }
-      await geminiGenerateVideo({
+      const startedJob = await geminiGenerateVideo({
         model: geminiVideoModel,
-        prompt: prompt.trim(),
+        prompt: submittedPrompt,
         image,
+        imageMimeType,
         apiKey,
-        config: { resolution, durationSeconds: duration },
+        singleAttempt: true,
+        config: { resolution, durationSeconds: effectiveDuration, aspectRatio },
       });
+      startedOperation = true;
+      if (!isCurrent()) return;
+      usePromptLibraryStore.getState().remember(submittedPrompt);
+      autoRetry.reset();
+
+      let operation = startedJob;
+      const deadline = started + GEMINI_VIDEO_TIMEOUT_MS;
+      while (!operation.done) {
+        if (!isCurrent()) return;
+        if (Date.now() >= deadline) {
+          throw new Error(
+            'Gemini video generation timed out. The job may still finish in AI Studio if you were charged.'
+          );
+        }
+        if (operation.error) break;
+        setPhase('poll');
+        await geminiVideoWait();
+        if (!isCurrent()) return;
+        operation = await geminiPollVideoOperation(apiKey, operation.operation, { singleAttempt: true });
+      }
+      if (operation.error) throw new Error(operation.error);
+      if (!operation.videoUri && !operation.videoBytes) {
+        throw new Error('Gemini finished without a video. Please try again.');
+      }
+
+      setPhase('download');
+      const blob = await geminiDownloadVideo(apiKey, operation.videoUri ?? '', {
+        singleAttempt: true,
+        videoBytes: operation.videoBytes,
+        mimeType: operation.mimeType,
+      });
+      if (!isCurrent()) return;
+
+      const slug = await requestPromptSlug(submittedPrompt, apiKey);
+      const src = URL.createObjectURL(blob);
+      const clip: GeminiClip = {
+        id: `gemini-video-${started}`,
+        src,
+        blob,
+        prompt: submittedPrompt,
+        slug: slug ?? undefined,
+        modelId: geminiVideoModel,
+        startedAt: started,
+        finishedAt: Date.now(),
+        costUsd: costEstimate,
+      };
+      setClips((current) => [clip, ...current]);
+      playGenerationChime();
+      toast.success('Video generated');
+
+      try {
+        const record = await useGalleryStore.getState().record({
+          kind: 'video',
+          prompt: submittedPrompt,
+          slug: slug ?? undefined,
+          provider: 'gemini',
+          modelId: geminiVideoModel,
+          inputMode: isImageMode ? 'image' : 'text',
+          controlValues: {
+            resolution,
+            duration: effectiveDuration,
+            aspect_ratio: aspectRatio,
+          },
+          mimeType: blob.type || 'video/mp4',
+          blob,
+        });
+        captureGeminiVideo({
+          modelId: geminiVideoModel,
+          prompt: submittedPrompt,
+          inputMode: isImageMode ? 'image' : 'text',
+          resolution,
+          durationSeconds: effectiveDuration,
+          galleryRecordId: record?.id,
+        });
+      } catch {
+        captureGeminiVideo({
+          modelId: geminiVideoModel,
+          prompt: submittedPrompt,
+          inputMode: isImageMode ? 'image' : 'text',
+          resolution,
+          durationSeconds: effectiveDuration,
+        });
+      }
     } catch (err) {
+      if (!isCurrent()) return;
       const message =
-        err instanceof Error
-          ? err.message
-          : 'Gemini video generation coming soon! For now, try the other providers.';
-      toast.info(message);
+        err instanceof Error ? err.message : 'Gemini could not generate this video.';
+      setError(message);
+      toast.error(message);
+      // A start that never received an operation can be sent again. Poll and
+      // download failures belong to a job Google already accepted.
+      if (!startedOperation && isRetryableFailure(err)) {
+        autoRetry.schedule(() => generateRef.current());
+      }
+    } finally {
+      if (isCurrent()) {
+        setPhase(null);
+      }
     }
   };
+
+  useEffect(() => {
+    generateRef.current = () => void handleGenerate();
+  });
 
   const setup = (
     <>
@@ -222,7 +388,11 @@ export default function GeminiVideoWorkspace({
               <span className="text-sm font-medium">Resolution</span>
               <select
                 value={resolution}
-                onChange={(e) => setResolution(e.target.value as '720p' | '1080p')}
+                onChange={(e) => {
+                  const next = e.target.value as '720p' | '1080p';
+                  setResolution(next);
+                  if (next === '1080p') setDuration(8);
+                }}
                 className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
               >
                 {currentModel.resolutions.map((res) => (
@@ -234,22 +404,29 @@ export default function GeminiVideoWorkspace({
             <label className="flex flex-col gap-1.5">
               <span className="text-sm font-medium">Duration</span>
               <select
-                value={duration}
+                value={effectiveDuration}
                 onChange={(e) => setDuration(Number(e.target.value) as 4 | 6 | 8)}
                 className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
               >
-                {currentModel.durations.map((dur) => (
+                {durationOptions.map((dur) => (
                   <option key={dur} value={dur}>{dur}s</option>
                 ))}
               </select>
             </label>
-          </div>
 
-          {costEstimate > 0 && (
-            <div className="text-sm text-[var(--foreground-muted)]">
-              Estimated: ${costEstimate.toFixed(3)} {rateLabel && `(${rateLabel})`}
-            </div>
-          )}
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium">Aspect ratio</span>
+              <select
+                value={aspectRatio}
+                onChange={(e) => setAspectRatio(e.target.value as '16:9' | '9:16')}
+                className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
+              >
+                {currentModel.aspectRatios.map((ratio) => (
+                  <option key={ratio} value={ratio}>{ratio}</option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
       </div>
 
@@ -310,24 +487,103 @@ export default function GeminiVideoWorkspace({
     </>
   );
 
+  const phaseLabel =
+    phase === 'download' ? 'Downloading video…' : phase === 'poll' ? 'Waiting for Veo…' : 'Starting…';
+
   const actions = (
     <div className="space-y-3">
       <button
-        onClick={() => void handleGenerate()}
-        disabled={needsKey}
+        onClick={() => {
+          autoRetry.reset();
+          void handleGenerate();
+        }}
+        disabled={needsKey || isGenerating}
         className="w-full rounded-lg bg-[var(--neon-purple)] px-4 py-3 font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
       >
-        <Sparkles className="inline-block mr-2 h-4 w-4" />
-        Generate video
+        {isGenerating ? (
+          <>
+            <Loader2 className="inline-block mr-2 h-4 w-4 animate-spin" />
+            {phaseLabel}
+          </>
+        ) : (
+          <>
+            <Sparkles className="inline-block mr-2 h-4 w-4" />
+            Generate video
+            {costEstimate > 0 && (
+              <span className="font-normal opacity-80">{` · ~$${costEstimate.toFixed(2)}`}</span>
+            )}
+          </>
+        )}
       </button>
+      {isGenerating && (
+        <p className="text-sm text-[var(--foreground-muted)]">
+          {phaseLabel}{' '}
+          <JobElapsed startedAt={startedAt} />
+          {rateLabel ? ` · ${rateLabel}` : ''}
+        </p>
+      )}
 
-      {error && <SubmissionError message={error} />}
-
-      <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-600">
-        <strong>Note:</strong> Gemini video generation is now available in the catalog!
-        Full async polling support coming in the next update. For now, use other providers for video generation.
-      </div>
+      {error && (
+        <SubmissionError message={error} retry={autoRetry.pending} onCancelRetry={autoRetry.cancel} />
+      )}
     </div>
+  );
+
+  const results = (
+    <section className="glass-card min-h-[420px] space-y-3 p-3.5 md:p-4">
+      <div>
+        <h3 className="display text-base font-semibold">Result</h3>
+        <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">
+          Finished clips stay here while you keep generating.
+        </p>
+      </div>
+      {isGenerating && clips.length === 0 && (
+        <div className="flex min-h-[240px] flex-col items-center justify-center gap-2 rounded-xl border border-[var(--border)] p-5 text-center text-[var(--foreground-muted)]">
+          <Loader2 className="animate-spin opacity-60" size={36} />
+          <p>{phaseLabel}</p>
+        </div>
+      )}
+      {!isGenerating && clips.length === 0 && (
+        <div className="rounded-xl border border-[var(--border)] p-5 text-center text-[var(--foreground-muted)]">
+          <Video className="mx-auto mb-3 opacity-35" size={46} />
+          <p>Your videos will appear here.</p>
+        </div>
+      )}
+      {clips.map((clip) => {
+        const filenameBase = downloadFilenameBase({
+          prompt: clip.prompt,
+          mediaType: 'video',
+          slug: clip.slug,
+          provider: 'gemini',
+          modelId: clip.modelId,
+        });
+        return (
+          <article key={clip.id} className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background-elevated)]/60 p-4">
+            <VideoPlayer src={clip.src} label="Generated video" className="max-h-[520px] w-full rounded-lg" />
+            <button
+              type="button"
+              onClick={() => {
+                setDownloadingId(clip.id);
+                try {
+                  downloadBlob(clip.blob, `${filenameBase}.${extensionForMedia('video', clip.blob.type)}`);
+                } finally {
+                  setDownloadingId(null);
+                }
+              }}
+              className="btn-secondary flex w-full items-center justify-center gap-2"
+            >
+              {downloadingId === clip.id ? <Loader2 className="animate-spin" size={17} /> : <Download size={17} />}
+              {downloadingId === clip.id ? 'Preparing download…' : 'Download video'}
+            </button>
+            <LastFrameActions
+              videoUrl={clip.src}
+              filenameBase={filenameBase}
+              onContinue={onContinueFromFrame}
+            />
+          </article>
+        );
+      })}
+    </section>
   );
 
   return (
@@ -351,7 +607,7 @@ export default function GeminiVideoWorkspace({
           </PromptPanel>
         }
         actions={actions}
-        results={null}
+        results={results}
       />
     </ConnectionGate>
   );

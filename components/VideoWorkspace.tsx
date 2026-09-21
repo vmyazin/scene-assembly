@@ -1,3 +1,4 @@
+// components/VideoWorkspace.tsx
 'use client';
 
 import { type StaticImageData } from 'next/image';
@@ -223,6 +224,7 @@ export default function VideoWorkspace({
           inputMode={geminiMode}
           onBack={onExit}
           onOpenConnections={onOpenConnections}
+          onContinueFromFrame={() => onInputModeChange('image')}
         />
       ) : isFal ? (
         <FalGenerationWorkspace

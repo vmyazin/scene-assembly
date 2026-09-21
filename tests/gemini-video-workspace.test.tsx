@@ -6,35 +6,65 @@ import { toast } from 'sonner';
 
 import GeminiVideoWorkspace from '../components/GeminiVideoWorkspace';
 import VideoWorkspace from '../components/VideoWorkspace';
+import { createMemoryGalleryStorage } from '../lib/gallery/memory-storage';
 import { useAppStore } from '../store/useAppStore';
 import { useDraftStore } from '../store/useDraftStore';
+import { configureGalleryStorage, useGalleryStore } from '../store/useGalleryStore';
 import { useSeedFrameStore } from '../store/useSeedFrameStore';
+import { useSpendStore } from '../store/useSpendStore';
 
-const { geminiGenerateVideoMock } = vi.hoisted(() => ({
+const VIDEO_URI = 'https://generativelanguage.googleapis.com/v1beta/files/abc:download?alt=media';
+
+const {
+  geminiGenerateVideoMock,
+  geminiPollVideoOperationMock,
+  geminiDownloadVideoMock,
+  geminiVideoWaitMock,
+  requestPromptSlugMock,
+} = vi.hoisted(() => ({
   geminiGenerateVideoMock: vi.fn(),
+  geminiPollVideoOperationMock: vi.fn(),
+  geminiDownloadVideoMock: vi.fn(),
+  geminiVideoWaitMock: vi.fn(),
+  requestPromptSlugMock: vi.fn(),
 }));
 
 vi.mock('../lib/engines/gemini', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/engines/gemini')>()),
   geminiGenerateVideo: geminiGenerateVideoMock,
+  geminiPollVideoOperation: geminiPollVideoOperationMock,
+  geminiDownloadVideo: geminiDownloadVideoMock,
+  geminiVideoWait: geminiVideoWaitMock,
+}));
+
+vi.mock('../lib/micro-ai/browser', () => ({
+  requestPromptSlug: requestPromptSlugMock,
+  requestExamplePrompt: vi.fn(),
 }));
 
 describe('Gemini video workspace image-to-video', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    let urls = 0;
     vi.stubGlobal(
       'URL',
       Object.assign(URL, {
-        createObjectURL: vi.fn(() => 'blob:gemini-reference'),
+        createObjectURL: vi.fn(() => `blob:gemini-${++urls}`),
         revokeObjectURL: vi.fn(),
       })
     );
-    geminiGenerateVideoMock.mockRejectedValue(
-      new Error(
-        'Gemini Veo 3.1 Lite image-to-video is not wired yet (still frame received). Use other providers for now.'
-      )
-    );
+    configureGalleryStorage(createMemoryGalleryStorage());
+    useGalleryStore.setState({ records: [], hydrated: true, storageError: null });
+    useSpendStore.setState({ entries: [] });
+    geminiGenerateVideoMock.mockResolvedValue({
+      operation: 'operations/veo-1',
+      done: true,
+      videoUri: VIDEO_URI,
+    });
+    geminiDownloadVideoMock.mockResolvedValue(new Blob(['mp4-bytes'], { type: 'video/mp4' }));
+    geminiVideoWaitMock.mockResolvedValue(undefined);
+    requestPromptSlugMock.mockResolvedValue('the-cat-leaps-forward');
     useAppStore.setState({
       apiKey: 'gemini-test-key',
       videoEngine: 'gemini',
@@ -95,16 +125,15 @@ describe('Gemini video workspace image-to-video', () => {
     expect(screen.queryByLabelText('Reference image file')).toBeNull();
   });
 
-  it('opens From library on document.body so Generate video cannot paint over it', () => {
-    const { container } = renderImageWorkspace();
-    fireEvent.click(screen.getByRole('button', { name: 'From library' }));
-    const dialog = screen.getByRole('dialog', { name: 'Choose an image' });
-    expect(container.contains(dialog)).toBe(false);
-    expect(document.body.contains(dialog)).toBe(true);
+  it('does not show the stub coming-soon callout once Generate is wired', () => {
+    renderTextWorkspace();
+    expect(screen.queryByText(/coming in the next update/i)).toBeNull();
+    expect(screen.queryByText(/use other providers for video generation/i)).toBeNull();
+    expect(screen.getByRole('button', { name: /Generate video/ })).toHaveTextContent(/~\$0\.40/);
   });
 
   it('attaches an uploaded still and requires it before generating in image-to-video', async () => {
-    const toastInfo = vi.spyOn(toast, 'info');
+    const toastSuccess = vi.spyOn(toast, 'success');
     const { container } = renderImageWorkspace();
     const still = new File(['frame'], 'opening.png', { type: 'image/png' });
 
@@ -124,24 +153,35 @@ describe('Gemini video workspace image-to-video', () => {
       expect.objectContaining({
         prompt: 'The cat leaps forward',
         image: expect.any(String),
+        imageMimeType: 'image/png',
         model: 'veo-3.1-lite-generate-preview',
+        singleAttempt: true,
       })
     );
     const image = geminiGenerateVideoMock.mock.calls[0][0].image as string;
     expect(image.length).toBeGreaterThan(0);
     expect(image.startsWith('data:')).toBe(false);
-    await waitFor(() =>
-      expect(toastInfo).toHaveBeenCalledWith(
-        'Gemini Veo 3.1 Lite image-to-video is not wired yet (still frame received). Use other providers for now.'
-      )
-    );
+    await waitFor(() => expect(geminiDownloadVideoMock).toHaveBeenCalledOnce());
+    expect(geminiPollVideoOperationMock).not.toHaveBeenCalled();
+    expect(await screen.findByLabelText('Generated video')).toBeInTheDocument();
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Video generated'));
+    await waitFor(() => expect(useSpendStore.getState().entries).toHaveLength(1));
+    expect(useSpendStore.getState().entries[0]).toMatchObject({
+      provider: 'gemini',
+      kind: 'video',
+      modelId: 'veo-3.1-lite-generate-preview',
+    });
   });
 
-  it('does not require an image in text-to-video', async () => {
-    geminiGenerateVideoMock.mockRejectedValue(
-      new Error('Gemini Veo 3.1 Lite text-to-video is not wired yet. Use other providers for now.')
-    );
-    const toastInfo = vi.spyOn(toast, 'info');
+  it('does not require an image in text-to-video and polls until the operation is done', async () => {
+    geminiGenerateVideoMock.mockResolvedValue({
+      operation: 'operations/veo-text',
+      done: false,
+    });
+    geminiPollVideoOperationMock
+      .mockResolvedValueOnce({ operation: 'operations/veo-text', done: false })
+      .mockResolvedValueOnce({ operation: 'operations/veo-text', done: true, videoUri: VIDEO_URI });
+
     renderTextWorkspace();
 
     expect(screen.queryByRole('heading', { name: 'Reference image' })).toBeNull();
@@ -153,12 +193,32 @@ describe('Gemini video workspace image-to-video', () => {
       expect.objectContaining({
         prompt: 'A moonlit ocean',
         image: undefined,
+        singleAttempt: true,
+        config: expect.objectContaining({ resolution: '720p', durationSeconds: 8, aspectRatio: '16:9' }),
       })
     );
-    await waitFor(() =>
-      expect(toastInfo).toHaveBeenCalledWith(
-        'Gemini Veo 3.1 Lite text-to-video is not wired yet. Use other providers for now.'
-      )
-    );
+    await waitFor(() => expect(geminiPollVideoOperationMock).toHaveBeenCalledTimes(2));
+    expect(geminiVideoWaitMock).toHaveBeenCalled();
+    await waitFor(() => expect(geminiDownloadVideoMock).toHaveBeenCalledWith(
+      'gemini-test-key',
+      VIDEO_URI,
+      expect.objectContaining({ singleAttempt: true })
+    ));
+    expect(await screen.findByLabelText('Generated video')).toBeInTheDocument();
+  });
+
+  it('shows an honest error when start fails and does not toast the old stub copy', async () => {
+    geminiGenerateVideoMock.mockRejectedValue(new Error('Gemini could not start video generation.'));
+    const toastError = vi.spyOn(toast, 'error');
+    const toastInfo = vi.spyOn(toast, 'info');
+    renderTextWorkspace();
+
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A moonlit ocean' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Generate video/ }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Gemini could not start video generation.');
+    expect(toastError).toHaveBeenCalledWith('Gemini could not start video generation.');
+    expect(toastInfo).not.toHaveBeenCalled();
+    expect(geminiDownloadVideoMock).not.toHaveBeenCalled();
   });
 });

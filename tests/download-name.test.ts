@@ -1,3 +1,4 @@
+// tests/download-name.test.ts
 import { describe, expect, it } from 'vitest';
 
 import { downloadFilenameBase, modelFileCode } from '../lib/download-name';
@@ -43,6 +44,7 @@ describe('model filename codes', () => {
     expect(modelFileCode('gemini', 'gemini-3.1-flash-image')).toBe('gemini-3_1-flash-image');
     expect(modelFileCode('gemini', 'gemini-3.1-flash-lite-image')).toBe('gemini-3_1-flash-lite-image');
     expect(modelFileCode('gemini', 'gemini-3-pro-image-preview')).toBe('gemini-3-pro-image');
+    expect(modelFileCode('gemini', 'veo-3.1-lite-generate-preview')).toBe('veo-3_1-lite');
     // A run recorded before the picker existed carries no model id.
     expect(modelFileCode('gemini')).toBe('gemini-3-pro-image');
   });

@@ -1,5 +1,7 @@
+// lib/download-name.ts
 import { ENGINES } from '@/lib/engines/registry';
 import { findGeminiImageModel } from '@/lib/engines/gemini-catalog';
+import { findGeminiVideoModel } from '@/lib/engines/gemini-video-catalog';
 import { FAL_IMAGE_MODEL, FAL_VIDEO_MODELS } from '@/lib/fal/catalog';
 import { KIE_MODELS } from '@/lib/kie/catalog';
 import { fallbackFilenameBase, type DownloadMediaType } from '@/lib/media-download';
@@ -29,7 +31,7 @@ export function modelFileCode(provider?: string, modelId?: string): string | und
   // three made it, so its code has to come from the model before the engine's
   // own fallback answers "gemini-3-pro-image" for a Lite image.
   if (provider === 'gemini' && modelId) {
-    const known = findGeminiImageModel(modelId);
+    const known = findGeminiImageModel(modelId) ?? findGeminiVideoModel(modelId);
     if (known) return known.fileCode;
   }
   if (provider && modelId) {
