@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { toast } from 'sonner';
+import { RouteError } from '../lib/providers/route-error';
 
 import GeminiVideoWorkspace from '../components/GeminiVideoWorkspace';
 import VideoWorkspace from '../components/VideoWorkspace';
@@ -238,6 +239,7 @@ describe('Gemini video workspace image-to-video', () => {
       provider: 'gemini',
       kind: 'video',
       modelId: 'veo-3.1-lite-generate-preview',
+      galleryRecordId: useGalleryStore.getState().records[0].id,
     });
   });
 
@@ -273,6 +275,68 @@ describe('Gemini video workspace image-to-video', () => {
       expect.objectContaining({ singleAttempt: true })
     ));
     expect(await screen.findByLabelText('Generated video')).toBeInTheDocument();
+  });
+
+  it.each([new RouteError('Lost response', 503), new TypeError('Lost response')])(
+    'does not automatically resubmit an ambiguous start failure: %s',
+    async (failure) => {
+      geminiGenerateVideoMock.mockRejectedValue(failure);
+      renderTextWorkspace();
+      fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A moonlit ocean' } });
+      fireEvent.click(screen.getByRole('button', { name: /^Generate video/ }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('Lost response');
+      expect(screen.queryByRole('button', { name: 'Cancel automatic retry' })).toBeNull();
+      expect(useSpendStore.getState().entries).toHaveLength(0);
+    }
+  );
+
+  it('still offers a cancellable retry for an explicit quota rejection', async () => {
+    geminiGenerateVideoMock.mockRejectedValue(new RouteError('Quota exceeded', 429));
+    renderTextWorkspace();
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A moonlit ocean' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Generate video/ }));
+    expect(await screen.findByRole('button', { name: 'Cancel automatic retry' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel automatic retry' }));
+  });
+
+  it('records completed generation spend once when downloading fails', async () => {
+    geminiDownloadVideoMock.mockRejectedValue(new Error('Download failed'));
+    renderTextWorkspace();
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A moonlit ocean' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Generate video/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Download failed');
+    expect(useSpendStore.getState().entries).toHaveLength(1);
+    expect(useSpendStore.getState().entries[0]).toMatchObject({
+      provider: 'gemini', kind: 'video', modelId: 'veo-3.1-lite-generate-preview',
+    });
+    expect(useGalleryStore.getState().records).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: 'Cancel automatic retry' })).toBeNull();
+  });
+
+  it('records spend once and keeps the result when library persistence fails', async () => {
+    const record = vi.spyOn(useGalleryStore.getState(), 'record').mockRejectedValueOnce(new Error('Storage full'));
+    try {
+      renderTextWorkspace();
+      fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A moonlit ocean' } });
+      fireEvent.click(screen.getByRole('button', { name: /^Generate video/ }));
+      expect(await screen.findByLabelText('Generated video')).toBeInTheDocument();
+      await waitFor(() => expect(useSpendStore.getState().entries).toHaveLength(1));
+      expect(useSpendStore.getState().entries[0].galleryRecordId).toBeUndefined();
+    } finally {
+      record.mockRestore();
+    }
+  });
+
+  it('does not record spend for a failed operation', async () => {
+    geminiGenerateVideoMock.mockResolvedValue({
+      operation: 'operations/blocked', done: true, error: 'Video blocked',
+    });
+    renderTextWorkspace();
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A moonlit ocean' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Generate video/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Video blocked');
+    expect(useSpendStore.getState().entries).toHaveLength(0);
+    expect(geminiDownloadVideoMock).not.toHaveBeenCalled();
   });
 
   it('shows an honest error when start fails and does not toast the old stub copy', async () => {

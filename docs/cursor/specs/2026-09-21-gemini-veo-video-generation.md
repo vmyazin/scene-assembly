@@ -3,6 +3,16 @@
 Status: Approved design
 Date: 2026-09-21
 
+## Follow-up decision — 2026-09-21
+
+This overrides the retry and success-only spend acceptance below. Missing start
+responses do not establish that Google rejected a paid job. Automatically retry
+only an explicit 429 quota rejection; leave ambiguous failures for manual review.
+Once an operation completes with video output, capture its estimated spend exactly
+once, including when download or library storage fails. Keep library linkage when
+storage succeeds. This follow-up is bounded to `GeminiVideoWorkspace` and its tests;
+it does not add models, cloud execution, or persistent operation recovery.
+
 ## Context
 
 Veo 3.1 Lite is already in `lib/engines/gemini-video-catalog.ts`, the video

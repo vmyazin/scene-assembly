@@ -36,7 +36,8 @@ import { keepUploadedImages } from '@/lib/gallery/keep-upload';
 import { extensionForMedia } from '@/lib/media-download';
 import { requestPromptSlug } from '@/lib/micro-ai/browser';
 import { playGenerationChime } from '@/lib/notify/chime';
-import { isRetryableFailure, useAutoRetry } from '@/lib/providers/auto-retry';
+import { useAutoRetry } from '@/lib/providers/auto-retry';
+import { routeStatus } from '@/lib/providers/route-error';
 import { captureGeminiVideo } from '@/lib/spend/capture';
 import { geminiVideoCost, geminiVideoRateLabel } from '@/lib/spend/rates';
 import { FRAME_EXTRACTION_ERROR, isVideoFile, lastFrameAsImageFile } from '@/lib/video-frame';
@@ -319,6 +320,8 @@ export default function GeminiVideoWorkspace({
     setStartedAt(started);
 
     let startedOperation = false;
+    let generated = false;
+    let galleryRecordId: string | undefined;
     try {
       let image: string | undefined;
       let imageMimeType: string | undefined;
@@ -360,6 +363,8 @@ export default function GeminiVideoWorkspace({
         throw new Error('Gemini finished without a video. Please try again.');
       }
 
+      // Google has completed the paid generation even if transfer or storage fails.
+      generated = true;
       setPhase('download');
       const blob = await geminiDownloadVideo(apiKey, operation.videoUri ?? '', {
         singleAttempt: true,
@@ -401,22 +406,9 @@ export default function GeminiVideoWorkspace({
           mimeType: blob.type || 'video/mp4',
           blob,
         });
-        captureGeminiVideo({
-          modelId: geminiVideoModel,
-          prompt: submittedPrompt,
-          inputMode: isImageMode ? 'image' : 'text',
-          resolution,
-          durationSeconds: effectiveDuration,
-          galleryRecordId: record?.id,
-        });
+        galleryRecordId = record?.id;
       } catch {
-        captureGeminiVideo({
-          modelId: geminiVideoModel,
-          prompt: submittedPrompt,
-          inputMode: isImageMode ? 'image' : 'text',
-          resolution,
-          durationSeconds: effectiveDuration,
-        });
+        // Library persistence is best effort; the completed generation still costs money.
       }
     } catch (err) {
       if (!isCurrent()) return;
@@ -424,12 +416,22 @@ export default function GeminiVideoWorkspace({
         err instanceof Error ? err.message : 'Gemini could not generate this video.';
       setError(message);
       toast.error(message);
-      // A start that never received an operation can be sent again. Poll and
-      // download failures belong to a job Google already accepted.
-      if (!startedOperation && isRetryableFailure(err)) {
+      // Only an explicit quota rejection is safe to resubmit automatically. A
+      // lost response or server error may hide an already accepted paid job.
+      if (!startedOperation && routeStatus(err) === 429) {
         autoRetry.schedule(() => generateRef.current());
       }
     } finally {
+      if (generated) {
+        captureGeminiVideo({
+          modelId: geminiVideoModel,
+          prompt: submittedPrompt,
+          inputMode: isImageMode ? 'image' : 'text',
+          resolution,
+          durationSeconds: effectiveDuration,
+          galleryRecordId,
+        });
+      }
       if (isCurrent()) {
         setPhase(null);
       }

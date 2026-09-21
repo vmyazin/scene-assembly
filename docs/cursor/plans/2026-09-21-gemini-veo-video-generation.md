@@ -2,6 +2,19 @@
 
 Date: 2026-09-21
 
+## Follow-up decision — 2026-09-21
+
+Overrides the original success-only capture and broad submission retry behavior.
+File map: `components/GeminiVideoWorkspace.tsx:320-440` (submission and accounting),
+`tests/gemini-video-workspace.test.tsx:280-360` (failure regression coverage).
+Do not modify SDK helpers, other providers, catalogs, or Worker adapters.
+
+- [x] Restrict automatic start retries to explicit quota rejection; verify with
+  `pnpm exec vitest run tests/gemini-video-workspace.test.tsx`.
+- [x] Capture completed generation spend despite transfer/storage failure, once;
+  verify with the same workspace suite and the spend tests.
+- [x] Typecheck and smoke-test the current localhost Gemini workspace.
+
 ## File map
 
 - `lib/engines/gemini.ts` — replace stubs with `generateVideos` /
@@ -32,3 +45,19 @@ Date: 2026-09-21
 - [x] Capture spend + gallery on success.
 - [x] Tests with mocked SDK and mocked helpers.
 - [x] `pnpm test` on the files above.
+
+## Follow-up verification — 2026-09-21
+
+Updated the isolated worktree to origin/main at fbe3577 before making these fixes.
+The superseded draft is preserved in a Git stash and is not part of this diff.
+Focused SDK/workspace/spend/naming suite: 143 tests passed. Next route type generation
+and TypeScript passed. Browser smoke at http://localhost:3163/?workspace=video
+verified the Gemini Lite controls, price, and missing-key gate. Paid generation
+was not repeated against this revision; failure paths are covered with mocks.
+The earlier standalone live API test used Veo Fast, not this Lite workspace.
+
+Local launch: `ACCOUNT_WORKER_PORT=8863 npm run dev -- --port 3163` in this worktree.
+Dependencies were installed with the frozen-lockfile pnpm commands in AGENTS.md;
+`next-env.d.ts` and ignored thumbnails were copied using its documented commands.
+Use `cloud/.dev.vars.example` for local Worker configuration; no provider key is
+needed for this smoke check. No cloud video adapter is added by this follow-up.
