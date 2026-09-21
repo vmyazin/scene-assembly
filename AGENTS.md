@@ -21,7 +21,11 @@
   download live in `lib/engines/gemini.ts` (`generateVideos`,
   `getVideosOperation`, then GET `video.uri` with the API key). Catalog
   constraints belong to `gemini-video-catalog.ts`; rates stay in
-  `lib/spend/rates.ts`. The browser BYOK UI is `GeminiVideoWorkspace`. Do not add
+  `lib/spend/rates.ts`. The browser BYOK UI is `GeminiVideoWorkspace`. Duration,
+  resolution and aspect ratio render through `ModelControls` (the same control
+  fal and Kie use) because stacked native selects drifted from the dense
+  duration + 720p/1080p row; Veo duration stays a discrete select because
+  Google rejects freeform lengths, and 1080p still locks to 8s. Do not add
   Veo to `CLOUD_GENERATION_PROVIDERS` until the live check in
   `docs/superpowers/plans/2026-09-05-cloud-provider-enablement.md` — video is a
   long-running operation, not the synchronous image adapter, and
