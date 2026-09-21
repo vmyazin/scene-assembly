@@ -1,3 +1,4 @@
+// lib/engines/gemini.ts
 import { GoogleGenAI } from '@google/genai';
 
 import { geminiImageSize, resolveGeminiImageModel } from './gemini-catalog';
@@ -138,8 +139,17 @@ interface GeminiVideoOpts {
  * Note: Placeholder implementation - will be completed with actual SDK integration.
  */
 export async function geminiGenerateVideo(opts: GeminiVideoOpts): Promise<VideoOperationResult> {
-  // Placeholder - actual SDK integration coming soon
-  throw new Error('Gemini video generation SDK integration in progress. Use other providers for now.');
+  const model = resolveGeminiVideoModel(opts.model);
+  geminiVideoResolution(model, opts.config?.resolution);
+  geminiVideoDuration(model, opts.config?.durationSeconds);
+  geminiVideoAspectRatio(model, opts.config?.aspectRatio);
+  // Placeholder — actual SDK integration coming soon. The still is accepted so
+  // image-to-video UI can hand bytes through without pretending they vanished.
+  throw new Error(
+    opts.image
+      ? `Gemini ${model.label} image-to-video is not wired yet (still frame received). Use other providers for now.`
+      : `Gemini ${model.label} text-to-video is not wired yet. Use other providers for now.`
+  );
 }
 
 /**

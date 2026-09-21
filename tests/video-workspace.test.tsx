@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import VideoWorkspace from '../components/VideoWorkspace';
 import { useAppStore } from '../store/useAppStore';
+import { useDraftStore } from '../store/useDraftStore';
 import { useFalJobsStore } from '../store/useFalJobsStore';
 
 const { cancelFalJobMock, submitFalJobMock, uploadFalFilesMock } = vi.hoisted(() => ({
@@ -57,6 +58,7 @@ describe('VideoWorkspace provider selection', () => {
       videoEngine: 'kie',
       falVideoModel: 'veo-3-1-fast',
     });
+    useDraftStore.getState().reset();
     useFalJobsStore.getState().clearJobs();
   });
 
@@ -108,13 +110,13 @@ describe('VideoWorkspace provider selection', () => {
     );
 
     const providers = screen.getByRole('radiogroup', { name: 'Video provider' });
-    // Gemini leads as the BYOK option; Runware follows as the cheapest per
-    // second, then the rest keep their established order.
+    // Runware leads as the cheapest per second, then Kie and fal; Gemini is
+    // the BYOK option in the fourth slot, then the remaining aggregators.
     expect(screen.getAllByRole('radio').map((radio) => radio.textContent?.trim())).toEqual([
-      'Gemini',
       'Runware',
       'Kie.ai',
       'fal.ai',
+      'Gemini',
       'Atlas Cloud',
       'CometAPI',
       'PiAPI',
