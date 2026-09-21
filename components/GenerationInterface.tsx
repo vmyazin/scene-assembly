@@ -1422,7 +1422,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
               )}
             </button>
 
-            <p className="mt-2 text-center text-xs text-[var(--foreground-subtle)]">
+            <p className="text-center text-xs text-[var(--foreground-subtle)]">
               {costLine}
             </p>
 

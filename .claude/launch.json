@@ -244,6 +244,13 @@
       "request": "launch",
       "command": "ACCOUNT_WORKER_PORT=8863 DEV_FAKE_GENERATION=1 npm run dev -- --port 3163",
       "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Mode switch tooltip smoke test",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "ACCOUNT_WORKER_PORT=8865 DEV_FAKE_GENERATION=1 npm run dev -- --port 3165",
+      "cwd": "${workspaceFolder}"
     }
   ]
 }

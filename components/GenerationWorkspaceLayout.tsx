@@ -64,12 +64,13 @@ export default function GenerationWorkspaceLayout({
   return (
     <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2 lg:items-start lg:gap-4">
       <div className={`space-y-3.5 ${setupPanel}`}>{setup}</div>
-      <div className="space-y-3.5">
+      <div className="space-y-2.5">
         <div
-          className={`space-y-3.5 lg:z-20 lg:rounded-(--radius) lg:bg-[hsl(var(--tint-hue)_38%_5%/0.93)] lg:pb-3.5 lg:backdrop-blur-xl ${promptPanel}`}
+          className={`space-y-2.5 lg:z-20 lg:rounded-(--radius) lg:bg-[hsl(var(--tint-hue)_38%_5%/0.93)] lg:pb-3.5 lg:backdrop-blur-xl ${promptPanel}`}
         >
           {prompt}
-          <div className="space-y-3.5">{actions}</div>
+          {/* One gap owns action spacing; child margins otherwise add to it. */}
+          <div className="flex flex-col gap-1.5">{actions}</div>
         </div>
         {results}
       </div>
