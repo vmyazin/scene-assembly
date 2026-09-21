@@ -104,7 +104,7 @@ const RUNWARE_MODELS: ProviderModel[] = [
   },
   {
     // Verified 2026-09-11: https://runware.ai/docs/models/prunaai-p-video-edit
-    // Promo pricing until Mon Nov 3, 2026 (was $0.045 std / $0.025 draft)
+    // Promo pricing until Nov 3, 2026 (was $0.045 std / $0.025 draft)
     id: 'prunaai:p-video@edit', label: 'P-Video-Edit', fileCode: 'p-video-edit',
     kind: 'video', modes: ['edit'],
     videoEdit: {

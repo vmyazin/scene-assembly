@@ -1,3 +1,4 @@
+// tests/models/listbox-specs.test.ts
 import { describe, expect, it } from 'vitest';
 
 import { findModel } from '@/lib/providers/catalog';
@@ -43,6 +44,11 @@ describe('listbox spec derivation', () => {
     // Runware's Wan 3.0 lists 480p / 720p / 1080p presets and nothing about shape.
     const cells = providerVideoSpecs(findModel('runware', 'alibaba:wan@3.0')!).map(textOf);
     expect(cells).toEqual(['30s', '1080p', '480p–1080p', '$0.05/s']);
+  });
+
+  it('prints P-Video-Edit From at the four-digit draft promo, not a rounded sticker', () => {
+    const cells = providerVideoSpecs(findModel('runware', 'prunaai:p-video@edit')!, 'edit').map(textOf);
+    expect(cells).toEqual(['15s', '848px', 'source', '$0.0188/s']);
   });
 
   it('says "fixed" for a video model with no seconds control', () => {

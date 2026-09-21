@@ -183,10 +183,16 @@ export function maxSeconds(model: Pick<ProviderModel, 'durations' | 'duration'>)
   return Math.max(...values);
 }
 
-/** `0.036` → `$0.036`, `0.1` → `$0.10`: three places, one trailing zero trimmed. */
+/**
+ * `0.036` → `$0.036`, `0.1` → `$0.10`, `0.0188` → `$0.0188`.
+ * Three places with one trailing zero trimmed, unless the fourth digit is
+ * significant — `toFixed(3)` would print P-Video-Edit's $0.0188 draft as $0.019.
+ */
 function compactUsd(usd: number): string {
-  const fixed = usd.toFixed(3);
-  return `$${fixed.endsWith('0') ? fixed.slice(0, -1) : fixed}`;
+  const four = usd.toFixed(4);
+  if (!four.endsWith('0')) return `$${four}`;
+  const three = usd.toFixed(3);
+  return `$${three.endsWith('0') ? three.slice(0, -1) : three}`;
 }
 
 const RATE_UNITS: Record<ProviderRate['per'], string> = { second: '/s', image: '/img', video: '/clip' };
