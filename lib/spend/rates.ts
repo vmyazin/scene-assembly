@@ -51,6 +51,60 @@ function geminiRate(modelId: string | undefined): GeminiImageRate {
   return GEMINI_IMAGE_RATES[modelId ?? ''] ?? GEMINI_IMAGE_RATES[DEFAULT_GEMINI_MODEL_ID];
 }
 
+/**
+ * https://ai.google.dev/gemini-api/docs/pricing — Veo video models, read
+ * 2026-09-21. Video generation is priced per second of output, with audio
+ * included in the base rate. Veo 3.1 Lite is the most affordable entry point,
+ * at $0.05/s for 720p and $0.08/s for 1080p. 4K is not supported on Lite.
+ */
+export interface GeminiVideoRate {
+  /** USD per second of generated video, by resolution. Audio is always included. */
+  usdPerSecond: Record<string, number>;
+}
+
+export const GEMINI_VIDEO_RATES: Record<string, GeminiVideoRate> = {
+  'veo-3.1-lite-generate-preview': {
+    usdPerSecond: { '720p': 0.05, '1080p': 0.08 },
+  },
+};
+
+export const DEFAULT_GEMINI_VIDEO_MODEL_ID = 'veo-3.1-lite-generate-preview';
+
+function geminiVideoRate(modelId: string | undefined): GeminiVideoRate | null {
+  return GEMINI_VIDEO_RATES[modelId ?? ''] ?? GEMINI_VIDEO_RATES[DEFAULT_GEMINI_VIDEO_MODEL_ID] ?? null;
+}
+
+/**
+ * Cost of one Gemini video generation at the given resolution and duration.
+ * Returns 0 if the model or resolution is unknown.
+ */
+export function geminiVideoCost(
+  modelId: string | undefined,
+  resolution: string | undefined,
+  durationSeconds: number | undefined
+): number {
+  const rate = geminiVideoRate(modelId);
+  if (!rate) return 0;
+  const usd = rate.usdPerSecond[resolution ?? '720p'] ?? rate.usdPerSecond['720p'] ?? 0;
+  const duration = durationSeconds && Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0;
+  const cost = usd * duration;
+  return Number.isFinite(cost) && cost > 0 ? cost : 0;
+}
+
+/**
+ * Rate label for Gemini video models. Shows the price range across supported
+ * resolutions, or the specific resolution's price if provided.
+ */
+export function geminiVideoRateLabel(modelId: string | undefined, resolution?: string): string | null {
+  const rate = geminiVideoRate(modelId);
+  if (!rate) return null;
+  const rates = resolution
+    ? [rate.usdPerSecond[resolution] ?? rate.usdPerSecond['720p']]
+    : Object.values(rate.usdPerSecond);
+  const range = usdRange(rates);
+  return range && `${range} / s`;
+}
+
 /** https://kie.ai/pricing — "1 credit ≈ $0.005", read 2026-09-03. */
 export const KIE_USD_PER_CREDIT = 0.005;
 

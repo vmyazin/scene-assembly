@@ -3,13 +3,14 @@ import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type { EngineId } from '@/lib/engines/registry';
 import { DEFAULT_GEMINI_IMAGE_MODEL } from '@/lib/engines/gemini-catalog';
+import { DEFAULT_GEMINI_VIDEO_MODEL } from '@/lib/engines/gemini-video-catalog';
 import type { ImageFormatPreference } from '@/lib/image/policy';
 import { DEFAULT_MODELS } from '@/lib/providers/catalog';
 import type { ProviderId } from '@/lib/providers/types';
 import type { ImportableProvider } from '@/lib/account/key-import';
 
 /** Engines that can produce video: the two original ones plus the aggregators. */
-export type VideoEngineId = 'kie' | 'fal' | ProviderId;
+export type VideoEngineId = 'gemini' | 'kie' | 'fal' | ProviderId;
 
 /** Store field names per provider, so the setters stay one line each. */
 const KEY_FIELDS: Record<ProviderId, 'runwareApiKey' | 'atlasApiKey' | 'cometApiKey' | 'piapiApiKey'> = {
@@ -42,6 +43,8 @@ interface AppState {
    * the same resolution, so the choice is worth keeping between visits.
    */
   geminiImageModel: string;
+  /** Which Gemini video model runs (persisted). */
+  geminiVideoModel: string;
   /** Cloudflare Workers AI credentials (persisted). */
   cfAccountId: string;
   cfToken: string;
@@ -104,6 +107,7 @@ interface AppState {
   setApiKey: (key: string) => void;
   setEngine: (engine: EngineId) => void;
   setGeminiImageModel: (modelId: string) => void;
+  setGeminiVideoModel: (modelId: string) => void;
   setCfAccountId: (v: string) => void;
   setCfToken: (v: string) => void;
   setKieApiKey: (key: string) => void;
@@ -163,6 +167,7 @@ export const useAppStore = create<AppState>()(
       apiKey: '',
       engine: 'gemini',
       geminiImageModel: DEFAULT_GEMINI_IMAGE_MODEL,
+      geminiVideoModel: DEFAULT_GEMINI_VIDEO_MODEL,
       cfAccountId: '',
       cfToken: '',
       kieApiKey: '',
@@ -191,6 +196,7 @@ export const useAppStore = create<AppState>()(
       setApiKey: (key) => set({ apiKey: key }),
       setEngine: (engine) => set({ engine }),
       setGeminiImageModel: (modelId) => set({ geminiImageModel: modelId }),
+      setGeminiVideoModel: (modelId) => set({ geminiVideoModel: modelId }),
       setCfAccountId: (v) => set({ cfAccountId: v }),
       setCfToken: (v) => set({ cfToken: v }),
       setKieApiKey: (key) => set({ kieApiKey: key }),
@@ -243,6 +249,7 @@ export const useAppStore = create<AppState>()(
         apiKey: s.apiKey,
         engine: s.engine,
         geminiImageModel: s.geminiImageModel,
+        geminiVideoModel: s.geminiVideoModel,
         cfAccountId: s.cfAccountId,
         cfToken: s.cfToken,
         kieApiKey: s.kieApiKey,
