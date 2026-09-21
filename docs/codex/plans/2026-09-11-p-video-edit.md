@@ -1,3 +1,6 @@
+## Follow-up decision — 2026-09-21
+P-Video-Edit estimates and the model-list From sticker use the Runware promo: $0.0188/s draft, $0.0338/s std, until Nov 3, 2026. List remains $0.025 / $0.045. Catalog `videoEdit` rates are the live figures; this is display/spend only. The 2026-09-11 smoke numbers below ($0.18 / $0.10 for a 4s clip) were list-price arithmetic and are not current.
+
 ## Follow-up decision — 2026-09-11
 User testing returned the synthetic fixture because the review server remained in DEV_FAKE_GENERATION=1. This supersedes the simulated review server state below: restart with DEV_FAKE_GENERATION=0 for real rendering. Make the simulated submission button explicitly say “Run simulation · test video only” and omit vendor price estimates in simulation, so it cannot look like a real paid edit. Align P-Video-Edit image captions with its prompt syntax.
 
