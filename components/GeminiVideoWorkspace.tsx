@@ -9,6 +9,7 @@ import ConnectionGate, { isGated } from '@/components/ConnectionGate';
 import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
 import JobElapsed from '@/components/JobElapsed';
 import LastFrameActions from '@/components/LastFrameActions';
+import ModelControls, { type ModelControlField } from '@/components/ModelControls';
 import PromptPanel from '@/components/PromptPanel';
 import ProviderLogo from '@/components/ProviderLogo';
 import ReferenceStack from '@/components/ReferenceStack';
@@ -25,7 +26,12 @@ import {
   geminiPollVideoOperation,
   geminiVideoWait,
 } from '@/lib/engines/gemini';
-import { GEMINI_VIDEO_MODELS } from '@/lib/engines/gemini-video-catalog';
+import {
+  GEMINI_VIDEO_MODELS,
+  geminiVideoDuration,
+  geminiVideoDurationOptions,
+  type GeminiVideoModel,
+} from '@/lib/engines/gemini-video-catalog';
 import { keepUploadedImages } from '@/lib/gallery/keep-upload';
 import { extensionForMedia } from '@/lib/media-download';
 import { requestPromptSlug } from '@/lib/micro-ai/browser';
@@ -88,6 +94,56 @@ function downloadBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
+/**
+ * Same ModelControls the fal/Kie video workspaces use, so duration sits in a
+ * compact field beside resolution toggles instead of a second stacked dropdown.
+ * Duration stays a discrete select (4/6/8) because Veo rejects freeform lengths;
+ * resolution uses the shared segmented control because Lite only publishes two.
+ */
+function geminiVideoControlFields(
+  model: GeminiVideoModel,
+  resolution: string
+): ModelControlField[] {
+  return [
+    {
+      key: 'duration',
+      label: 'Duration',
+      type: 'select',
+      defaultValue: geminiVideoDuration(model, undefined, resolution),
+      options: geminiVideoDurationOptions(model, resolution).map((seconds) => ({
+        label: String(seconds),
+        value: seconds,
+      })),
+    },
+    {
+      key: 'resolution',
+      label: 'Resolution',
+      type: 'select',
+      defaultValue: model.resolutions[0],
+      options: model.resolutions.map((value) => ({ label: value, value })),
+    },
+    {
+      key: 'aspectRatio',
+      label: 'Aspect ratio',
+      type: 'select',
+      defaultValue: model.aspectRatios[0],
+      options: model.aspectRatios.map((value) => ({ label: value, value })),
+    },
+  ];
+}
+
+function isGeminiResolution(value: string | number | boolean): value is '720p' | '1080p' {
+  return value === '720p' || value === '1080p';
+}
+
+function isGeminiDuration(value: string | number | boolean): value is 4 | 6 | 8 {
+  return value === 4 || value === 6 || value === 8;
+}
+
+function isGeminiAspectRatio(value: string | number | boolean): value is '16:9' | '9:16' {
+  return value === '16:9' || value === '9:16';
+}
+
 export default function GeminiVideoWorkspace({
   inputMode,
   onOpenConnections,
@@ -119,8 +175,7 @@ export default function GeminiVideoWorkspace({
   const needsKey = !apiKey;
   const gated = isGated(needsKey, false);
   const currentModel = GEMINI_VIDEO_MODELS.find((m) => m.id === geminiVideoModel) || GEMINI_VIDEO_MODELS[0];
-  const effectiveDuration = resolution === '1080p' ? 8 : duration;
-  const durationOptions = resolution === '1080p' ? currentModel.durations.filter((value) => value === 8) : currentModel.durations;
+  const effectiveDuration = geminiVideoDuration(currentModel, duration, resolution) as 4 | 6 | 8;
   const costEstimate = geminiVideoCost(geminiVideoModel, resolution, effectiveDuration);
   const rateLabel = geminiVideoRateLabel(geminiVideoModel, resolution);
   const isImageMode = inputMode === 'image';
@@ -222,6 +277,21 @@ export default function GeminiVideoWorkspace({
   const removeReference = (index: number) => {
     const reference = references[index];
     if (reference) useDraftStore.getState().removeReference(reference.id);
+  };
+
+  const updateControl = (key: string, value: string | number | boolean) => {
+    if (key === 'resolution' && isGeminiResolution(value)) {
+      setResolution(value);
+      if (value === '1080p') setDuration(8);
+      return;
+    }
+    if (key === 'duration' && isGeminiDuration(value)) {
+      setDuration(geminiVideoDuration(currentModel, value, resolution) as 4 | 6 | 8);
+      return;
+    }
+    if (key === 'aspectRatio' && isGeminiAspectRatio(value)) {
+      setAspectRatio(value);
+    }
   };
 
   const handleGenerate = async () => {
@@ -383,49 +453,13 @@ export default function GeminiVideoWorkspace({
             {currentModel.note}
           </div>
 
-          <div className="grid gap-3">
-            <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium">Resolution</span>
-              <select
-                value={resolution}
-                onChange={(e) => {
-                  const next = e.target.value as '720p' | '1080p';
-                  setResolution(next);
-                  if (next === '1080p') setDuration(8);
-                }}
-                className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
-              >
-                {currentModel.resolutions.map((res) => (
-                  <option key={res} value={res}>{res}</option>
-                ))}
-              </select>
-            </label>
-
-            <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium">Duration</span>
-              <select
-                value={effectiveDuration}
-                onChange={(e) => setDuration(Number(e.target.value) as 4 | 6 | 8)}
-                className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
-              >
-                {durationOptions.map((dur) => (
-                  <option key={dur} value={dur}>{dur}s</option>
-                ))}
-              </select>
-            </label>
-
-            <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium">Aspect ratio</span>
-              <select
-                value={aspectRatio}
-                onChange={(e) => setAspectRatio(e.target.value as '16:9' | '9:16')}
-                className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
-              >
-                {currentModel.aspectRatios.map((ratio) => (
-                  <option key={ratio} value={ratio}>{ratio}</option>
-                ))}
-              </select>
-            </label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <ModelControls
+              namespace="gemini-video"
+              fields={geminiVideoControlFields(currentModel, resolution)}
+              values={{ duration: effectiveDuration, resolution, aspectRatio }}
+              onChange={updateControl}
+            />
           </div>
         </div>
       </div>
