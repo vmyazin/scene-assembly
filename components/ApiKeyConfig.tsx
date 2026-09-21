@@ -1,3 +1,4 @@
+// components/ApiKeyConfig.tsx
 'use client';
 
 import { useState, useEffect, useId, useRef } from 'react';
@@ -5,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Key, Eye, EyeOff, AlertCircle, X, Loader2, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAccountStore } from '@/store/useAccountStore';
+import DialogPortal from '@/components/DialogPortal';
 import { ConnectionStorageBadge, ConnectionStorageButton } from '@/components/account/ConnectionStorageControl';
 import { useAppStore } from '@/store/useAppStore';
 import MicroAiUsagePanel from '@/components/MicroAiUsagePanel';
@@ -554,6 +556,7 @@ export default function ApiKeyConfig({ open, onOpenChange, focusProvider }: ApiK
   }, [open, focusProvider]);
 
   return (
+    <DialogPortal>
     <AnimatePresence>
       {open && (
         <motion.div
@@ -817,5 +820,6 @@ export default function ApiKeyConfig({ open, onOpenChange, focusProvider }: ApiK
         </motion.div>
       )}
     </AnimatePresence>
+    </DialogPortal>
   );
 }

@@ -1,9 +1,11 @@
+// components/ConfirmDialog.tsx
 'use client';
 
 import { useId, useRef, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AlertTriangle } from 'lucide-react';
 
+import DialogPortal from '@/components/DialogPortal';
 import { useAccessibleDialog } from '@/hooks/useAccessibleDialog';
 
 interface ConfirmDialogProps {
@@ -41,6 +43,7 @@ export default function ConfirmDialog({
   useAccessibleDialog({ open, onClose: onCancel, dialogRef: panelRef });
 
   return (
+    <DialogPortal>
     <AnimatePresence>
       {open && (
         <motion.div
@@ -87,5 +90,6 @@ export default function ConfirmDialog({
         </motion.div>
       )}
     </AnimatePresence>
+    </DialogPortal>
   );
 }

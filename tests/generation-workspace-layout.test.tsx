@@ -54,6 +54,9 @@ it('lets the setup and prompt panels stick while results scroll past', () => {
     expect(panel.className).toMatch(/lg:max-h-\[calc\(100dvh/);
     expect(panel.className).toContain('lg:overflow-y-auto');
   }
+  // Results pass under this pane, which is why it has a stacking context.
+  // Dialogs must portal to body (`DialogPortal`) rather than competing here.
+  expect(promptPanel.className).toContain('lg:z-20');
   // Results stay in the scrolling flow, outside the stuck block.
   expect(promptPanel.textContent).not.toContain('Results');
 });

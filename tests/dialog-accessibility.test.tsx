@@ -126,10 +126,12 @@ describe('accessible dialogs', () => {
 
   it('exposes ImageLightbox as a named modal with a close affordance and Escape handler', async () => {
     const onClose = vi.fn();
-    render(<ImageLightbox src="/preview.png" open onClose={onClose} />);
+    const { container } = render(<ImageLightbox src="/preview.png" open onClose={onClose} />);
 
     const dialog = await screen.findByRole('dialog', { name: 'Image preview' });
     expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(container.contains(dialog)).toBe(false);
+    expect(document.body.contains(dialog)).toBe(true);
     // Framer Motion keeps the entering portal at opacity 0 in jsdom; the
     // accessible, rendered close control is the observable affordance here.
     expect(screen.getByRole('button', { name: /close/i })).toBeInTheDocument();

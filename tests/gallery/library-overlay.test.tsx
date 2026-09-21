@@ -207,4 +207,27 @@ describe('LibraryOverlay', () => {
     fireEvent.click(screen.getByRole('button', { name: 'This browser' }));
     expect(screen.getByRole('tab', { name: 'results (1)' })).toBeInTheDocument();
   });
+
+  it('portals onto document.body so a sticky generate column cannot paint over it', () => {
+    // The workspace prompt pane is `lg:sticky lg:z-20` with backdrop-blur —
+    // a stacking context. An in-tree `fixed z-[60]` overlay from the setup
+    // column stays trapped in that column's (z-auto) context, which is how
+    // Prompt / Generate showed through the cloud library. jsdom cannot compute
+    // stacking, so this asserts the DOM escape the CSS needs.
+    const { container } = render(
+      <div>
+        <div data-testid="setup-column" className="lg:sticky">
+          <LibraryOverlay open onOpenChange={() => undefined} purpose="pick-image" />
+        </div>
+        <div data-testid="prompt-column" className="lg:sticky lg:z-20 lg:backdrop-blur-xl">
+          Generate video
+        </div>
+      </div>,
+    );
+
+    const dialog = screen.getByRole('dialog', { name: 'Choose an image' });
+    expect(dialog.closest('[data-testid="setup-column"]')).toBeNull();
+    expect(container.contains(dialog)).toBe(false);
+    expect(document.body.contains(dialog)).toBe(true);
+  });
 });

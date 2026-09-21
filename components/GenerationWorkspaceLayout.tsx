@@ -1,3 +1,4 @@
+// components/GenerationWorkspaceLayout.tsx
 import type { ReactNode } from 'react';
 
 interface GenerationWorkspaceLayoutProps {
@@ -66,6 +67,10 @@ export default function GenerationWorkspaceLayout({
       <div className={`space-y-3.5 ${setupPanel}`}>{setup}</div>
       <div className="space-y-2.5">
         <div
+          // `lg:z-20` is only so results scroll *under* this stuck prompt. It
+          // also becomes a stacking context, which is why app dialogs portal to
+          // `document.body` (`DialogPortal`) rather than rendering in-tree:
+          // a `fixed` overlay from the setup column cannot outrank this pane.
           className={`space-y-2.5 lg:z-20 lg:rounded-(--radius) lg:bg-[hsl(var(--tint-hue)_38%_5%/0.93)] lg:pb-3.5 lg:backdrop-blur-xl ${promptPanel}`}
         >
           {prompt}

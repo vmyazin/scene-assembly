@@ -1,9 +1,11 @@
+// components/account/BrowserImportDialog.tsx
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CloudUpload, Film, Image as ImageIcon } from 'lucide-react';
 
+import DialogPortal from '@/components/DialogPortal';
 import { useAccessibleDialog } from '@/hooks/useAccessibleDialog';
 import { formatAccountBytes as size, type AccountStorage } from '@/lib/account/use-library';
 import { browserKeyCandidates } from '@/lib/account/key-import';
@@ -123,9 +125,8 @@ export default function BrowserImportDialog({
   const usedShare = storage ? Math.min(100, (storage.usedBytes / storage.limitBytes) * 100) : 0;
   const addShare = storage ? Math.min(100 - usedShare, (asset.selectedBytes / storage.limitBytes) * 100) : 0;
 
-  if (typeof document === 'undefined') return null;
-
   return (
+    <DialogPortal>
     <AnimatePresence>
       {open && (
         <motion.div
@@ -303,5 +304,6 @@ export default function BrowserImportDialog({
         </motion.div>
       )}
     </AnimatePresence>
+    </DialogPortal>
   );
 }
