@@ -216,6 +216,14 @@
   it came from and nobody can tell which run it applied to. Capture never
   throws: the generation it describes has already succeeded. Spec:
   `docs/superpowers/specs/2026-09-03-spend-dashboard-design.md`.
+- **A PR that changes user-visible UI** → take a screenshot of the worked-on UI
+  from the running app and put it in the PR description under **UI screenshot**.
+  Crop to the changed control when that is the whole change. Reviewers should
+  not have to check out the branch to see selected-state color, density, or
+  alignment — a class-name diff cannot show those. Skip only when there is
+  nothing to look at (docs, rates, Worker-only API). This is not the changelog
+  screenshot gate further down, which stays conservative; a UI PR still needs
+  the picture even if the changelog would skip it.
 
 ## Session workflow (worktree → smoke-test → ship → wipe)
 
@@ -326,6 +334,15 @@ inventing fake people or orgs beyond the seed, skip it.
 - Use a non-cancelling concurrency group — let an in-flight deploy finish rather than
   killing it mid-upload.
 - Comment any ordering dependency between deploy steps at the step itself.
+
+## Pull requests
+
+- **When a PR changes user-visible UI, include a screenshot of the worked-on UI
+  in the PR description.** Crop to the changed control when that is the whole
+  change; embed it under a **UI screenshot** heading so reviewers see the screen
+  without digging through commits. A layout or selected-state change that only
+  exists in class names cannot be reviewed from the diff. Skip only for changes
+  with nothing to look at (docs, rates, Worker-only API).
 
 ## Commits
 
