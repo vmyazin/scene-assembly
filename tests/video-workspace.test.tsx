@@ -1,3 +1,4 @@
+// tests/video-workspace.test.tsx
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -107,20 +108,41 @@ describe('VideoWorkspace provider selection', () => {
     );
 
     const providers = screen.getByRole('radiogroup', { name: 'Video provider' });
-    // Runware leads on cost, so it takes the first slot; the rest keep their
-    // established order behind it.
-    expect(screen.getAllByRole('radio').map((radio) => radio.textContent)).toEqual([
-      expect.stringContaining('Runware'),
-      expect.stringContaining('Kie.ai'),
-      expect.stringContaining('fal.ai'),
-      expect.stringContaining('Atlas Cloud'),
-      expect.stringContaining('CometAPI'),
-      expect.stringContaining('PiAPI'),
+    // Gemini leads as the BYOK option; Runware follows as the cheapest per
+    // second, then the rest keep their established order.
+    expect(screen.getAllByRole('radio').map((radio) => radio.textContent?.trim())).toEqual([
+      'Gemini',
+      'Runware',
+      'Kie.ai',
+      'fal.ai',
+      'Atlas Cloud',
+      'CometAPI',
+      'PiAPI',
     ]);
     expect(screen.getByRole('radio', { name: /Kie\.ai/i })).toHaveAttribute('aria-checked', 'true');
     expect(providers.compareDocumentPosition(screen.getByTestId('kie-workspace'))).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
     );
+  });
+
+  it('names the Gemini provider and workspace without Google', async () => {
+    useAppStore.setState({ apiKey: '' });
+    render(
+      <VideoWorkspace
+        inputMode="text"
+        onInputModeChange={() => undefined}
+        onExit={() => undefined}
+        onOpenConnections={() => undefined}
+      />
+    );
+
+    await userEvent.click(screen.getByRole('radio', { name: /^Gemini$/ }));
+
+    expect(useAppStore.getState().videoEngine).toBe('gemini');
+    expect(screen.getByRole('heading', { name: 'Gemini · Veo 3.1 Lite' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Add your Gemini key to start generating' })
+    ).toBeInTheDocument();
   });
 
   it('supports arrow-key provider selection with a single roving tab stop', () => {
