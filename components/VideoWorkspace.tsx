@@ -3,6 +3,7 @@
 import { type StaticImageData } from 'next/image';
 import { ImagePlus, MoveRight, ScanFace, Type } from 'lucide-react';
 import FalGenerationWorkspace from '@/components/FalGenerationWorkspace';
+import GeminiVideoWorkspace from '@/components/GeminiVideoWorkspace';
 import KieGenerationWorkspace from '@/components/KieGenerationWorkspace';
 import MediaCard from '@/components/MediaCard';
 import ProviderSelector, { type VideoProvider } from '@/components/ProviderSelector';
@@ -98,6 +99,7 @@ export default function VideoWorkspace({
 }: VideoWorkspaceProps) {
   const videoEngine = useAppStore((state) => state.videoEngine);
   const setVideoEngine = useAppStore((state) => state.setVideoEngine);
+  const isGemini = videoEngine === 'gemini';
   const isFal = videoEngine === 'fal';
   const activeProvider: ProviderId | null =
     videoEngine === 'runware' || videoEngine === 'atlas' || videoEngine === 'comet' || videoEngine === 'piapi'
@@ -130,6 +132,9 @@ export default function VideoWorkspace({
   // rather than passing a provider-only mode into fal or Kie.
   const activeMode: ProviderMode = supportsMode(videoEngine, inputMode) ? inputMode : 'image';
   const legacyMode: FalInputMode = activeMode === 'reference' || activeMode === 'edit' ? 'image' : activeMode;
+  
+  // Gemini supports only text and image modes
+  const geminiMode: 'text' | 'image' = activeMode === 'text' ? 'text' : 'image';
 
   const selectEngine = (engine: VideoProvider) => {
     if (!supportsMode(engine, inputMode)) onInputModeChange('image');
@@ -211,6 +216,13 @@ export default function VideoWorkspace({
           onBack={onExit}
           onOpenConnections={onOpenConnections}
           onContinueFromFrame={() => onInputModeChange('image')}
+        />
+      ) : isGemini ? (
+        <GeminiVideoWorkspace
+          key={`gemini-${geminiMode}`}
+          inputMode={geminiMode}
+          onBack={onExit}
+          onOpenConnections={onOpenConnections}
         />
       ) : isFal ? (
         <FalGenerationWorkspace

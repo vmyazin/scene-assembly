@@ -3,7 +3,7 @@
 import { useRef, type KeyboardEvent } from 'react';
 import ProviderLogo from '@/components/ProviderLogo';
 
-export type VideoProvider = 'kie' | 'fal' | 'runware' | 'atlas' | 'comet' | 'piapi';
+export type VideoProvider = 'gemini' | 'kie' | 'fal' | 'runware' | 'atlas' | 'comet' | 'piapi';
 
 interface ProviderSelectorProps {
   value: VideoProvider;
@@ -12,8 +12,9 @@ interface ProviderSelectorProps {
 
 const providers = [
   // No blurbs: the model counts they carried drifted from the catalogs, and a
-  // provider's name is the whole of what this control chooses. Runware leads —
-  // it is the cheapest per second of the five.
+  // provider's name is the whole of what this control chooses. Gemini leads as
+  // the BYOK option, followed by Runware as the cheapest per second.
+  { id: 'gemini' as const, label: 'Google Gemini' },
   { id: 'runware' as const, label: 'Runware' },
   { id: 'kie' as const, label: 'Kie.ai' },
   { id: 'fal' as const, label: 'fal.ai' },
@@ -46,7 +47,7 @@ export default function ProviderSelector({ value, onChange }: ProviderSelectorPr
     <div
       role="radiogroup"
       aria-label="Video provider"
-      className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6"
+      className="grid gap-2 sm:grid-cols-3 lg:grid-cols-7"
     >
       {providers.map((provider, index) => {
         const selected = provider.id === value;
