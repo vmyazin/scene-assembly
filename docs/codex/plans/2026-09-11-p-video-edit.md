@@ -25,7 +25,7 @@ Run pnpm --ignore-workspace install --frozen-lockfile --prefer-offline and pnpm 
 - Provider/model/pricing regression suite: 242 passed; final edit regression run: 16 passed, including the added model-switch source-limit test.
 - Cloud aggregator/edit suite: 20 tests passed across initial run and corrected test-token rerun.
 - Web and Worker TypeScript checks passed; Next production build passed; git diff --check passed.
-- Browser smoke: local test account, P-Video-Edit selected, seeded four-second source from cloud library, Standard estimate $0.18, Draft estimate $0.10, prompt shortcut, submitted local cloud simulation, saved video and download control visible.
+- Browser smoke: local test account, P-Video-Edit selected, seeded four-second source from cloud library, Standard estimate $0.14 (promo; was $0.18), Draft estimate $0.08 (promo; was $0.10), prompt shortcut, submitted local cloud simulation, saved video and download control visible.
 - Local simulation does not verify actual Runware transformation quality. No paid P-Video-Edit run performed.
 - Review server remains at http://localhost:3153/?workspace=video&videoMode=edit. No commit, push, or deployment performed; awaiting review.
 

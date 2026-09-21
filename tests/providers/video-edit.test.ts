@@ -63,7 +63,7 @@ describe('P-Video-Edit', () => {
     expect(()=>validateEditSource({durationSeconds:NaN,width:1280,height:720},model.videoEdit!)).toThrow();
   });
   it('prices Standard and Draft using source duration', () => {
-    expect(resolveCatalogRate(model,5,1,{inputMode:'edit'}).costUsd).toBeCloseTo(0.225);
-    expect(resolveCatalogRate(model,5,1,{inputMode:'edit',draft:true}).costUsd).toBeCloseTo(0.125);
+    expect(resolveCatalogRate(model,5,1,{inputMode:'edit'}).costUsd).toBeCloseTo(0.169);
+    expect(resolveCatalogRate(model,5,1,{inputMode:'edit',draft:true}).costUsd).toBeCloseTo(0.094);
   });
 });

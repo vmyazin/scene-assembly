@@ -2,7 +2,7 @@
 Status: Approved design
 
 ## Context and goals
-Add Pruna P-Video-Edit through Runware to the existing Edit video workspace. Accept a source up to 15 seconds and up to four optional images. Provide Standard and Draft rendering, with $0.045/s and $0.025/s estimates respectively. Output follows source duration and aspect ratio at 25fps with a fixed model-dependent size (maximum long edge 848px). Audio and prompt enhancement use provider defaults.
+Add Pruna P-Video-Edit through Runware to the existing Edit video workspace. Accept a source up to 15 seconds and up to four optional images. Provide Standard and Draft rendering, with $0.0338/s and $0.0188/s promo estimates respectively (promo valid until Mon Nov 3, 2026; list $0.045/s std, $0.025/s draft). Output follows source duration and aspect ratio at 25fps with a fixed model-dependent size (maximum long edge 848px). Audio and prompt enhancement use provider defaults.
 
 Source: https://runware.ai/docs/models/prunaai-p-video-edit (verified 2026-09-11).
 
