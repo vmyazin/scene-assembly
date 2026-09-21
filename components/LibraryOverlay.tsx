@@ -1,3 +1,4 @@
+// components/LibraryOverlay.tsx
 'use client';
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
@@ -5,6 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Library, Loader2, Upload, X } from 'lucide-react';
 
 import AccountLibrary from '@/components/account/AccountLibrary';
+import DialogPortal from '@/components/DialogPortal';
 import { useAccountStore } from '@/store/useAccountStore';
 import GalleryGrid from '@/components/GalleryGrid';
 import PromptLibraryList from '@/components/PromptLibraryList';
@@ -148,6 +150,7 @@ export default function LibraryOverlay({
   };
 
   return (
+    <DialogPortal>
     <AnimatePresence>
       {open && (
         <motion.div
@@ -332,5 +335,6 @@ export default function LibraryOverlay({
         </motion.div>
       )}
     </AnimatePresence>
+    </DialogPortal>
   );
 }

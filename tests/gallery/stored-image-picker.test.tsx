@@ -46,4 +46,12 @@ describe('StoredImagePicker', () => {
     });
     expect(useDraftStore.getState().references[0]?.file.name).toBe('stored-library-image.png');
   });
+
+  it('opens the library overlay on document.body rather than inside the picker', () => {
+    const { container } = render(<StoredImagePicker referenceLimit={2} />);
+    fireEvent.click(screen.getByRole('button', { name: 'From library' }));
+    const dialog = screen.getByRole('dialog', { name: 'Choose an image' });
+    expect(container.contains(dialog)).toBe(false);
+    expect(document.body.contains(dialog)).toBe(true);
+  });
 });

@@ -1,18 +1,20 @@
+// components/ImageLightbox.tsx
 'use client';
 
 import { AnimatePresence, motion } from 'framer-motion';
 import { Download, X } from 'lucide-react';
 import { useRef } from 'react';
-import { createPortal } from 'react-dom';
 
+import DialogPortal from '@/components/DialogPortal';
 import { useAccessibleDialog } from '@/hooks/useAccessibleDialog';
 
 /**
  * Full-screen view of a single result.
  *
  * Portaled to <body> so it escapes the z-10 stacking context of <main> and
- * covers the header and footer, and shared by every workspace that shows an
- * image: a result is worth looking at closely wherever it was generated.
+ * the sticky Generate column, covering the header and footer. Shared by every
+ * workspace that shows an image: a result is worth looking at closely wherever
+ * it was generated.
  */
 export default function ImageLightbox({
   src,
@@ -31,9 +33,8 @@ export default function ImageLightbox({
   const dialogRef = useRef<HTMLDivElement>(null);
   useAccessibleDialog({ open: open && Boolean(src), onClose, dialogRef });
 
-  if (typeof document === 'undefined') return null;
-
-  return createPortal(
+  return (
+    <DialogPortal>
     <AnimatePresence>
       {open && src && (
         <motion.div
@@ -81,7 +82,7 @@ export default function ImageLightbox({
           )}
         </motion.div>
       )}
-    </AnimatePresence>,
-    document.body
+    </AnimatePresence>
+    </DialogPortal>
   );
 }

@@ -95,6 +95,14 @@ describe('Gemini video workspace image-to-video', () => {
     expect(screen.queryByLabelText('Reference image file')).toBeNull();
   });
 
+  it('opens From library on document.body so Generate video cannot paint over it', () => {
+    const { container } = renderImageWorkspace();
+    fireEvent.click(screen.getByRole('button', { name: 'From library' }));
+    const dialog = screen.getByRole('dialog', { name: 'Choose an image' });
+    expect(container.contains(dialog)).toBe(false);
+    expect(document.body.contains(dialog)).toBe(true);
+  });
+
   it('attaches an uploaded still and requires it before generating in image-to-video', async () => {
     const toastInfo = vi.spyOn(toast, 'info');
     const { container } = renderImageWorkspace();
