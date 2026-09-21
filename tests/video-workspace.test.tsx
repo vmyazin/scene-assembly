@@ -107,9 +107,9 @@ describe('VideoWorkspace provider selection', () => {
     );
 
     const providers = screen.getByRole('radiogroup', { name: 'Video provider' });
-    // Runware leads on cost, so it takes the first slot; the rest keep their
-    // established order behind it.
+    // Gemini leads as the BYOK option; Runware follows on cost, then the rest.
     expect(screen.getAllByRole('radio').map((radio) => radio.textContent)).toEqual([
+      expect.stringContaining('Gemini'),
       expect.stringContaining('Runware'),
       expect.stringContaining('Kie.ai'),
       expect.stringContaining('fal.ai'),
@@ -117,6 +117,8 @@ describe('VideoWorkspace provider selection', () => {
       expect.stringContaining('CometAPI'),
       expect.stringContaining('PiAPI'),
     ]);
+    expect(screen.getByRole('radio', { name: 'Gemini' })).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: 'Google Gemini' })).not.toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /Kie\.ai/i })).toHaveAttribute('aria-checked', 'true');
     expect(providers.compareDocumentPosition(screen.getByTestId('kie-workspace'))).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING

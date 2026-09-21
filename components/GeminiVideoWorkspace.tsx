@@ -49,7 +49,7 @@ export default function GeminiVideoWorkspace({
     <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--background-elevated)] p-4">
       <div className="flex items-center gap-2">
         <ProviderLogo provider="gemini" size={20} />
-        <h3 className="font-semibold">Google Gemini · Veo 3.1 Lite</h3>
+        <h3 className="font-semibold">Gemini · Veo 3.1 Lite</h3>
       </div>
       
       <div className="space-y-3">
@@ -115,7 +115,7 @@ export default function GeminiVideoWorkspace({
   return (
     <ConnectionGate
       provider="gemini"
-      label="Google Gemini"
+      label="Gemini"
       storage="browser"
       needsKey={needsKey}
       onConnect={() => onOpenConnections('gemini')}

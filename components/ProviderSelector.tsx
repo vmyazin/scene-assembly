@@ -14,7 +14,7 @@ const providers = [
   // No blurbs: the model counts they carried drifted from the catalogs, and a
   // provider's name is the whole of what this control chooses. Gemini leads as
   // the BYOK option, followed by Runware as the cheapest per second.
-  { id: 'gemini' as const, label: 'Google Gemini' },
+  { id: 'gemini' as const, label: 'Gemini' },
   { id: 'runware' as const, label: 'Runware' },
   { id: 'kie' as const, label: 'Kie.ai' },
   { id: 'fal' as const, label: 'fal.ai' },
