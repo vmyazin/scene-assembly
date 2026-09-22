@@ -15,6 +15,19 @@ interface JobElapsedProps {
 }
 
 /**
+ * Whether `JobElapsed` will render anything for this pair.
+ *
+ * Exported so a caller that puts a separator in front of the clock can leave it
+ * out too. A job that finished inside a second reports no duration, and the
+ * `Saved ·` it otherwise left behind reads as a row that was cut off — which
+ * local-test jobs hit every time.
+ */
+export function hasElapsed(startedAt: number | undefined, finishedAt?: number): boolean {
+  if (typeof startedAt !== 'number') return false;
+  return finishedAt === undefined || finishedAt - startedAt >= 1000;
+}
+
+/**
  * How long a job has been going, or how long it took.
  *
  * `role="timer"` carries an implicit `aria-live="off"`, which is the point: a
@@ -32,8 +45,7 @@ export default function JobElapsed({ startedAt, finishedAt, className = '' }: Jo
 
   // Nothing to say without an origin, and a finished job that somehow reports
   // no duration reads better as absent than as `took 0:00`.
-  if (typeof startedAt !== 'number') return null;
-  if (finishedAt !== undefined && seconds <= 0) return null;
+  if (!hasElapsed(startedAt, finishedAt)) return null;
 
   const clock = formatElapsed(seconds);
 

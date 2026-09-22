@@ -3,17 +3,22 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import JobQueueOverlay from '@/components/account/JobQueueOverlay';
 import { useAccountStore, type AccountSession } from '@/store/useAccountStore';
 import { useJobQueueStore } from '@/store/useJobQueueStore';
-import type { CloudJobState, CloudJobView } from '@/lib/account/contracts';
+import { useAppStore } from '@/store/useAppStore';
+import type { CloudAsset, CloudJobState, CloudJobView } from '@/lib/account/contracts';
 
 const session: AccountSession = {account:{id:'owner',name:'Owner',email:'owner@example.test'},googleEnabled:true,localSignIn:false,providers:['runware'],connections:[]};
 function job(id:string,state:CloudJobState,over:Partial<CloudJobView>={}):CloudJobView {
   return {id,provider:'runware',state,errorCode:null,createdAt:1,updatedAt:1,
     request:{provider:'runware',modelId:'bytedance:seedance@2.0-mini',mediaType:'video',inputMode:'text',prompt:'A canal at dusk',values:{},referenceIds:[]},...over};
 }
-function show(jobs:CloudJobView[]) {
+function show(jobs:CloudJobView[],assets:CloudAsset[]=[]) {
   const state=useAccountStore.getState();
-  state.applyJobs('owner',state.epoch,jobs,[]);
+  state.applyJobs('owner',state.epoch,jobs,assets);
   render(<JobQueueOverlay/>);
+}
+function asset(id:string,jobId:string):CloudAsset {
+  return {id,kind:'video',mimeType:'video/mp4',bytes:10,createdAt:1,jobId,
+    metadata:{provider:'runware',modelId:'bytedance:seedance@2.0-mini',mediaType:'video',inputMode:'text',prompt:'A canal at dusk',values:{},referenceIds:[]}};
 }
 beforeEach(()=>{
   vi.clearAllMocks();
@@ -39,6 +44,8 @@ describe('job queue overlay',()=>{
     expect(screen.getByText('Image, Gemini 3 Pro Image')).toBeInTheDocument();
   });
   it('renders nothing when no job is in flight',()=>{
+    // Succeeded work never keeps the card alive by itself: it is context for a
+    // run in progress, not a receipt that follows the reader around after one.
     show([job('a','saved'),job('b','cancelled')]);
     expect(screen.queryByLabelText('Job queue')).toBeNull();
   });
@@ -82,6 +89,44 @@ describe('job queue overlay',()=>{
   it('names a tracking-stopped job by what happened to it',()=>{
     show([job('a','failed',{errorCode:'tracking_stopped'}),job('b','running')]);
     expect(screen.getByText('Tracking stopped')).toBeInTheDocument();
+  });
+  it('keeps a succeeded job in the list, with its state and how long it took',()=>{
+    show([job('a','running'),job('b','saved',{createdAt:1000,updatedAt:13000})]);
+    expect(screen.getByText('Saved')).toBeInTheDocument();
+    // The same JobElapsed treatment as every other row, stopped rather than counting.
+    expect(screen.getByRole('timer',{name:'Took 0:12'})).toBeInTheDocument();
+  });
+  it('points a succeeded row at the one library card it produced',()=>{
+    show([job('a','running'),job('b','saved')],[asset('other','a'),asset('mine','b')]);
+    const link=screen.getByRole('link',{name:/Saved/});
+    expect(link).toHaveAttribute('href','/account#asset-mine');
+  });
+  it('still offers the library when the asset is not loaded yet',()=>{
+    show([job('a','running'),job('b','saved')]);
+    expect(screen.getByRole('link',{name:/Saved/})).toHaveAttribute('href','/account');
+  });
+  it('points a running row back at the form it was started from, engine and all',()=>{
+    show([job('a','running',{request:{provider:'runware',modelId:'bytedance:seedance@2.0-mini',mediaType:'video',inputMode:'image',prompt:'x',values:{},referenceIds:[]}})]);
+    const link=screen.getByRole('link',{name:/Generating/});
+    expect(link).toHaveAttribute('href','/?workspace=video&videoMode=image');
+    // The panel holding the spinner filters on engine and model, which live in
+    // the app store rather than the URL, so the click has to set them too.
+    useAppStore.setState({videoEngine:'kie'});
+    fireEvent.click(link);
+    expect(useAppStore.getState().videoEngine).toBe('runware');
+  });
+  it('leaves a row with no workspace as plain text rather than a dead link',()=>{
+    show([job('a','running',{provider:'local-test',request:{provider:'local-test',modelId:'local-test',mediaType:'image',inputMode:'text',prompt:'x',values:{},referenceIds:[]}})]);
+    expect(screen.getByText('Image, local-test')).toBeInTheDocument();
+    expect(screen.queryByRole('link',{name:/Generating/})).toBeNull();
+  });
+  it('counts succeeded rows against the cap, but never ahead of the running ones',()=>{
+    // A run of four finished images must not push the one still generating off
+    // the bottom of a five-row card.
+    show([...['s1','s2','s3','s4','s5'].map(id=>job(id,'saved')),job('live','running')]);
+    expect(screen.getByText('Generating')).toBeInTheDocument();
+    expect(screen.getAllByText('Saved')).toHaveLength(4);
+    expect(screen.getByText('+1 more')).toBeInTheDocument();
   });
   it('sends overflow to the account page rather than growing',()=>{
     show(['a','b','c','d','e','f','g'].map(id=>job(id,'running')));

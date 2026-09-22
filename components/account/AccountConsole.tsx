@@ -38,6 +38,17 @@ function RailBlock({ children }: { children: React.ReactNode }) {
 }
 
 /**
+ * The two deep links into this console: `#jobs` from the queue card's count,
+ * and `#asset-<id>` from a succeeded queue row (`libraryHashForAsset`).
+ */
+function readHash(): { jobs: boolean; assetId: string | null } {
+  if (typeof window === 'undefined') return { jobs: false, assetId: null };
+  const hash = window.location.hash;
+  const match = /^#asset-(.+)$/.exec(hash);
+  return { jobs: hash === '#jobs', assetId: match ? match[1] : null };
+}
+
+/**
  * The signed-in account console: a settings rail beside the cloud library.
  *
  * The library hook is mounted once, here, and its data handed down. Letting the
@@ -70,18 +81,35 @@ export default function AccountConsole({
   const ownerId = account.id;
   const router = useRouter();
   /**
-   * Deep link from the job queue card. That card is now only a count, so the
-   * page it points at has to arrive already showing the jobs it counted —
-   * landing on the asset grid would make the count a dead end.
+   * Where the job queue card sends people. `#jobs` is its count, which has to
+   * land on the jobs it counted or the count is a dead end; `#asset-<id>` is a
+   * succeeded row, which points at one result rather than at the page.
    *
-   * Read in the initializer rather than an effect: the dashboard renders
-   * "Checking your account…" until the session resolves, so this component only
-   * ever mounts in the browser, and a setState in an effect would cost a
-   * cascading render to show the wrong panel first.
+   * The initializer covers a full page load. The effect covers the rest, and it
+   * is not redundant: arriving from the studio is a client-side navigation, and
+   * Next writes that URL with `history.pushState` — which fires no `hashchange`
+   * and lands after the first render, so a console that only read the hash in
+   * its initializer showed the plain library every time the link was clicked
+   * from inside the app. `hashchange` still has its own job: the reader may
+   * already be standing on /account, and that navigation remounts nothing.
    */
-  const [filter, setFilter] = useState<LibraryFilterId>(() =>
-    typeof window !== 'undefined' && window.location.hash === '#jobs' ? 'attention' : 'all'
-  );
+  const [filter, setFilter] = useState<LibraryFilterId>(() => (readHash().jobs ? 'attention' : 'all'));
+  const [highlightAssetId, setHighlightAssetId] = useState<string | null>(() => readHash().assetId);
+  useEffect(() => {
+    const read = () => {
+      const { jobs, assetId } = readHash();
+      if (jobs) { setFilter('attention'); return; }
+      if (!assetId) return;
+      // The asset lives in the grid, so a console left on the jobs tab has to
+      // move back to it or the highlight would point at a panel that is not on
+      // screen.
+      setFilter('all');
+      setHighlightAssetId(assetId);
+    };
+    read();
+    window.addEventListener('hashchange', read);
+    return () => window.removeEventListener('hashchange', read);
+  }, []);
   const [importing, setImporting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
@@ -334,7 +362,7 @@ export default function AccountConsole({
                a button that filed the clip somewhere unnamed. The grid fires this
                only after the placement succeeds, so a failed add stays on the
                account page with its error toast. */
-            <CloudAssetGrid assets={assets} ownerId={ownerId} columns={4} onAddedToTimeline={() => router.push('/timeline')} onChanged={library.refresh} />
+            <CloudAssetGrid assets={assets} ownerId={ownerId} columns={4} highlightAssetId={highlightAssetId} onAddedToTimeline={() => router.push('/timeline')} onChanged={library.refresh} />
           )}
         </div>
 

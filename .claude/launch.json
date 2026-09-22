@@ -258,6 +258,13 @@
       "request": "launch",
       "command": "ACCOUNT_WORKER_PORT=8863 npm run dev -- --port 3163",
       "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Job queue finished rows smoke test",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "ACCOUNT_WORKER_PORT=8867 npm run dev -- --port 3167",
+      "cwd": "${workspaceFolder}"
     }
   ]
 }

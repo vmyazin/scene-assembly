@@ -75,6 +75,19 @@
   download; never name a file after an asset id, and never send the browser Gemini key
   from the cloud path.
 - **Signed-in generation** → reuse `useCloudWorkspace`, `CloudExecutionNotice`, `CloudJobPanel` and `CloudJobList`; keep account jobs in the memory-only `useAccountStore`, never a guest job store. Pass `storage="account"` to `ConnectionGate` for cloud execution so its key-storage explanation stays accurate. Prompt-library recording for cloud jobs lives in `useCloudWorkspace.submit`, not in the workspace, because every workspace's cloud branch returns early and the four copies of `remember()` below those returns were all skipped.
+- **A link from a background job to where it is looked at** → `lib/account/job-location.ts`
+  is the one answer, because a job has two homes and the wrong one is a dead end. While it
+  runs, that is the studio form it was started from — the `CloudJobPanel` matching its
+  provider / modelId / mediaType / inputMode — and the URL carries only the workspace and
+  mode (`?feature=…`, `?workspace=video&videoMode=…`), so the link's `onClick` must also
+  write engine and model into `useAppStore` or the panel filters for a provider nobody
+  selected. Once saved, it is the asset, reached as `/account#asset-<id>` and joined
+  through `CloudAsset.jobId` — never through matching metadata, which two runs of the same
+  prompt share. `AccountConsole` reads that hash (and `#jobs`) in a state initializer *and*
+  in a mount effect: an in-app click is a `history.pushState` that fires no `hashchange`
+  and lands after the first render, so the initializer alone silently ignored every link
+  clicked from inside the app. Spec:
+  `docs/claude/specs/2026-09-21-queue-finished-jobs-design.md`.
 - **Accounts, sign-in, or cloud persistence** → first read `docs/codex/account-development.md` and `docs/codex/specs/2026-09-04-optional-cloud-accounts-design.md`. Authentication entry pages live at `/sign-in` and `/sign-up`; signed-in management lives at `/account`, composing the existing account panels. Do not add account calls to action to the existing studio layout. The legacy admin gate is separate because enabling it would block guest routes.
 
 - **Video generation workspace layout** → first read

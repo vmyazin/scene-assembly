@@ -11,6 +11,12 @@ export function isActiveJob(job: Pick<CloudJobView,'state'>) { return ACTIVE.inc
 /** Needs a person: it will not resolve itself, so the overlay keeps showing it
  *  until dismissed rather than letting it scroll away with the finished work. */
 export function needsAttention(job: Pick<CloudJobView,'state'>) { return job.state === 'needs_attention' || job.state === 'failed'; }
+/** Finished, saved, and owed nothing further. Separate from `isListedJob`
+ *  below on purpose: the account page and the workspace rails sit beside the
+ *  result card itself, so a "Saved" row there repeats what is already on
+ *  screen, while the queue overlay is watched during a run and needs the
+ *  finished rows to say "one done, three running" rather than "three left". */
+export function isSucceededJob(job: Pick<CloudJobView,'state'>) { return job.state === 'saved'; }
 /** Finished and owed nothing further, so the row is only a record: removing it
  *  takes away no saved asset and no spend entry, both of which outlive the job.
  *  Terminal states only, mirroring the Worker's own guard — anything earlier

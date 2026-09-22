@@ -21,11 +21,17 @@ import { useTimelineStore } from '@/store/useTimelineStore';
 import VideoPlayer from '@/components/video/VideoPlayer';
 import TemporaryAssetNotice from './TemporaryAssetNotice';
 
-export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLimit=8,columns=2,onUsedReference,onAddedToTimeline,onPickVideo,onChanged}: {
+export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLimit=8,columns=2,highlightAssetId,onUsedReference,onAddedToTimeline,onPickVideo,onChanged}: {
   assets:CloudAsset[];ownerId:string;mode?:'browse'|'pick-image'|'pick-clip';referenceLimit?:number;
   /** Widest column count at desktop. The overlay stays at two because it sits
    *  in a narrow sheet; the account console goes to four. */
   columns?:2|4;
+  /** One card to single out, arrived at through `/account#asset-<id>` — the job
+   *  queue's answer to "which of these is the row I clicked". Passing it is also
+   *  what turns on the anchor ids: two grids can be mounted at once (the console
+   *  behind the studio header's library overlay), and duplicate ids would send
+   *  the deep link to whichever rendered first. */
+  highlightAssetId?:string|null;
   onUsedReference?:()=>void;
   /** Fired after a cloud clip lands on the timeline, so the host can close the
    *  picker and — from the browse library — switch to the timeline workspace. */
@@ -43,6 +49,17 @@ export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLi
   const dense=columns===4;
   const preview=visible.find(asset=>asset.id===previewId&&asset.kind==='image')??null;
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
+  /** Bring the singled-out card to the reader rather than leaving them to find
+   *  the outline. Not left to the browser's own hash scrolling: the grid is
+   *  client-rendered from a poll, so the element does not exist yet at the
+   *  moment the hash lands. */
+  useEffect(()=>{
+    if(!highlightAssetId)return;
+    const card=document.getElementById(`asset-${highlightAssetId}`);
+    if(!card)return;
+    const still=typeof window.matchMedia==='function'&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    card.scrollIntoView({block:'center',behavior:still?'auto':'smooth'});
+  },[highlightAssetId,assets]);
   function assertOwner(){
     if(useAccountStore.getState().session?.account?.id!==ownerId)throw new Error('Your account changed. Try again from the current library.');
   }
@@ -79,7 +96,7 @@ export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLi
   return <>
     <TemporaryAssetNotice assets={visible}/>
     {visible.length===0?<p className="py-6 text-center text-sm text-[var(--foreground-muted)]">{mode==='pick-image'?'No cloud images on this page.':mode==='pick-clip'?'No cloud clips on this page.':'Your saved cloud assets will appear here.'}</p>:
-      <ul className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${columns===4?'lg:grid-cols-3 xl:grid-cols-4':''}`}>{visible.map(asset=><li key={asset.id} className={`rounded-xl border border-cyan-300/25 bg-[var(--background-elevated)]/80 transition-colors hover:border-cyan-300/50 motion-reduce:transition-none ${dense?'space-y-2.5 p-2.5':'space-y-3 p-3'}`}>
+      <ul className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${columns===4?'lg:grid-cols-3 xl:grid-cols-4':''}`}>{visible.map(asset=>{const singled=highlightAssetId===asset.id;return <li key={asset.id} {...(highlightAssetId!==undefined?{id:`asset-${asset.id}`}:{})} {...(singled?{'aria-current':'true' as const}:{})} className={`scroll-mt-24 rounded-xl border bg-[var(--background-elevated)]/80 transition-colors motion-reduce:transition-none ${singled?'border-[var(--neon-cyan)] ring-2 ring-[var(--neon-cyan)]/70 ring-offset-2 ring-offset-[var(--background-elevated)]':'border-cyan-300/25 hover:border-cyan-300/50'} ${dense?'space-y-2.5 p-2.5':'space-y-3 p-3'}`}>
         <div className="flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-black/40">
           {asset.kind==='image'?
             // Private same-origin authorization redirects to an expiring Worker capability.
@@ -109,7 +126,7 @@ export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLi
           </>}
         </div>
         {mode==='browse'&&asset.kind==='video'&&<LastFrameActions videoUrl={`/api/account/assets/${asset.id}/content`} filenameBase={knownAccountAssetFilenameBase(asset)} onContinue={onUsedReference}/>}
-      </li>)}</ul>}
+      </li>;})}</ul>}
     <ImageLightbox
       src={preview?`/api/account/assets/${preview.id}/content`:null}
       open={Boolean(preview)}
