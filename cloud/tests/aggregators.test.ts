@@ -87,6 +87,30 @@ describe('durable aggregator adapters', () => {
     expect(() => validateRequest(env,{...frames,referenceIds:['first']})).toThrow(/exactly two images/);
     expect(() => validateRequest(env,{...frames,inputMode:'image' as const,referenceIds:['first'],values:{size:'imaginary'}})).toThrow(/"imaginary" is not an output size/);
   });
+  it('lets Atlas Developer editions carry a tier and a full set of references', () => {
+    const nano = {...request,provider:'atlas' as const,modelId:'google/nano-banana-2/text-to-image-developer',values:{resolution:'4K',aspectRatio:'16:9'}};
+    expect(() => validateRequest(env,nano)).not.toThrow();
+    // Only the tiers the model publishes, and only on a model that has any.
+    expect(() => validateRequest(env,{...nano,values:{resolution:'8K'}})).toThrow(/is not a resolution/);
+    expect(() => validateRequest(env,{...nano,modelId:'google/nano-banana-2-lite/text-to-image-developer',values:{resolution:'4K'}})).toThrow(/is not a resolution/);
+    expect(() => validateRequest(env,{...nano,modelId:'z-image/turbo'})).toThrow(/is not a resolution/);
+    // The editors' documented reference limits, which a flat cap of one hid.
+    const edit = {...nano,modelId:'google/nano-banana-2/edit-developer',inputMode:'image' as const,referenceIds:Array.from({length:14},(_,i)=>`ref-${i}`),values:{}};
+    expect(() => validateRequest(env,edit)).not.toThrow();
+    expect(() => validateRequest(env,{...edit,referenceIds:[...edit.referenceIds,'extra']})).toThrow(/up to 14/);
+    expect(() => validateRequest(env,{...edit,modelId:'openai/gpt-image-2.5-sunburst-developer/edit',referenceIds:Array.from({length:16},(_,i)=>`ref-${i}`)})).not.toThrow();
+  });
+  it('sends MiniMax H3 the resolution preset the catalog publishes', async () => {
+    await saveConnection(env,'owner','atlas',{apiKey:'atlas-test-secret'});
+    const mock = vi.fn().mockResolvedValueOnce(Response.json({data:{id:'h3-task'}}));
+    vi.stubGlobal('fetch', mock);
+    const r:CloudJobRequest = {...request,provider:'atlas',modelId:'minimax/h3-developer/text-to-video',mediaType:'video',inputMode:'text',values:{size:'768p',durationSeconds:8,aspectRatio:'16:9'}};
+    validateRequest(env,r);
+    const job = await acceptJob(env,'owner','atlas-h3-video-token',r);
+    await adapterFor(env,'atlas').submit(env,job);
+    // The label is `768p`; the wire value is the capital-P preset, under `ratio`.
+    expect(JSON.parse(mock.mock.calls[0][1].body)).toMatchObject({resolution:'768P',ratio:'16:9',duration:8});
+  });
   it('rejects invalid media, references, arbitrary fields and unsupported size before intake', () => {
     for (const patch of [{modelId:'arbitrary-model'},{mediaType:'video'},{inputMode:'image'}, {values:{size:'imaginary'}}, {values:{durationSeconds:8}}, {values:{apiKey:'untrusted'}}]) {
       expect(() => validateRequest(env,{...request,...patch})).toThrow();

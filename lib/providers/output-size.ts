@@ -273,8 +273,38 @@ export const POLLINATIONS_IMAGE_DIMENSIONS: Record<string, Dimensions> = {
   '21:9': [1280, 548],
 };
 
+/**
+ * GPT Image 2.5, at its 1K billing tier. Every pair here is a member of the
+ * endpoint's own `size` enum — it accepts nothing else — and every one of them
+ * sits under the $0.03 tier, so the price on the card is the price charged.
+ *
+ * The tier publishes no 16:9, 9:16 or 21:9 size, so those three snap to the
+ * widest and tallest shapes it does publish, and the control marks them
+ * approximate. Atlas writes this one with an `x`, not the star its other image
+ * models take; `atlas.ts` owns that formatting.
+ */
+export const ATLAS_GPT_IMAGE_DIMENSIONS: Record<string, Dimensions> = {
+  '1:1': [1024, 1024],
+  '16:9': [1536, 1024],
+  '9:16': [1024, 1536],
+  '4:3': [1024, 768],
+  '3:4': [768, 1024],
+  '3:2': [1536, 1024],
+  '2:3': [1024, 1536],
+  '21:9': [1536, 1024],
+};
+
 /** Atlas picks a table per model, since not every model shares one. */
 export const isSeedream = (model: string) => model.startsWith('bytedance/seedream-');
+
+export const isGptImage25 = (model: string) => model.startsWith('openai/gpt-image-2.5-');
+
+/**
+ * Nano Banana 2 takes a ratio and a tier (`1k`/`2k`/`4k`) and publishes no
+ * pixel pair for either, so this app has no number to show. It belongs with
+ * Gemini and fal below, not with the models that name their own sizes.
+ */
+export const isNanoBanana2 = (model: string) => model.startsWith('google/nano-banana-2');
 
 /**
  * Look up a ratio in a table the way an adapter does, including its fallback,
@@ -305,7 +335,12 @@ export function imageDimensions(
   if (engine === 'comet') return ratioDimensions(COMET_IMAGE_DIMENSIONS, aspectRatio);
   if (engine === 'pollinations') return ratioDimensions(POLLINATIONS_IMAGE_DIMENSIONS, aspectRatio);
   if (engine === 'atlas') {
-    const table = modelId && isSeedream(modelId) ? ATLAS_SEEDREAM_DIMENSIONS : ATLAS_IMAGE_DIMENSIONS;
+    if (modelId && isNanoBanana2(modelId)) return null;
+    const table = modelId && isSeedream(modelId)
+      ? ATLAS_SEEDREAM_DIMENSIONS
+      : modelId && isGptImage25(modelId)
+        ? ATLAS_GPT_IMAGE_DIMENSIONS
+        : ATLAS_IMAGE_DIMENSIONS;
     return ratioDimensions(table, aspectRatio);
   }
   return null;

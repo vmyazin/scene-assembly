@@ -150,6 +150,10 @@ Comet's catalog is public too: `GET https://api.cometapi.com/api/models`.
 | Atlas | `bytedance/seedance-2.0-mini/{text,image,reference}-to-video` | text→video, image→video, first+last frame, reference→video | $0.011 / s |
 | Atlas | `bytedance/seedance-2.0-fast/{text,image,reference}-to-video` | text→video, image→video, first+last frame, reference→video | $0.027 / s |
 | Atlas | `bytedance/seedance-2.5/{text,image,reference}-to-video` | text→video, image→video, first+last frame, reference→video | $0.134 / s, every resolution |
+| Atlas | `google/nano-banana-2/{text-to-image,edit}-developer` | text→image, image→image (14 refs) | $0.028 / image, every tier |
+| Atlas | `google/nano-banana-2-lite/{text-to-image,edit}-developer` | text→image, image→image (14 refs) | $0.014 / image, 1K only |
+| Atlas | `openai/gpt-image-2.5-{sunburst,flare}-developer/{text-to-image,edit}` | text→image, image→image (16 refs) | $0.03 / image @ 1K |
+| Atlas | `minimax/h3-developer/{text,image,reference}-to-video` | text→video, image→video, first+last frame, reference→video | $0.015 / s @ 480P and 768P |
 | Comet | `gpt-image-2` | text→image | metered |
 | Comet | `qwen-image` | text→image (n must be 1) | metered |
 | Comet | `seedance-2-5`, `doubao-seedance-2-0-mini` | text→video, image→video | metered |
@@ -262,6 +266,40 @@ clients, catalogs, stores or workspaces, the gallery pipeline, or the auth guard
   entries are unusable as a picker. The public catalog endpoints stay available
   for a later "browse all models" surface.
 
+**2026-09-22 addition — Atlas "Developer" editions.** Atlas began publishing a
+second id for models it already carried: same weights, lower price. Ids and
+prices are from the live catalog at `https://api.atlascloud.ai/api/v1/models`
+(which carries `price.actual` / `price.origin` per model) and from each model's
+`https://www.atlascloud.ai/models/{id}/llms.txt`. Four things are worth
+recording, because each one was a way to get this wrong:
+
+- **The suffix is not derivable.** Google hangs `-developer` off the *mode*
+  (`google/nano-banana-2/text-to-image-developer`); OpenAI and MiniMax hang it
+  off the *model* (`minimax/h3-developer/text-to-video`). Every id was copied
+  from the catalog endpoint. A constructed one 404s at submit.
+- **Atlas drops a field the upstream schema does not name, silently.** None of
+  these three speak the dialect `atlasCreateImage` had been sending. Nano Banana
+  2 has no `size` at all — it takes `aspect_ratio` plus `resolution`
+  (`1k`/`2k`/`4k`, lowercase). GPT Image 2.5 takes `size` as `WIDTHxHEIGHT` from
+  a fixed enum, with an `x`, and `n` rather than `num_images`. MiniMax H3 renames
+  `aspect_ratio` → `ratio`, `last_image` → `end_image`, and `reference_images` →
+  `refers: [{url, type}]`. Sent in the old dialect every one of these returns a
+  plausible image at the default size instead of failing, so `atlas.ts`
+  dispatches per model and `tests/providers/atlas-comet.test.ts` asserts the
+  field names rather than just a successful call.
+- **Only Nano Banana 2 gets a resolution control.** Atlas prices it flat at
+  $0.028 for 1K, 2K *and* 4K, so there is no tier to mis-bill. GPT Image 2.5 is
+  tiered ($0.03 / $0.05 / $0.08) and its enum is tier × shape, and **the 1K tier
+  publishes no 16:9, 9:16 or 21:9 size** — a tier control there would answer
+  "1K, 16:9" with a 2K pixel pair and bill $0.05 for the $0.03 on the card. It is
+  pinned to 1K, with those three shapes snapped to the widest and tallest sizes
+  the tier does publish, the same call Seedream v5.0 Pro records above.
+- **H3's two `-sr` upscales are left unpriced.** The llms.txt quotes one flat
+  "$0.015 per second" with no table, while Atlas's own announcement says "from
+  $0.015/sec at 480P". Rather than assume the upscales cost the same, only
+  `480P` and `768P` carry a rate — a missing tier must never fall back to the
+  cheapest one.
+
 ## Sources
 
 - Runware: `https://runware.ai/docs/llms.txt`, `/docs/platform/task-polling`,
@@ -272,6 +310,9 @@ clients, catalogs, stores or workspaces, the gallery pipeline, or the auth guard
   `https://www.atlascloud.ai/models/black-forest-labs/flux-schnell/llms.txt`,
   `https://www.atlascloud.ai/models/bytedance/seedance-v1-pro-fast/image-to-video/llms.txt`,
   `https://www.atlascloud.ai/models/bytedance/seedance-2.5/{text,image,reference}-to-video/llms.txt`,
+  `https://www.atlascloud.ai/models/google/nano-banana-2{,-lite}/{text-to-image,edit}-developer/llms.txt`,
+  `https://www.atlascloud.ai/models/openai/gpt-image-2.5-{sunburst,flare}-developer/{text-to-image,edit}/llms.txt`,
+  `https://www.atlascloud.ai/models/minimax/h3-developer/{text,image,reference}-to-video/llms.txt`,
   `https://api.atlascloud.ai/api/v1/models`
 - Comet: `https://apidoc.cometapi.com/llms.txt`, `/api/image/openai/images.md`,
   `/api/video/seedance/create.md`, `/api/video/seedance/query.md`,

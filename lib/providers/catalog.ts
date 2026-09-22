@@ -389,6 +389,183 @@ function seedance25(): ProviderModel[] {
   ];
 }
 
+/**
+ * Atlas's "Developer" editions: the same upstream weights behind a cheaper
+ * model id. Read 2026-09-22 from the live catalog at
+ * `https://api.atlascloud.ai/api/v1/models` and from each model's own
+ * `https://www.atlascloud.ai/models/{id}/llms.txt`.
+ *
+ * **The suffix is not a rule you can apply.** Google hangs `-developer` off the
+ * *mode* (`/text-to-image-developer`); OpenAI and MiniMax hang it off the
+ * *model* (`h3-developer/text-to-video`). Every id below is copied from the
+ * catalog endpoint, never constructed — a built one 404s at submit.
+ */
+
+/**
+ * Nano Banana 2, in the tier the user picked. Atlas charges **one flat price
+ * for 1K, 2K and 4K here**, which is why this is the only image family in the
+ * catalog that gets a resolution control: offering 4K costs the user nothing
+ * over 1K, so there is no tier to mis-bill. The `sizes` labels are the studio's
+ * own `1K`/`2K`/`4K` (so a choice carries over from Gemini and PiAPI) while the
+ * presets are the lowercase values the API documents — Atlas rejects `2K`.
+ *
+ * Lite publishes `1k` alone, so its control shows one option rather than
+ * promising a resolution the endpoint refuses.
+ */
+function nanoBanana2Developer(tier: 'full' | 'lite'): ProviderModel[] {
+  const lite = tier === 'lite';
+  const usd = lite ? 0.014 : 0.028;
+  const shared = {
+    kind: 'image' as const,
+    price: `$${usd} / image`,
+    rate: { usd, per: 'image' as const },
+    sizes: (lite ? ['1K'] : ['1K', '2K', '4K']).map((label) => ({ label, preset: label.toLowerCase() })),
+  };
+  const family = lite ? 'nano-banana-2-lite' : 'nano-banana-2';
+  const label = lite ? 'Nano Banana 2 Lite' : 'Nano Banana 2';
+  const code = lite ? 'nano-banana-2-lite-dev' : 'nano-banana-2-dev';
+
+  return [
+    {
+      ...shared,
+      id: `google/${family}/text-to-image-developer`,
+      label: `${label} Developer`,
+      fileCode: `${code}-t2i`,
+      modes: ['text'],
+      note: lite
+        ? 'The cheapest image model here. 1K only — Lite publishes no larger size.'
+        : 'One price at every resolution, so 4K costs the same as 1K.',
+    },
+    {
+      ...shared,
+      id: `google/${family}/edit-developer`,
+      label: `${label} Developer Edit`,
+      fileCode: `${code}-edit`,
+      modes: ['image'],
+      maxInputImages: 14,
+      note: 'Editing only — it needs at least one reference. Up to 14.',
+    },
+  ];
+}
+
+/**
+ * GPT Image 2.5, pinned to its 1K billing tier — the same decision Seedream
+ * v5.0 Pro above records, and for a sharper reason.
+ *
+ * Atlas prices this family per tier ($0.03 / 1K, $0.05 / 2K, $0.08 / 4K), but
+ * the `size` enum is tier × shape and **the 1K tier publishes no 16:9, 9:16 or
+ * 21:9 size at all**. A resolution control would therefore have to answer "1K,
+ * 16:9" with a 2K pixel pair and bill the user $0.05 for the $0.03 they chose.
+ * Snapping those three shapes to the widest and tallest 1K sizes keeps one
+ * honest price on the card; `ATLAS_GPT_IMAGE_DIMENSIONS` names the pixels each
+ * ratio really resolves to, and the control marks the three that only
+ * approximate.
+ *
+ * Sunburst and Flare are separate weights at the same price; Atlas documents no
+ * difference beyond the name, so neither gets a note claiming one.
+ */
+function gptImage25Developer(variant: 'sunburst' | 'flare'): ProviderModel[] {
+  const name = variant === 'sunburst' ? 'Sunburst' : 'Flare';
+  const shared = {
+    kind: 'image' as const,
+    price: '$0.03 / image @ 1K',
+    rate: { usd: 0.03, per: 'image' as const },
+  };
+
+  return [
+    {
+      ...shared,
+      id: `openai/gpt-image-2.5-${variant}-developer/text-to-image`,
+      label: `GPT Image 2.5 ${name} Developer`,
+      fileCode: `gpt-image-2_5-${variant}-dev-t2i`,
+      modes: ['text'],
+      note: 'Prompts up to 32,000 characters. Runs at the 1K tier, where the widest published shape is 3:2.',
+    },
+    {
+      ...shared,
+      id: `openai/gpt-image-2.5-${variant}-developer/edit`,
+      label: `GPT Image 2.5 ${name} Developer Edit`,
+      fileCode: `gpt-image-2_5-${variant}-dev-edit`,
+      modes: ['image'],
+      maxInputImages: 16,
+      note: 'Editing only — it needs at least one reference. Up to 16.',
+    },
+  ];
+}
+
+/**
+ * MiniMax H3 Developer. Three endpoints, one set of controls, same shape as the
+ * Seedance families above — but almost every field name differs from theirs,
+ * and Atlas drops a name a model does not know in silence, so the wire mapping
+ * in `atlas.ts` is what makes these work: `ratio` (not `aspect_ratio`),
+ * `end_image` (not `last_image`) and `refers` (not `reference_images`).
+ *
+ * Only the two native tiers are priced. Atlas quotes "$0.015 per second" with
+ * no table while its own announcement says "from $0.015/sec at 480P", so the
+ * two `-sr` upscales are left unpriced rather than assumed to cost the same —
+ * a missing tier must never fall back to the cheapest one.
+ */
+function minimaxH3Developer(): ProviderModel[] {
+  const shared = {
+    kind: 'video' as const,
+    price: '$0.015 / s @ 480P · 768P · upscaled sizes: price unknown',
+    rate: { usdByResolution: { '480P': 0.015, '768P': 0.015 }, per: 'second' as const },
+    // Documented as any whole 4–15, with 8 the endpoint's own default.
+    duration: { type: 'range' as const, min: 4, max: 15, default: 8 },
+    sizes: [
+      { label: '480p', preset: '480P' },
+      { label: '768p', preset: '768P' },
+      { label: '1440p (upscaled)', preset: '1440p-sr' },
+      { label: '4K (upscaled)', preset: '4k-sr' },
+    ],
+    supportsAudio: true,
+  };
+  // The endpoint publishes no 3:2 or 2:3, so those are left off rather than
+  // sent and silently reshaped.
+  const aspectRatios = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'];
+
+  return [
+    {
+      ...shared,
+      id: 'minimax/h3-developer/text-to-video',
+      fileCode: 'minimax-h3-dev-t2v',
+      label: 'MiniMax H3 Developer',
+      modes: ['text'],
+      aspectRatios,
+    },
+    {
+      ...shared,
+      id: 'minimax/h3-developer/image-to-video',
+      fileCode: 'minimax-h3-dev-i2v',
+      label: 'MiniMax H3 Developer',
+      // `end_image` is optional, so one frame opens the clip and two bookend it.
+      modes: ['image', 'frames'],
+      maxInputImages: 2,
+      videoInputs: {
+        image: { field: 'frameImages', maxImages: 1 },
+        frames: { field: 'frameImages', maxImages: 2 },
+      },
+      // No `aspectRatios`: this endpoint lists `adaptive` as its only value,
+      // because the shape comes from the frame supplied.
+    },
+    {
+      ...shared,
+      id: 'minimax/h3-developer/reference-to-video',
+      fileCode: 'minimax-h3-dev-r2v',
+      label: 'MiniMax H3 Developer',
+      modes: ['reference'],
+      // The schema sets `minItems: 1` and publishes no ceiling, so 5 is this
+      // app's limit rather than a number quoted from the vendor.
+      maxInputImages: 5,
+      aspectRatios,
+      videoInputs: {
+        reference: { field: 'referenceImages', maxImages: 5, clientMaxImages: 5 },
+      },
+      note: 'Anchors characters, products and styles to your reference images, with native audio.',
+    },
+  ];
+}
+
 const ATLAS_MODELS: ProviderModel[] = [
   {
     id: 'black-forest-labs/flux-schnell',
@@ -492,6 +669,12 @@ const ATLAS_MODELS: ProviderModel[] = [
   ...seedance20Tier('mini'),
   ...seedance20Tier('fast'),
   ...seedance25(),
+  // Developer editions — same weights, cheaper ids. See the block above.
+  ...nanoBanana2Developer('full'),
+  ...nanoBanana2Developer('lite'),
+  ...gptImage25Developer('sunburst'),
+  ...gptImage25Developer('flare'),
+  ...minimaxH3Developer(),
 ];
 
 const COMET_MODELS: ProviderModel[] = [

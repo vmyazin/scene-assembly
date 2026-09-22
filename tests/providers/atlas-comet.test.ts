@@ -54,6 +54,153 @@ describe('atlas cloud', () => {
     expect(result).toEqual({ url: 'https://cdn.atlas/a.png' });
   });
 
+  /**
+   * The Developer editions are the reason `imageBody` dispatches per model.
+   * Atlas validates against the upstream schema and drops a name that schema
+   * does not carry **without erroring**, so a body assembled in the older
+   * dialect would return a plausible image at the wrong size and the wrong
+   * shape. These assert the names each endpoint publishes, not just that a
+   * request went out.
+   */
+  describe('developer editions speak their own dialect', () => {
+    async function submitImage(request: Parameters<typeof atlasGenerateImage>[0]) {
+      const fetchMock = mockFetchSequence([
+        { payload: { data: { id: 'pred-dev' } } },
+        { payload: { id: 'pred-dev', status: 'succeeded', output: ['https://cdn.atlas/dev.png'] } },
+      ]);
+      await atlasGenerateImage(request, noSleep);
+      return JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    }
+
+    it('sends Nano Banana 2 a ratio and a lowercase tier, and no size at all', async () => {
+      const body = await submitImage({
+        apiKey: 'at-key',
+        model: 'google/nano-banana-2/text-to-image-developer',
+        prompt: 'a lighthouse',
+        aspectRatio: '16:9',
+        resolution: '4K',
+      });
+
+      expect(body).toEqual({
+        model: 'google/nano-banana-2/text-to-image-developer',
+        prompt: 'a lighthouse',
+        aspect_ratio: '16:9',
+        // Lowercased through the catalog: Atlas refuses the studio's `4K`.
+        resolution: '4k',
+      });
+      // The two fields every other Atlas image model sends would be ignored here.
+      expect(body.size).toBeUndefined();
+      expect(body.num_images).toBeUndefined();
+    });
+
+    it('holds Nano Banana 2 Lite to the one tier it publishes', async () => {
+      const body = await submitImage({
+        apiKey: 'at-key',
+        model: 'google/nano-banana-2-lite/text-to-image-developer',
+        prompt: 'a lighthouse',
+        resolution: '4K',
+      });
+
+      // Lite lists `1k` alone, so a tier carried over from a bigger model
+      // resolves down rather than travelling and being rejected.
+      expect(body.resolution).toBe('1k');
+    });
+
+    it('sends Nano Banana 2 edits as the images array', async () => {
+      const body = await submitImage({
+        apiKey: 'at-key',
+        model: 'google/nano-banana-2/edit-developer',
+        prompt: 'make it dusk',
+        images: ['data:image/png;base64,AAA', 'data:image/png;base64,BBB'],
+      });
+
+      expect(body.images).toEqual(['data:image/png;base64,AAA', 'data:image/png;base64,BBB']);
+      expect(body.image).toBeUndefined();
+    });
+
+    it("writes GPT Image 2.5's size with an x, from its own enum, with n", async () => {
+      const body = await submitImage({
+        apiKey: 'at-key',
+        model: 'openai/gpt-image-2.5-sunburst-developer/text-to-image',
+        prompt: 'a ramen stall',
+        aspectRatio: '4:3',
+      });
+
+      expect(body).toEqual({
+        model: 'openai/gpt-image-2.5-sunburst-developer/text-to-image',
+        prompt: 'a ramen stall',
+        // An `x`, where every other Atlas image model takes a star.
+        size: '1024x768',
+        n: 1,
+      });
+      expect(body.num_images).toBeUndefined();
+    });
+
+    it('snaps the shapes GPT Image 2.5 publishes no 1K size for', async () => {
+      // 16:9 has no size in the 1K tier, and billing 2K for a 1K choice is the
+      // failure the pin exists to prevent — so it lands on the widest 1K shape.
+      const body = await submitImage({
+        apiKey: 'at-key',
+        model: 'openai/gpt-image-2.5-flare-developer/text-to-image',
+        prompt: 'a ramen stall',
+        aspectRatio: '16:9',
+      });
+
+      expect(body.size).toBe('1536x1024');
+    });
+
+    it('renames every field MiniMax H3 renames', async () => {
+      const fetchMock = mockFetchSequence([{ payload: { data: { id: 'vid-h3' } } }]);
+      await atlasCreateVideo({
+        apiKey: 'at-key',
+        model: 'minimax/h3-developer/image-to-video',
+        prompt: 'push in slowly',
+        images: ['data:image/png;base64,AAA', 'data:image/png;base64,ZZZ'],
+        inputField: 'frameImages',
+        durationSeconds: 8,
+        resolution: '768P',
+        aspectRatio: '16:9',
+      });
+
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+      expect(body).toEqual({
+        model: 'minimax/h3-developer/image-to-video',
+        prompt: 'push in slowly',
+        image: 'data:image/png;base64,AAA',
+        // `end_image`, not the `last_image` the Seedance endpoints take.
+        end_image: 'data:image/png;base64,ZZZ',
+        duration: 8,
+        resolution: '768P',
+        // `ratio`, not `aspect_ratio`.
+        ratio: '16:9',
+      });
+      expect(body.last_image).toBeUndefined();
+      expect(body.aspect_ratio).toBeUndefined();
+    });
+
+    it('wraps H3 references as refers objects, with the type named', async () => {
+      const fetchMock = mockFetchSequence([{ payload: { data: { id: 'vid-h3r' } } }]);
+      await atlasCreateVideo({
+        apiKey: 'at-key',
+        model: 'minimax/h3-developer/reference-to-video',
+        prompt: 'keep her jacket',
+        images: ['data:image/png;base64,AAA', 'data:image/png;base64,BBB'],
+        inputField: 'referenceImages',
+        durationSeconds: 8,
+        resolution: '480P',
+      });
+
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+      // `type` is documented as optional because Atlas infers it from the URL
+      // extension — which a data URL does not have, so it is always written.
+      expect(body.refers).toEqual([
+        { url: 'data:image/png;base64,AAA', type: 'image' },
+        { url: 'data:image/png;base64,BBB', type: 'image' },
+      ]);
+      expect(body.reference_images).toBeUndefined();
+    });
+  });
+
   it('fails with the prediction logs, which are the only detail Atlas gives', async () => {
     mockFetchSequence([
       { payload: { data: { id: 'pred-2' } } },

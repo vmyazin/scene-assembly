@@ -37,7 +37,12 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
   if (r.inputMode === 'text' && count !== 0) return invalid('A text-only run cannot include images. Remove them or switch to an image input mode.');
   if (r.inputMode !== 'text' && count === 0) return invalid(`${describeMode(r.inputMode, true)} needs at least one image.`);
   if (r.mediaType === 'image') {
-    const maxImages = Math.min(model.maxInputImages ?? 1, r.provider === 'piapi' ? 14 : r.provider === 'runware' ? 4 : 1);
+    // Atlas's editors are the reason this is not a flat 1: Nano Banana 2 Edit
+    // takes 14 references and GPT Image 2.5 Edit 16, and the adapter sends them
+    // as the `images` array the endpoints document. Capping Atlas at one here
+    // would make the limit on the model card a lie in cloud mode. 16 is the
+    // ceiling `validateCloudJobRequest` already puts on `referenceIds`.
+    const maxImages = Math.min(model.maxInputImages ?? 1, r.provider === 'piapi' ? 14 : r.provider === 'atlas' ? 16 : r.provider === 'runware' ? 4 : 1);
     if (count > maxImages) return invalid(`${model.label} takes up to ${maxImages} input image${maxImages === 1 ? '' : 's'} in a background job. Remove ${count - maxImages}.`);
   } else if (r.inputMode !== 'text') {
     const capability = resolveVideoInput(r.provider, r.modelId, r.inputMode);
@@ -54,10 +59,17 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
     if (audio !== undefined && (!model.supportsAudio || typeof audio !== 'boolean')) return invalid('Audio must be on or off for a supported video model.');
     if (aspectRatio !== undefined && model.aspectRatios && !model.aspectRatios.includes(String(aspectRatio))) return invalid('Choose an aspect ratio this model supports.');
   }
+  // Only some Atlas image models publish a tier, so the catalog entry is what
+  // says whether one is accepted and which labels are real.
+  if (r.provider === 'atlas' && resolution !== undefined && (r.mediaType !== 'image' || !model.sizes?.some(s => s.label === String(resolution)))) return invalid(`"${String(resolution)}" is not a resolution ${model.label} publishes. Pick one from the list.`);
   if (aspectRatio !== undefined && !['1:1','16:9','9:16','4:3','3:4','3:2','2:3','21:9'].includes(String(aspectRatio))) return invalid(`"${String(aspectRatio)}" is not an aspect ratio ${model.label} accepts.`);
   if (size !== undefined && (typeof size !== 'string' || !model.sizes?.some(s => s.label === size))) return invalid(`"${String(size)}" is not an output size ${model.label} publishes. Pick one from the list.`);
   if (durationSeconds !== undefined && (typeof durationSeconds !== 'number' || resolveDuration(r.provider, r.modelId, durationSeconds) !== durationSeconds)) return invalid(`${String(durationSeconds)} seconds is not a length ${model.label} publishes. Pick one from the list.`);
-  const stray = Object.keys(r.values).find(key => !(r.provider === 'piapi' ? ['aspectRatio','size','durationSeconds','resolution','audio'] : ['aspectRatio','size','durationSeconds']).includes(key));
+  const accepted = r.provider === 'piapi'
+    ? ['aspectRatio','size','durationSeconds','resolution','audio']
+    : r.provider === 'atlas' ? ['aspectRatio','size','durationSeconds','resolution']
+      : ['aspectRatio','size','durationSeconds'];
+  const stray = Object.keys(r.values).find(key => !accepted.includes(key));
   if (stray) return invalid(`"${stray}" is not a setting this provider accepts.`);
 }
 
@@ -88,7 +100,7 @@ export const aggregatorAdapter: GenerationAdapter = {
         throw new Error('Missing output');
       }
       const create = provider === 'piapi' ? piapiCreateImage : provider === 'runware' ? runwareCreateImage : atlasCreateImage;
-      const result = await create({...common, imageInput: model.imageInput, ...(provider === 'piapi' ? {resolution: r.values.resolution as string | undefined} : {})});
+      const result = await create({...common, imageInput: model.imageInput, ...(provider === 'piapi' || provider === 'atlas' ? {resolution: r.values.resolution as string | undefined} : {})});
       return {handle: {id: result.taskId}};
     }
     if (r.inputMode === 'edit') {

@@ -156,6 +156,26 @@ describe('the shared table is the one the request uses', () => {
     expect(imageDimensions('atlas', 'bytedance/seedream-v5.0-pro/text-to-image', '9:16')).toEqual([1152, 2048]);
   });
 
+  it('gives GPT Image 2.5 its own enum, and Nano Banana 2 no number at all', async () => {
+    const fetchMock = captureFetch({ data: { id: 'pred-1' } });
+    await atlasCreateImage({
+      apiKey: 'at',
+      model: 'openai/gpt-image-2.5-sunburst-developer/text-to-image',
+      prompt: 'a lighthouse',
+      aspectRatio: '3:2',
+    });
+
+    // The control and the request agree, and both stay inside the 1K tier the
+    // catalog prices — an `x`, because this is the one Atlas model that takes one.
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).size).toBe('1536x1024');
+    expect(imageDimensions('atlas', 'openai/gpt-image-2.5-sunburst-developer/text-to-image', '3:2')).toEqual([1536, 1024]);
+
+    // Nano Banana 2 publishes no pixel pair for a tier, so the control shows
+    // none rather than inventing one to put beside the ratio.
+    expect(imageDimensions('atlas', 'google/nano-banana-2/text-to-image-developer', '9:16')).toBeNull();
+    expect(imageDimensions('atlas', 'google/nano-banana-2-lite/edit-developer', '1:1')).toBeNull();
+  });
+
   it('Comet sends the pixels the image control promises', async () => {
     const fetchMock = captureFetch({ data: [{ url: 'https://cdn.cometapi.com/a.png' }] });
     await cometGenerateImage({ apiKey: 'cm', model: 'qwen-image', prompt: 'a lighthouse', aspectRatio: '9:16' });

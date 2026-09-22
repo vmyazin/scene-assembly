@@ -27,6 +27,22 @@ describe('provider catalog rates', () => {
       'bytedance/seedance-2.5/text-to-video': { usd: 0.134, per: 'second' },
       'bytedance/seedance-2.5/image-to-video': { usd: 0.134, per: 'second' },
       'bytedance/seedance-2.5/reference-to-video': { usd: 0.134, per: 'second' },
+      // Developer editions. Nano Banana 2 is the one family Atlas prices flat
+      // across 1K/2K/4K, which is why it is the only one offering the tier.
+      'google/nano-banana-2/text-to-image-developer': { usd: 0.028, per: 'image' },
+      'google/nano-banana-2/edit-developer': { usd: 0.028, per: 'image' },
+      'google/nano-banana-2-lite/text-to-image-developer': { usd: 0.014, per: 'image' },
+      'google/nano-banana-2-lite/edit-developer': { usd: 0.014, per: 'image' },
+      // Pinned to the 1K tier, so the $0.03 on the card is the tier charged.
+      'openai/gpt-image-2.5-sunburst-developer/text-to-image': { usd: 0.03, per: 'image' },
+      'openai/gpt-image-2.5-sunburst-developer/edit': { usd: 0.03, per: 'image' },
+      'openai/gpt-image-2.5-flare-developer/text-to-image': { usd: 0.03, per: 'image' },
+      'openai/gpt-image-2.5-flare-developer/edit': { usd: 0.03, per: 'image' },
+      // The two `-sr` upscales are deliberately absent: Atlas publishes no
+      // price for them, and an absent tier must not bill at the cheapest one.
+      'minimax/h3-developer/text-to-video': { usdByResolution: { '480P': 0.015, '768P': 0.015 }, per: 'second' },
+      'minimax/h3-developer/image-to-video': { usdByResolution: { '480P': 0.015, '768P': 0.015 }, per: 'second' },
+      'minimax/h3-developer/reference-to-video': { usdByResolution: { '480P': 0.015, '768P': 0.015 }, per: 'second' },
     });
   });
 

@@ -113,7 +113,12 @@ async function handleProviderRequest(provider: ProviderId, body: Record<string, 
       prompt,
       // Trimmed to what the model documents it accepts.
       images: catalogModel?.maxInputImages ? images.slice(0, catalogModel.maxInputImages) : images,
-      ...(provider === 'piapi' ? {resolution: typeof config.imageSize === 'string' ? config.imageSize : '1K'} : {}),
+      // PiAPI takes the studio's label as written; Atlas resolves it through the
+      // catalog, because only some of its models publish a tier at all and the
+      // ones that do spell it lowercase. Either way the label is what travels.
+      ...(provider === 'piapi' || provider === 'atlas'
+        ? {resolution: typeof config.imageSize === 'string' ? config.imageSize : '1K'}
+        : {}),
       aspectRatio: typeof config.aspectRatio === 'string' ? config.aspectRatio : undefined,
       imageInput: catalogModel?.imageInput,
     });

@@ -344,6 +344,24 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
     [geminiModels, geminiImageModel]
   );
   const isGemini = activeEngineId === 'gemini';
+  // Aggregator prices are the vendors' published rates, carried on the catalog
+  // entry — the units differ per provider, so they are shown as written rather
+  // than folded into one estimate. The resolution control reads the same entry,
+  // so the price on the card and the tier on the wire cannot disagree.
+  const activeProviderCatalogModel =
+    activeProvider && activeProviderModel
+      ? modelsFor(activeProvider, 'image').find((model) => model.id === activeProviderModel)
+      : undefined;
+  /**
+   * Atlas publishes a resolution tier per *model*, not per engine: Nano Banana 2
+   * takes 1K/2K/4K at one flat price, its Lite tier publishes 1K alone, and the
+   * FLUX, Seedream and GPT Image models take no tier at all. So the control
+   * follows the catalog entry there rather than `supportsImageSize`, which can
+   * only answer for a whole engine.
+   */
+  const providerImageSizes = activeProviderCatalogModel?.sizes?.length
+    ? activeProviderCatalogModel.sizes
+    : undefined;
   // What the download filename is tagged with. Cloudflare and Pollinations still
   // name themselves from the engine registry; Gemini, fal and the aggregators
   // each answer with the model that actually ran.
@@ -356,10 +374,14 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
    */
   const resolutionOptions = isGemini
     ? activeGeminiModel.sizes.map((value) => ({ label: value, value }))
-    : RESOLUTION_OPTIONS;
+    : providerImageSizes
+      ? providerImageSizes.map((size) => ({ label: size.label, value: size.label }))
+      : RESOLUTION_OPTIONS;
   const selectedImageSize = isGemini
     ? geminiImageSize(activeGeminiModel, config.imageSize)
-    : config.imageSize ?? '1K';
+    : providerImageSizes
+      ? (providerImageSizes.find((size) => size.label === config.imageSize) ?? providerImageSizes[0]).label
+      : config.imageSize ?? '1K';
 
   /**
    * The ratio list, told what each ratio actually resolves to.
@@ -782,13 +804,6 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
     )?.endpointId ?? '',
     { resolution: selectedImageSize, webSearch: Boolean(config.useGoogleSearch) }
   );
-  // Aggregator prices are the vendors' published rates, carried on the catalog
-  // entry — the units differ per provider, so they are shown as written rather
-  // than folded into one estimate.
-  const activeProviderCatalogModel =
-    activeProvider && activeProviderModel
-      ? modelsFor(activeProvider, 'image').find((model) => model.id === activeProviderModel)
-      : undefined;
   const costLine =
     activeEngine.id === 'pollinations'
       ? cloudWorkspace.cloud ? 'Provider usage rates apply · Pollinations (FLUX)' : 'Free · Pollinations (FLUX)'
@@ -856,7 +871,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
         const values: Record<string,string|number|boolean> = activeEngine.id === 'fal'
           ? {aspect_ratio:config.aspectRatio ?? 'auto',resolution:config.imageSize ?? '1K',enable_web_search:Boolean(config.useGoogleSearch)}
           : activeProvider || activeEngine.id === 'pollinations'
-            ? {aspectRatio:config.aspectRatio ?? DEFAULT_ASPECT_RATIO, ...(activeProvider === 'piapi' ? {resolution:config.imageSize ?? '1K'} : {})}
+            ? {aspectRatio:config.aspectRatio ?? DEFAULT_ASPECT_RATIO, ...(activeProvider === 'piapi' || providerImageSizes ? {resolution:selectedImageSize} : {})}
             : activeEngine.id === 'cloudflare' ? {}
               : {aspectRatio:config.aspectRatio ?? DEFAULT_ASPECT_RATIO,imageSize:selectedImageSize,useGoogleSearch:Boolean(config.useGoogleSearch) && activeGeminiModel.supportsGoogleSearch};
         await cloudWorkspace.submit({modelId:cloudModelId,mediaType:'image',inputMode:cloudInputMode,prompt:cloudPrompt,values},feature.requiresImage ? references.map(reference => reference.file) : [],prompt);
@@ -1282,7 +1297,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                     </div>
                     )}
 
-                    {activeEngine.supportsImageSize && (
+                    {(activeEngine.supportsImageSize || providerImageSizes) && (
                     <div className="space-y-2">
                       <span className="block text-sm font-medium text-[var(--foreground)]">
                         Resolution
