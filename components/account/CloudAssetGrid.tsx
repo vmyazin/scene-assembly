@@ -19,6 +19,7 @@ import { useAccountStore } from '@/store/useAccountStore';
 import { useDraftStore } from '@/store/useDraftStore';
 import { useTimelineStore } from '@/store/useTimelineStore';
 import VideoPlayer from '@/components/video/VideoPlayer';
+import { libraryGridClass } from './library-grid';
 import TemporaryAssetNotice from './TemporaryAssetNotice';
 
 export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLimit=8,columns=2,highlightAssetId,onUsedReference,onAddedToTimeline,onPickVideo,onChanged}: {
@@ -96,7 +97,7 @@ export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLi
   return <>
     <TemporaryAssetNotice assets={visible}/>
     {visible.length===0?<p className="py-6 text-center text-sm text-[var(--foreground-muted)]">{mode==='pick-image'?'No cloud images on this page.':mode==='pick-clip'?'No cloud clips on this page.':'Your saved cloud assets will appear here.'}</p>:
-      <ul className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${columns===4?'lg:grid-cols-3 xl:grid-cols-4':''}`}>{visible.map(asset=>{const singled=highlightAssetId===asset.id;return <li key={asset.id} {...(highlightAssetId!==undefined?{id:`asset-${asset.id}`}:{})} {...(singled?{'aria-current':'true' as const}:{})} className={`scroll-mt-24 rounded-xl border bg-[var(--background-elevated)]/80 transition-colors motion-reduce:transition-none ${singled?'border-[var(--neon-cyan)] ring-2 ring-[var(--neon-cyan)]/70 ring-offset-2 ring-offset-[var(--background-elevated)]':'border-cyan-300/25 hover:border-cyan-300/50'} ${dense?'space-y-2.5 p-2.5':'space-y-3 p-3'}`}>
+      <ul className={libraryGridClass(columns)}>{visible.map(asset=>{const singled=highlightAssetId===asset.id;return <li key={asset.id} {...(highlightAssetId!==undefined?{id:`asset-${asset.id}`}:{})} {...(singled?{'aria-current':'true' as const}:{})} className={`scroll-mt-24 rounded-xl border bg-[var(--background-elevated)]/80 transition-colors motion-reduce:transition-none ${singled?'border-[var(--neon-cyan)] ring-2 ring-[var(--neon-cyan)]/70 ring-offset-2 ring-offset-[var(--background-elevated)]':'border-cyan-300/25 hover:border-cyan-300/50'} ${dense?'space-y-2.5 p-2.5':'space-y-3 p-3'}`}>
         <div className="flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-black/40">
           {asset.kind==='image'?
             // Private same-origin authorization redirects to an expiring Worker capability.

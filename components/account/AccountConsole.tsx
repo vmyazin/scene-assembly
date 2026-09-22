@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Cloud, LogOut, WalletCards } from 'lucide-react';
 
 import CloudAssetGrid from './CloudAssetGrid';
+import CloudJobCardGrid from './CloudJobCardGrid';
 import CloudJobList from './CloudJobList';
 import LibraryFilters, { type LibraryFilterId } from './LibraryFilters';
 import AccountAvatar from './AccountAvatar';
@@ -342,6 +343,16 @@ export default function AccountConsole({
         <div id="jobs" className="mt-4 scroll-mt-24">
           {showingJobs ? (
             visibleJobs.length > 0 ? (
+              /* Two tabs, two shapes, because the jobs behind them are two
+                 different things. Work in flight is the library's own content
+                 arriving, so it takes the card the grid beside it uses and
+                 keeps the reader's place. Work waiting on a person is a
+                 paragraph of explanation and a decision or two, which is a row.
+                 Drawing both as rows is what made a running job read as an
+                 error log entry. */
+              filter === 'active' ? (
+                <CloudJobCardGrid jobs={activeJobs} busy={actionBusy} onCancel={id => void jobAction(`jobs/${id}/cancel`)} />
+              ) : (
               <>
               {/* Says why the tab holds more rows than its badge counts.
                   Without it the pill reads as a miscount rather than as the
@@ -361,8 +372,11 @@ export default function AccountConsole({
                 onClear={targets => void clearJobs(targets)}
               />
               </>
+              )
             ) : (
-              <p className="py-8 text-center text-sm text-[var(--foreground-muted)]">Nothing here right now.</p>
+              <p className="py-8 text-center text-sm text-[var(--foreground-muted)]">
+                {filter === 'active' ? 'Nothing is generating right now.' : 'Nothing here right now.'}
+              </p>
             )
           ) : loading ? (
             <p role="status" className="py-8 text-center text-sm text-[var(--foreground-muted)]">Loading cloud assets…</p>
