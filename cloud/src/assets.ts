@@ -26,7 +26,10 @@ async function fetchOutput(url:string):Promise<Response> {
   for(let i=0;i<4;i++) {
     const response=await fetch(target,{redirect:'manual',signal:AbortSignal.timeout(120_000)});
     if([301,302,303,307,308].includes(response.status)) { const next=response.headers.get('location'); await response.body?.cancel(); if(!next)break; target=safeResultUrl(new URL(next,target).href); continue; }
-    if(!response.ok || !response.body)throw new AccountError('Could not fetch the generated file.',502,'save_failed');
+    // Split on purpose: a link the provider has already expired answers the
+    // same way on every resume, so it is not the retryable "transfer broke"
+    // case the single `save_failed` code used to lump it in with.
+    if(!response.ok || !response.body)throw new AccountError([403,404,410].includes(response.status)?'The provider\'s download link for this result no longer works.':'Could not fetch the generated file.',502,[403,404,410].includes(response.status)?'result_link_expired':'save_failed');
     return response;
   }
   throw new AccountError('Provider returned too many redirects.',502,'result_location');
@@ -72,19 +75,19 @@ export async function captureResult(env:Env,job:JobRow,result:ProviderResult) {
     let storedMime=object?.httpMetadata?.contentType||source.mimeType;
     if(!object){
       if(source.objectKey){
-        if(source.objectKey!==key)throw new Error('Invalid staged result');
-        throw new Error('Staged result is unavailable');
+        if(source.objectKey!==key)throw new AccountError('Invalid staged result.',502,'staged_missing');
+        throw new AccountError('The staged result is no longer in storage.',502,'staged_missing');
       }
-      if(!source.url)throw new Error('Missing result source');
+      if(!source.url)throw new AccountError('The provider reported success without a result to fetch.',502,'result_missing');
       const response=await fetchOutput(source.url);
       const mime=(response.headers.get('content-type')||source.mimeType||'').split(';')[0].trim().toLowerCase();
-      if(!mime.startsWith(`${request.mediaType}/`)){await response.body?.cancel();throw new Error('Unexpected result type');}
+      if(!mime.startsWith(`${request.mediaType}/`)){await response.body?.cancel();throw new AccountError('The provider returned a different kind of file than this job asked for.',502,'result_type');}
       // Multipart completion can omit httpMetadata even though R2 stored it.
       // Keep the MIME that passed writeOutput validation for the D1 asset row.
       storedMime=mime;
       object=await writeOutput(env,key,response.body!,mime,MAX_JOB_OUTPUT_BYTES-totalBytes);
     }
-    if(object.size<=0)throw new Error('Empty stored result');
+    if(object.size<=0)throw new AccountError('The stored result is empty.',502,'result_empty');
     totalBytes+=object.size;
     if(totalBytes>MAX_JOB_OUTPUT_BYTES)throw new AccountError('This job exceeds the supported total output size.',502,'result_size');
     // The marker is the insert itself. Replays cannot count the same object twice.

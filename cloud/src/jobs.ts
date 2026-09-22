@@ -55,7 +55,8 @@ const RUNNING_JOB_COUNT = `SELECT COUNT(*) FROM account_jobs
 export interface JobRow {
   id: string; user_id: string; provider: CloudJobRequest['provider']; request_json: string; state: CloudJobState;
   connection_id: string | null; connection_revision: number | null; provider_task: string | null;
-  result_json: string | null; error_code: string | null; reservation_bytes: number; reservation_accounted: number;
+  result_json: string | null; error_code: string | null; failure_reason: string | null; failure_detail: string | null;
+  reservation_bytes: number; reservation_accounted: number;
   request_digest: string; workflow_attempt: number; dispatched: number; deleted: number; created_at: number; updated_at: number;
 }
 export class AccountError extends Error { constructor(message: string, public status: number, public code: string) { super(message); } }
@@ -65,7 +66,13 @@ function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 export function jobView(row: JobRow): CloudJobView {
-  return { id: row.id, provider: row.provider, state: row.state, errorCode: row.error_code, request: JSON.parse(row.request_json), createdAt: row.created_at, updatedAt: row.updated_at };
+  return {
+    id: row.id, provider: row.provider, state: row.state, errorCode: row.error_code,
+    // `attempts` is the resume count, not a retry count: the row uses it to say
+    // "attempt 2" and to stop offering a button the Worker would now refuse.
+    failureReason: row.failure_reason ?? null, failureDetail: row.failure_detail ?? null, attempts: row.workflow_attempt,
+    request: JSON.parse(row.request_json), createdAt: row.created_at, updatedAt: row.updated_at,
+  };
 }
 export async function getJob(env: Env, id: string, owner?: string) {
   return env.DB.prepare(`SELECT * FROM account_jobs WHERE id = ? AND deleted = 0${owner ? ' AND user_id = ?' : ''}`).bind(...(owner ? [id, owner] : [id])).first<JobRow>();
@@ -144,15 +151,38 @@ export async function acceptJob(env: Env, owner: string, token: string, request:
   if (row.request_digest !== digest) throw new AccountError('Submission token already used.', 409, 'token_conflict');
   return row;
 }
-export async function setJobState(env: Env, id: string, state: CloudJobState, errorCode: string | null = null) {
-  await env.DB.prepare("UPDATE account_jobs SET state = ?, error_code = ?, updated_at = ? WHERE id = ? AND deleted = 0 AND state NOT IN ('saved','failed','cancelled')").bind(state, errorCode, Date.now(), id).run();
+/**
+ * Records the specific cause, separately from the coarse state transition.
+ *
+ * Called from inside the failing step rather than after it, because that is the
+ * last place the `AccountError` prototype is intact — past the `step.do`
+ * boundary the code is gone and only a flattened message survives. Writing it
+ * here is also what lets the step return instead of burning five backed-off
+ * retries on a cause no retry can change.
+ */
+export async function recordFailure(env: Env, id: string, reason: string, detail: string | null = null) {
+  await env.DB.prepare("UPDATE account_jobs SET failure_reason = ?, failure_detail = ? WHERE id = ? AND deleted = 0 AND state NOT IN ('saved','cancelled')").bind(reason, detail, id).run();
+}
+/**
+ * `COALESCE` on the reason columns, deliberately.
+ *
+ * The coarse transition always runs after the specific one — the runner's outer
+ * catch sets `needs_attention`/`save_failed` once the step that already knew it
+ * was a dead link has given up — so a plain assignment here would erase the
+ * only useful thing the row had. Overwriting is `recordFailure`'s job, and
+ * clearing is the resume route's.
+ */
+export async function setJobState(env: Env, id: string, state: CloudJobState, errorCode: string | null = null, failure?: { reason: string; detail?: string | null }) {
+  await env.DB.prepare("UPDATE account_jobs SET state = ?, error_code = ?, failure_reason = COALESCE(?, failure_reason), failure_detail = COALESCE(?, failure_detail), updated_at = ? WHERE id = ? AND deleted = 0 AND state NOT IN ('saved','failed','cancelled')")
+    .bind(state, errorCode, failure?.reason ?? null, failure?.detail ?? null, Date.now(), id).run();
 }
 /** Release once, under the same transaction as the terminal status. */
-export async function finishJob(env: Env, id: string, state: 'saved' | 'failed' | 'cancelled', errorCode: string | null = null) {
+export async function finishJob(env: Env, id: string, state: 'saved' | 'failed' | 'cancelled', errorCode: string | null = null, failure?: { reason: string; detail?: string | null }) {
   await env.DB.batch([
     env.DB.prepare(`UPDATE account_storage SET reserved_bytes = reserved_bytes - (SELECT reservation_bytes FROM account_jobs WHERE id = ?), active_jobs = active_jobs - 1
       WHERE user_id = (SELECT user_id FROM account_jobs WHERE id = ? AND reservation_accounted = 1 AND deleted=0 AND state NOT IN ('saved','failed','cancelled'))`).bind(id, id),
-    env.DB.prepare("UPDATE account_jobs SET state = ?, error_code = ?, reservation_accounted = 0, updated_at = ? WHERE id = ? AND deleted = 0 AND state NOT IN ('saved','failed','cancelled')").bind(state, errorCode, Date.now(), id),
+    env.DB.prepare("UPDATE account_jobs SET state = ?, error_code = ?, failure_reason = COALESCE(?, failure_reason), failure_detail = COALESCE(?, failure_detail), reservation_accounted = 0, updated_at = ? WHERE id = ? AND deleted = 0 AND state NOT IN ('saved','failed','cancelled')")
+      .bind(state, errorCode, failure?.reason ?? null, failure?.detail ?? null, Date.now(), id),
   ]);
 }
 /** Cancel only before provider submission, releasing the reservation atomically. */
@@ -168,15 +198,33 @@ export async function cancelQueuedJob(env: Env, id: string, owner: string): Prom
   if (job.state === 'cancelled') return job;
   throw new AccountError('This generation has already started and remains tracked.', 409, 'generation_started');
 }
-/** Stop tracking only while a job is waiting for an explicit account decision. */
-export async function dismissAttentionJob(env: Env, id: string, owner: string): Promise<JobRow | null> {
+/**
+ * Stop tracking only while a job is waiting for an explicit account decision.
+ *
+ * `remove` folds what used to be a mandatory second click into this batch. The
+ * two steps were not two decisions: the destructive one — the provider may
+ * still finish and charge — is taken at the confirm dialog, and what followed
+ * was a row saying "Tracking stopped" next to an X, which people reasonably
+ * read as the button having done nothing. Three of them sat on one account for
+ * five days. The release and the removal have to land together for the same
+ * reason they did before: a row that is gone from the list is the only row that
+ * cannot be used to release its own reservation later.
+ *
+ * Soft delete, never a real DELETE, matching `removeFinishedJob`:
+ * `cleanupTerminalJobObjects` finds staged provider objects by joining this row
+ * during its 24-hour grace, and dropping it would strand them unmetered.
+ */
+export async function dismissAttentionJob(env: Env, id: string, owner: string, remove = false): Promise<JobRow | null> {
   const now = Date.now();
   await env.DB.batch([
     env.DB.prepare(`UPDATE account_storage SET reserved_bytes = reserved_bytes - (SELECT reservation_bytes FROM account_jobs WHERE id = ?), active_jobs = active_jobs - 1
       WHERE user_id = (SELECT user_id FROM account_jobs WHERE id = ? AND user_id = ? AND reservation_accounted = 1 AND deleted = 0 AND state = 'needs_attention')`).bind(id, id, owner),
-    env.DB.prepare("UPDATE account_jobs SET state = 'failed', error_code = 'tracking_stopped', reservation_accounted = 0, updated_at = ? WHERE id = ? AND user_id = ? AND deleted = 0 AND state = 'needs_attention'").bind(now, id, owner),
+    env.DB.prepare(`UPDATE account_jobs SET state = 'failed', error_code = 'tracking_stopped', reservation_accounted = 0, deleted = ?, updated_at = ? WHERE id = ? AND user_id = ? AND deleted = 0 AND state = 'needs_attention'`).bind(remove ? 1 : 0, now, id, owner),
   ]);
-  const job = await getJob(env, id, owner);
+  // Read past the `deleted = 0` filter `getJob` applies: with `remove` the row
+  // this call just wrote is exactly the one that filter now hides, and reading
+  // through it would report a successful removal as a missing job.
+  const job = await env.DB.prepare('SELECT * FROM account_jobs WHERE id = ? AND user_id = ?').bind(id, owner).first<JobRow>();
   if (!job) return null;
   if (job.state === 'failed' && job.error_code === 'tracking_stopped') return job;
   throw new AccountError('This generation is no longer waiting for a tracking decision.', 409, 'tracking_state_changed');

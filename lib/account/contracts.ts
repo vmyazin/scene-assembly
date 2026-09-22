@@ -13,6 +13,23 @@ export interface CloudJobRequest {
 export type CloudJobState = 'queued' | 'submitting' | 'running' | 'saving' | 'saved' | 'needs_attention' | 'failed' | 'cancelled';
 export interface CloudJobView {
   id: string; provider: CloudProvider; state: CloudJobState; errorCode: string | null;
+  /** All three are optional because the browser and the Worker deploy
+   *  separately and can sit at different commits: a Worker from before this
+   *  field existed simply omits it, and the row falls back to the old generic
+   *  copy rather than rendering `undefined`.
+   *
+   *  Why it stopped, from the shared vocabulary in `lib/account/job-failure.ts`.
+   *  `errorCode` names the arm of the runner that gave up, which is not what a
+   *  reader needs: one `save_failed` covers an expired provider link, an
+   *  oversized clip and a transient blip, and only one of those is worth
+   *  resuming. Null on jobs that stopped before the Worker recorded it. */
+  failureReason?: string | null;
+  /** The provider's own sentence for a refusal, already sanitized Worker-side.
+   *  Only ever set alongside `provider_rejected`. */
+  failureDetail?: string | null;
+  /** Resumes so far. The row says "attempt 2" with it, and stops offering a
+   *  button the Worker would now refuse. */
+  attempts?: number;
   request: CloudJobRequest; createdAt: number; updatedAt: number;
 }
 export interface CloudAssetCounts {

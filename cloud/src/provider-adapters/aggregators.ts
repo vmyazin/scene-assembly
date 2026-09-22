@@ -126,7 +126,7 @@ export const aggregatorAdapter: GenerationAdapter = {
     if (handle.sourceMedia && (result.state === 'success' || result.state === 'error')) {
       await runwareDeleteMedia(await credentials(env, job), handle.sourceMedia).catch(() => {});
     }
-    if (result.state === 'error') return {state: 'failed'};
+    if (result.state === 'error') return {state: 'failed', ...(result.error ? {reason: result.error} : {})};
     if (result.state !== 'success') return {state: 'running'};
     if (!result.urls.length) throw new Error('Missing output');
     return {state: 'success', result: {sources: result.urls.map(url => ({url})), ...(result.cost !== undefined ? {cost: result.cost} : {})}};

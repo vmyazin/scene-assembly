@@ -36,6 +36,24 @@
 - **Edit an existing video** → first read `docs/codex/specs/2026-09-11-edit-video.md`. For P-Video-Edit, also read `docs/codex/specs/2026-09-11-p-video-edit.md`; edit limits and Draft pricing belong to `videoEdit` capabilities, because P-Video-Edit has fixed output dimensions and must not inherit Seedance resolution controls. Source clips use `sourceVideoId` in account requests and `inputs.video` at Runware, never the image reference array, because their validation, duration and retention differ. Edit rates live on the catalog capability; normal generation rates undercharge edits. The existing clip library picker accepts `onPickVideo` so selection cannot accidentally place a clip on the timeline.
 
 - **Cloud library, imports, or spend** → first read `docs/codex/account-development.md`. Reuse `CloudAssetGrid` / `useAccountLibrary` for cloud files, `prepareReferences` for reference insertion, and `SpendReport` with the canonical spend resolvers for either ledger. Import controls read browser stores only after explicit selection; account requests must retain owner/epoch guards because a session can change during a file transfer. Two rules the cloud grid pays for when they are broken: **size gates go after `prepareReferences`, never before** — a cloud result is a full-resolution provider PNG and the conversion is what decides the payload, so gating on `asset.bytes` rejected every background-mode image the pipeline could have handled; and **it reports outcomes the way `GalleryGrid` does, in a toast**, because both grids sit behind the two tabs of one picker and an inline alert above a scrolled list is invisible at the moment it is written, which reads as a button that does nothing.
+- **A job stuck in "Needs attention", or copy about why one stopped** → the reason lives in
+  `lib/account/job-failure.ts`, not in `error_code`. `error_code` names the arm of the runner that
+  gave up, so one `save_failed` covered an expired provider link, an oversized clip and a transient
+  blip — which is why the row could only say "needs another attempt" and offered a Resume that
+  repeated the same 404 forever. The shared module owns the vocabulary, the sentence per reason and
+  the `RECOVERABLE` set; `cloud/src/failure.ts` imports that set rather than copying it, **because
+  it is what enforces the copy** — a reason recoverable in one and not the other is a Resume button
+  the Worker answers 409 to. Three rules the Worker pays for when they are broken: classify inside
+  the failing `step.do`, since past that boundary the `AccountError` prototype is gone and only a
+  flattened message survives; write the reason with `recordFailure` and let `setJobState`/`finishJob`
+  `COALESCE` it, because the coarse transition always runs last and a plain assignment erases the
+  only useful thing on the row; and put provider text through `sanitizeProviderMessage` — it is the
+  one string in the pipeline we did not write, and a vendor can echo a request that carries a key.
+  Stopping tracking removes the row in the same D1 batch (`dismissAttentionJob(..., remove)`), opt-in
+  from the request body so the browser and Worker can deploy in either order. Adding a column here
+  needs both `cloud/migrations/` **and** the `LOCAL_SCHEMA` catch-up in `cloud/src/schema.ts`, since
+  `CREATE TABLE IF NOT EXISTS` is a no-op on an existing local database.
+
 - **Browser → cloud import, or test data for it** → the picker is
   `components/account/BrowserImportDialog.tsx` over the `use-asset-import` hook; the hook owns the
   transfer loop, the stable per-file client id that makes a retry idempotent, and the owner/epoch

@@ -15,10 +15,11 @@ import BrowserImportDialog from './BrowserImportDialog';
 import { accountRequest } from '@/lib/account/client';
 import { browserKeyCandidates } from '@/lib/account/key-import';
 import { isImportableGalleryRecord } from '@/lib/account/import';
-import { isActiveJob, needsAttention } from '@/lib/account/job-status';
+import { awaitingDecision, isActiveJob, needsAttention } from '@/lib/account/job-status';
 import { formatAccountBytes as size, useAccountLibrary, type LibraryKind } from '@/lib/account/use-library';
 import { useAccountSpendTotals } from '@/lib/account/use-spend-totals';
 import { formatUsdTotal } from '@/lib/spend/format';
+import type { CloudJobView } from '@/lib/account/contracts';
 import type { AccountIdentity } from '@/store/useAccountStore';
 import { useAccountStore } from '@/store/useAccountStore';
 import { useAppStore } from '@/store/useAppStore';
@@ -122,7 +123,13 @@ export default function AccountConsole({
   const spend = useAccountSpendTotals(ownerId);
 
   const activeJobs = useMemo(() => jobs.filter(isActiveJob), [jobs]);
+  /** Two numbers, because they answer different questions. The tab lists
+   *  everything unresolved — a stopped job is still a row someone has to clear,
+   *  and this is the only place it can be cleared from — while the pill counts
+   *  only the rows where a decision changes something. Counting them together
+   *  is how five real decisions wore a "Needs attention 11" badge. */
   const attentionJobs = useMemo(() => jobs.filter(needsAttention), [jobs]);
+  const decisionCount = useMemo(() => attentionJobs.filter(awaitingDecision).length, [attentionJobs]);
 
   // Selected field by field on purpose: a selector returning a fresh object
   // gives `useSyncExternalStore` a new snapshot every render, which loops.
@@ -168,22 +175,30 @@ export default function AccountConsole({
   }
 
   /**
-   * Removal is sequential and shares one busy window, because "Clear" hands
-   * over every id at once: firing them in parallel would race the same account
-   * rows, and routing them back through `jobAction` would drop all but the
-   * first to its own re-entry guard. The owner is re-checked between requests
-   * for the same reason the import loop does it — a session can change partway
-   * through a run of calls. A failure still refreshes, so a partly cleared list
-   * shows what actually remains rather than the rows it started with.
+   * One path off the list for both halves of what used to be two steps. A job
+   * still awaiting a decision is dismissed with `remove`, so the Worker
+   * releases its reservation and hides the row in a single batch; anything
+   * already terminal is deleted. They belong in one loop because they share an
+   * outcome — the row is gone — and differ only in which endpoint gets there.
+   *
+   * Sequential and sharing one busy window, because "Clear" hands over every
+   * job at once: firing them in parallel would race the same account rows, and
+   * routing them back through `jobAction` would drop all but the first to its
+   * own re-entry guard. The owner is re-checked between requests for the same
+   * reason the import loop does it — a session can change partway through a run
+   * of calls. A failure still refreshes, so a partly cleared list shows what
+   * actually remains rather than the rows it started with.
    */
-  async function removeJobs(ids: string[]) {
+  async function clearJobs(targets: CloudJobView[]) {
     if (actionBusy) return;
     setActionBusy(true);
     setActionError(null);
     try {
-      for (const id of ids) {
+      for (const job of targets) {
         if (ownerId !== useAccountStore.getState().session?.account?.id) throw new Error('Your account changed. Try again from the current library.');
-        await accountRequest(`jobs/${id}`, { method: 'DELETE', headers: { 'X-Account-Id': ownerId } });
+        await (job.state === 'needs_attention'
+          ? accountRequest(`jobs/${job.id}/dismiss`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Account-Id': ownerId }, body: JSON.stringify({ remove: true }) })
+          : accountRequest(`jobs/${job.id}`, { method: 'DELETE', headers: { 'X-Account-Id': ownerId } }));
       }
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : 'Please try again.');
@@ -306,7 +321,8 @@ export default function AccountConsole({
 
         <LibraryFilters
           counts={counts}
-          attentionCount={attentionJobs.length}
+          attentionCount={decisionCount}
+          stoppedCount={attentionJobs.length - decisionCount}
           activeCount={activeJobs.length}
           active={filter}
           onSelect={setFilter}
@@ -326,15 +342,25 @@ export default function AccountConsole({
         <div id="jobs" className="mt-4 scroll-mt-24">
           {showingJobs ? (
             visibleJobs.length > 0 ? (
+              <>
+              {/* Says why the tab holds more rows than its badge counts.
+                  Without it the pill reads as a miscount rather than as the
+                  distinction it is: decisions above, records to clear below. */}
+              {filter === 'attention' && decisionCount > 0 && attentionJobs.length > decisionCount && (
+                <p className="mb-3 text-xs text-[var(--foreground-muted)]">
+                  {decisionCount} waiting on you · {attentionJobs.length - decisionCount} stopped {attentionJobs.length - decisionCount === 1 ? 'record' : 'records'} you can clear.
+                </p>
+              )}
               <CloudJobList
                 jobs={visibleJobs}
                 limit={20}
                 busy={actionBusy}
                 onResume={id => void jobAction(`jobs/${id}/resume`)}
                 onCancel={id => void jobAction(`jobs/${id}/cancel`)}
-                onDismiss={id => void jobAction(`jobs/${id}/dismiss`)}
-                onRemove={ids => void removeJobs(ids)}
+                onDismiss={id => { const job = jobs.find(entry => entry.id === id); if (job) void clearJobs([job]); }}
+                onClear={targets => void clearJobs(targets)}
               />
+              </>
             ) : (
               <p className="py-8 text-center text-sm text-[var(--foreground-muted)]">Nothing here right now.</p>
             )

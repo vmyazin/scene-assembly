@@ -65,29 +65,46 @@ const TONES: Record<LibraryFilterId, { on: string; off: string }> = {
  * "Needs attention" is counted from jobs, not assets — a job that failed to
  * save has no asset row, so an asset-derived count would report zero at exactly
  * the moment the filter matters.
+ *
+ * That pill names what it counts, which is why it takes two numbers. Behind it
+ * sits everything unresolved, decisions and stopped records alike, because it
+ * is the only route to either. But a record that already failed needs no
+ * decision, and counting the two together is how an account with five real
+ * decisions wore a "Needs attention 11" badge — six of those were corpses. So
+ * the badge reads the decisions, and once there are none left it renames itself
+ * after what actually remains rather than announcing zero or vanishing and
+ * taking the rows with it.
  */
 export default function LibraryFilters({
   counts,
   attentionCount,
+  stoppedCount = 0,
   activeCount,
   active,
   onSelect,
 }: {
   counts: CloudAssetCounts | null;
+  /** Jobs waiting on a decision. */
   attentionCount: number;
+  /** Jobs already stopped or failed: listed behind the same pill, never part of
+   *  the alarm. */
+  stoppedCount?: number;
   activeCount: number;
   active: LibraryFilterId;
   onSelect: (id: LibraryFilterId) => void;
 }) {
+  const unresolved = attentionCount + stoppedCount;
   // Three pills reading zero are noise, not navigation: an account with
   // nothing in it has nothing to narrow.
-  if (!counts || (counts.all === 0 && attentionCount === 0 && activeCount === 0)) return null;
+  if (!counts || (counts.all === 0 && unresolved === 0 && activeCount === 0)) return null;
   const filters: LibraryFilter[] = [
     { id: 'all', label: 'All', count: counts.all },
     { id: 'image', label: 'Images', count: counts.image },
     { id: 'video', label: 'Video', count: counts.video },
     ...(activeCount > 0 ? [{ id: 'active' as const, label: 'Generating', count: activeCount }] : []),
-    ...(attentionCount > 0 ? [{ id: 'attention' as const, label: 'Needs attention', count: attentionCount }] : []),
+    ...(unresolved > 0 ? [attentionCount > 0
+      ? { id: 'attention' as const, label: 'Needs attention', count: attentionCount }
+      : { id: 'attention' as const, label: 'Stopped', count: stoppedCount }] : []),
     ...(counts.temporary > 0 ? [{ id: 'temporary' as const, label: 'Temporary', count: counts.temporary }] : []),
   ];
   return (

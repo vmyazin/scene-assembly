@@ -5,7 +5,7 @@ import { useAccountStore } from '@/store/useAccountStore';
 import { useJobQueueStore } from '@/store/useJobQueueStore';
 import { jobSummary } from '@/lib/account/job-label';
 import { assetForJob, libraryHashForAsset, studioLocationForJob } from '@/lib/account/job-location';
-import { JOB_STATE_LABELS, JOB_STATE_TONES, isActiveJob, isSucceededJob, needsAttention } from '@/lib/account/job-status';
+import { JOB_STATE_LABELS, JOB_STATE_TONES, awaitingDecision, isActiveJob, isSucceededJob, needsAttention } from '@/lib/account/job-status';
 import type { CloudAsset, CloudJobView } from '@/lib/account/contracts';
 import JobElapsed, { hasElapsed } from '@/components/JobElapsed';
 
@@ -38,11 +38,18 @@ export default function JobQueueOverlay() {
   const alive = jobs.filter(job => !dismissed.includes(job.id) && (isActiveJob(job) || needsAttention(job)));
   const succeeded = jobs.filter(job => !dismissed.includes(job.id) && isSucceededJob(job));
   if (!alive.length) return null;
+  /** The alarm counts decisions, not records. A job that already failed or was
+   *  stopped needs nothing from anyone here — it only needs clearing, on the
+   *  page this links to — and counting those alongside real decisions is how
+   *  five of them became a standing "11 jobs need attention" badge. */
+  const decisions = alive.filter(awaitingDecision);
 
   // Nothing is in flight, so there is no progress to report — only unfinished
   // business, which belongs where it can be settled rather than in a corner.
   // Finished work is not counted here: it needs nothing from anyone.
   if (!alive.some(isActiveJob)) {
+    // Stopped records alone are not an alarm worth following someone around.
+    if (!decisions.length) return null;
     return (
       <div
         role="status"
@@ -55,8 +62,8 @@ export default function JobQueueOverlay() {
           className="flex items-center gap-2 rounded-full border border-amber-300/30 bg-[var(--surface-overlay)] px-3 py-1.5 text-xs text-amber-200 shadow-lg transition-colors hover:border-amber-300/60 hover:text-amber-100"
         >
           <TriangleAlert size={13} aria-hidden="true" />
-          {alive.length} job{alive.length === 1 ? '' : 's'} need
-          {alive.length === 1 ? 's' : ''} attention
+          {decisions.length} job{decisions.length === 1 ? '' : 's'} need
+          {decisions.length === 1 ? 's' : ''} attention
         </Link>
       </div>
     );

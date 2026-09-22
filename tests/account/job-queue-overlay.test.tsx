@@ -52,17 +52,26 @@ describe('job queue overlay',()=>{
   it('collapses to a count when nothing is in flight, and points at where it can be settled',()=>{
     // Unfinished business does not resolve itself and `dismissed` is per-tab, so
     // as a list this rebuilt on every reload and followed the reader all run.
+    // The count is decisions only: the failed job below needs no decision, it
+    // needs clearing, and counting the two together is how five real decisions
+    // wore an "11 jobs need attention" badge.
     show([job('a','saved'),job('b','needs_attention',{errorCode:'storage_full'}),job('c','failed')]);
-    const link=screen.getByRole('link',{name:'2 jobs need attention'});
+    const link=screen.getByRole('link',{name:'1 job needs attention'});
     expect(link).toHaveAttribute('href','/account#jobs');
     // A count, not the rows it replaced.
     expect(screen.queryByText('Needs attention')).toBeNull();
     expect(screen.queryByText('Video, Seedance 2.0 Mini')).toBeNull();
     expect(screen.queryByText('Saved')).toBeNull();
   });
-  it('counts one job in the singular',()=>{
-    show([job('a','failed')]);
-    expect(screen.getByRole('link',{name:'1 job needs attention'})).toBeInTheDocument();
+  it('counts decisions in the plural',()=>{
+    show([job('a','needs_attention',{errorCode:'storage_full'}),job('b','needs_attention',{errorCode:'save_failed'})]);
+    expect(screen.getByRole('link',{name:'2 jobs need attention'})).toBeInTheDocument();
+  });
+  it('raises no standing alarm for stopped records alone',()=>{
+    // A row that already failed is a record to clear on /account, not an alert
+    // worth following someone across every page for the rest of the session.
+    show([job('a','failed'),job('b','cancelled')]);
+    expect(screen.queryByLabelText('Job queue')).toBeNull();
   });
   it('still names every job while something is in flight',()=>{
     // The card earns its size only while there is progress to report.

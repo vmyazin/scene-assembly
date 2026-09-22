@@ -67,7 +67,7 @@ export const kieAdapter: GenerationAdapter = {
   async poll(env, job, handle) {
     if (handle.protocol !== 'market' && handle.protocol !== 'veo') throw new Error('Invalid protocol');
     const result = await getKieTask({apiKey:await credentials(env,job),protocol:handle.protocol,taskId:handle.id});
-    if (result.state === 'fail') return {state:'failed'};
+    if (result.state === 'fail') return {state:'failed', ...(result.error ? {reason:result.error} : {})};
     if (result.state !== 'success') return {state:'running'};
     if (!result.resultUrls.length) throw new Error('Missing output');
     return {state:'success',result:{sources:result.resultUrls.map(url=>({url}))}};

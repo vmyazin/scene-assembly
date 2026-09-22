@@ -8,9 +8,21 @@ export const JOB_STATE_TONES: Record<CloudJobState,string> = {queued:'text-sky-3
  *  telling the truth when it says something is happening. */
 const ACTIVE: CloudJobState[] = ['queued','submitting','running','saving'];
 export function isActiveJob(job: Pick<CloudJobView,'state'>) { return ACTIVE.includes(job.state); }
-/** Needs a person: it will not resolve itself, so the overlay keeps showing it
- *  until dismissed rather than letting it scroll away with the finished work. */
+/** Unresolved: it will not resolve itself, so the overlay keeps showing it
+ *  until dismissed rather than letting it scroll away with the finished work.
+ *  Deliberately wider than `awaitingDecision` — a stopped job is still a row
+ *  someone has to clear, so it stays on the list it can be cleared from. */
 export function needsAttention(job: Pick<CloudJobView,'state'>) { return job.state === 'needs_attention' || job.state === 'failed'; }
+/**
+ * Waiting on a person, where the decision still changes something.
+ *
+ * What the alarm counts, as opposed to what the list shows. A job that already
+ * failed or was stopped is a record to clear, not a decision to make, and
+ * counting those together is how an account with five real decisions grew a
+ * standing "11 jobs need attention" badge that followed the reader across every
+ * page — an alarm that is mostly corpses is an alarm people learn to ignore.
+ */
+export function awaitingDecision(job: Pick<CloudJobView,'state'>) { return job.state === 'needs_attention'; }
 /** Finished, saved, and owed nothing further. Separate from `isListedJob`
  *  below on purpose: the account page and the workspace rails sit beside the
  *  result card itself, so a "Saved" row there repeats what is already on
@@ -23,6 +35,17 @@ export function isSucceededJob(job: Pick<CloudJobView,'state'>) { return job.sta
  *  still holds a storage reservation that cancelling or dismissing must release
  *  first, and the Worker answers 409 rather than hiding it. */
 export function isRemovableJob(job: Pick<CloudJobView,'state'>) { return job.state === 'failed' || job.state === 'cancelled'; }
+/**
+ * Clearable in one confirmed action from the list.
+ *
+ * Wider than `isRemovableJob` because stopping tracking and removing the row
+ * are no longer two decisions: the Worker releases the reservation and hides
+ * the row in one batch. A row still awaiting a decision therefore belongs in a
+ * bulk clear — with the charge warning in the dialog, which is the part that
+ * is not reversible. The single X stays on `isRemovableJob` alone, since an
+ * unconfirmed click must never be able to stop tracking a live job.
+ */
+export function isClearableJob(job: Pick<CloudJobView,'state'>) { return isRemovableJob(job) || job.state === 'needs_attention'; }
 /** Worth a row of its own. A saved job's output is already a card in the
  *  library or the result panel, so its row only repeated the prompt with a
  *  "Saved" tag; everything still running, waiting on a person, or stopped is

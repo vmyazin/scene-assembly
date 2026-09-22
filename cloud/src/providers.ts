@@ -11,7 +11,11 @@ export interface ProviderHandle { id: string; protocol?: string; notBefore?:numb
 export interface GenerationAdapter {
   recover?(env: Env, job: JobRow): Promise<ProviderResult | undefined>;
   submit(env: Env, job: JobRow): Promise<{handle?:ProviderHandle; result?:ProviderResult}>;
-  poll(env: Env, job: JobRow, handle: ProviderHandle): Promise<{state:'running'|'failed'|'success'; result?:ProviderResult}>;
+  /** `reason` is the provider's own words for a refusal. It is the most
+   *  actionable thing a stopped row can show, and it is the only string in this
+   *  contract we did not write, so the runner puts it through
+   *  `sanitizeProviderMessage` before it reaches D1. */
+  poll(env: Env, job: JobRow, handle: ProviderHandle): Promise<{state:'running'|'failed'|'success'; result?:ProviderResult; reason?:string}>;
 }
 // Production providers are added only after contract verification. A local fake
 // exercises the complete durable flow without calling or charging any vendor.

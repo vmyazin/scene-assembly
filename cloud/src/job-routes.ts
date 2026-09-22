@@ -4,6 +4,7 @@ import { currentAccount } from './sessions';
 import { json, type Env } from './security';
 import { acceptJob, AccountError, cancelQueuedJob, dismissAttentionJob, dispatchJob, getJob, jobView, removeFinishedJob, type JobRow } from './jobs';
 import { adapterFor, validateRequest } from './providers';
+import { isRecoverable, MAX_RESUME_ATTEMPTS } from './failure';
 import { assetView, deleteAsset, getAsset } from './assets';
 
 export async function jobRoutes(request:Request,env:Env):Promise<Response|null>{
@@ -43,20 +44,36 @@ export async function jobRoutes(request:Request,env:Env):Promise<Response|null>{
         return json({job:jobView(cancelled)});
       }
       if(request.method==='POST'&&jobMatch[2]==='/dismiss'){
-        const dismissed=await dismissAttentionJob(env,job.id,account.id);
+        // `remove` is opt-in from the body rather than the default, so the two
+        // halves of this app can deploy in either order: an older browser that
+        // sends nothing still gets the two-step behaviour it knows how to
+        // render, and a newer one talking to an older Worker has its flag
+        // ignored rather than rejected.
+        const body=await request.text().then(text=>text?JSON.parse(text):{}).catch(()=>{throw new AccountError('Invalid request.',400,'invalid_request');});
+        const dismissed=await dismissAttentionJob(env,job.id,account.id,body?.remove===true);
         if(!dismissed)return json({error:'Job not found.'},404);
-        return json({job:jobView(dismissed)});
+        return json({job:jobView(dismissed),removed:body?.remove===true});
       }
       if(request.method==='POST'&&jobMatch[2]==='/resume'){
+        let recovered=false;
         if(job.state==='needs_attention'&&!job.provider_task&&!job.result_json){
           const result=await adapterFor(env,job.provider).recover?.(env,job);
           if(result){
             job.result_json=JSON.stringify(result);
+            recovered=true;
             await env.DB.prepare("UPDATE account_jobs SET result_json=? WHERE id=? AND state='needs_attention' AND deleted=0").bind(job.result_json,job.id).run();
           }
         }
         if(job.state!=='needs_attention'||(!job.provider_task&&!job.result_json))return json({error:'This submission needs provider reconciliation before it can be resumed.'},409);
-        const claimed=await env.DB.prepare("UPDATE account_jobs SET state = ?, workflow_attempt = workflow_attempt + 1, dispatched = 0, error_code = NULL WHERE id = ? AND state = 'needs_attention'").bind(job.result_json?'saving':'running',job.id).run();
+        // Two refusals the account page used to make people discover by
+        // clicking. A provider link that has expired answers the same way on
+        // every attempt, so resuming is not a slower path to the result — it is
+        // the same failure with a fresh timestamp. A recovery that just found a
+        // staged output is exempt: the reason on the row describes the
+        // submission that was lost, not the save that is now possible.
+        if(!recovered&&!isRecoverable(job.failure_reason))return json({error:'This result cannot be recovered by trying again. Stop tracking the job to clear it.',code:'unrecoverable'},409);
+        if(job.workflow_attempt>=MAX_RESUME_ATTEMPTS)return json({error:`This job has already been resumed ${MAX_RESUME_ATTEMPTS} times without finishing. Stop tracking it to clear it.`,code:'resume_exhausted'},409);
+        const claimed=await env.DB.prepare("UPDATE account_jobs SET state = ?, workflow_attempt = workflow_attempt + 1, dispatched = 0, error_code = NULL, failure_reason = NULL, failure_detail = NULL WHERE id = ? AND state = 'needs_attention'").bind(job.result_json?'saving':'running',job.id).run();
         if(!claimed.meta.changes)return json({error:'This generation is no longer waiting for a tracking decision.',code:'tracking_state_changed'},409);
         const resumed=await getJob(env,job.id,account.id);
         if(resumed)await dispatchJob(env,resumed).catch(()=>{});

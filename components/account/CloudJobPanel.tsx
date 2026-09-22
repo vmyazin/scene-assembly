@@ -12,7 +12,7 @@ import { useAccountStore } from '@/store/useAccountStore';
 import { downloadAccountAsset } from '@/lib/account/download';
 import { accountRequest } from '@/lib/account/client';
 import { isListedJob , isActiveJob} from '@/lib/account/job-status';
-import type { CloudAsset, CloudJobRequest } from '@/lib/account/contracts';
+import type { CloudAsset, CloudJobRequest, CloudJobView } from '@/lib/account/contracts';
 import VideoPlayer from '@/components/video/VideoPlayer';
 import JobElapsed from '@/components/JobElapsed';
 import CloudJobList from './CloudJobList';
@@ -38,7 +38,7 @@ export default function CloudJobPanel({provider,modelId,mediaType,inputMode,onCo
     toast.success('Added to the timeline');
   }
   async function download(asset:CloudAsset){setDownloading(asset.id);try{await downloadAccountAsset(asset);}catch(error){setError(error instanceof Error?error.message:'Download failed.');}finally{setDownloading(null);}}
-  async function changeJob(id:string,action:'resume'|'cancel'|'dismiss'){
+  async function changeJob(id:string,action:'resume'|'cancel'){
     if(pending.current)return;
     const {session,epoch}=useAccountStore.getState(),owner=session?.account?.id;
     if(!owner)return;
@@ -50,19 +50,32 @@ export default function CloudJobPanel({provider,modelId,mediaType,inputMode,onCo
     }catch(error){setError(error instanceof Error?error.message:'Could not update this job.');}
     finally{pending.current=false;setBusy(false);}
   }
-  /** Removal drops the rows locally instead of replacing one, because this panel
-   *  reads the memory-only account store rather than refetching. Sequential and
-   *  under one busy window: "Clear" passes every id at once. */
-  async function removeJobs(ids:string[]){
+  /**
+   * One path off the list, whether a row is stopped or still waiting.
+   *
+   * A job awaiting a decision is dismissed with `remove`, so the Worker
+   * releases its reservation and hides the row in the same batch; anything
+   * already terminal is simply deleted. They share a loop because they share an
+   * outcome — the row is gone — and because "Clear" hands over every job at
+   * once, sequentially and under one busy window.
+   *
+   * Rows are dropped locally rather than replaced, since this panel reads the
+   * memory-only account store rather than refetching: applying the returned
+   * `tracking_stopped` job would put the row straight back on screen, which is
+   * the two-step behaviour this replaced.
+   */
+  async function clearJobs(targets:CloudJobView[]){
     if(pending.current)return;
     const {session,epoch}=useAccountStore.getState(),owner=session?.account?.id;
     if(!owner)return;
     pending.current=true;setBusy(true);setError(null);
     const removed:string[]=[];
     try{
-      for(const id of ids){
-        await accountRequest(`jobs/${id}`,{method:'DELETE',headers:{'X-Account-Id':owner}});
-        removed.push(id);
+      for(const job of targets){
+        await (job.state==='needs_attention'
+          ?accountRequest(`jobs/${job.id}/dismiss`,{method:'POST',headers:{'Content-Type':'application/json','X-Account-Id':owner},body:JSON.stringify({remove:true})})
+          :accountRequest(`jobs/${job.id}`,{method:'DELETE',headers:{'X-Account-Id':owner}}));
+        removed.push(job.id);
       }
     }catch(error){setError(error instanceof Error?error.message:'Could not update this job.');}
     finally{
@@ -75,7 +88,7 @@ export default function CloudJobPanel({provider,modelId,mediaType,inputMode,onCo
   }
   return <AccountSurface label="Account generation results" className="flex min-h-[420px] flex-col gap-4">
     <div><h3 className="display flex items-center gap-2 text-base font-semibold"><Cloud size={17} className="text-cyan-300" aria-hidden="true"/>Result</h3><p className="mt-1 text-xs text-[var(--foreground-muted)]">Saved to your account when complete. You can leave this page.</p></div>
-    <CloudJobList jobs={jobs.filter(isListedJob)} busy={busy} onResume={id=>void changeJob(id,'resume')} onCancel={id=>void changeJob(id,'cancel')} onDismiss={id=>void changeJob(id,'dismiss')} onRemove={ids=>void removeJobs(ids)} />
+    <CloudJobList jobs={jobs.filter(isListedJob)} busy={busy} onResume={id=>void changeJob(id,'resume')} onCancel={id=>void changeJob(id,'cancel')} onDismiss={id=>{const job=jobs.find(entry=>entry.id===id);if(job)void clearJobs([job]);}} onClear={targets=>void clearJobs(targets)} />
     <TemporaryAssetNotice assets={assets} />
     {mediaType==='image'?<ResultStack items={assets.map(a=>{
       // Timed by joining back to the job that made it, because the asset itself
