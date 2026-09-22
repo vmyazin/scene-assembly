@@ -6,13 +6,19 @@ const { generateVideos, getVideosOperation } = vi.hoisted(() => ({
   getVideosOperation: vi.fn(),
 }));
 
-vi.mock('@google/genai', () => ({
+// Only the network surface is faked. `GenerateVideosOperation` stays real, because
+// the SDK calls `_fromAPIResponse` on the operation we hand it: a plain object
+// literal passes type-checking and then throws at runtime.
+vi.mock('@google/genai', async () => ({
+  ...(await vi.importActual<typeof import('@google/genai')>('@google/genai')),
   GoogleGenAI: class {
     constructor(public readonly options: { apiKey: string; httpOptions?: { retryOptions?: { attempts: number } } }) {}
     models = { generateVideos };
     operations = { getVideosOperation };
   },
 }));
+
+import { GenerateVideosOperation } from '@google/genai';
 
 import { RouteError } from '../../lib/providers/route-error';
 import {
@@ -149,6 +155,27 @@ describe('geminiPollVideoOperation', () => {
       mimeType: 'video/mp4',
     });
     expect(getVideosOperation).toHaveBeenCalledWith({ operation: { name: 'operations/veo-text' } });
+  });
+
+  it('hands the SDK a real operation so it can convert the raw poll response', async () => {
+    // Mirrors @google/genai: it converts the wire payload by calling
+    // `_fromAPIResponse` on the very operation the caller passed in.
+    getVideosOperation.mockImplementation(async ({ operation }: { operation: GenerateVideosOperation }) =>
+      operation._fromAPIResponse({
+        apiResponse: {
+          name: 'operations/veo-raw',
+          done: true,
+          response: { generateVideoResponse: { generatedSamples: [{ video: { uri: VIDEO_URI } }] } },
+        },
+        _isVertexAI: false,
+      })
+    );
+
+    await expect(geminiPollVideoOperation('test-key', 'operations/veo-raw', { singleAttempt: true })).resolves.toMatchObject({
+      operation: 'operations/veo-raw',
+      done: true,
+      videoUri: VIDEO_URI,
+    });
   });
 
   it('surfaces operation errors and RAI blocks', async () => {

@@ -1,5 +1,5 @@
 // lib/engines/gemini.ts
-import { GoogleGenAI, type GenerateVideosOperation } from '@google/genai';
+import { GenerateVideosOperation, GoogleGenAI } from '@google/genai';
 
 import { RouteError } from '../providers/route-error';
 
@@ -298,9 +298,12 @@ export async function geminiPollVideoOperation(
 
   try {
     const ai = geminiClient(key, opts.singleAttempt);
-    const operation = await ai.operations.getVideosOperation({
-      operation: { name } as GenerateVideosOperation,
-    });
+    // Must be a real GenerateVideosOperation: the SDK converts the wire payload
+    // by calling `_fromAPIResponse` on this object, so an object literal
+    // type-checks and then throws at runtime.
+    const pending = new GenerateVideosOperation();
+    pending.name = name;
+    const operation = await ai.operations.getVideosOperation({ operation: pending });
     return readVideoOperation(operation);
   } catch (error) {
     throw geminiRouteError(error, 'Gemini could not check this video job.', key);
