@@ -265,6 +265,13 @@
       "request": "launch",
       "command": "ACCOUNT_WORKER_PORT=8867 npm run dev -- --port 3167",
       "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Provider billing readout smoke test",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "ACCOUNT_WORKER_PORT=8871 DEV_FAKE_GENERATION=1 npm run dev -- --port 3171",
+      "cwd": "${workspaceFolder}"
     }
   ]
 }

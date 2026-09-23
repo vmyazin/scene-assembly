@@ -9,7 +9,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import SegmentedToggleGroup from '@/components/SegmentedToggleGroup';
 import AccountSpend from '@/components/spend/AccountSpend';
 import SpendReport from '@/components/spend/SpendReport';
-import { fetchKieCredits } from '@/lib/kie/browser';
+import ProviderBilling from '@/components/spend/ProviderBilling';
 import { isSpendRange, SPEND_RANGES } from '@/lib/spend/rollup';
 import { useAccountStore } from '@/store/useAccountStore';
 import { useAppStore } from '@/store/useAppStore';
@@ -27,7 +27,6 @@ function SpendView() {
   const hasHydrated = useSpendStore((state) => state.hasHydrated);
   const removeLocal = useSpendStore((state) => state.remove);
   const clearLocal = useSpendStore((state) => state.clear);
-  const kieApiKey = useAppStore((state) => state.kieApiKey);
   const [clearIntent, setClearIntent] = useState<{
     source: SpendSource;
     scope: string;
@@ -47,17 +46,6 @@ function SpendView() {
     useAppStore.persist.rehydrate();
     void useSpendStore.persist.rehydrate();
   }, []);
-
-  const [fetchedKieCredits, setFetchedKieCredits] = useState<number | null | undefined>(undefined);
-  useEffect(() => {
-    if (!kieApiKey || source !== 'browser') return;
-    let cancelled = false;
-    void fetchKieCredits(kieApiKey).then((credits) => {
-      if (!cancelled) setFetchedKieCredits(credits);
-    });
-    return () => { cancelled = true; };
-  }, [kieApiKey, source]);
-  const kieCredits = kieApiKey ? fetchedKieCredits : undefined;
 
   const waitingForSession = accountStatus === 'loading' && !ownerId;
 
@@ -90,6 +78,8 @@ function SpendView() {
           )}
         </div>
 
+        {!waitingForSession && <ProviderBilling source={source} ownerId={ownerId} epoch={accountEpoch} />}
+
         {waitingForSession ? (
           <div className="flex items-center justify-center py-16"><div className="loading-spinner" /></div>
         ) : accountStatus === 'unavailable' && ownerId && source === 'account' ? (
@@ -118,7 +108,6 @@ function SpendView() {
               range={range}
               now={now}
               loading={!hasHydrated}
-              kieCredits={kieCredits}
               onRemove={removeLocal}
               onClearRequest={() => setClearIntent({ source: 'browser', scope: accountScope, clear: clearLocal })}
             />

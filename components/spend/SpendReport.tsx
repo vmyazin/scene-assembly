@@ -20,7 +20,6 @@ interface SpendReportProps {
   loadingOlder?: boolean;
   error?: string | null;
   hasOlder?: boolean;
-  kieCredits?: number | null;
   onRetry?: () => void;
   onLoadOlder?: () => void;
   onRemove: (id: string) => void | Promise<void>;
@@ -36,7 +35,6 @@ export default function SpendReport({
   loadingOlder = false,
   error,
   hasOlder = false,
-  kieCredits,
   onRetry,
   onLoadOlder,
   onRemove,
@@ -91,7 +89,7 @@ export default function SpendReport({
         </>
       ) : (
         <>
-          <SpendSummary totals={totals(scoped)} kieCredits={cloud ? undefined : kieCredits} />
+          <SpendSummary totals={totals(scoped)} />
           <SpendDailyChart days={byDay(scoped, range, now)} />
           <div className="grid gap-4 md:grid-cols-2">
             <SpendBreakdown title="By provider" rows={byProvider(scoped)} />

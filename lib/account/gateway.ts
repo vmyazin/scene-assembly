@@ -8,7 +8,7 @@ export async function accountGateway(request: Request): Promise<Response> {
     return Response.json({ error: 'Account service is not configured.' }, { status: 503 });
   }
   const incoming = new URL(request.url);
-  const allowed = new Set(['session', 'profile', 'sign-in/google', 'callback/google', 'sign-out', 'local-sign-in']);
+  const allowed = new Set(['session', 'profile', 'sign-in/google', 'callback/google', 'sign-out', 'local-sign-in', 'provider-billing']);
   const path = incoming.pathname.slice('/api/account/'.length);
   if (!allowed.has(path) && !/^(?:jobs(?:\/[a-zA-Z0-9-]+(?:\/(?:resume|cancel|dismiss))?)?|assets(?:\/[a-zA-Z0-9-]+(?:\/(?:content|access))?)?|uploads(?:\/[a-zA-Z0-9-]+)?|imports(?:\/[a-zA-Z0-9-]+)?|spend(?:\/[a-zA-Z0-9_-]+)?|storage)$/.test(path) && !/^connections(?:\/(?:gemini|fal|kie|runware|atlas|comet|piapi|cloudflare|pollinations))?$/.test(path)) return new Response(null, { status: 404 });
   const headers = new Headers();

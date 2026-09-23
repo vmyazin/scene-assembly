@@ -60,7 +60,7 @@ describe('account gateway', () => {
 it('forwards bounded import metadata and account spend requests',async()=>{
   process.env.ACCOUNT_WORKER_ORIGIN='https://worker.example.test';
   vi.stubGlobal('fetch',vi.fn(async()=>Response.json({ok:true})));
-  for(const [path,method] of [['imports','POST'],['imports/fixture-id','DELETE'],['spend?cursor=1:gemini-fixture','GET'],['spend/all','DELETE']] as const){
+  for(const [path,method] of [['imports','POST'],['imports/fixture-id','DELETE'],['spend?cursor=1:gemini-fixture','GET'],['spend/all','DELETE'],['provider-billing','GET']] as const){
     const response=await accountGateway(new Request(`https://app.example.test/api/account/${path}`,{method,headers:{Origin:'https://app.example.test','X-Account-Id':'owner'},...(method==='POST'?{body:JSON.stringify({metadata:{prompt:'x'.repeat(3000)}})}:{})}));
     expect(response.status).toBe(200);
   }

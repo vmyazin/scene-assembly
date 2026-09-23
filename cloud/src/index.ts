@@ -8,6 +8,7 @@ import { lifecycleRoutes } from './lifecycle';
 import { jobRoutes } from './job-routes';
 import { dispatchJob, type JobRow } from './jobs';
 import { connectionRoutes } from './connections';
+import { providerBillingRoutes } from './provider-billing';
 import { bootstrapLocalSchema } from './schema';
 import { cookie, cookieName, hash, isLocal, json, randomToken, readCookie, returnPath, validOrigin, type Env } from './security';
 import { googleAuthorization, googleEnabled, googleIdentity } from './google';
@@ -53,6 +54,8 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (jobResponse) return jobResponse;
     const spendResponse=await spendRoutes(request,env);
     if(spendResponse)return spendResponse;
+    const billingResponse=await providerBillingRoutes(request,env);
+    if(billingResponse)return billingResponse;
     const connectionResponse = await connectionRoutes(request, env);
     if (connectionResponse) return connectionResponse;
     if (path === '/health' && request.method === 'GET') return json({ ok: true });

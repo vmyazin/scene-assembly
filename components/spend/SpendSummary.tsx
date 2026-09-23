@@ -3,8 +3,6 @@ import type { SpendTotals } from '@/lib/spend/rollup';
 
 interface SpendSummaryProps {
   totals: SpendTotals;
-  /** Live Kie balance; undefined hides the tile, null means the read failed. */
-  kieCredits?: number | null;
 }
 
 function Tile({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -17,7 +15,7 @@ function Tile({ label, value, hint }: { label: string; value: string; hint?: str
   );
 }
 
-export default function SpendSummary({ totals, kieCredits }: SpendSummaryProps) {
+export default function SpendSummary({ totals }: SpendSummaryProps) {
   const exactShare = totals.costUsd > 0 ? Math.round((totals.exactUsd / totals.costUsd) * 100) : 0;
   return (
     <section aria-label="Summary">
@@ -25,9 +23,6 @@ export default function SpendSummary({ totals, kieCredits }: SpendSummaryProps) 
         <Tile label="Total" value={formatUsdTotal(totals.costUsd)} hint={totals.unknownRuns > 0 ? `${totals.unknownRuns} run${totals.unknownRuns === 1 ? '' : 's'} unpriced` : undefined} />
         <Tile label="Runs" value={String(totals.runs)} />
         <Tile label="Exact" value={`${exactShare}%`} hint={`${formatUsdTotal(totals.estimatedUsd)} estimated`} />
-        {kieCredits !== undefined && (
-          <Tile label="Kie credits" value={kieCredits === null ? '—' : String(kieCredits)} hint="Live balance" />
-        )}
       </dl>
     </section>
   );

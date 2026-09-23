@@ -1,8 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('nuqs', () => ({ useQueryState: () => ['all', vi.fn()] }));
-vi.mock('@/lib/kie/browser', () => ({ fetchKieCredits: vi.fn().mockResolvedValue(940) }));
 
 import SpendPage from '@/app/spend/page';
 import type { SpendEntry } from '@/lib/spend/ledger';
@@ -26,6 +25,7 @@ function entry(overrides: Partial<SpendEntry>): SpendEntry {
 }
 
 describe('SpendPage', () => {
+  afterEach(() => vi.restoreAllMocks());
   beforeEach(() => {
     localStorage.clear();
     useSpendStore.setState({ entries: [], hasHydrated: true });
@@ -51,12 +51,14 @@ describe('SpendPage', () => {
       hasHydrated: true,
     });
     useAppStore.setState({ kieApiKey: 'kie-key', hasHydrated: true });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ snapshot: { provider: 'kie', balance: 940, unit: 'credits', fetchedAt: Date.now() } }));
     render(<SpendPage />);
 
     const summary = screen.getByRole('region', { name: 'Summary' });
     expect(within(summary).getByText('$0.14')).toBeInTheDocument();
     expect(within(summary).getByText('3')).toBeInTheDocument();
-    expect(await within(summary).findByText('940')).toBeInTheDocument();
+    expect(await screen.findByText('940 credits')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Kie is low');
 
     const charts = screen.getAllByRole('img', { name: /Spend per day/ });
     expect(charts.length).toBeGreaterThan(0);

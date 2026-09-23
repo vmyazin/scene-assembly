@@ -178,6 +178,15 @@ without another provider call. Permanent assets have no automatic expiry.
 The account spend ledger is stored in D1 and remains separate from the browser
 ledger. Both use the canonical resolvers in `lib/spend/resolve.ts`; figures stay
 exact, estimated, or unknown when trustworthy rate/usage data is unavailable.
+The Spend page also reads current provider billing from Kie, Runware, and Atlas.
+Guest reads use the device's keys through a first-party proxy; signed-in reads
+decrypt saved connections only in the account Worker. These balances are never
+stored in the ledger: provider totals can include use outside Scene Assembly.
+Kie warns below 2,000 credits (about $10); Runware reports rolling 30-day use,
+and Atlas reports its account balance and, when permitted, recent model costs.
+The named local run scenario uses ports 3171 and 8871. With fake generation and
+no real keys, `/spend` shows the empty provider state; real billing reads need
+connected vendor keys.
 Spend capture follows a confirmed provider result even when saving needs
 attention, and reconciliation repairs a missed ledger insert without affecting
 the completed generation. Account spend and asset endpoints return 50 rows at a
