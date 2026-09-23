@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { RefreshCw } from 'lucide-react';
 
 import { accountRequest } from '@/lib/account/client';
 import { type BillingProvider, type ProviderBillingSnapshot } from '@/lib/billing/provider-readout';
@@ -21,29 +22,44 @@ function usd(value: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(value);
 }
 
+/** Mirrors a loaded card's rows so the grid keeps its height while balances are read. */
+function BalanceSkeleton() {
+  const bar = 'rounded bg-[var(--foreground)]/10';
+  return (
+    <div aria-hidden="true" className="animate-pulse rounded-xl border border-[var(--border)] p-4 motion-reduce:animate-none">
+      <div className={`${bar} h-4 w-24`} />
+      <div className={`${bar} mt-3 h-7 w-32`} />
+      <div className={`${bar} mt-2 h-3.5 w-48`} />
+      <div className={`${bar} mt-4 h-3.5 w-28`} />
+    </div>
+  );
+}
+
 export default function ProviderBilling({ source, ownerId, epoch }: { source: 'account' | 'browser'; ownerId: string | null; epoch: number }) {
   const kieKey = useAppStore(state => state.kieApiKey);
   const runwareKey = useAppStore(state => state.runwareApiKey);
   const atlasKey = useAppStore(state => state.atlasApiKey);
-  const [results, setResults] = useState<Result[]>([]);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [refresh, setRefresh] = useState(0);
-  const requestId = useRef(0);
   const reload = useCallback(() => setRefresh(value => value + 1), []);
+  // Loading is derived rather than set: the last response belongs to a different
+  // request key, so nothing needs resetting inside the effect.
+  const requestKey = `${source}:${ownerId}:${epoch}:${kieKey}:${runwareKey}:${atlasKey}:${refresh}`;
+  const [settled, setSettled] = useState<{ key: string; results: Result[]; error: string | null } | null>(null);
+  const idle = source === 'account' && !ownerId;
+  const current = settled?.key === requestKey ? settled : null;
+  const loading = !idle && !current;
+  const results = current?.results ?? [];
+  const loadError = current?.error ?? null;
 
   useEffect(() => {
-    const id = ++requestId.current;
+    if (source === 'account' && !ownerId) return;
+    let cancelled = false;
     const keys: Partial<Record<BillingProvider, string>> = { kie: kieKey, runware: runwareKey, atlas: atlasKey };
     const connected = (Object.entries(keys) as [BillingProvider, string][]).filter(([, key]) => Boolean(key));
-    setLoading(true);
-    setResults([]);
-    setLoadError(null);
     const load = async () => {
       try {
         let next: Result[];
         if (source === 'account') {
-          if (!ownerId) return;
           const response = await accountRequest<{ results: Result[] }>('provider-billing');
           next = response.results.filter(result => result.provider in LABELS);
         } else {
@@ -59,17 +75,17 @@ export default function ProviderBilling({ source, ownerId, epoch }: { source: 'a
             } catch { return { provider, error: 'Could not read balance.' }; }
           }));
         }
-        if (requestId.current === id) setResults(next);
+        if (!cancelled) setSettled({ key: requestKey, results: next, error: null });
       } catch {
-        if (requestId.current === id) setLoadError('Saved provider billing is temporarily unavailable.');
-      } finally {
-        if (requestId.current === id) setLoading(false);
+        if (!cancelled) setSettled({ key: requestKey, results: [], error: 'Saved provider billing is temporarily unavailable.' });
       }
     };
     void load();
-    return () => { requestId.current += 1; };
-  }, [source, ownerId, epoch, kieKey, runwareKey, atlasKey, refresh]);
+    return () => { cancelled = true; };
+  }, [source, ownerId, kieKey, runwareKey, atlasKey, requestKey]);
 
+  // A browser knows which keys it holds; an account's connections live on the Worker.
+  const expected = source === 'browser' ? [kieKey, runwareKey, atlasKey].filter(Boolean).length : 3;
   const lowKie = results.find(result => result.provider === 'kie')?.snapshot;
   const isLow = lowKie?.unit === 'credits' && lowKie.balance < KIE_LOW_CREDITS;
 
@@ -80,7 +96,16 @@ export default function ProviderBilling({ source, ownerId, epoch }: { source: 'a
           <h2 id="provider-billing-heading" className="field-label">Provider balances</h2>
           <p className="field-hint mt-1">Live provider data, separate from the Scene Assembly spend ledger.</p>
         </div>
-        <button type="button" className="btn-secondary" onClick={reload} disabled={loading}>{loading ? 'Checking…' : 'Refresh balances'}</button>
+        <button
+          type="button"
+          className="btn-secondary grid size-10 place-items-center p-0"
+          onClick={reload}
+          disabled={loading}
+          aria-label={loading ? 'Checking balances' : 'Refresh balances'}
+          title="Refresh balances"
+        >
+          <RefreshCw size={16} aria-hidden="true" className={loading ? 'animate-spin motion-reduce:animate-none' : undefined} />
+        </button>
       </div>
       {isLow && (
         <div role="alert" className="mt-4 rounded-xl border border-amber-400/45 bg-amber-400/10 px-4 py-3 text-sm text-[var(--foreground)]">
@@ -92,6 +117,11 @@ export default function ProviderBilling({ source, ownerId, epoch }: { source: 'a
       {results.length === 0 && !loading && !loadError && (
         <p className="field-hint mt-4">No Kie, Runware, or Atlas connection found for this {source === 'account' ? 'account' : 'browser'}.{' '}<Link href="/" className="underline">Open the studio</Link> to connect one.</p>
       )}
+      {loading && results.length === 0 && expected > 0 && (
+        <div role="status" aria-label="Loading provider balances" className="mt-4 grid gap-3 md:grid-cols-3">
+          {Array.from({ length: expected }, (_, index) => <BalanceSkeleton key={index} />)}
+        </div>
+      )}
       {results.length > 0 && (
         <dl className="mt-4 grid gap-3 md:grid-cols-3">
           {results.map(({ provider, snapshot, error }) => (
@@ -99,9 +129,12 @@ export default function ProviderBilling({ source, ownerId, epoch }: { source: 'a
               <dt className="field-label">{LABELS[provider]}</dt>
               {snapshot ? (
                 <>
-                  <dd className="display mt-2 text-2xl">{snapshot.unit === 'credits' ? `${snapshot.balance.toLocaleString()} credits` : usd(snapshot.balance)}</dd>
+                  <dd className="mt-2 flex flex-wrap items-baseline gap-x-2">
+                    <span className="display text-2xl">{snapshot.unit === 'credits' ? `${snapshot.balance.toLocaleString()} credits` : usd(snapshot.balance)}</span>
+                    {/* Cash is the balance less bonus, so only a bonus says anything new — and only when there is one. */}
+                    {snapshot.bonus !== undefined && snapshot.bonus > 0 && <span className="field-hint">incl. {usd(snapshot.bonus)} bonus</span>}
+                  </dd>
                   <p className="field-hint mt-1">Available balance{snapshot.unit === 'credits' ? ` · about ${usd(snapshot.balance * KIE_USD_PER_CREDIT)}` : ''} · checked {new Date(snapshot.fetchedAt).toLocaleTimeString()}</p>
-                  {snapshot.cash !== undefined && snapshot.bonus !== undefined && <p className="field-hint mt-2">{usd(snapshot.cash)} cash · {usd(snapshot.bonus)} bonus</p>}
                   {snapshot.spentLast30Days !== undefined && <p className="field-hint mt-2">Provider reported last 30 days: {usd(snapshot.spentLast30Days)}{snapshot.requestsLast30Days !== undefined ? ` across ${snapshot.requestsLast30Days.toLocaleString()} requests` : ''}</p>}
                 </>
               ) : <dd className="field-hint mt-2">{error || 'Balance unavailable.'}</dd>}
