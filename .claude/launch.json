@@ -279,6 +279,13 @@
       "request": "launch",
       "command": "ACCOUNT_WORKER_PORT=8883 npm run dev -- --port 3183",
       "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Animal transfer thumbnails",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "ACCOUNT_WORKER_PORT=8885 npm run dev -- --port 3185",
+      "cwd": "${workspaceFolder}"
     }
   ]
 }
