@@ -97,12 +97,13 @@ describe('account spend', () => {
   it('discards a pending read after logout and aborts it when the owner changes', async () => {
     const first = deferred<{ accountId: string; entries: SpendEntry[]; nextCursor: null }>();
     const signals: AbortSignal[] = [];
-    vi.mocked(accountRequest).mockImplementation(async (_path, init) => {
+    vi.mocked(accountRequest).mockImplementation(async (path, init) => {
+      if (path !== 'spend') return new Promise(() => {});
       if (init?.signal) signals.push(init.signal);
       return first.promise;
     });
     render(<SpendPage />);
-    await waitFor(() => expect(accountRequest).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(signals).toHaveLength(1));
 
     owner('owner-2');
     await waitFor(() => expect(signals[0].aborted).toBe(true));
@@ -113,9 +114,27 @@ describe('account spend', () => {
     expect(screen.queryByText('Stale cloud record')).toBeNull();
   });
 
+  it('shows the Worker range total instead of summing the first loaded page', async () => {
+    vi.mocked(accountRequest).mockImplementation(async (path) => {
+      if (path === 'spend') return { accountId: 'owner-1', entries: [entry('new', 'Newest')], nextCursor: '100:old' };
+      if (path === 'spend/totals') return {
+        accountId: 'owner-1',
+        totals: { costUsd: 5.24, runs: 120, exactUsd: 5, estimatedUsd: 0.24, unknownRuns: 3 },
+      };
+      throw new Error(`Unexpected path: ${path}`);
+    });
+    render(<SpendPage />);
+
+    const summary = await screen.findByRole('region', { name: 'Summary' });
+    await waitFor(() => expect(summary).toHaveTextContent('$5.24'));
+    expect(summary).toHaveTextContent('120');
+    expect(summary).toHaveTextContent('3 runs unpriced');
+  });
+
   it('appends and deduplicates older pages', async () => {
     vi.mocked(accountRequest).mockImplementation(async (path) => {
       if (path === 'spend') return { accountId: 'owner-1', entries: [entry('new', 'Newest')], nextCursor: '100:old' };
+      if (path.startsWith('spend/totals')) return new Promise(() => {});
       if (path === 'spend?cursor=100%3Aold') return {
         accountId: 'owner-1',
         entries: [entry('new', 'Newest'), entry('old', 'Older')],

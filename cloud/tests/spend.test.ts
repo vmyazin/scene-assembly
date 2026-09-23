@@ -66,6 +66,17 @@ describe('persistent account spend',()=>{
     expect(JSON.stringify(body)).not.toContain('example.invalid');
   });
 
+  it('totals the whole ledger from `since` onward without paging it to the browser',async()=>{
+    for(let index=0;index<60;index++){const row=job(`run-${index}`,'owner',{updated_at:1_000+index});insertJob(row);await recordAccountSpend(env,row);}
+    const theirs=job('theirs','other');insertJob(theirs);await recordAccountSpend(env,theirs);
+    const all=await (await api('/totals')).json() as {totals:{runs:number;costUsd:number}};
+    expect(all.totals.runs).toBe(60);
+    expect(all.totals.costUsd).toBeCloseTo(2.4);
+    const recent=await (await api('/totals?since=1050')).json() as {totals:{runs:number}};
+    expect(recent.totals.runs).toBe(10);
+    expect((await api('/totals?since=last-week')).status).toBe(400);
+  });
+
   it('tombstones a deleted entry so reconciliation cannot restore it',async()=>{
     const row=job('remove-me');insertJob(row);await recordAccountSpend(env,row);
     expect((await api('/runware-remove-me','DELETE')).status).toBe(200);

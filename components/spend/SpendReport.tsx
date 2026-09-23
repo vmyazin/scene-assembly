@@ -9,11 +9,13 @@ import SpendEmptyPreview from '@/components/spend/SpendEmptyPreview';
 import SpendLedger from '@/components/spend/SpendLedger';
 import SpendSummary from '@/components/spend/SpendSummary';
 import { providerLabel, type SpendEntry, type SpendProvider } from '@/lib/spend/ledger';
-import { byDay, byModel, byProvider, inRange, toCsv, totals, type SpendRange } from '@/lib/spend/rollup';
+import { byDay, byModel, byProvider, inRange, toCsv, totals, type SpendRange, type SpendTotals } from '@/lib/spend/rollup';
 
 interface SpendReportProps {
   source: 'account' | 'browser';
   entries: SpendEntry[];
+  /** Range totals computed elsewhere; null while pending. Omitted, the summary sums `entries`. */
+  summaryTotals?: SpendTotals | null;
   range: SpendRange;
   now: number;
   loading?: boolean;
@@ -29,6 +31,7 @@ interface SpendReportProps {
 export default function SpendReport({
   source,
   entries,
+  summaryTotals,
   range,
   now,
   loading = false,
@@ -89,7 +92,7 @@ export default function SpendReport({
         </>
       ) : (
         <>
-          <SpendSummary totals={totals(scoped)} />
+          <SpendSummary totals={summaryTotals === undefined ? totals(scoped) : summaryTotals} />
           <SpendDailyChart days={byDay(scoped, range, now)} />
           <div className="grid gap-4 md:grid-cols-2">
             <SpendBreakdown title="By provider" rows={byProvider(scoped)} />

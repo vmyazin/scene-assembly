@@ -64,13 +64,18 @@ export async function spendRoutes(request:Request,env:Env):Promise<Response|null
     // client adding up the first page would under-report every account past
     // fifty runs. Walked in batches so a long ledger stays memory-bounded, and
     // reduced with the same pure rollup /spend uses — a SQL reimplementation of
-    // the arithmetic would drift from it.
+    // the arithmetic would drift from it. `since` is the range start the /spend
+    // page computes in the viewer's local time, so the Worker never has to
+    // guess a timezone for "this month".
+    const sinceParam=new URL(request.url).searchParams.get('since');
+    if(sinceParam!==null&&!/^\d{1,15}$/.test(sinceParam))return json({error:'Invalid range start.'},400);
+    const since=sinceParam===null?0:Number(sinceParam);
     const entries:AccountSpendEntry[]=[];
     let before=Number.MAX_SAFE_INTEGER,beforeId='~';
     for(let batch=0;batch<200;batch++){
-      const rows=await env.DB.prepare(`SELECT * FROM account_spend WHERE user_id=? AND deleted=0
+      const rows=await env.DB.prepare(`SELECT id,at,entry_json FROM account_spend WHERE user_id=? AND deleted=0 AND at>=?
         AND (at<? OR (at=? AND id<?)) ORDER BY at DESC,id DESC LIMIT 500`)
-        .bind(account.id,before,before,beforeId).all<SpendRow>();
+        .bind(account.id,since,before,before,beforeId).all<SpendRow>();
       for(const row of rows.results){const entry=entryView(row);if(entry)entries.push(entry);}
       const last=rows.results.at(-1);
       if(rows.results.length<500||!last)break;

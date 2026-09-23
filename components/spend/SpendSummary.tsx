@@ -2,7 +2,8 @@ import { formatUsdTotal } from '@/lib/spend/format';
 import type { SpendTotals } from '@/lib/spend/rollup';
 
 interface SpendSummaryProps {
-  totals: SpendTotals;
+  /** Null while a total computed elsewhere is still on its way. */
+  totals: SpendTotals | null;
 }
 
 function Tile({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -16,6 +17,17 @@ function Tile({ label, value, hint }: { label: string; value: string; hint?: str
 }
 
 export default function SpendSummary({ totals }: SpendSummaryProps) {
+  if (!totals) {
+    return (
+      <section aria-label="Summary" aria-busy="true">
+        <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Tile label="Total" value="—" hint="Totalling…" />
+          <Tile label="Runs" value="—" />
+          <Tile label="Exact" value="—" />
+        </dl>
+      </section>
+    );
+  }
   const exactShare = totals.costUsd > 0 ? Math.round((totals.exactUsd / totals.costUsd) * 100) : 0;
   return (
     <section aria-label="Summary">
