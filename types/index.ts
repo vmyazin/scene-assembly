@@ -95,7 +95,7 @@ export const FEATURES: Feature[] = [
     name: 'Style Transfer & Artistic Transformation',
     description: 'Apply artistic styles to your images. Transform photos into paintings, match the aesthetic of reference images, or create unique artistic interpretations. From oil paintings to watercolors, anime to impressionism.',
     icon: '🎭',
-    thumbnail: '/thumbnails/cat-banana.png',
+    thumbnail: '/thumbnails/style-transfer-cat.jpg',
     category: 'editing',
     requiresImage: true,
     requiresMultipleImages: true,

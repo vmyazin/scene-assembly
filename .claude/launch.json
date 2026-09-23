@@ -272,6 +272,13 @@
       "request": "launch",
       "command": "ACCOUNT_WORKER_PORT=8871 DEV_FAKE_GENERATION=1 npm run dev -- --port 3171",
       "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Style transfer cat thumbnail",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "ACCOUNT_WORKER_PORT=8883 npm run dev -- --port 3183",
+      "cwd": "${workspaceFolder}"
     }
   ]
 }
