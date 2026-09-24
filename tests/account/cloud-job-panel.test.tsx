@@ -41,4 +41,23 @@ describe('the workspace result panel', () => {
     expect(screen.getByText('Still running prompt')).toBeInTheDocument();
     expect(screen.getByText('Stopped prompt')).toBeInTheDocument();
   });
+
+  it('shows image jobs from every provider and model, not just the selected one', () => {
+    const { epoch } = useAccountStore.getState();
+    const other: CloudJobView = {
+      id: 'kie-running',
+      provider: 'kie',
+      request: { ...request, provider: 'kie', modelId: 'flux-kontext-pro', inputMode: 'image', prompt: 'Kie prompt' },
+      state: 'running',
+      errorCode: null,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    useAccountStore.getState().applyJobs('owner-1', epoch, [job('gem', 'running', 'Gemini prompt'), other], []);
+
+    render(<CloudJobPanel provider="gemini" modelId="gemini-3-pro-image-preview" mediaType="image" inputMode="text" />);
+
+    expect(screen.getByText('Gemini prompt')).toBeInTheDocument();
+    expect(screen.getByText('Kie prompt')).toBeInTheDocument();
+  });
 });

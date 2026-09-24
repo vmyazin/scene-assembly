@@ -21,19 +21,15 @@ import {
   resolveGeminiImageModel,
 } from '@/lib/engines/gemini-catalog';
 import { requestExamplePrompt, requestPromptSlug } from '@/lib/micro-ai/browser';
-import {
-  boundedMediaBlob,
-  extensionForMimeType,
-  MAX_REMOTE_IMAGE_BYTES,
-  normalizedMimeType,
-  SUPPORTED_RASTER_MIMES,
-} from '@/lib/media-download';
+import { extensionForMimeType } from '@/lib/media-download';
+import { downloadImageResult, IMAGE_DOWNLOAD_ERROR } from '@/lib/results/download-image';
+import { useImageResultFeed } from '@/lib/results/image-feed';
+import { useImageResultsStore } from '@/store/useImageResultsStore';
 import { runFalImage } from '@/lib/fal/browser';
 import { FAL_IMAGE_MODEL } from '@/lib/fal/catalog';
 import type { EngineUsage } from '@/lib/engines/gemini';
 import { captureImageResult } from '@/lib/spend/capture';
 import { downloadFilenameBase } from '@/lib/download-name';
-import { convertedForDownload } from '@/lib/image/download-format';
 import ProviderLogo from '@/components/ProviderLogo';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import PromptPanel from '@/components/PromptPanel';
@@ -52,7 +48,7 @@ import { keepUploadedImages } from '@/lib/gallery/keep-upload';
 import { useDraftStore } from '@/store/useDraftStore';
 import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
 import { useGalleryStore } from '@/store/useGalleryStore';
-import { blobFromDataUrl, resultBlob } from '@/lib/gallery/capture';
+import { resultBlob } from '@/lib/gallery/capture';
 import { candidatesFromValues, useAutoAspect } from '@/lib/draft/aspect-match';
 import {
   APPROXIMATE_LEGEND,
@@ -168,7 +164,6 @@ function draftedConfig(): GenerationConfig {
 }
 
 const FAL_GENERATION_ERROR = 'Unable to generate this image with fal. Please try again.';
-const DOWNLOAD_ERROR = 'Unable to download this image. Please try again.';
 const MAX_FAL_REFERENCE_BYTES = 20 * 1024 * 1024;
 
 class LocalFalCancellation extends Error {
@@ -180,16 +175,6 @@ class LocalFalCancellation extends Error {
 
 function isAbortError(error: unknown) {
   return error instanceof DOMException && error.name === 'AbortError';
-}
-
-function isSafeFalMediaUrl(value: string) {
-  try {
-    const url = new URL(value);
-    const isFalMedia = url.hostname === 'fal.media' || url.hostname.endsWith('.fal.media');
-    return url.protocol === 'https:' && !url.username && !url.password && isFalMedia;
-  } catch {
-    return false;
-  }
 }
 
 interface EngineSelectorProps {
@@ -429,11 +414,10 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
   const promptErrorId = useId();
   const [error, setError] = useState<string | null>(null);
   /**
-   * Finished results, newest first. Not cleared anywhere on purpose:
-   * `app/page.tsx` mounts this component with `key={selectedFeature.id}`, so
-   * switching feature remounts it and the stack goes with it.
+   * Every image finished this session, from any engine — not just the one on
+   * screen, so switching engine or feature never hides an earlier result.
    */
-  const [results, setResults] = useState<ResultStackItem[]>([]);
+  const results = useImageResultFeed();
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   // Pre-rendered, AI-summarized download filename for the current prompt.
   const [filenameSlug, setFilenameSlug] = useState<string | null>(null);
@@ -442,8 +426,6 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
   const generationOperationRef = useRef(0);
   const downloadAbortRef = useRef<AbortController | null>(null);
   const downloadOperationRef = useRef(0);
-  /** Monotonic, so a React key survives a newer result being pushed above it. */
-  const resultIdRef = useRef(0);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -689,23 +671,18 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
       autoRetry.reset();
       toast.success('Image generated');
       playGenerationChime();
-      resultIdRef.current += 1;
-      setResults((current) => [
-        {
-          id: `result-${resultIdRef.current}`,
-          src: result.dataUrl,
-          mimeType: result.mimeType,
-          provider: activeEngine.id,
-          modelId: activeModelId,
-          cost: result.cost,
-          startedAt: startedAtRef.current,
-          finishedAt: Date.now(),
-          createdAt: Date.now(),
-        },
-        // Kept whole rather than sliced here: ResultStack owns the display cap,
-        // and the library holds everything regardless.
-        ...current,
-      ]);
+      // Kept whole rather than sliced here: ResultStack owns the display cap,
+      // and the library holds everything regardless.
+      useImageResultsStore.getState().add({
+        src: result.dataUrl,
+        mimeType: result.mimeType,
+        provider: activeEngine.id,
+        modelId: activeModelId,
+        prompt,
+        slug: filenameSlug ?? undefined,
+        cost: result.cost,
+        startedAt: startedAtRef.current,
+      });
       // Images are small enough to keep every time. The provider URL fal hands
       // back expires in a week, so the bytes are what make this durable.
       void captureImage(result.dataUrl).then((galleryRecordId) =>
@@ -941,101 +918,47 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
    * first regardless of which card it came from.
    */
   const downloadImage = async (item: ResultStackItem | null) => {
-    const generatedImage = item?.src;
-    if (!generatedImage) return;
+    if (!item?.src) return;
 
     downloadAbortRef.current?.abort();
     const operationId = downloadOperationRef.current + 1;
     downloadOperationRef.current = operationId;
-    downloadAbortRef.current = null;
-    setError(null);
-    setDownloadingId(item.id);
-
-    const base = downloadFilenameBase({
-      prompt,
-      mediaType: 'image',
-      slug: filenameSlug || slugify(prompt) || `scene-assembly-${feature.id}`,
-      provider: activeEngine.id,
-      modelId: activeModelId,
-    });
-
-    if (generatedImage.startsWith('data:image/')) {
-      // Decoded rather than handed straight to the anchor, so the chosen format
-      // applies here too — this is the path nano banana's PNG results take.
-      // A decode failure falls back to the original direct-anchor download:
-      // saving the result must not depend on converting it.
-      try {
-        const saved = await convertedForDownload(blobFromDataUrl(generatedImage), imageFormat);
-        const objectUrl = URL.createObjectURL(saved);
-        try {
-          const link = document.createElement('a');
-          link.href = objectUrl;
-          link.download = `${base}.${extensionForMimeType(saved.type)}`;
-          link.click();
-        } finally {
-          URL.revokeObjectURL(objectUrl);
-        }
-      } catch {
-        const link = document.createElement('a');
-        link.href = generatedImage;
-        link.download = `${base}.${extensionForMimeType(item.mimeType ?? generatedMimeType)}`;
-        link.click();
-      } finally {
-        setDownloadingId(null);
-      }
-      return;
-    }
-
-    if (!isSafeFalMediaUrl(generatedImage)) {
-      setError(DOWNLOAD_ERROR);
-      setDownloadingId(null);
-      return;
-    }
-
     const controller = new AbortController();
     downloadAbortRef.current = controller;
-    let objectUrl: string | null = null;
+    setError(null);
+    setDownloadingId(item.id);
     const isCurrentOperation = () =>
       mountedRef.current &&
       !controller.signal.aborted &&
       downloadOperationRef.current === operationId &&
       downloadAbortRef.current === controller;
 
+    // Named after the run that made the card, not the panel on screen: the
+    // feed is shared, so the newest card may come from another engine or an
+    // earlier prompt. The pre-rendered slug is used only while it still
+    // describes that prompt.
+    const itemPrompt = item.prompt ?? prompt;
+    const slug = item.slug || (itemPrompt === prompt ? filenameSlug : null);
+    const base = downloadFilenameBase({
+      prompt: itemPrompt,
+      mediaType: 'image',
+      slug: slug || slugify(itemPrompt) || `scene-assembly-${feature.id}`,
+      provider: item.provider ?? activeEngine.id,
+      modelId: item.modelId ?? activeModelId,
+    });
+
     try {
-      const response = await fetch(generatedImage, { signal: controller.signal });
-      if (!isCurrentOperation()) return;
-
-      const responseMime = normalizedMimeType(response.headers.get('Content-Type'));
-      if (!response.ok || !SUPPORTED_RASTER_MIMES.has(responseMime)) {
-        throw new Error(DOWNLOAD_ERROR);
-      }
-
-      const blob = await boundedMediaBlob(
-        response,
-        responseMime,
-        controller.signal,
-        MAX_REMOTE_IMAGE_BYTES
-      );
-      if (!isCurrentOperation()) return;
-
-      const saved = await convertedForDownload(blob, imageFormat);
-      if (!isCurrentOperation()) return;
-
-      objectUrl = URL.createObjectURL(saved);
-
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      // From the saved blob, never the response header: a browser that cannot
-      // encode the chosen format leaves the original bytes, and the name must
-      // follow the bytes.
-      link.download = `${base}.${extensionForMimeType(saved.type)}`;
-      link.click();
+      await downloadImageResult(item, {
+        filenameBase: base,
+        imageFormat,
+        signal: controller.signal,
+        fallbackMimeType: generatedMimeType,
+      });
     } catch (caught) {
       if (!isCurrentOperation() || isAbortError(caught)) return;
-      setError(DOWNLOAD_ERROR);
+      setError(caught instanceof Error ? caught.message : IMAGE_DOWNLOAD_ERROR);
       controller.abort();
     } finally {
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
       if (
         downloadOperationRef.current === operationId &&
         downloadAbortRef.current === controller
@@ -1483,7 +1406,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
               onDownload={(item) => downloadImage(item)}
               downloadingId={downloadingId}
               downloadLabel="Download Image"
-              filenameBase={() => filenameSlug || 'generated-image'}
+              filenameBase={(item) => item.slug || (item.prompt === prompt && filenameSlug) || 'generated-image'}
               onUseAsFirstFrame={onUseAsFirstFrame}
 
               emptyState={

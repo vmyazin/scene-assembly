@@ -21,8 +21,13 @@ import TemporaryAssetNotice from './TemporaryAssetNotice';
 export default function CloudJobPanel({provider,modelId,mediaType,inputMode,onContinueFromFrame,resultJobId}:Pick<CloudJobRequest,'provider'|'modelId'|'mediaType'|'inputMode'> & {onContinueFromFrame?:()=>void;resultJobId?:string}) {
   const allJobs=useAccountStore(state=>state.jobs),allAssets=useAccountStore(state=>state.assets);
   const [error,setError]=useState<string|null>(null),[downloading,setDownloading]=useState<string|null>(null);
-  const jobs=allJobs.filter(j=>j.provider===provider&&j.request.modelId===modelId&&j.request.mediaType===mediaType&&j.request.inputMode===inputMode);
-  const assets=allAssets.filter(a=>a.metadata.provider===provider&&a.metadata.modelId===modelId&&a.kind===mediaType&&a.metadata.inputMode===inputMode&&(!resultJobId||a.jobId===resultJobId));
+  // Images are one feed across every provider and model, the same as the local
+  // panels (`useImageResultFeed`): a result is a result wherever it came from,
+  // and each card names its source. Video stays scoped to the selection,
+  // because that panel shows a single clip and it has to be the one just asked for.
+  const inScope=(p:string,m:string,mode:string)=>mediaType==='image'||(p===provider&&m===modelId&&mode===inputMode);
+  const jobs=allJobs.filter(j=>j.request.mediaType===mediaType&&inScope(j.provider,j.request.modelId,j.request.inputMode));
+  const assets=allAssets.filter(a=>a.kind===mediaType&&inScope(a.metadata.provider,a.metadata.modelId,a.metadata.inputMode)&&(!resultJobId||a.jobId===resultJobId));
   const pending=useRef(false),[busy,setBusy]=useState(false);
   // `isActiveJob` rather than a fourth copy of the state list: the timer needs
   // the running job itself, and two answers to "is this in flight" on one line

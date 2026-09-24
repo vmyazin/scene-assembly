@@ -40,6 +40,13 @@ export interface ResultStackItem {
   startedAt?: number;
   finishedAt?: number;
   createdAt?: number;
+  /**
+   * What produced it, for the download name. Carried on the item because the
+   * feed is shared across engines: the prompt on screen may belong to a
+   * different run than the card being saved.
+   */
+  prompt?: string;
+  slug?: string;
 }
 
 interface ResultStackProps {

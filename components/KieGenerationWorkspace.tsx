@@ -23,6 +23,8 @@ import {
   isDownloadableMediaUrl,
 } from '@/lib/media-download';
 import { downloadFilenameBase } from '@/lib/download-name';
+import { downloadImageResult, IMAGE_DOWNLOAD_ERROR } from '@/lib/results/download-image';
+import { useImageResultFeed } from '@/lib/results/image-feed';
 import { useAppStore } from '@/store/useAppStore';
 import { useKieJobsStore } from '@/store/useKieJobsStore';
 import { useSeedFrameStore } from '@/store/useSeedFrameStore';
@@ -151,31 +153,11 @@ export default function KieGenerationWorkspace({
   const latestJob = matchingJobs[0];
   const resultUrl = latestJob?.state === 'success' ? latestJob.resultUrls[0] : undefined;
   /**
-   * The image stack, straight off the job list this panel already keeps —
-   * no parallel state, so results stay visible for exactly as long as the
-   * store lists them.
+   * The shared image feed rather than this model's slice: every image finished
+   * this session, Kie's straight off the job list and the other engines' from
+   * `useImageResultsStore`, so switching model or engine hides nothing.
    */
-  const imageResults: ResultStackItem[] =
-    mediaType === 'image'
-      ? matchingJobs.flatMap((job) =>
-          job.state === 'success' && job.resultUrls[0]
-            ? [
-                {
-                  id: job.id,
-                  src: job.resultUrls[0],
-                  provider: 'kie',
-                  modelId: job.modelId,
-                  createdAt: job.createdAt,
-                  // `updatedAt` is the poll that saw it finish, so this is
-                  // submit-to-result including queue time. Kie reports no cost
-                  // per task — only a credit balance — so the footer omits it.
-                  startedAt: job.createdAt,
-                  finishedAt: job.updatedAt,
-                },
-              ]
-            : []
-        )
-      : [];
+  const imageFeed = useImageResultFeed();
   const resolvedExampleFeatureId =
     exampleFeatureId ?? (mediaType === 'video' ? `${inputMode}-to-video` : 'text-to-image');
 
@@ -354,6 +336,29 @@ export default function KieGenerationWorkspace({
 
   /** Saves the card that was clicked; defaults to the newest for the video panel. */
   const downloadResult = async (item?: ResultStackItem) => {
+    // A card from another engine, or from a Kie model no longer selected, has
+    // no job in `matchingJobs`; the shared helper knows every source's path.
+    if (item && !matchingJobs.some((candidate) => candidate.id === item.id)) {
+      setError(null);
+      setDownloadingId(item.id);
+      try {
+        await downloadImageResult(item, {
+          filenameBase: downloadFilenameBase({
+            prompt: item.prompt ?? '',
+            mediaType: 'image',
+            slug: item.slug,
+            provider: item.provider,
+            modelId: item.modelId,
+          }),
+          imageFormat,
+        });
+      } catch (caught) {
+        if (mountedRef.current) setError(caught instanceof Error ? caught.message : IMAGE_DOWNLOAD_ERROR);
+      } finally {
+        if (mountedRef.current) setDownloadingId((current) => (current === item.id ? null : current));
+      }
+      return;
+    }
     const job = item ? matchingJobs.find((candidate) => candidate.id === item.id) : latestJob;
     const url = item?.src ?? resultUrl;
     if (!job || !url) return;
@@ -727,7 +732,7 @@ export default function KieGenerationWorkspace({
                 </p>
               )}
               <ResultStack
-                items={imageResults}
+                items={imageFeed}
                 isGenerating={Boolean(latestJob && !isKieJobTerminal(latestJob.state))}
                 pendingLabel={`Kie is working on your ${mediaType}.`}
                 pendingDetail={

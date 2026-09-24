@@ -234,7 +234,15 @@
 - **An image result panel** → render `components/ResultStack.tsx` rather than
   laying out cards inline. It owns the 4-item display cap, the per-card download
   and fullscreen, and the lightbox — a panel that keeps its own `lightboxOpen`
-  boolean cannot say *which* of several results is open.
+  boolean cannot say *which* of several results is open. Feed it
+  `useImageResultFeed()` (`lib/results/image-feed.ts`), never a per-engine or
+  per-model slice: the image feed is one session-wide list across every engine,
+  because filtering by the engine on screen hid every earlier result the moment
+  someone switched provider to compare. New local results go into
+  `useImageResultsStore`; Kie's come from its job store. Download cards through
+  `downloadImageResult` (`lib/results/download-image.ts`), since any panel can be
+  showing any source's URL. The signed-in `CloudJobPanel` does the same for
+  images; video stays scoped to the selection because it shows a single clip.
 - **Anything that re-encodes image bytes** → read
   `docs/superpowers/specs/2026-08-31-image-format-conversion-design.md`, then go
   through `lib/image/convert.ts`. Never call a canvas encoder directly: it must
