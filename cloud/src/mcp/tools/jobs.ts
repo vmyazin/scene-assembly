@@ -6,7 +6,7 @@ import { acceptJob, AccountError, dispatchJob, getJob, jobView, type JobRow } fr
 import { mediaAccess } from '../../media';
 import { hash, randomToken } from '../../security';
 import { discardUploads } from '../../uploads';
-import { attachCharge, budgetStatus, releaseCharge, reserveCharge } from '../budget';
+import { attachCharge, budgetStatus, dropCharge, reserveCharge } from '../budget';
 import { ToolError } from '../errors';
 import { defineTool, type ToolContext } from '../tool';
 import { resolveReferences } from './references';
@@ -47,37 +47,72 @@ export const generate = defineTool({
     const prepared = await prepareRequest(ctx, args);
     const estimate = estimateCloudJob(prepared.request);
     const token = await agentJobToken(agent.id, args.idempotencyKey);
-    const existing = await env.DB.prepare('SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ? AND deleted = 0').bind(agent.user_id, token).first<JobRow>();
+    // Deliberately not filtered on deleted = 0: a removed job's row still owns
+    // this token, and a retry must be told to pick a new idempotencyKey rather
+    // than fall through to reserveCharge, which would book a second charge for
+    // a token that already named a (now gone) job.
+    const existing = await env.DB.prepare('SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?').bind(agent.user_id, token).first<JobRow>();
     if (existing) {
+      if (existing.deleted) throw new AccountError('That idempotencyKey belongs to a job that was removed. Use a new idempotencyKey.', 409, 'token_conflict');
       if (!sameRun(JSON.parse(existing.request_json), prepared.request)) throw new AccountError('Submission token already used.', 409, 'token_conflict');
       return started(ctx, existing, estimate);
     }
     const outcome = await reserveCharge(env, agent, token, estimate, ctx.now());
     if (!outcome.ok) throw budgetRefusal(outcome, estimate);
-    // References resolved (and possibly copied from the library) only reach a
-    // job that actually gets created; a copy this call made is tracked here so
-    // a refusal below (acceptJob throwing after a successful resolve) can
-    // discard it rather than leave it occupying an input slot for 24 hours. A
-    // staged { uploadId } the agent already owns is never in copiedIds, so it
-    // is never touched here.
-    let references: Awaited<ReturnType<typeof resolveReferences>> | undefined;
+
+    // Everything from here down to acceptJob returning a job is undone on
+    // failure: a reservation whose job never got made paid for nothing, and a
+    // library copy resolveReferences made for it is unused. dropCharge (never
+    // releaseCharge — that only marks a row released, and a retried
+    // idempotencyKey looks itself up by this exact id) deletes the row outright
+    // so the same key can book a fresh, budget-checked charge next time. A
+    // staged { uploadId } is never in copiedIds, so it is never touched here.
+    //
+    // Once acceptJob has returned a job, none of this applies any more: the
+    // charge and any copies it used now belong to that job, and a transient
+    // failure attaching the charge, dispatching, or reading the job back must
+    // leave both alone — cleanupOrphanCharges reattaches an orphaned charge by
+    // token on its own schedule, and undoing a live job's inputs here would
+    // fail it at the provider instead.
+    let references: Awaited<ReturnType<typeof resolveReferences>>;
     try {
       references = await resolveReferences(ctx, args.references, args.sourceVideo);
-      const request: CloudJobRequest = {
-        provider: prepared.request.provider, modelId: prepared.request.modelId, mediaType: prepared.request.mediaType,
-        inputMode: prepared.request.inputMode, prompt: prepared.request.prompt, values: prepared.request.values,
-        referenceIds: references.referenceIds, ...(references.sourceVideoId ? { sourceVideoId: references.sourceVideoId } : {}),
-      };
-      const job = await acceptJob(env, agent.user_id, token, request, agent.id);
-      await attachCharge(env, token, job.id);
-      // Acceptance is durable even when dispatch fails; scheduled reconciliation repairs it.
-      if (!job.dispatched) await dispatchJob(env, job).catch(() => {});
-      return started(ctx, (await getJob(env, job.id, agent.user_id)) ?? job, estimate);
     } catch (error) {
-      if (outcome.created) await releaseCharge(env, token);
-      if (references?.copiedIds.length) await discardUploads(env, agent.user_id, references.copiedIds);
+      if (outcome.created) await dropCharge(env, token).catch(() => {});
       throw error;
     }
+
+    const request: CloudJobRequest = {
+      provider: prepared.request.provider, modelId: prepared.request.modelId, mediaType: prepared.request.mediaType,
+      inputMode: prepared.request.inputMode, prompt: prepared.request.prompt, values: prepared.request.values,
+      referenceIds: references.referenceIds, ...(references.sourceVideoId ? { sourceVideoId: references.sourceVideoId } : {}),
+    };
+    let job: JobRow;
+    try {
+      job = await acceptJob(env, agent.user_id, token, request, agent.id);
+    } catch (error) {
+      // Two concurrent calls with the same idempotencyKey can each resolve an
+      // { assetId } reference into a different copied upload id, so their
+      // digests differ and acceptJob's own uniqueness check picks one winner;
+      // the loser lands here with a token_conflict even though a job now
+      // exists under this token. That job — not this call — owns the shared
+      // charge (the winner's own attachCharge claims it), so only the copies
+      // this call made are ours to discard.
+      const winner = await env.DB.prepare('SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?').bind(agent.user_id, token).first<JobRow>();
+      if (winner) {
+        if (references.copiedIds.length) await discardUploads(env, agent.user_id, references.copiedIds).catch(() => {});
+        if (sameRun(JSON.parse(winner.request_json), prepared.request)) return started(ctx, winner, estimate);
+        throw error;
+      }
+      if (outcome.created) await dropCharge(env, token).catch(() => {});
+      if (references.copiedIds.length) await discardUploads(env, agent.user_id, references.copiedIds).catch(() => {});
+      throw error;
+    }
+
+    await attachCharge(env, token, job.id);
+    // Acceptance is durable even when dispatch fails; scheduled reconciliation repairs it.
+    if (!job.dispatched) await dispatchJob(env, job).catch(() => {});
+    return started(ctx, (await getJob(env, job.id, agent.user_id)) ?? job, estimate);
   },
 });
 
@@ -90,13 +125,18 @@ export const getJobTool = defineTool({
   input: z.object({ jobId: z.string().min(1).max(64), waitSeconds: z.number().int().min(0).max(25).optional() }),
   async run(ctx, { jobId, waitSeconds = 0 }) {
     const owner = ctx.agent.user_id;
+    const notFound = () => new ToolError('not_found', 'No job with that id on this account.');
     let job = await getJob(ctx.env, jobId, owner);
-    if (!job) throw new ToolError('not_found', 'No job with that id on this account.');
+    if (!job) throw notFound();
     const from = job.state;
     const deadline = ctx.now() + waitSeconds * 1000;
     while (!TERMINAL.includes(job.state) && job.state === from && ctx.now() < deadline) {
       await ctx.sleep(Math.min(POLL_MS, deadline - ctx.now()));
-      job = (await getJob(ctx.env, jobId, owner)) ?? job;
+      const refreshed = await getJob(ctx.env, jobId, owner);
+      // A job removed mid-wait is gone, not merely unchanged: report that
+      // rather than keep returning its last state as if the wait continued.
+      if (!refreshed) throw notFound();
+      job = refreshed;
     }
     const outputs = job.state === 'saved'
       ? await Promise.all((await jobAssets(ctx.env, owner, job.id)).map(async asset => {
@@ -127,9 +167,16 @@ export const listJobs = defineTool({
   annotations: { readOnlyHint: true, openWorldHint: false },
   input: z.object({ state: z.enum(['active', 'needs_attention', 'finished', 'all']).optional(), limit: z.number().int().min(1).max(100).optional() }),
   async run(ctx, { state = 'all', limit = 20 }) {
-    const rows = await ctx.env.DB.prepare('SELECT j.*, g.client_name AS agent_name FROM account_jobs j LEFT JOIN account_agents g ON g.id = j.agent_id WHERE j.user_id = ? AND j.deleted = 0 ORDER BY j.created_at DESC LIMIT 100')
-      .bind(ctx.agent.user_id).all<JobRow>();
-    const jobs = rows.results.filter(row => state === 'all' || LIST_STATES[state].includes(row.state)).slice(0, limit).map(jobView);
+    // The state filter has to run inside SQL, before LIMIT: filtering in JS
+    // after fetching only the newest rows can miss a match that is older than
+    // the cutoff, e.g. a needs_attention job that has sat untouched while a
+    // hundred newer active ones were created.
+    const states = state === 'all' ? null : JSON.stringify(LIST_STATES[state]);
+    const rows = await ctx.env.DB.prepare(`SELECT j.*, g.client_name AS agent_name FROM account_jobs j LEFT JOIN account_agents g ON g.id = j.agent_id
+      WHERE j.user_id = ? AND j.deleted = 0 AND (? IS NULL OR j.state IN (SELECT value FROM json_each(?)))
+      ORDER BY j.created_at DESC LIMIT ?`)
+      .bind(ctx.agent.user_id, states, states, limit).all<JobRow>();
+    const jobs = rows.results.map(jobView);
     return { structured: { jobs }, text: `${jobs.length} job${jobs.length === 1 ? '' : 's'}.` };
   },
 });

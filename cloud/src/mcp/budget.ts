@@ -66,7 +66,11 @@ export async function reserveCharge(env: Env, agent: AgentRow, chargeId: string,
     .bind(chargeId, agent.id, micros, estimate.confidence, now, chargeId, agent.id, now - BUDGET_WINDOW_MS, micros ?? 0, agent.budget_micros).run();
   const status = await budgetStatus(env, agent, now);
   if (inserted.meta.changes) return { ok: true, created: true, status };
-  if (await env.DB.prepare('SELECT 1 AS found FROM account_agent_charges WHERE id = ? AND agent_id = ?').bind(chargeId, agent.id).first()) {
+  // Only an unreleased row may be treated as "this is the same reservation,
+  // skip straight to ok": a released or dropped-then-recreated id must still
+  // pass the budget check below, or a retried idempotency key could reuse a
+  // stale row to run uncharged (see dropCharge).
+  if (await env.DB.prepare('SELECT 1 AS found FROM account_agent_charges WHERE id = ? AND agent_id = ? AND released = 0').bind(chargeId, agent.id).first()) {
     return { ok: true, created: false, status };
   }
   return { ok: false, code: 'budget_exceeded', status, needUsd: fromMicros(micros ?? 0), roomAt: await roomAt(env, agent, micros ?? 0, now) };
@@ -79,6 +83,19 @@ export async function attachCharge(env: Env, chargeId: string, jobId: string) {
 /** Only when the provider certainly never ran the job; see the spec's Budget section. */
 export async function releaseCharge(env: Env, chargeId: string) {
   await env.DB.prepare('UPDATE account_agent_charges SET released = 1 WHERE id = ?').bind(chargeId).run();
+}
+
+/**
+ * A reservation whose job was never accepted paid for nothing: delete it
+ * outright rather than mark it released. The charge id is the request token,
+ * and a retried idempotency key looks itself up by that same id — a released
+ * (but still present) row would otherwise satisfy reserveCharge's "same
+ * reservation" fallback above without ever re-checking the budget, letting a
+ * retry after a pre-acceptance refusal run uncharged. `job_id IS NULL` keeps
+ * this from ever touching a charge a job has already claimed.
+ */
+export async function dropCharge(env: Env, chargeId: string) {
+  await env.DB.prepare('DELETE FROM account_agent_charges WHERE id = ? AND job_id IS NULL').bind(chargeId).run();
 }
 
 /** The ledger's figure replaces the estimate. An unknown figure changes nothing. */

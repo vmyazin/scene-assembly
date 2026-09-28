@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { attachCharge, BUDGET_WINDOW_MS, budgetStatus, cleanupOrphanCharges, previewCharge, releaseCharge, reserveCharge, settleCharge } from '../src/mcp/budget';
+import { attachCharge, BUDGET_WINDOW_MS, budgetStatus, cleanupOrphanCharges, dropCharge, previewCharge, releaseCharge, reserveCharge, settleCharge } from '../src/mcp/budget';
 import { recordAccountSpend } from '../src/spend';
 import type { JobRow } from '../src/jobs';
 import { agentEnv, OWNER, seedAgent } from './agent-fixtures';
@@ -84,6 +84,27 @@ describe('agent budget', () => {
     const lowered = { ...agent, budget_micros: 1_000_000 };
     expect(await budgetStatus(env, lowered, T0)).toEqual({ limitUsd: 1, usedUsd: 4, remainingUsd: 0 });
     expect(await reserveCharge(env, lowered, 'next', priced(0.5), T0 + 1)).toMatchObject({ ok: false, code: 'budget_exceeded', roomAt: T0 + BUDGET_WINDOW_MS });
+  });
+
+  // Fix round 1, Finding 1(c): a released row must not let a repeated charge
+  // id skip straight past the budget check.
+  it('refuses a repeated charge id whose reservation was already released', async () => {
+    const { env } = agentEnv();
+    const agent = await seedAgent(env, { budgetUsd: 1 });
+    await reserveCharge(env, agent, 'released-charge', priced(0.5), T0);
+    await releaseCharge(env, 'released-charge');
+    expect(await reserveCharge(env, agent, 'released-charge', priced(0.5), T0 + 1)).toMatchObject({ ok: false, code: 'budget_exceeded' });
+  });
+
+  it('drops a reservation that never became a job, but leaves an attached one alone', async () => {
+    const { db, env } = agentEnv();
+    const agent = await seedAgent(env);
+    await reserveCharge(env, agent, 'orphan', priced(1), T0);
+    await reserveCharge(env, agent, 'attached', priced(1), T0);
+    await attachCharge(env, 'attached', 'job-x');
+    await dropCharge(env, 'orphan');
+    await dropCharge(env, 'attached');
+    expect(db.prepare('SELECT id FROM account_agent_charges ORDER BY id').all()).toEqual([{ id: 'attached' }]);
   });
 
   it('previews without booking', async () => {
