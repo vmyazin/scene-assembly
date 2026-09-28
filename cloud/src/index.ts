@@ -20,20 +20,24 @@ import { agentRoutes } from './mcp/agent-routes';
 
 interface OAuthAttempt { verifier: string; nonce: string; return_to: string }
 const bootstrapped = new WeakMap<object, Promise<void>>();
+/** Local dev creates its schema on first request. Exported because the entry
+ *  wrapper reads D1 (the registration limit) before handleRequest runs. */
+export async function ensureLocalSchema(env: Env) {
+  if (!isLocal(env)) return;
+  // Share the upgrade across simultaneous first requests; retry after a failure.
+  let ready = bootstrapped.get(env.DB);
+  if (!ready) {
+    ready = bootstrapLocalSchema(env.DB).catch(error => { bootstrapped.delete(env.DB); throw error; });
+    bootstrapped.set(env.DB, ready);
+  }
+  await ready;
+}
 export async function handleRequest(request: Request, env: Env): Promise<Response> {
   try {
     if (!validOrigin(env)) return json({ error: 'Account service is not configured.' }, 503);
     // The local shortcut must stay absent even before production migrations exist.
     if(new URL(request.url).pathname==='/api/account/local-sign-in'&&!isLocal(env))return json({error:'Not found.'},404);
-    if (isLocal(env)) {
-      // Share the upgrade across simultaneous first requests; retry after a failure.
-      let ready = bootstrapped.get(env.DB);
-      if (!ready) {
-        ready = bootstrapLocalSchema(env.DB).catch(error => { bootstrapped.delete(env.DB); throw error; });
-        bootstrapped.set(env.DB, ready);
-      }
-      await ready;
-    }
+    await ensureLocalSchema(env);
     const ingress = await applyIngress(request, env);
     if (ingress.response) return ingress.response;
     request = ingress.request;

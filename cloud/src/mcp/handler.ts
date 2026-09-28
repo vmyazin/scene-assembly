@@ -41,9 +41,15 @@ export async function serveMcp(request: Request, env: Env, props: AgentProps | u
   return handler.fetch(request, { authInfo });
 }
 
-/** The OAuth library's apiHandler: it puts the token's props on ctx.props. */
+/**
+ * The OAuth library's apiHandler: it puts the token's props on ctx.props. The
+ * library types that as `unknown` (OAuthProviderOptions is not generic over
+ * Props), so the cast happens here rather than in the parameter type — typing
+ * the parameter itself as `ExecutionContext & { props?: AgentProps }` fails
+ * the library's own contravariant check against `ExecutionContext<unknown>`.
+ */
 export const mcpApiHandler = {
-  fetch(request: Request, env: Env, ctx: ExecutionContext & { props?: AgentProps }) {
-    return serveMcp(request, env, ctx.props);
+  fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    return serveMcp(request, env, ctx.props as AgentProps | undefined);
   },
 };

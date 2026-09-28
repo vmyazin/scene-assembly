@@ -7,3 +7,7 @@ GOOGLE_CLIENT_SECRET=
 # Credential-free image fixture through the real account UI/Workflow/R2 flow.
 # 1 bypasses vendors only in a compile-time local build; never set in production.
 DEV_FAKE_GENERATION=0
+
+# Written by scripts/dev-account-services.mjs to match the Worker port: where agents
+# connect over MCP, and where /oauth/finish sends the browser back to.
+# MCP_ORIGIN=http://localhost:8797

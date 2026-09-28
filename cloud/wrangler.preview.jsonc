@@ -10,7 +10,8 @@
   },
   "vars": {
     "APP_ORIGIN": "https://scene-assembly-ohuguqu4p-mzork.vercel.app",
-    "PUBLIC_WORKER_ORIGIN": "https://scene-assembly-accounts-preview.vasily-or-simon-account.workers.dev"
+    "PUBLIC_WORKER_ORIGIN": "https://scene-assembly-accounts-preview.vasily-or-simon-account.workers.dev",
+    "MCP_ORIGIN": "https://scene-assembly-accounts-preview.vasily-or-simon-account.workers.dev"
   },
   "d1_databases": [
     {
@@ -26,6 +27,19 @@
       "bucket_name": "scene-assembly-assets-preview"
     }
   ],
+  // OAuth grants and tokens for connected agents (workers-oauth-provider). The id is a
+  // local placeholder until the namespace is created in Task 18 of
+  // docs/claude/plans/2026-09-28-agent-mcp.md; tests/deploy-config.test.ts refuses it then.
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV",
+      "id": "local-placeholder-oauth-kv-preview"
+    }
+  ],
+  // Inline previews for the agents' view_asset tool. Local by default in Wrangler 4.
+  "images": {
+    "binding": "IMAGES"
+  },
   "workflows": [
     {
       "binding": "GENERATION",

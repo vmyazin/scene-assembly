@@ -16,6 +16,8 @@ if (!existsSync('cloud/.dev.vars')) copyFileSync('cloud/.dev.vars.example', 'clo
 let localVars = readFileSync('cloud/.dev.vars', 'utf8').replace(/^APP_ORIGIN=.*$/m, `APP_ORIGIN=http://localhost:${port}`);
 if (!/^ACCOUNT_ENCRYPTION_KEYS=/m.test(localVars)) localVars += `\nACCOUNT_ENCRYPTION_KEYS='${JSON.stringify({ '1': randomBytes(32).toString('base64') })}'\nACCOUNT_ENCRYPTION_VERSION=1\n`;
 localVars = localVars.replace(/^PUBLIC_WORKER_ORIGIN=.*\n?/m, '') + `\nPUBLIC_WORKER_ORIGIN=http://localhost:${workerPort}\n`;
+// Agents connect to the Worker directly, and /oauth/finish sends the browser back to it.
+localVars = localVars.replace(/^MCP_ORIGIN=.*\n?/m, '') + `MCP_ORIGIN=http://localhost:${workerPort}\n`;
 writeFileSync('cloud/.dev.vars', localVars);
 const children = [];
 let stopping = false;

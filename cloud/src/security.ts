@@ -18,6 +18,8 @@ export interface Env {
   MCP_ORIGIN?: string;
   /** Injected by workers-oauth-provider before any handler runs. */
   OAUTH_PROVIDER?: OAuthHelpers;
+  OAUTH_KV?: KVNamespace;
+  IMAGES?: ImagesBinding;
 }
 export function isLocal(env: Env): boolean {
   return typeof __LOCAL_DEV__ !== 'undefined' && __LOCAL_DEV__ === true
