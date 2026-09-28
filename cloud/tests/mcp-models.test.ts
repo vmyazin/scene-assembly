@@ -36,6 +36,15 @@ describe('the MCP endpoint', () => {
       expect(tool.annotations?.readOnlyHint).toBe(true);
     }
   });
+
+  it("still advertises each tool's real input schema, even though the copy handed to registerTool accepts anything", async () => {
+    const { env } = agentEnv(enabled);
+    const client = await connectAgent(env, await seedAgent(env));
+    const { tools } = await client.listTools();
+    const estimate = tools.find(tool => tool.name === 'estimate_cost')!;
+    const schema = estimate.inputSchema as { properties?: Record<string, { enum?: unknown[] }> };
+    expect(schema.properties?.provider?.enum).toEqual(expect.arrayContaining(['fal', 'atlas', 'gemini', 'runware']));
+  });
 });
 
 describe('list_models', () => {
@@ -112,6 +121,24 @@ describe('estimate_cost', () => {
     const result = await client.callTool({ name: 'estimate_cost', arguments: { provider: 'gemini', modelId: 'gemini-3-pro-image-preview', mediaType: 'image', inputMode: 'text', prompt: 'x' } });
     expect(structured(result)).toMatchObject({ code: 'connection_required', retryable: false });
   });
+
+  it('refuses an argument the tool schema rejects, structured, rather than the SDK\'s own bare-text error', async () => {
+    const { db, env } = agentEnv(enabled);
+    connectProvider(db, 'atlas');
+    const client = await connectAgent(env, await seedAgent(env));
+    const result = await client.callTool({ name: 'estimate_cost', arguments: { provider: 'openai', modelId: 'black-forest-labs/flux-schnell', mediaType: 'image', inputMode: 'text', prompt: 'x' } });
+    expect(result.isError).toBe(true);
+    expect(structured(result)).toMatchObject({ code: 'invalid_field', field: 'provider', retryable: false, allowed: expect.arrayContaining(['fal', 'atlas']) });
+  });
+
+  it('refuses a call missing a required field, naming that field', async () => {
+    const { db, env } = agentEnv(enabled);
+    connectProvider(db, 'atlas');
+    const client = await connectAgent(env, await seedAgent(env));
+    const result = await client.callTool({ name: 'estimate_cost', arguments: { provider: 'atlas', modelId: 'black-forest-labs/flux-schnell', mediaType: 'image', inputMode: 'text' } });
+    expect(result.isError).toBe(true);
+    expect(structured(result)).toMatchObject({ code: 'invalid_field', field: 'prompt', retryable: false });
+  });
 });
 
 describe('runTool', () => {
@@ -134,6 +161,17 @@ describe('runTool', () => {
     const result = await runTool(ctx, leaky, {});
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result)).not.toContain('sk-live-123');
+    expect(result.structuredContent).toMatchObject({ code: 'internal_error', retryable: true });
+  });
+
+  it('turns a rate limiter failure into a structured internal_error rather than a raw throw', async () => {
+    const { db, env } = agentEnv();
+    const agent = await seedAgent(env);
+    db.exec('DROP TABLE account_ingress_limits');
+    const ctx: ToolContext = { env, agent, now: () => 1_800_000_000_000, sleep: async () => {} };
+    const ok = defineTool({ name: 'r', title: 'r', description: 'r', kind: 'read', annotations: {}, input: z.object({}), async run() { return { structured: {}, text: 'ok' }; } });
+    const result = await runTool(ctx, ok, {});
+    expect(result.isError).toBe(true);
     expect(result.structuredContent).toMatchObject({ code: 'internal_error', retryable: true });
   });
 });
