@@ -1,5 +1,6 @@
 import { currentAccount } from './sessions';
 import { cookie, json, type Env } from './security';
+import { revokeUserGrants } from './mcp/agents';
 
 export async function deleteAccount(env:Env,owner:string) {
   const now=Date.now();
@@ -10,6 +11,7 @@ export async function deleteAccount(env:Env,owner:string) {
     // New Google sign-up receives a new account ID and a different R2 prefix.
     env.DB.prepare('DELETE FROM account_users WHERE id=?').bind(owner),
   ]);
+  await revokeUserGrants(env, owner);
 }
 
 export async function lifecycleRoutes(request:Request,env:Env):Promise<Response|null> {

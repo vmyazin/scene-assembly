@@ -16,6 +16,7 @@ import { createSession, currentAccount, revokeSession } from './sessions';
 import { cleanupImports, importRoutes, publicImportMedia } from './imports';
 import { applyIngress, cleanupExpiredIngress } from './ingress';
 import { cleanupOrphanCharges } from './mcp/budget';
+import { agentRoutes } from './mcp/agent-routes';
 
 interface OAuthAttempt { verifier: string; nonce: string; return_to: string }
 const bootstrapped = new WeakMap<object, Promise<void>>();
@@ -59,6 +60,8 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if(billingResponse)return billingResponse;
     const connectionResponse = await connectionRoutes(request, env);
     if (connectionResponse) return connectionResponse;
+    const agentResponse = await agentRoutes(request, env);
+    if (agentResponse) return agentResponse;
     if (path === '/health' && request.method === 'GET') return json({ ok: true });
     if (path === '/api/account/session' && request.method === 'GET') {
       const account=await currentAccount(request,env);

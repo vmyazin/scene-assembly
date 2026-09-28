@@ -50,3 +50,35 @@ export async function touchAgent(env: Env, agentId: string, now = Date.now()) {
   await env.DB.prepare('UPDATE account_agents SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)')
     .bind(now, agentId, now - 60_000).run();
 }
+
+export async function updateAgent(env: Env, userId: string, agentId: string, settings: AgentSettings): Promise<boolean> {
+  const updated = await env.DB.prepare('UPDATE account_agents SET budget_micros = ?, allow_unknown_cost = ?, allow_delete = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL')
+    .bind(toMicros(settings.budgetUsd), settings.allowUnknownCost ? 1 : 0, settings.allowDelete ? 1 : 0, agentId, userId).run();
+  return Boolean(updated.meta.changes);
+}
+
+/** The row stays, so jobs this agent started keep saying who started them. */
+export async function revokeAgent(env: Env, userId: string, agentId: string, now = Date.now()): Promise<boolean> {
+  const revoked = await env.DB.prepare('UPDATE account_agents SET revoked_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL').bind(now, agentId, userId).run();
+  if (!revoked.meta.changes) return false;
+  await revokeUserGrants(env, userId, agentId);
+  return true;
+}
+
+/**
+ * Best effort, never throws. `revoked_at` (or a deleted account) is what
+ * refuses the agent on its very next call; revoking the grant in KV only stops
+ * its refresh token from minting new access tokens sooner than they expire.
+ */
+export async function revokeUserGrants(env: Env, userId: string, agentId?: string) {
+  const helpers = env.OAUTH_PROVIDER;
+  if (!helpers) return;
+  try {
+    let cursor: string | undefined;
+    do {
+      const page = await helpers.listUserGrants(userId, cursor ? { cursor } : undefined);
+      for (const grant of page.items) if (!agentId || grant.metadata?.agentId === agentId) await helpers.revokeGrant(grant.id, userId);
+      cursor = page.cursor;
+    } while (cursor);
+  } catch { /* See above: the D1 row already refuses the agent. */ }
+}

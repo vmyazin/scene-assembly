@@ -48,3 +48,6 @@ export interface CloudAsset {
 export function jobInputIds(request: Pick<CloudJobRequest, 'referenceIds' | 'sourceVideoId'>): string[] {
   return [...request.referenceIds, ...(request.sourceVideoId ? [request.sourceVideoId] : [])];
 }
+
+/** One connected MCP client, as the account page's panel shows it. */
+export interface ConnectedAgent { id: string; name: string; connectedAt: number; lastUsedAt: number | null; budgetUsd: number; usedUsd: number; allowUnknownCost: boolean; allowDelete: boolean }

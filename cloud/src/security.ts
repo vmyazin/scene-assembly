@@ -1,3 +1,5 @@
+import type { OAuthHelpers } from '@cloudflare/workers-oauth-provider';
+
 declare const __LOCAL_DEV__: boolean;
 export interface Env {
   PUBLIC_WORKER_ORIGIN?: string;
@@ -13,6 +15,9 @@ export interface Env {
   DEV_FAKE_GENERATION?: string;
   ACCOUNT_ENCRYPTION_KEYS?: string;
   ACCOUNT_ENCRYPTION_VERSION?: string;
+  MCP_ORIGIN?: string;
+  /** Injected by workers-oauth-provider before any handler runs. */
+  OAUTH_PROVIDER?: OAuthHelpers;
 }
 export function isLocal(env: Env): boolean {
   return typeof __LOCAL_DEV__ !== 'undefined' && __LOCAL_DEV__ === true

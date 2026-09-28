@@ -15,6 +15,7 @@
     "wrangler": "^4.113.0"
   },
   "dependencies": {
+    "@cloudflare/workers-oauth-provider": "1.2.1",
     "oauth4webapi": "^3.8.7"
   }
 }
