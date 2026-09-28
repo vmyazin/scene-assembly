@@ -22,6 +22,10 @@ CREATE TABLE IF NOT EXISTS account_agent_authorizations (
   decision TEXT CHECK (decision IN ('approved','denied')),
   user_id TEXT REFERENCES account_users(id) ON DELETE CASCADE,
   settings_json TEXT,
+  -- One-time secret (hashed) for the approving browser, checked at /oauth/finish
+  -- alongside the library's own binding cookie: the cookie proves which browser
+  -- *started* the request, not which one *approved* it (fix round 1, finding 1).
+  finish_hash TEXT,
   expires_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS account_agent_authorizations_expiry ON account_agent_authorizations(expires_at);

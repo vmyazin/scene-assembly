@@ -39,6 +39,10 @@ CREATE TABLE IF NOT EXISTS account_agent_authorizations (
   decision TEXT CHECK (decision IN ('approved','denied')),
   user_id TEXT REFERENCES account_users(id) ON DELETE CASCADE,
   settings_json TEXT,
+  -- One-time secret (hashed) for the approving browser, checked at /oauth/finish
+  -- alongside the library's own binding cookie: the cookie proves which browser
+  -- *started* the request, not which one *approved* it (fix round 1, finding 1).
+  finish_hash TEXT,
   expires_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS account_agent_authorizations_expiry ON account_agent_authorizations(expires_at);
@@ -76,5 +80,9 @@ export async function bootstrapLocalSchema(db: D1Database) {
   }
   if (!jobs.results.some(column => column.name === 'agent_id')) {
     await db.prepare('ALTER TABLE account_jobs ADD COLUMN agent_id TEXT').run();
+  }
+  const authorizations = await db.prepare('PRAGMA table_info(account_agent_authorizations)').all<{ name: string }>();
+  if (!authorizations.results.some(column => column.name === 'finish_hash')) {
+    await db.prepare('ALTER TABLE account_agent_authorizations ADD COLUMN finish_hash TEXT').run();
   }
 }

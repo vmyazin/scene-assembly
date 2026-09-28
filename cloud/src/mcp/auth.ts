@@ -5,13 +5,18 @@ import { unknownPriceProviders } from '../../../lib/spend/estimate';
 import { consume } from '../ingress';
 import { AccountError } from '../jobs';
 import { enabledProviders } from '../providers';
-import { isLocal, json, type Env } from '../security';
+import { hash, isLocal, json, randomToken, type Env } from '../security';
 import { currentAccount } from '../sessions';
 import { listConnections } from '../vault';
 import { AGENT_BUDGET, createAgent, DEFAULT_AGENT_SETTINGS, parseAgentSettings, type AgentSettings } from './agents';
 
 /** Open client registration is otherwise a free way to write to KV. */
 export const REGISTRATIONS_PER_MINUTE = 20;
+/** `/oauth/authorize` is an unauthenticated GET that inserts a D1 row; `/oauth/finish`
+ *  is an unauthenticated GET that deletes one and, on approval, creates an agent and a
+ *  grant. Both need their own per-IP ceiling for the same reason registration does. */
+export const AUTHORIZE_STARTS_PER_MINUTE = 30;
+export const FINISHES_PER_MINUTE = 30;
 
 /** Used only when a local env has no MCP_ORIGIN at all (e.g. `wrangler dev` run directly,
  *  bypassing scripts/dev-account-services.mjs, which always writes one). */
@@ -38,18 +43,44 @@ export function mcpResource(env: Env): string | null {
   return isLocal(env) ? LOCAL_MCP_RESOURCE : null;
 }
 
+/** Plain text: unlike `/oauth/register` (an OAuth client), `/oauth/authorize` and
+ *  `/oauth/finish` are pages a browser navigates to directly. */
+function tooManyRequests(retryAfter: string) {
+  return new Response('Too many requests. Try again in a minute.', {
+    status: 429, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'Retry-After': retryAfter },
+  });
+}
+
 /**
- * Applied by the entry wrapper before the OAuth library runs, because the
- * library's clientRegistrationCallback is not given `env`. Answers in the OAuth
- * error shape, since the caller is an OAuth client, not the app.
+ * Applied by the entry wrapper before the OAuth library runs, for every route
+ * that writes to D1 or KV on an unauthenticated request: registering a client
+ * (the library's `clientRegistrationCallback` is not given `env`, so it can't
+ * guard itself), starting a consent (`authorize` inserts a row per GET), and
+ * finishing one (`finish` deletes a row and, on approval, creates an agent and a
+ * grant, per GET). Each gets its own per-IP bucket, so a burst on one path never
+ * spends another's budget. Registration answers in the OAuth error shape, since
+ * its caller is an OAuth client; the other two answer in plain text, since their
+ * caller is a browser tab.
  */
 export async function guardRegistration(request: Request, env: Env, now = Date.now()): Promise<Response | undefined> {
-  if (request.method !== 'POST' || new URL(request.url).pathname !== '/oauth/register') return undefined;
-  const limited = await consume(env, `oauth-register:${request.headers.get('CF-Connecting-IP') ?? 'unknown'}`, REGISTRATIONS_PER_MINUTE, now);
-  if (!limited) return undefined;
-  return new Response(JSON.stringify({ error: 'too_many_requests', error_description: 'Too many client registrations from this address. Try again in a minute.' }), {
-    status: 429, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Retry-After': limited.headers.get('Retry-After') ?? '60' },
-  });
+  const path = new URL(request.url).pathname;
+  const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  if (request.method === 'POST' && path === '/oauth/register') {
+    const limited = await consume(env, `oauth-register:${ip}`, REGISTRATIONS_PER_MINUTE, now);
+    if (!limited) return undefined;
+    return new Response(JSON.stringify({ error: 'too_many_requests', error_description: 'Too many client registrations from this address. Try again in a minute.' }), {
+      status: 429, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Retry-After': limited.headers.get('Retry-After') ?? '60' },
+    });
+  }
+  if (request.method === 'GET' && path === '/oauth/authorize') {
+    const limited = await consume(env, `oauth-authorize:${ip}`, AUTHORIZE_STARTS_PER_MINUTE, now);
+    return limited ? tooManyRequests(limited.headers.get('Retry-After') ?? '60') : undefined;
+  }
+  if (request.method === 'GET' && path === '/oauth/finish') {
+    const limited = await consume(env, `oauth-finish:${ip}`, FINISHES_PER_MINUTE, now);
+    return limited ? tooManyRequests(limited.headers.get('Retry-After') ?? '60') : undefined;
+  }
+  return undefined;
 }
 
 /** The library's consent transaction lives 600 s; ours matches it. */
@@ -57,10 +88,11 @@ export const AUTHORIZATION_TTL_MS = 600_000;
 const AGENT_SCOPE = ['scene-assembly'];
 const EXPIRED = 'This connection request has expired or was already used. Start connecting again from your agent.';
 const WRONG_BROWSER = 'Finish connecting in the browser that opened this page, then start again from your agent.';
+const CONNECT_FAILED = 'Connecting this agent failed. Start connecting again from your agent.';
 
 interface AuthorizationRow {
   id: string; consent_handle: string; description_json: string; client_id: string; client_name: string; redirect_host: string;
-  decision: 'approved' | 'denied' | null; user_id: string | null; settings_json: string | null; expires_at: number;
+  decision: 'approved' | 'denied' | null; user_id: string | null; settings_json: string | null; finish_hash: string | null; expires_at: number;
 }
 
 /** Plain text on purpose: every message is ours, and a text page cannot become markup. */
@@ -131,24 +163,43 @@ export async function authorizationRoutes(request: Request, env: Env, now = Date
     try { settings = parseAgentSettings(body); }
     catch (error) { if (error instanceof AccountError) return json({ error: error.message, code: error.code }, error.status); throw error; }
   }
-  const recorded = await env.DB.prepare('UPDATE account_agent_authorizations SET decision = ?, user_id = ?, settings_json = ? WHERE id = ? AND decision IS NULL AND expires_at > ?')
-    .bind(decision, account.id, settings ? JSON.stringify(settings) : null, row.id, now).run();
+  // The finish secret is returned only in this response, to the signed-in approver's
+  // own browser — only D1 keeps the hash. Completing the connection then needs both
+  // this secret and the library's binding cookie from the browser that started it, so
+  // neither the starter nor a bystander who only has one of the two can redeem it.
+  const secret = randomToken();
+  const recorded = await env.DB.prepare('UPDATE account_agent_authorizations SET decision = ?, user_id = ?, settings_json = ?, finish_hash = ? WHERE id = ? AND decision IS NULL AND expires_at > ?')
+    .bind(decision, account.id, settings ? JSON.stringify(settings) : null, await hash(secret), row.id, now).run();
   if (!recorded.meta.changes) return json({ error: 'This request was already answered.', code: 'already_decided' }, 409);
-  return json({ redirectTo: `${env.MCP_ORIGIN}/oauth/finish?request=${row.id}` });
+  return json({ redirectTo: `${env.MCP_ORIGIN}/oauth/finish?request=${row.id}&t=${secret}` });
 }
 
 /**
- * GET /oauth/finish. Consumes the decided request, then lets the library check
- * the browser binding. Consumed first, so a link opened in the wrong browser
- * burns the request instead of leaving it to be tried again.
+ * GET /oauth/finish?request=<id>&t=<secret>. Consumes the decided request, then
+ * lets the library check the browser binding. Consumed first, so a link opened
+ * with the wrong secret or in the wrong browser burns the request instead of
+ * leaving it to be tried again.
+ *
+ * The binding cookie alone proves which browser *started* the request, not
+ * which one *approved* it — `/oauth/finish` cannot see the session cookie
+ * (`__Host-sa_session` is host-only on `APP_ORIGIN`, a different origin), so
+ * nothing here otherwise distinguishes the approving person from anyone who
+ * gets sent the starter's `?request=` link while the decision is still
+ * pending. `t` is the fix: a secret returned only in the POST response to the
+ * signed-in approver's own browser, checked here against `finish_hash` before
+ * the row is even read as a candidate. Completing a connection therefore needs
+ * both the secret (proves who approved it) and the cookie (proves this is the
+ * browser that started it) — neither alone is enough.
  */
 export async function finish(request: Request, env: Env, now = Date.now()): Promise<Response> {
   const helpers = env.OAUTH_PROVIDER;
   if (!helpers) return page(503, 'Agent connections are not configured on this server.');
-  const id = new URL(request.url).searchParams.get('request');
-  if (!id || !/^[a-zA-Z0-9-]{1,64}$/.test(id)) return page(400, EXPIRED);
-  const row = await env.DB.prepare('DELETE FROM account_agent_authorizations WHERE id = ? AND decision IS NOT NULL AND expires_at > ? RETURNING *')
-    .bind(id, now).first<AuthorizationRow>();
+  const params = new URL(request.url).searchParams;
+  const id = params.get('request');
+  const t = params.get('t');
+  if (!id || !/^[a-zA-Z0-9-]{1,64}$/.test(id) || !t) return page(400, EXPIRED);
+  const row = await env.DB.prepare('DELETE FROM account_agent_authorizations WHERE id = ? AND decision IS NOT NULL AND finish_hash = ? AND expires_at > ? RETURNING *')
+    .bind(id, await hash(t), now).first<AuthorizationRow>();
   if (!row || !row.user_id) return page(400, EXPIRED);
   if (row.decision === 'denied') {
     try {
@@ -159,16 +210,28 @@ export async function finish(request: Request, env: Env, now = Date.now()): Prom
   let approved;
   try { approved = await helpers.approveConsent(request, row.consent_handle, { scope: AGENT_SCOPE }); }
   catch { return page(400, WRONG_BROWSER); }
-  const settings = parseAgentSettings(JSON.parse(row.settings_json ?? '{}'));
-  const agent = await createAgent(env, { userId: row.user_id, clientId: row.client_id, clientName: row.client_name, settings }, now);
-  const { redirectTo } = await helpers.completeAuthorization({
-    request: approved.request, userId: row.user_id, scope: AGENT_SCOPE,
-    props: { userId: row.user_id, agentId: agent.id }, metadata: { agentId: agent.id, clientName: row.client_name },
-  });
-  const headers = new Headers(approved.headers);
-  headers.set('Location', redirectTo);
-  headers.set('Cache-Control', 'no-store');
-  return new Response(null, { status: 302, headers });
+  // Consent is spent past this point: approveConsent already burned the library's
+  // handle. A failure below must not surface as the gateway's generic JSON, and
+  // must not leave an agent behind with no grant able to reach it.
+  let agentId: string | undefined;
+  try {
+    const settings = parseAgentSettings(JSON.parse(row.settings_json ?? '{}'));
+    const agent = await createAgent(env, { userId: row.user_id, clientId: row.client_id, clientName: row.client_name, settings }, now);
+    agentId = agent.id;
+    const { redirectTo } = await helpers.completeAuthorization({
+      request: approved.request, userId: row.user_id, scope: AGENT_SCOPE,
+      props: { userId: row.user_id, agentId: agent.id }, metadata: { agentId: agent.id, clientName: row.client_name },
+    });
+    const headers = new Headers(approved.headers);
+    headers.set('Location', redirectTo);
+    headers.set('Cache-Control', 'no-store');
+    return new Response(null, { status: 302, headers });
+  } catch {
+    // Best effort: the page below is returned either way, so a second failure here
+    // (D1 unavailable, say) must not replace the honest text with the gateway's 503.
+    if (agentId) await env.DB.prepare('DELETE FROM account_agents WHERE id = ?').bind(agentId).run().catch(() => {});
+    return page(500, CONNECT_FAILED);
+  }
 }
 
 export async function cleanupAuthorizations(env: Env, now = Date.now()) {

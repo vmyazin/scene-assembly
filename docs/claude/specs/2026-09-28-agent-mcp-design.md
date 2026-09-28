@@ -83,6 +83,24 @@ superseded text.
     `127.0.0.1`, and the workers.dev hostname cannot be used as an MCP URL.
 17. **Refresh tokens are a fixed 30 days from the grant**, with no sliding idle
     TTL, so a connected agent re-consents monthly.
+18. **Completing a connection needs a one-time finish secret returned only to
+    the approving browser, as well as the starter's binding cookie** (2026-09-28,
+    Task 9 fix round 1), so a link to a request someone else started cannot be
+    redeemed by them after you approve it. `/oauth/authorize`'s binding cookie
+    proves which browser *started* a request, not which one *approved* it —
+    `/oauth/finish` cannot see `__Host-sa_session` (host-only on `APP_ORIGIN`, a
+    different origin), so nothing else distinguishes the approver from anyone
+    sent the starter's `?request=` link. `POST
+    /api/account/agent-authorizations/:id`'s decision now also stores
+    `finish_hash = hash(randomToken())` and returns `redirectTo` with
+    `&t=<secret>`; `/oauth/finish` requires a matching `t` (checked against
+    `finish_hash` in the same consuming `DELETE ... RETURNING`) before it even
+    considers the row, in addition to the library's own cookie check —
+    completing a connection needs both. `/oauth/authorize` and `/oauth/finish`
+    are each limited to 30 requests per minute per client IP (their own
+    buckets), next to `/oauth/register`'s existing 20, since both are
+    unauthenticated GETs that write to D1. Overrides follow-up 2 and Task 9
+    Steps 1 and 3 in the plan.
 
 ## Context
 

@@ -14,6 +14,8 @@ function setup() {
 }
 const signedIn = async (env: Env) => (await createSession(env, { subject: 'google-owner', email: 'owner@example.test', name: 'Owner' })).split(';')[0];
 const worker = (env: Env, path: string, init: RequestInit = {}) => handleRequest(new Request(`http://localhost:8797${path}`, init), env);
+/** `redirectTo` is already an absolute URL (it names `MCP_ORIGIN`), so this hits it directly rather than through `worker`'s path-only helper. */
+const visitFinish = (env: Env, url: string, headers: HeadersInit = {}) => handleRequest(new Request(url, { headers }), env);
 const api = (env: Env, id: string, cookie: string, body?: unknown) => worker(env, `/api/account/agent-authorizations/${id}`, {
   method: body === undefined ? 'GET' : 'POST', headers: { origin: env.APP_ORIGIN, cookie, 'content-type': 'application/json' },
   ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -60,8 +62,9 @@ describe('agent consent', () => {
     const { id, consentCookie } = await begin(env);
     const cookie = await signedIn(env);
     const decided = await api(env, id, cookie, approve);
-    expect(await decided.json()).toEqual({ redirectTo: `http://localhost:8797/oauth/finish?request=${id}` });
-    const finished = await worker(env, `/oauth/finish?request=${id}`, { headers: { cookie: consentCookie } });
+    const { redirectTo } = await decided.json();
+    expect(redirectTo).toMatch(new RegExp(`^http://localhost:8797/oauth/finish\\?request=${id}&t=[A-Za-z0-9_-]{20,}$`));
+    const finished = await visitFinish(env, redirectTo, { cookie: consentCookie });
     expect(finished.status).toBe(302);
     expect(finished.headers.get('Location')).toBe('http://127.0.0.1:6274/oauth/callback?code=code-1&state=state-1');
     const agent = db.prepare('SELECT * FROM account_agents').get() as Record<string, unknown>;
@@ -75,20 +78,23 @@ describe('agent consent', () => {
     const { db, env } = setup();
     const { id, consentCookie } = await begin(env);
     const cookie = await signedIn(env);
-    expect((await api(env, id, cookie, approve)).status).toBe(200);
+    const first = await api(env, id, cookie, approve);
+    expect(first.status).toBe(200);
+    const { redirectTo } = await first.json();
     const again = await api(env, id, cookie, approve);
     expect(again.status).toBe(409);
     expect((await again.json()).code).toBe('already_decided');
-    expect((await worker(env, `/oauth/finish?request=${id}`, { headers: { cookie: consentCookie } })).status).toBe(302);
-    expect((await worker(env, `/oauth/finish?request=${id}`, { headers: { cookie: consentCookie } })).status).toBe(400);
+    expect((await visitFinish(env, redirectTo, { cookie: consentCookie })).status).toBe(302);
+    expect((await visitFinish(env, redirectTo, { cookie: consentCookie })).status).toBe(400);
     expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 1 });
   });
 
   it('does nothing when finished from a browser that did not start it', async () => {
     const { db, env } = setup();
     const { id } = await begin(env);
-    await api(env, id, await signedIn(env), approve);
-    const response = await worker(env, `/oauth/finish?request=${id}`, { headers: { cookie: 'consent=someone-else' } });
+    const decided = await api(env, id, await signedIn(env), approve);
+    const { redirectTo } = await decided.json();
+    const response = await visitFinish(env, redirectTo, { cookie: 'consent=someone-else' });
     expect(response.status).toBe(400);
     expect(await response.text()).toMatch(/browser that opened this page/);
     expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 0 });
@@ -97,8 +103,9 @@ describe('agent consent', () => {
   it('sends a denial back to the client as access_denied', async () => {
     const { db, env } = setup();
     const { id, consentCookie } = await begin(env);
-    await api(env, id, await signedIn(env), { decision: 'deny' });
-    const response = await worker(env, `/oauth/finish?request=${id}`, { headers: { cookie: consentCookie } });
+    const decided = await api(env, id, await signedIn(env), { decision: 'deny' });
+    const { redirectTo } = await decided.json();
+    const response = await visitFinish(env, redirectTo, { cookie: consentCookie });
     expect(response.status).toBe(302);
     expect(response.headers.get('Location')).toContain('error=access_denied');
     expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 0 });
@@ -113,5 +120,54 @@ describe('agent consent', () => {
     expect(crossSite.status).toBe(403);
     await cleanupAuthorizations(env, Date.now() + 11 * 60_000);
     expect((await api(env, id, cookie)).status).toBe(404);
+  });
+
+  // Fix round 1, finding 1 (consent phishing): the binding cookie alone proves
+  // which browser *started* a request, not which browser *approved* it — the
+  // finish secret closes that gap. Three ways to fail with only one of the two.
+  describe('the finish secret', () => {
+    it('refuses the starting browser\'s cookie alone, without the secret, and leaves the request live', async () => {
+      const { db, env } = setup();
+      const { id, consentCookie } = await begin(env);
+      await api(env, id, await signedIn(env), approve);
+      const response = await worker(env, `/oauth/finish?request=${id}`, { headers: { cookie: consentCookie } });
+      expect(response.status).toBe(400);
+      expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 0 });
+      expect(db.prepare('SELECT COUNT(*) AS n FROM account_agent_authorizations').get()).toEqual({ n: 1 });
+    });
+
+    it('refuses the correct secret alone, without the browser that started the request', async () => {
+      const { db, env } = setup();
+      const { id } = await begin(env);
+      const decided = await api(env, id, await signedIn(env), approve);
+      const { redirectTo } = await decided.json();
+      const response = await visitFinish(env, redirectTo);
+      expect(response.status).toBe(400);
+      expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 0 });
+    });
+
+    it('refuses a wrong secret', async () => {
+      const { db, env } = setup();
+      const { id, consentCookie } = await begin(env);
+      await api(env, id, await signedIn(env), approve);
+      const response = await worker(env, `/oauth/finish?request=${id}&t=wrong-secret-value`, { headers: { cookie: consentCookie } });
+      expect(response.status).toBe(400);
+      expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 0 });
+    });
+  });
+
+  // Fix round 1, minor 3: a failure inside finish after consent has already
+  // been spent (approveConsent succeeded) must not leak the gateway's JSON,
+  // and must not leave an orphaned agent behind.
+  it('fails the finish page, not the client, if completing authorization goes wrong after consent is spent', async () => {
+    const { db, env } = setup();
+    const { id, consentCookie } = await begin(env);
+    const decided = await api(env, id, await signedIn(env), approve);
+    const { redirectTo } = await decided.json();
+    env.OAUTH_PROVIDER!.completeAuthorization = async () => { throw new Error('boom'); };
+    const response = await visitFinish(env, redirectTo, { cookie: consentCookie });
+    expect(response.status).toBe(500);
+    expect(response.headers.get('Content-Type')).toContain('text/plain');
+    expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 0 });
   });
 });

@@ -48,8 +48,13 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if(importMediaResponse)return importMediaResponse;
     const url = new URL(request.url);
     const path = url.pathname;
-    // The browser legs of connecting an agent. Both are GETs the library sends the
-    // browser to; neither changes anything without the library's binding cookie.
+    // The browser legs of connecting an agent, both GETs the library sends the browser
+    // to and both rate-limited per IP by guardRegistration in entry.ts before this runs.
+    // authorize only ever inserts a fresh pending row; finish only ever completes one
+    // the signed-in POST to authorizationRoutes (below) already decided, and requires
+    // both that decision's one-time secret (?t=, checked against finish_hash) and the
+    // library's own cookie binding to the browser that started the request — proving,
+    // respectively, who approved it and that this is the browser that asked.
     if (path === '/oauth/authorize' && request.method === 'GET') return authorize(request, env);
     if (path === '/oauth/finish' && request.method === 'GET') return finish(request, env);
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && request.headers.get('origin') !== env.APP_ORIGIN) return json({ error: 'Request origin is not allowed.' }, 403);
