@@ -8,15 +8,16 @@ export function mediaOrigin(env:Env) {
   if(url.origin!==env.PUBLIC_WORKER_ORIGIN || !(url.protocol==='https:' || isLocal(env)&&url.protocol==='http:'&&['localhost','127.0.0.1'].includes(url.hostname)))throw new Error('Invalid media origin');
   return url.origin;
 }
-export async function mediaAccess(env:Env,owner:string,resourceId:string,purpose:'upload'|'input'|'download',jobId:string|null=null) {
+export async function mediaAccess(env:Env,owner:string,resourceId:string,purpose:'upload'|'agent-upload'|'input'|'download',jobId:string|null=null) {
   const origin=mediaOrigin(env), token=randomToken();
-  const expiresAt=Date.now()+(purpose==='input'?86_400_000:600_000);
+  // An agent's PUT link: long enough to find the file, short for a bearer URL.
+  const expiresAt=Date.now()+(purpose==='input'?86_400_000:purpose==='agent-upload'?900_000:600_000);
   await env.DB.prepare('INSERT INTO account_media_tokens (token_hash,user_id,resource_id,purpose,job_id,expires_at) VALUES (?,?,?,?,?,?)').bind(await hash(token),owner,resourceId,purpose,jobId,expiresAt).run();
   return {url:`${origin}/media/${purpose}/${token}`,expiresAt};
 }
 export interface MediaToken { user_id:string;resource_id:string;purpose:string;job_id:string|null;expires_at:number }
 export async function mediaToken(env:Env,path:string) {
-  const match=path.match(/^\/media\/(upload|input|download)\/([A-Za-z0-9_-]{43})$/);
+  const match=path.match(/^\/media\/(upload|agent-upload|input|download)\/([A-Za-z0-9_-]{43})$/);
   if(!match)return null;
   return env.DB.prepare('SELECT * FROM account_media_tokens WHERE token_hash=? AND purpose=? AND expires_at>?').bind(await hash(match[2]),match[1],Date.now()).first<MediaToken>();
 }
