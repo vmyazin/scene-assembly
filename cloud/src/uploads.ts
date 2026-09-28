@@ -37,8 +37,9 @@ export async function inputUrls(env:Env,job:JobRow):Promise<string[]> {
   }
   return urls;
 }
-/** Stages bytes the Worker already holds — an agent's URL reference, a copy of a
- *  library file — as a ready input with the same 24-hour lifecycle as a browser upload. */
+/** Stages bytes the Worker already holds in full — a copy of a library file, whose
+ *  exact size is already known — as a ready input with the same 24-hour lifecycle
+ *  as a browser upload. */
 export async function storeUpload(env:Env,owner:string,body:ReadableStream<Uint8Array>|Uint8Array,bytes:number,mime:string):Promise<{id:string;expiresAt:number}> {
   const reserved=await reserveUpload(env,owner,bytes,mime,null);
   try{
@@ -52,13 +53,54 @@ export async function storeUpload(env:Env,owner:string,body:ReadableStream<Uint8
     throw error;
   }
 }
+/** Stages an agent's URL reference while it is still being downloaded: reserves the
+ *  input at the type's cap (images vs. video) rather than a known final size, writes
+ *  bytes through to storage as they arrive instead of buffering the whole file in the
+ *  isolate, then narrows expected_bytes to what actually landed. */
+export async function storeStreamedUpload(env:Env,owner:string,body:ReadableStream<Uint8Array>,mime:string,maxBytes:number):Promise<{id:string;bytes:number;expiresAt:number}> {
+  const reserved=await reserveUpload(env,owner,maxBytes,mime,null);
+  try{
+    const object=await writeOutput(env,reserved.objectKey,body,mime,maxBytes);
+    await env.DB.prepare("UPDATE account_uploads SET expected_bytes=?, state='ready' WHERE id=? AND state='pending'").bind(object.size,reserved.id).run();
+    return {id:reserved.id,bytes:object.size,expiresAt:reserved.expiresAt};
+  }catch(error){
+    await env.ASSETS?.delete(reserved.objectKey).catch(()=>{});
+    await env.DB.prepare("UPDATE account_uploads SET state='deleted' WHERE id=?").bind(reserved.id).run();
+    // writeOutput's own wording talks about "generated files"; an agent needs the
+    // sentence it already read in add_reference's tool description.
+    if(error instanceof AccountError&&error.code==='result_size')throw new AccountError(mime.startsWith('image/')?'Reference images can be up to 20 MB.':'References can be up to 100 MB.',400,'reference_fetch_failed');
+    throw error;
+  }
+}
 /** A library file used as a reference. Copied rather than shared, because inputs
- *  expire and are cleaned up on their own schedule and a library file must not. */
+ *  expire and are cleaned up on their own schedule and a library file must not.
+ *  Size and type are checked before ever reading the object, so an oversized or
+ *  unsupported asset is refused without opening (and having to cancel) its body. */
 export async function copyAssetToUpload(env:Env,owner:string,assetId:string):Promise<string> {
   const asset=await getAsset(env,assetId,owner);
-  const object=asset?await env.ASSETS?.get(asset.object_key):null;
-  if(!asset||!object)throw new AccountError('That library file is not available to use as a reference.',404,'reference_unavailable');
-  return (await storeUpload(env,owner,object.body,asset.bytes,asset.mime_type)).id;
+  const unavailable=()=>new AccountError('That library file is not available to use as a reference.',404,'reference_unavailable');
+  if(!asset)throw unavailable();
+  const overLimit=isEditVideoMime(asset.mime_type)?asset.bytes>MAX_EDIT_VIDEO_BYTES:!/^image\/(png|jpeg|webp|avif)$/.test(asset.mime_type)||asset.bytes>MAX_INPUT_BYTES;
+  if(overLimit)throw new AccountError('That library file is too large or an unsupported type to use as a reference. Use an image up to 20 MB or a video up to 100 MB.',404,'reference_unavailable');
+  const object=await env.ASSETS?.get(asset.object_key);
+  if(!object)throw unavailable();
+  try{
+    return (await storeUpload(env,owner,object.body,asset.bytes,asset.mime_type)).id;
+  }catch(error){
+    await object.body.cancel().catch(()=>{});
+    throw error;
+  }
+}
+/** Best-effort cleanup for uploads a tool created but no longer wants — a copy made
+ *  mid-way through resolveReferences before a later reference in the same call
+ *  failed. Never touches an id the agent staged itself: only a caller that knows it
+ *  created these ids passes them in. Marking them deleted here is enough;
+ *  cleanupUploads removes their R2 objects on its own schedule. */
+export async function discardUploads(env:Env,owner:string,ids:string[]):Promise<void> {
+  if(!ids.length)return;
+  try{
+    await env.DB.batch(ids.map(id=>env.DB.prepare("UPDATE account_uploads SET state='deleted' WHERE id=? AND user_id=?").bind(id,owner)));
+  }catch{/* Best effort: an id left ready still expires on its own 24-hour clock. */}
 }
 export async function publicMedia(request:Request,env:Env):Promise<Response|null> {
   const path=new URL(request.url).pathname;if(!path.startsWith('/media/'))return null;
