@@ -3,6 +3,7 @@ import { totals as rollupTotals } from '../../lib/spend/rollup';
 import { currentAccount } from './sessions';
 import { json, type Env } from './security';
 import type { JobRow } from './jobs';
+import { settleCharge } from './mcp/budget';
 
 interface SpendRow { id:string; user_id:string; job_id:string; entry_json:string; at:number; deleted:number }
 
@@ -18,6 +19,9 @@ export async function recordAccountSpend(env:Env,job:JobRow):Promise<boolean> {
     const inserted=await env.DB.prepare(`INSERT OR IGNORE INTO account_spend (id,user_id,job_id,entry_json,at)
       SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM account_users WHERE id=?)`)
       .bind(entry.id,job.user_id,job.id,JSON.stringify(entry),entry.at,job.user_id).run();
+    // An agent's reservation becomes the ledger's figure. Idempotent, so the
+    // reconcile pass repeating it for an already-recorded job changes nothing.
+    await settleCharge(env, job.id, entry);
     return Boolean(inserted.meta.changes);
   } catch {
     return false;

@@ -15,6 +15,7 @@ import { googleAuthorization, googleEnabled, googleIdentity } from './google';
 import { createSession, currentAccount, revokeSession } from './sessions';
 import { cleanupImports, importRoutes, publicImportMedia } from './imports';
 import { applyIngress, cleanupExpiredIngress } from './ingress';
+import { cleanupOrphanCharges } from './mcp/budget';
 
 interface OAuthAttempt { verifier: string; nonce: string; return_to: string }
 const bootstrapped = new WeakMap<object, Promise<void>>();
@@ -125,6 +126,7 @@ export async function runScheduledMaintenance(env:Env) {
     ()=>cleanupTerminalJobObjects(env),
     ()=>cleanupObjects(env),
     ()=>cleanupExpiredIngress(env),
+    ()=>cleanupOrphanCharges(env),
     ()=>env.DB.prepare('DELETE FROM account_oauth WHERE expires_at <= ?').bind(Date.now()).run(),
     ()=>env.DB.prepare('DELETE FROM account_sessions WHERE expires_at <= ?').bind(Date.now()).run(),
   ];
