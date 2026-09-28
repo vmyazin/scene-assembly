@@ -518,7 +518,11 @@ function minimaxH3Developer(): ProviderModel[] {
       { label: '1440p (upscaled)', preset: '1440p-sr' },
       { label: '4K (upscaled)', preset: '4k-sr' },
     ],
-    supportsAudio: true,
+    // No `supportsAudio`. That flag draws an on/off switch and puts `audio` in
+    // the request, but H3 always generates its soundtrack and none of the three
+    // schemas names an audio field, at one flat rate. The switch did nothing in
+    // the browser and made the Worker refuse every signed-in H3 job.
+    note: 'Every clip comes with a generated soundtrack; there is no silent option.',
   };
   // The endpoint publishes no 3:2 or 2:3, so those are left off rather than
   // sent and silently reshaped.
