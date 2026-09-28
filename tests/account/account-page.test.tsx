@@ -112,7 +112,7 @@ describe('account pages', () => {
 
     replace.mockClear();
     view.unmount();
-    render(<SignUpPage />);
+    render(await SignUpPage({ searchParams: Promise.resolve({}) }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith('/account'));
   });
 
@@ -159,7 +159,7 @@ describe('account pages', () => {
 
     vi.mocked(fetch).mockClear();
     view.unmount();
-    render(<SignUpPage />);
+    render(await SignUpPage({ searchParams: Promise.resolve({}) }));
     fireEvent.click(screen.getByRole('button', { name: 'Continue with Google' }));
     await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/account/sign-in/google', expect.objectContaining({
       method: 'POST',

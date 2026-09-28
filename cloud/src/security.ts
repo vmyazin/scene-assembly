@@ -50,11 +50,7 @@ export async function hash(value: string) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest), n => n.toString(16).padStart(2, '0')).join('');
 }
-export function returnPath(value: unknown): string {
-  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.includes('\\') || /[\x00-\x1f]/.test(value)) return '/';
-  const url = new URL(value, 'https://return.invalid');
-  return url.origin === 'https://return.invalid' && !url.pathname.startsWith('/api/') ? `${url.pathname}${url.search}` : '/';
-}
+export { returnPath } from '../../lib/account/return-path';
 export function json(value: unknown, status = 200, cookies: string[] = []) {
   const headers = new Headers({ 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
   for (const value of cookies) headers.append('Set-Cookie', value);
