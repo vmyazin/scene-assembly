@@ -1,3 +1,4 @@
+// components/ProviderVideoWorkspace.tsx
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -967,7 +968,7 @@ export default function ProviderVideoWorkspace({
                 message={refusal?.message ?? error}
                 retry={autoRetry.pending}
                 onCancelRetry={autoRetry.cancel}
-                offerTryRelaxed={refusal?.offerTryRelaxed}
+                offerTryRelaxed={Boolean(refusal?.offerTryRelaxed && relaxed.offered)}
                 onTryRelaxed={() => relaxed.requestRelaxed(() => void submit())}
               />
             )}

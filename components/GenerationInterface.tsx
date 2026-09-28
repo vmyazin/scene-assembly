@@ -169,6 +169,22 @@ function draftedConfig(): GenerationConfig {
 }
 
 const FAL_GENERATION_ERROR = 'Unable to generate this image with fal. Please try again.';
+
+/**
+ * Policy and floor text survive only while Relaxed is offered. Anything else,
+ * a message that still holds the key, or a build where the toggle is hidden,
+ * stays the generic sentence so a key never reaches the toast and the hidden
+ * control is not advertised.
+ */
+function falDisplayedFailure(caught: unknown, apiKey: string, offered: boolean): string {
+  if (!offered) return FAL_GENERATION_ERROR;
+  const raw = caught instanceof Error ? caught.message : '';
+  const kind = classifyFailure(raw).kind;
+  if (kind !== 'policy' && kind !== 'floor') return FAL_GENERATION_ERROR;
+  if (!raw || raw.length > 512) return FAL_GENERATION_ERROR;
+  if (apiKey && raw.toLowerCase().includes(apiKey.toLowerCase())) return FAL_GENERATION_ERROR;
+  return raw;
+}
 const MAX_FAL_REFERENCE_BYTES = 20 * 1024 * 1024;
 
 class LocalFalCancellation extends Error {
@@ -632,7 +648,11 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
           ) {
             throw new LocalFalCancellation();
           }
-          throw new RouteError(FAL_GENERATION_ERROR, routeStatus(caught) ?? -1);
+          // The generic sentence stays for everything else: fal errors used to
+          // arrive with the key still in them, and this is the last gate before
+          // the toast. A filter decision has to keep its own words, or the
+          // Relaxed offer never appears.
+          throw new RouteError(falDisplayedFailure(caught, falApiKey, relaxed.offered), routeStatus(caught) ?? -1);
         } finally {
           if (
             generationOperationRef.current === operationId &&
@@ -1425,7 +1445,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                   className="glass-card p-4 bg-red-500/10 border-red-500/30 text-red-300 whitespace-pre-wrap"
                 >
                   {displayError}
-                  {refusal?.offerTryRelaxed && (
+                  {refusal?.offerTryRelaxed && relaxed.offered && (
                     <button
                       type="button"
                       className="btn-secondary mt-2 text-xs"

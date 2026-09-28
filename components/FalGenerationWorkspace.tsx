@@ -1,3 +1,4 @@
+// components/FalGenerationWorkspace.tsx
 'use client';
 
 import { useCloudWorkspace } from '@/lib/account/useCloudWorkspace';
@@ -929,7 +930,7 @@ function FalGenerationWorkspaceSession({
                 message={refusal?.message ?? error}
                 retry={autoRetry.pending}
                 onCancelRetry={autoRetry.cancel}
-                offerTryRelaxed={refusal?.offerTryRelaxed}
+                offerTryRelaxed={Boolean(refusal?.offerTryRelaxed && relaxed.offered)}
                 onTryRelaxed={() => relaxed.requestRelaxed(() => void submit())}
               />
             )}
