@@ -1,9 +1,62 @@
 import { OAuthProvider } from '@cloudflare/workers-oauth-provider';
 import { ensureLocalSchema, handleRequest, runScheduledMaintenance } from './index';
-import { guardRegistration } from './mcp/auth';
+import { guardRegistration, mcpResource } from './mcp/auth';
 import { mcpApiHandler } from './mcp/handler';
-import type { Env } from './security';
+import { json, type Env } from './security';
 export { GenerationWorkflow } from './workflow';
+
+/**
+ * Paths the OAuth library itself answers. When `mcpResource` finds no usable
+ * `MCP_ORIGIN` (see below), only these get the "not configured" 503 — every
+ * other route, including the app's own /oauth/authorize and /oauth/finish
+ * consent pages, reaches `handleRequest` exactly as if agents were never
+ * wired in.
+ */
+function isOAuthLibraryPath(pathname: string): boolean {
+  return pathname === '/mcp' || pathname === '/oauth/register' || pathname === '/oauth/token' || pathname.startsWith('/.well-known/oauth-');
+}
+
+/**
+ * One `OAuthProvider` per distinct resource string, built once and reused —
+ * not per request. `mcpResource(env)` already validated the string, so the
+ * library's own constructor-time validation (a raw `TypeError` for anything
+ * that isn't a canonical absolute HTTPS URL, or HTTP on a loopback host)
+ * never fires here; memoizing just avoids repeating that validation, and the
+ * library's own `resolveConsent`/token helpers, on every request. `env` is
+ * never captured by the provider itself — the library passes it fresh into
+ * every `.fetch()` call — so reusing the object across requests is safe even
+ * though bindings and secrets differ per invocation.
+ */
+const providers = new Map<string, OAuthProvider<Env>>();
+function providerFor(resource: string): OAuthProvider<Env> {
+  let provider = providers.get(resource);
+  if (!provider) {
+    provider = new OAuthProvider<Env>({
+      apiRoute: '/mcp',
+      apiHandler: mcpApiHandler,
+      defaultHandler: { fetch: (request, env) => handleRequest(request, env as Env) },
+      authorizeEndpoint: '/oauth/authorize',
+      tokenEndpoint: '/oauth/token',
+      clientRegistrationEndpoint: '/oauth/register',
+      scopesSupported: ['scene-assembly'],
+      accessTokenTTL: 3600,
+      refreshTokenTTL: 30 * 86_400,
+      // Off for now: enabling this flips global_fetch_strictly_public for every outbound
+      // fetch this Worker makes, which needs its own decision. Every client registers
+      // through DCR and shows as unverified until that decision is made (design doc
+      // follow-up 15).
+      clientIdMetadataDocumentEnabled: false,
+      resourceMetadata: { resource },
+    });
+    providers.set(resource, provider);
+  }
+  return provider;
+}
+
+const NOT_CONFIGURED = () => json({ error: 'Agent connections are not configured.' }, 503);
+/** Same wording and shape as handleRequest's own catch-all, for the same reason: never
+ *  serialize an OAuth error, since a vendor or library payload may carry credentials. */
+const UNAVAILABLE = () => json({ error: 'Account service is temporarily unavailable. Guest generation is still available.' }, 503);
 
 /**
  * OAuth 2.1 for agents (docs/claude/specs/2026-09-28-agent-mcp-design.md).
@@ -11,35 +64,19 @@ export { GenerationWorkflow } from './workflow';
  * /oauth/token and the .well-known metadata. Everything else — every existing
  * /api/account and /media route, and the consent pages /oauth/authorize and
  * /oauth/finish — reaches handleRequest exactly as before.
- *
- * Built per request, not once at module scope: the installed 1.2.1 types
- * (newer than the design doc anticipated) require `resourceMetadata.resource`,
- * a canonical absolute URL that differs by environment (MCP_ORIGIN — prod,
- * preview and local all point elsewhere), and `env` only exists inside
- * `fetch()`. The constructor does synchronous field assignment and
- * validation, no I/O, so building it per request adds no real cost.
  */
-function buildProvider(env: Env) {
-  return new OAuthProvider<Env>({
-    apiRoute: '/mcp',
-    apiHandler: mcpApiHandler,
-    defaultHandler: { fetch: (request, env) => handleRequest(request, env as Env) },
-    authorizeEndpoint: '/oauth/authorize',
-    tokenEndpoint: '/oauth/token',
-    clientRegistrationEndpoint: '/oauth/register',
-    scopesSupported: ['scene-assembly'],
-    accessTokenTTL: 3600,
-    refreshTokenTTL: 30 * 86_400,
-    // A client identified by an https URL (as Claude.ai is) shows a verified domain on consent.
-    clientIdMetadataDocumentEnabled: true,
-    resourceMetadata: { resource: `${env.MCP_ORIGIN ?? 'http://localhost:8797'}/mcp` },
-  });
-}
-
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    await ensureLocalSchema(env);
-    return (await guardRegistration(request, env)) ?? buildProvider(env).fetch(request, env, ctx);
+    try {
+      await ensureLocalSchema(env);
+      const registrationLimited = await guardRegistration(request, env);
+      if (registrationLimited) return registrationLimited;
+      const resource = mcpResource(env);
+      if (!resource) return isOAuthLibraryPath(new URL(request.url).pathname) ? NOT_CONFIGURED() : handleRequest(request, env);
+      return await providerFor(resource).fetch(request, env, ctx);
+    } catch {
+      return UNAVAILABLE();
+    }
   },
   async scheduled(_event: ScheduledController, env: Env) {
     await runScheduledMaintenance(env);

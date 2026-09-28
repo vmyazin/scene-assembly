@@ -71,6 +71,18 @@ superseded text.
 14. **Retryable statuses move to `lib/providers/route-error.ts`**
     (`isRetryableStatus`), because `auto-retry.ts` is a `'use client'` React
     module the Worker cannot import.
+15. **CIMD is off** (overrides follow-up 3), until `global_fetch_strictly_public`
+    is evaluated — enabling it changes every outbound `fetch` this Worker makes,
+    which needs its own decision. Until then every client, including
+    URL-identified ones such as Claude.ai, registers through DCR and shows as
+    unverified.
+16. **`resourceMetadata.resource` is required** (`@cloudflare/workers-oauth-provider`
+    1.2.1), derived from `MCP_ORIGIN` as `<origin>/mcp`. Protected-resource
+    metadata is then served only at `/.well-known/oauth-protected-resource/mcp`
+    on that exact host, so locally the MCP URL must use `localhost`, not
+    `127.0.0.1`, and the workers.dev hostname cannot be used as an MCP URL.
+17. **Refresh tokens are a fixed 30 days from the grant**, with no sliding idle
+    TTL, so a connected agent re-consents monthly.
 
 ## Context
 
