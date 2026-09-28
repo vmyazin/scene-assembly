@@ -2,24 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { routeStatus } from './route-error';
+import { isRetryableStatus, routeStatus } from './route-error';
 
 /** How long a failed submission waits before it is sent again on its own. */
 export const AUTO_RETRY_DELAY_SECONDS = 10;
 /** Automatic attempts made after the one the user asked for. */
 export const AUTO_RETRY_LIMIT = 5;
 
-/**
- * Statuses where the provider never reached a decision, so sending the same
- * request again is the same request rather than a second one. Everything else —
- * a bad key, no credits, a content-policy refusal, rejected controls — fails the
- * same way forever, and retrying it only hides the sentence that says why.
- */
-const RETRYABLE_STATUSES = new Set([0, 408, 425, 429, 500, 502, 503, 504]);
-
 export function isRetryableFailure(error: unknown): boolean {
   const status = routeStatus(error);
-  if (status !== undefined) return RETRYABLE_STATUSES.has(status);
+  if (status !== undefined) return isRetryableStatus(status);
   // fetch() rejects with a TypeError when the request never left the machine.
   return error instanceof TypeError;
 }
