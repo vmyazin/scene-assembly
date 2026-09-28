@@ -1,21 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { handleRequest } from '../src/index';
-import { createSession } from '../src/sessions';
 import { deleteAccount } from '../src/lifecycle';
 import { reserveCharge } from '../src/mcp/budget';
-import type { Env } from '../src/security';
-import { agentEnv, OWNER, seedAgent, seedUser } from './agent-fixtures';
+import { accountCall as call, agentEnv, OWNER, seedAgent, seedUser, signIn as signedIn } from './agent-fixtures';
 
-async function signedIn(env: Env, subject = 'google-owner') {
-  // createSession upserts by Google subject, so this signs in the fixture's OWNER.
-  return (await createSession(env, { subject, email: 'owner@example.test', name: 'Owner' })).split(';')[0];
-}
-function call(env: Env, path: string, method = 'GET', cookie = '', body?: unknown) {
-  return handleRequest(new Request(`http://localhost:8797/api/account/${path}`, {
-    method, headers: { origin: env.APP_ORIGIN, cookie, 'content-type': 'application/json' },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  }), env);
-}
 function grantHelpers(grants: { id: string; userId: string; metadata: { agentId: string } }[]) {
   const revoked: string[] = [];
   return { revoked, helpers: {

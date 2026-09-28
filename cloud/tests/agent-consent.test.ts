@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { handleRequest } from '../src/index';
 import { cleanupAuthorizations } from '../src/mcp/auth';
-import { createSession } from '../src/sessions';
 import type { Env } from '../src/security';
-import { agentEnv, connectProvider } from './agent-fixtures';
+import { agentEnv, connectProvider, signIn as signedIn } from './agent-fixtures';
 import { fakeOAuth } from './fake-oauth';
 
 function setup() {
@@ -12,7 +11,6 @@ function setup() {
   env.OAUTH_PROVIDER = oauth.helpers;
   return { db, env, oauth };
 }
-const signedIn = async (env: Env) => (await createSession(env, { subject: 'google-owner', email: 'owner@example.test', name: 'Owner' })).split(';')[0];
 const worker = (env: Env, path: string, init: RequestInit = {}) => handleRequest(new Request(`http://localhost:8797${path}`, init), env);
 /** `redirectTo` is already an absolute URL (it names `MCP_ORIGIN`), so this hits it directly rather than through `worker`'s path-only helper. */
 const visitFinish = (env: Env, url: string, headers: HeadersInit = {}) => handleRequest(new Request(url, { headers }), env);

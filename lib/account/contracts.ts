@@ -11,6 +11,8 @@ export interface CloudJobRequest {
   sourceVideoId?: string;
 }
 export type CloudJobState = 'queued' | 'submitting' | 'running' | 'saving' | 'saved' | 'needs_attention' | 'failed' | 'cancelled';
+/** The agent that started a job, kept after it disconnects so old work stays attributed. */
+export interface StartedBy { agentId: string; name: string | null }
 export interface CloudJobView {
   id: string; provider: CloudProvider; state: CloudJobState; errorCode: string | null;
   /** All three are optional because the browser and the Worker deploy
@@ -30,6 +32,8 @@ export interface CloudJobView {
   /** Resumes so far. The row says "attempt 2" with it, and stops offering a
    *  button the Worker would now refuse. */
   attempts?: number;
+  /** Absent for jobs started in the browser, and from Workers that predate agents. */
+  startedBy?: StartedBy;
   request: CloudJobRequest; createdAt: number; updatedAt: number;
 }
 export interface CloudAssetCounts {
@@ -42,6 +46,8 @@ export interface CloudAsset {
   metadata: CloudJobRequest; jobId: string | null;
   /** Present only for overflow awaiting space in the permanent library. */
   expiresAt?: number;
+  /** Absent for jobs started in the browser, and from Workers that predate agents. */
+  startedBy?: StartedBy;
 }
 
 /** Every temporary input must share the same ownership and retention lifecycle. */

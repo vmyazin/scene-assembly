@@ -4,8 +4,29 @@ import { memoryBucket } from './bucket';
 import { LOCAL_SCHEMA } from '../src/schema';
 import { createAgent, type AgentRow, type AgentSettings } from '../src/mcp/agents';
 import type { Env } from '../src/security';
+import { handleRequest } from '../src/index';
+import { createSession } from '../src/sessions';
 
 export const OWNER = 'owner';
+
+/** A session cookie for OWNER: createSession upserts by Google subject. */
+export async function signIn(env: Env) {
+  return (await createSession(env, { subject: `google-${OWNER}`, email: `${OWNER}@example.test`, name: OWNER })).split(';')[0];
+}
+export function accountCall(env: Env, path: string, method = 'GET', cookie = '', body?: unknown) {
+  return handleRequest(new Request(`http://localhost:8797/api/account/${path}`, {
+    method, headers: { origin: env.APP_ORIGIN, cookie, 'content-type': 'application/json' },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  }), env);
+}
+/** A saved library row (the bytes, if a test needs them, go in the memory bucket). */
+export function seedAsset(db: DatabaseSync, patch: { id: string; jobId: string | null; kind?: 'image' | 'video'; mimeType?: string; bytes?: number; userId?: string; createdAt?: number }) {
+  const key = `accounts/${patch.userId ?? OWNER}/assets/${patch.id}`;
+  const metadata = { provider: 'atlas', modelId: 'black-forest-labs/flux-schnell', mediaType: patch.kind ?? 'image', inputMode: 'text', prompt: 'a kite', values: {}, referenceIds: [] };
+  db.prepare('INSERT INTO account_assets (id,user_id,job_id,object_key,kind,mime_type,bytes,metadata_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(patch.id, patch.userId ?? OWNER, patch.jobId, key, patch.kind ?? 'image', patch.mimeType ?? 'image/png', patch.bytes ?? 3, JSON.stringify(metadata), patch.createdAt ?? 1);
+  return key;
+}
 
 export function seedUser(db: DatabaseSync, id: string) {
   db.prepare('INSERT INTO account_users (id,google_subject,email,name,created_at) VALUES (?,?,?,?,1)').run(id, `google-${id}`, `${id}@example.test`, id);
