@@ -1,5 +1,6 @@
 import { AccountError } from './jobs';
 import { isRecoverable, MAX_RESUME_ATTEMPTS, type FailureReason } from '../../lib/account/job-failure';
+import { classifyFailure } from '../../lib/moderation/classify';
 
 /**
  * Worker-side classification of a failure into the shared vocabulary.
@@ -73,10 +74,15 @@ export function captureFailureReason(error: unknown): FailureReason {
  * prompt was rejected by a provider that never saw it.
  */
 export function providerFailureReason(error: unknown): { reason: FailureReason; detail: string | null } {
-  if (error instanceof AccountError) return { reason: 'provider_rejected', detail: sanitizeProviderMessage(error.message) };
+  const detailOf = (message: string | undefined) => sanitizeProviderMessage(message);
+  const asRefusal = (detail: string | null): { reason: FailureReason; detail: string | null } =>
+    detail && classifyFailure(detail).kind === 'policy'
+      ? { reason: 'provider_policy', detail }
+      : { reason: 'provider_rejected', detail };
+  if (error instanceof AccountError) return asRefusal(detailOf(error.message));
   const status = (error as { status?: unknown })?.status;
   if (typeof status === 'number' && status >= 400 && status < 500) {
-    return { reason: 'provider_rejected', detail: sanitizeProviderMessage((error as Error)?.message) };
+    return asRefusal(detailOf((error as Error)?.message));
   }
   return { reason: 'provider_unreachable', detail: null };
 }

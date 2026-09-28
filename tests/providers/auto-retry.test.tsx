@@ -25,6 +25,20 @@ describe('isRetryableFailure', () => {
   it('leaves an unlabelled failure alone', () => {
     expect(isRetryableFailure(new Error('Kie did not return a task ID.'))).toBe(false);
   });
+
+  it('does not retry a content-policy or floor refusal even when the status is 500', () => {
+    expect(isRetryableFailure(Object.assign(new Error('blocked by content policy'), { status: 500 }))).toBe(false);
+    expect(
+      isRetryableFailure(
+        Object.assign(
+          new Error(
+            "Scene Assembly doesn't generate this (minors in a suggestive context / sexualized real people). Relaxed filter doesn't change this."
+          ),
+          { status: 500 }
+        )
+      )
+    ).toBe(false);
+  });
 });
 
 function Harness({ action }: { action: () => void }) {

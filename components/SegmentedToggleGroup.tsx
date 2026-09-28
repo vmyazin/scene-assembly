@@ -5,6 +5,8 @@ import { useRef, type KeyboardEvent } from 'react';
 export interface SegmentedToggleOption {
   label: string;
   value: string | number;
+  /** A choice the current request cannot use, such as Relaxed with a reference attached. */
+  disabled?: boolean;
 }
 
 export interface SegmentedToggleGroupProps {
@@ -57,9 +59,12 @@ export default function SegmentedToggleGroup({
             type="button"
             role="radio"
             aria-checked={selected}
-            onClick={() => onChange(option.value)}
+            disabled={option.disabled}
+            onClick={() => {
+              if (!option.disabled) onChange(option.value);
+            }}
             onKeyDown={(event) => handleKeyDown(event, optionIndex)}
-            className={`min-w-0 flex-1 rounded-lg border px-3 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neon-cyan)] ${
+            className={`min-w-0 flex-1 rounded-lg border px-3 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neon-cyan)] disabled:cursor-not-allowed disabled:opacity-50 ${
               selected
                 ? 'border-[var(--neon-cyan)] bg-[var(--neon-cyan)]/10 text-[var(--neon-cyan)]'
                 : 'border-[var(--border)] bg-[var(--background-elevated)]/60 text-[var(--foreground-muted)] hover:border-[var(--border-hover)] hover:text-[var(--foreground)]'

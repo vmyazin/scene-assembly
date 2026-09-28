@@ -47,6 +47,8 @@ export interface ResultStackItem {
    */
   prompt?: string;
   slug?: string;
+  /** Set when this result was generated with Relaxed filter. */
+  relaxed?: boolean;
 }
 
 interface ResultStackProps {
@@ -222,6 +224,7 @@ export default function ResultStack({
                 startedAt={item.startedAt}
                 finishedAt={item.finishedAt}
                 createdAt={item.createdAt}
+                relaxed={item.relaxed}
                 width={sizes[item.id]?.width}
                 height={sizes[item.id]?.height}
                 className="@lg:mt-auto"

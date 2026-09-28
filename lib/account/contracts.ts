@@ -25,7 +25,7 @@ export interface CloudJobView {
    *  resuming. Null on jobs that stopped before the Worker recorded it. */
   failureReason?: string | null;
   /** The provider's own sentence for a refusal, already sanitized Worker-side.
-   *  Only ever set alongside `provider_rejected`. */
+   *  Only ever set alongside `provider_rejected` or `provider_policy`. */
   failureDetail?: string | null;
   /** Resumes so far. The row says "attempt 2" with it, and stops offering a
    *  button the Worker would now refuse. */

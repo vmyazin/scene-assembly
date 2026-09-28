@@ -16,6 +16,11 @@ import StoredImagePicker from '@/components/StoredImagePicker';
 import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
 import ConnectionGate, { isGated } from '@/components/ConnectionGate';
 import SubmissionError from '@/components/SubmissionError';
+import RelaxedFilterControl from '@/components/RelaxedFilterControl';
+import { trackGenerationResult } from '@/lib/analytics/generation-result';
+import { classifyFailure, refusalPresentation } from '@/lib/moderation/classify';
+import { inspectPrompt } from '@/lib/moderation/floors';
+import { useRelaxedFilter } from '@/lib/moderation/use-relaxed-filter';
 import { isRetryableFailure, useAutoRetry } from '@/lib/providers/auto-retry';
 import ReferenceStack from '@/components/ReferenceStack';
 import { requestExamplePrompt, requestPromptSlug } from '@/lib/micro-ai/browser';
@@ -306,6 +311,14 @@ function FalGenerationWorkspaceSession({
     controlState?.variantId === variant.id
       ? controlState.values
       : carryOverValues(variant.fields, defaultFalValues(variant), controlValues);
+  const relaxed = useRelaxedFilter({
+    workspaceKey: 'fal-video',
+    provider: 'fal',
+    modelId: selectedModel.id,
+    endpointId: variant.endpointId,
+    prompt,
+    hasReferences: references.length > 0,
+  });
   const [modelSearch, setModelSearch] = useState('');
 
   const [error, setError] = useState<string | null>(null);
@@ -523,7 +536,13 @@ function FalGenerationWorkspaceSession({
       return;
     }
 
+    const floor = inspectPrompt(prompt, relaxed.levelRef.current);
+    if (floor.blocked && floor.message) {
+      setError(floor.message);
+      return;
+    }
     const activeReferences = inputMode === 'text' ? [] : references;
+    const submittedValues = { ...values, ...relaxed.attach() };
     const validationError = validateFalInput(variant, {
       prompt,
       uploadUrls: activeReferences.map((reference) => reference.previewUrl),
@@ -537,7 +556,7 @@ function FalGenerationWorkspaceSession({
       buildFalInput(variant, {
         prompt,
         uploadUrls: activeReferences.map((reference) => reference.previewUrl),
-        values,
+        values: submittedValues,
       });
     } catch {
       setError('Review the selected fal model controls and try again.');
@@ -546,7 +565,7 @@ function FalGenerationWorkspaceSession({
 
     if(cloudWorkspace.cloud){
       setError(null);setSubmittingVariantId(variant.id);
-      try{await cloudWorkspace.submit({modelId:selectedModel.id,mediaType:'video',inputMode,prompt:prompt.trim(),values},activeReferences.map(r=>r.file));autoRetry.reset();}
+      try{await cloudWorkspace.submit({modelId:selectedModel.id,mediaType:'video',inputMode,prompt:prompt.trim(),values:submittedValues},activeReferences.map(r=>r.file));autoRetry.reset();}
       catch(error){if(mountedRef.current)setError(error instanceof Error?error.message:'Could not confirm this background job.');}
       finally{if(mountedRef.current)setSubmittingVariantId(null);}
       return;
@@ -580,7 +599,7 @@ function FalGenerationWorkspaceSession({
         inputMode,
         prompt: prompt.trim(),
         uploadUrls,
-        values,
+        values: submittedValues,
       }, { signal: operation.controller.signal });
       if (!isCurrent()) {
         if (!operation.reconciled) {
@@ -611,7 +630,7 @@ function FalGenerationWorkspaceSession({
         mediaType: 'video',
         inputMode,
         prompt: submittedPrompt,
-        controlValues: values,
+        controlValues: submittedValues,
         createdAt: now,
         updatedAt: now,
         pollAttempt: 0,
@@ -619,9 +638,11 @@ function FalGenerationWorkspaceSession({
       // Runs alongside the generation so the name is ready before the video is.
       void attachSlug(requestId, submittedPrompt);
       autoRetry.reset();
+      trackGenerationResult({ engine: 'fal', route: selectedModel.id, model: selectedModel.label, level: relaxed.levelRef.current, outcome: 'ok', media: 'video' });
     } catch (submitFailure) {
       if (isCurrent() && !operation.controller.signal.aborted) {
         const message = safeFailureText(submitFailure, apiKey.trim(), submissionError);
+        trackGenerationResult({ engine: 'fal', route: selectedModel.id, model: selectedModel.label, level: relaxed.levelRef.current, outcome: classifyFailure(message).kind, media: 'video' });
         setError(message);
         // Only failures that never reached a decision are sent again: a rejected
         // key or an empty balance would fail identically five more times. A
@@ -671,6 +692,16 @@ function FalGenerationWorkspaceSession({
       if (mountedRef.current) setCancellingIds(new Set(cancellingRef.current));
     }
   };
+
+  const refusal = error
+    ? refusalPresentation(error, {
+        providerLabel: 'fal',
+        modelLabel: selectedModel.label,
+        level: relaxed.effective,
+        route: { provider: 'fal', modelId: selectedModel.id, endpointId: variant.endpointId },
+        hasReferences: references.length > 0,
+      })
+    : null;
 
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-3.5 sm:space-y-4">
@@ -848,6 +879,7 @@ function FalGenerationWorkspaceSession({
                 values={values}
                 onChange={updateValue}
               />
+              <RelaxedFilterControl filter={relaxed} />
             </div>
           </section>
           </>
@@ -893,7 +925,13 @@ function FalGenerationWorkspaceSession({
             </button>
             <CloudExecutionNotice workspace={cloudWorkspace} />
             {error && (
-              <SubmissionError message={error} retry={autoRetry.pending} onCancelRetry={autoRetry.cancel} />
+              <SubmissionError
+                message={refusal?.message ?? error}
+                retry={autoRetry.pending}
+                onCancelRetry={autoRetry.cancel}
+                offerTryRelaxed={refusal?.offerTryRelaxed}
+                onTryRelaxed={() => relaxed.requestRelaxed(() => void submit())}
+              />
             )}
           </>
         }

@@ -1,3 +1,6 @@
+// lib/fal/catalog.ts
+import { applyProviderModeration } from '../moderation/capabilities';
+import { effectiveModerationLevel } from '../moderation/floors';
 import type {
   FalFieldDefinition,
   FalFieldOption,
@@ -555,7 +558,14 @@ export function buildFalInput(
     const normalized = normalizeFalFieldValue(field, value);
     if (normalized !== undefined) input[field.key] = normalized;
   }
-  return input;
+  const hasReferences = args.uploadUrls.length > 0;
+  return applyProviderModeration(input, {
+    provider: 'fal',
+    modelId: variant.id,
+    endpointId: variant.endpointId,
+    level: effectiveModerationLevel({ level: args.values.moderation, prompt: args.prompt, hasReferences }),
+    hasReferences,
+  });
 }
 
 export function extractFalResult(mediaType: FalMediaType, payload: unknown) {

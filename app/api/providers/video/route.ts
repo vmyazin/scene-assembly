@@ -11,6 +11,7 @@ import {
   resolveVideoInput,
 } from '@/lib/providers/catalog';
 import { ProviderError, type ProviderMode } from '@/lib/providers/types';
+import { floorRejection, honoredModeration } from '@/lib/moderation/guard';
 
 /**
  * Video for the aggregator providers — one route for all three, because their
@@ -70,10 +71,18 @@ export async function POST(request: NextRequest) {
   if (!prompt) {
     return NextResponse.json({ success: false, error: 'Prompt is required' }, { status: 400 });
   }
+  const blocked = floorRejection(prompt);
+  if (blocked) return blocked;
 
   const images = Array.isArray(body.images)
     ? body.images.filter((image): image is string => typeof image === 'string' && image.startsWith('data:'))
     : [];
+  const moderation = await honoredModeration({
+    requested: body.moderation,
+    prompt,
+    hasReferences: images.length > 0 || typeof body.sourceVideo === 'string',
+    request,
+  });
 
   const model = resolveModel(
     body.provider,
@@ -115,7 +124,7 @@ export async function POST(request: NextRequest) {
     const settingsError = editSettingsError(capability, {size: body.size, draft: body.draft, audio: body.audio, resolution: body.resolution});
     if (settingsError || images.length > capability.maxImages) return NextResponse.json({success: false, error: settingsError ?? `Add up to ${capability.maxImages} replacement images.`}, {status: 400});
     try {
-      const {taskId} = await adapter.createVideo({apiKey, model, prompt, inputMode, sourceVideo: body.sourceVideo, images, resolution: size?.preset, ...(capability.draftRate ? {draft: body.draft === true} : {})});
+      const {taskId} = await adapter.createVideo({apiKey, model, prompt, inputMode, sourceVideo: body.sourceVideo, images, resolution: size?.preset, ...(capability.draftRate ? {draft: body.draft === true} : {}), ...(moderation === 'relaxed' ? {moderation} : {})});
       return NextResponse.json({success: true, taskId});
     } catch (error) { return failure(error, 'Could not start this video edit.'); }
   }
@@ -179,6 +188,7 @@ export async function POST(request: NextRequest) {
       resolution: size?.preset,
       ...(body.provider === 'piapi' ? {audio: body.audio === true} : {}),
       aspectRatio: typeof body.aspectRatio === 'string' ? body.aspectRatio : undefined,
+      ...(moderation === 'relaxed' ? {moderation} : {}),
     });
     return NextResponse.json({ success: true, taskId });
   } catch (error) {

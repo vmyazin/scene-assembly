@@ -1,3 +1,6 @@
+// lib/kie/catalog.ts
+import { applyProviderModeration, lockKieVeoFallback } from '../moderation/capabilities';
+import { effectiveModerationLevel } from '../moderation/floors';
 import type {
   KieFieldDefinition,
   KieInputMode,
@@ -164,7 +167,7 @@ export const KIE_MODELS: KieModelDefinition[] = [
       'flux-2/pro-text-to-image',
       'flux-2/pro-image-to-image',
       'image_urls',
-      [aspectRatios, { ...imageResolution, options: imageResolution.options?.slice(0, 2) }, boolField('nsfw_checker', 'Safety check', true), seed],
+      [aspectRatios, { ...imageResolution, options: imageResolution.options?.slice(0, 2) }, seed],
       4
     ),
   },
@@ -195,7 +198,7 @@ export const KIE_MODELS: KieModelDefinition[] = [
         modelId: 'google/imagen4-ultra',
         protocol: 'market',
         inputMode: 'text',
-        fields: [aspectRatios, textField('negative_prompt', 'Negative prompt'), seed, boolField('nsfw_checker', 'Safety check', true)],
+        fields: [aspectRatios, textField('negative_prompt', 'Negative prompt'), seed],
       },
     ],
   },
@@ -238,7 +241,7 @@ export const KIE_MODELS: KieModelDefinition[] = [
         modelId: 'z-image',
         protocol: 'market',
         inputMode: 'text',
-        fields: [aspectRatios, boolField('nsfw_checker', 'Safety check', true)],
+        fields: [aspectRatios],
       },
     ],
   },
@@ -257,7 +260,6 @@ export const KIE_MODELS: KieModelDefinition[] = [
         fields: [
           { ...aspectRatios, options: aspectRatios.options?.filter((option) => ['auto', '16:9', '9:16'].includes(String(option.value))) },
           textField('watermark', 'Watermark'),
-          boolField('enableFallback', 'Enable fallback'),
           boolField('enableTranslation', 'Translate prompt', true),
           selectField('generationType', 'Generation mode', 'TEXT_2_VIDEO', ['TEXT_2_VIDEO']),
         ],
@@ -272,7 +274,6 @@ export const KIE_MODELS: KieModelDefinition[] = [
         fields: [
           { ...aspectRatios, options: aspectRatios.options?.filter((option) => ['auto', '16:9', '9:16'].includes(String(option.value))) },
           textField('watermark', 'Watermark'),
-          boolField('enableFallback', 'Enable fallback'),
           boolField('enableTranslation', 'Translate prompt', true),
           selectField('generationType', 'Generation mode', 'REFERENCE_2_VIDEO', [
             'FIRST_AND_LAST_FRAMES_2_VIDEO',
@@ -453,5 +454,16 @@ export function buildKieInput(
     if (value !== undefined && value !== '') input[field.key] = value;
   }
 
-  return input;
+  const hasReferences = args.uploadUrls.length > 0;
+  const applied = applyProviderModeration(input, {
+    provider: 'kie',
+    modelId: variant.modelId,
+    level: effectiveModerationLevel({ level: args.values.moderation, prompt: args.prompt, hasReferences }),
+    hasReferences,
+  });
+  // The per-model Safety check and Enable fallback controls are gone. The
+  // checker is the Relaxed filter; Standard still sends `true`, which is what
+  // the catalog default sent. Fallback stays hard-off: Kie used it to switch
+  // models on errors that include the minor and prominent-person floors.
+  return lockKieVeoFallback(applied, variant.protocol);
 }

@@ -44,6 +44,11 @@ import StoredImagePicker from '@/components/StoredImagePicker';
 import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
 import ConnectionGate, { isGated } from '@/components/ConnectionGate';
 import SubmissionError from '@/components/SubmissionError';
+import RelaxedFilterControl from '@/components/RelaxedFilterControl';
+import { trackGenerationResult } from '@/lib/analytics/generation-result';
+import { classifyFailure, refusalPresentation } from '@/lib/moderation/classify';
+import { inspectPrompt } from '@/lib/moderation/floors';
+import { useRelaxedFilter } from '@/lib/moderation/use-relaxed-filter';
 import {
   AUTO_RETRY_DELAY_SECONDS,
   isRetryableFailure,
@@ -131,6 +136,13 @@ export default function KieGenerationWorkspace({
   const values =
     valuesByVariant[variantKey] ??
     carryOverValues(variant.fields, defaultKieValues(variant), controlValues);
+  const relaxed = useRelaxedFilter({
+    workspaceKey: 'kie',
+    provider: 'kie',
+    modelId: selectedModel.id,
+    prompt,
+    hasReferences: references.length > 0,
+  });
   const [modelSearch, setModelSearch] = useState('');
 
   const [error, setError] = useState<string | null>(null);
@@ -390,6 +402,11 @@ export default function KieGenerationWorkspace({
       onOpenConnections('kie');
       return;
     }
+    const floor = inspectPrompt(prompt, relaxed.levelRef.current);
+    if (floor.blocked && floor.message) {
+      setError(floor.message);
+      return;
+    }
     const inputError = validateKieInput(variant, {
       prompt,
       uploadUrls: references.map((reference) => reference.previewUrl),
@@ -401,9 +418,10 @@ export default function KieGenerationWorkspace({
 
     setError(null);
     setIsSubmitting(true);
+    const submittedValues = { ...values, ...relaxed.attach() };
     try {
       if(cloudWorkspace.cloud){
-        await cloudWorkspace.submit({modelId:selectedModel.id,mediaType,inputMode,prompt:prompt.trim(),values},(inputMode==='text'?[]:references).map(r=>r.file));
+        await cloudWorkspace.submit({modelId:selectedModel.id,mediaType,inputMode,prompt:prompt.trim(),values:submittedValues},(inputMode==='text'?[]:references).map(r=>r.file));
         autoRetry.reset();toast.success('Background job accepted. You can leave this page.');return;
       }
       // The balance is read alongside the uploads, before the submit that spends
@@ -419,7 +437,7 @@ export default function KieGenerationWorkspace({
         inputMode,
         prompt: prompt.trim(),
         uploadUrls,
-        values,
+        values: submittedValues,
       });
       const now = currentKieTime();
       const submittedPrompt = prompt.trim();
@@ -434,7 +452,7 @@ export default function KieGenerationWorkspace({
         mediaType,
         inputMode,
         prompt: submittedPrompt,
-        controlValues: values,
+        controlValues: submittedValues,
         creditsBefore: creditsBefore ?? undefined,
         createdAt: now,
         updatedAt: now,
@@ -443,9 +461,11 @@ export default function KieGenerationWorkspace({
       // Runs alongside the generation so the name is ready before the result is.
       void attachSlug(taskId, submittedPrompt);
       autoRetry.reset();
+      trackGenerationResult({ engine: 'kie', route: selectedModel.id, model: selectedModel.label, level: relaxed.levelRef.current, outcome: 'ok', media: mediaType });
       toast.success('Task queued.');
     } catch (submissionError) {
       const message = submissionError instanceof Error ? submissionError.message : 'Kie could not start this task.';
+      trackGenerationResult({ engine: 'kie', route: selectedModel.id, model: selectedModel.label, level: relaxed.levelRef.current, outcome: classifyFailure(message).kind, media: mediaType });
       setError(message);
       // Kie goes away for seconds at a time, and the person watching the button
       // can do nothing about it but press it again — so the workspace presses it.
@@ -458,6 +478,16 @@ export default function KieGenerationWorkspace({
       setIsSubmitting(false);
     }
   };
+
+  const refusal = error
+    ? refusalPresentation(error, {
+        providerLabel: 'Kie',
+        modelLabel: selectedModel.label,
+        level: relaxed.effective,
+        route: { provider: 'kie', modelId: selectedModel.id },
+        hasReferences: references.length > 0,
+      })
+    : null;
 
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-3.5 sm:space-y-4">
@@ -606,6 +636,7 @@ export default function KieGenerationWorkspace({
                 values={values}
                 onChange={updateValues}
               />
+              <RelaxedFilterControl filter={relaxed} />
             </div>
           </section>
           </>
@@ -650,7 +681,13 @@ export default function KieGenerationWorkspace({
             </button>
             <CloudExecutionNotice workspace={cloudWorkspace} />
             {error && (
-              <SubmissionError message={error} retry={autoRetry.pending} onCancelRetry={autoRetry.cancel} />
+              <SubmissionError
+                message={refusal?.message ?? error}
+                retry={autoRetry.pending}
+                onCancelRetry={autoRetry.cancel}
+                offerTryRelaxed={refusal?.offerTryRelaxed}
+                onTryRelaxed={() => relaxed.requestRelaxed(() => void submit())}
+              />
             )}
           </>
         }

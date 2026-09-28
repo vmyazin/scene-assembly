@@ -58,7 +58,15 @@ it('carries the provider’s own refusal onto the job',async()=>{
   const provider:GenerationAdapter={submit:vi.fn(),poll:vi.fn().mockResolvedValue({state:'failed',reason:'prompt violates content policy'})};
   await runGeneration(env,j.id,step,provider);
   expect((await getJob(env,j.id))?.error_code).toBe('provider_failed');
-  expect(await reason(j.id)).toMatchObject({failure_reason:'provider_rejected',failure_detail:'prompt violates content policy'});
+  expect(await reason(j.id)).toMatchObject({failure_reason:'provider_policy',failure_detail:'prompt violates content policy'});
+});
+
+it('keeps a non-policy provider refusal as a rejection',async()=>{
+  const j=await job('failure-token-0000000000000001');
+  await env.DB.prepare("UPDATE account_jobs SET state='running',provider_task=? WHERE id=?").bind('{"id":"task"}',j.id).run();
+  const provider:GenerationAdapter={submit:vi.fn(),poll:vi.fn().mockResolvedValue({state:'failed',reason:'unsupported aspect ratio'})};
+  await runGeneration(env,j.id,step,provider);
+  expect(await reason(j.id)).toMatchObject({failure_reason:'provider_rejected',failure_detail:'unsupported aspect ratio'});
 });
 
 it('strips anything credential-shaped out of a provider message',()=>{

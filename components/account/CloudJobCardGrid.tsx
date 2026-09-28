@@ -102,6 +102,7 @@ function CloudJobCard({ job, busy, onCancel }: { job: CloudJobView; busy: boolea
             than left as a vendor id. */}
         <p className="mt-1 text-[0.625rem] text-sky-200">
           {job.provider} · {job.request.mediaType} · {jobModelLabel(job.provider, job.request.modelId)}
+          {job.request.values.moderation === 'relaxed' ? ' · Relaxed' : ''}
         </p>
         <p className="mt-1 text-[0.625rem] text-[var(--foreground-subtle)]">{stage.say}</p>
       </div>

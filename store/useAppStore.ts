@@ -8,6 +8,7 @@ import type { ImageFormatPreference } from '@/lib/image/policy';
 import { DEFAULT_MODELS } from '@/lib/providers/catalog';
 import type { ProviderId } from '@/lib/providers/types';
 import type { ImportableProvider } from '@/lib/account/key-import';
+import type { ModerationLevel, RelaxedConsent } from '@/lib/moderation/level';
 
 /** Engines that can produce video: the two original ones plus the aggregators. */
 export type VideoEngineId = 'gemini' | 'kie' | 'fal' | ProviderId;
@@ -102,6 +103,13 @@ interface AppState {
    * undone by the very next close.
    */
   accountKeyOptOuts: ImportableProvider[];
+  /**
+   * First-time Relaxed confirmation. Null until the person checks the 18+
+   * box. A new `policyVersion` asks again.
+   */
+  relaxedFilter: RelaxedConsent | null;
+  /** Last choice per workspace (`image`, `fal-video`, `kie`, `provider-video`). */
+  preferredLevel: Record<string, ModerationLevel>;
   /** True once the persisted state has rehydrated on the client. */
   hasHydrated: boolean;
   setApiKey: (key: string) => void;
@@ -122,6 +130,8 @@ interface AppState {
   setConvertLibraryImages: (convert: boolean) => void;
   setUiSoundsEnabled: (enabled: boolean) => void;
   setAccountKeyOptOut: (provider: ImportableProvider, optedOut: boolean) => void;
+  setRelaxedConsent: (consent: RelaxedConsent | null) => void;
+  setPreferredLevel: (workspace: string, level: ModerationLevel) => void;
   setHasHydrated: (v: boolean) => void;
 }
 
@@ -189,6 +199,8 @@ export const useAppStore = create<AppState>()(
       cometImageModel: DEFAULT_MODELS.comet.image,
       cometVideoModel: DEFAULT_MODELS.comet.video,
       accountKeyOptOuts: [],
+      relaxedFilter: null,
+      preferredLevel: {},
       imageFormat: 'auto',
       convertLibraryImages: true,
       uiSoundsEnabled: true,
@@ -219,6 +231,9 @@ export const useAppStore = create<AppState>()(
               : [...state.accountKeyOptOuts, provider]
             : state.accountKeyOptOuts.filter((id) => id !== provider),
         })),
+      setRelaxedConsent: (consent) => set({ relaxedFilter: consent }),
+      setPreferredLevel: (workspace, level) =>
+        set((state) => ({ preferredLevel: { ...state.preferredLevel, [workspace]: level } })),
       setHasHydrated: (v) => set({ hasHydrated: v }),
     }),
     {
@@ -271,6 +286,8 @@ export const useAppStore = create<AppState>()(
         cometImageModel: s.cometImageModel,
         cometVideoModel: s.cometVideoModel,
         accountKeyOptOuts: s.accountKeyOptOuts,
+        relaxedFilter: s.relaxedFilter,
+        preferredLevel: s.preferredLevel,
         imageFormat: s.imageFormat,
         convertLibraryImages: s.convertLibraryImages,
         uiSoundsEnabled: s.uiSoundsEnabled,

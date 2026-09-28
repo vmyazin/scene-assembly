@@ -19,7 +19,7 @@ import type { CloudJobView } from './contracts';
 export const FAILURE_REASONS = [
   'result_link_expired', 'result_location', 'result_missing', 'result_wrong_type', 'result_too_large',
   'result_count', 'result_empty', 'staged_missing', 'transfer_failed', 'storage_full',
-  'provider_rejected', 'provider_unreachable', 'provider_timeout', 'submit_unconfirmed', 'worker_interrupted',
+  'provider_rejected', 'provider_policy', 'provider_unreachable', 'provider_timeout', 'submit_unconfirmed', 'worker_interrupted',
 ] as const;
 export type FailureReason = typeof FAILURE_REASONS[number];
 
@@ -64,6 +64,7 @@ const SENTENCES: Record<FailureReason, string> = {
   transfer_failed: 'Saving the result was interrupted. The provider’s file may still be there.',
   storage_full: 'Your result is temporarily available. Download it before its deadline, or free library space and resume saving.',
   provider_rejected: 'The provider refused this job.',
+  provider_policy: 'The provider blocked this under its content filter. Resuming runs the same request and will be blocked again.',
   provider_unreachable: 'The provider could not be reached to confirm this job.',
   provider_timeout: 'The provider was still working when tracking gave up.',
   submit_unconfirmed: 'The provider may have accepted this job. Check its history before starting another paid generation.',
@@ -95,9 +96,8 @@ export function describeFailure(job: FailingJob): JobFailure {
   const reason = isFailureReason(job.failureReason) ? job.failureReason : null;
   return {
     sentence: reason ? SENTENCES[reason] : legacySentence(job.errorCode),
-    // Only `provider_rejected` carries one, and the Worker sanitized it before
-    // it was stored. Rendered as the provider's words, never as our own.
-    detail: reason === 'provider_rejected' ? job.failureDetail ?? null : null,
+    // Provider text is stored only for a refusal the Worker sanitized first.
+    detail: reason === 'provider_rejected' || reason === 'provider_policy' ? job.failureDetail ?? null : null,
     resumable: isRecoverable(job.failureReason),
   };
 }

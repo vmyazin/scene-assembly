@@ -16,6 +16,14 @@
 
 ## Auto-load routing
 
+- **Relaxed filter** → `lib/moderation/`. Standard sends today's payload
+  (Kie still includes `nsfw_checker: true` and Veo `enableFallback: false`).
+  Relaxed writes one documented host key and is text-only: a reference or a
+  minor mention forces Standard. `NEXT_PUBLIC_RELAXED_FILTER` defaults to
+  `off` until the A/B in the spec; the Worker does not read that Next flag
+  and instead downgrades a relaxed job when `relaxed_consent_at` is missing.
+  User-facing copy never says uncensored or NSFW.
+
 - **Gemini / Veo video generation** → first read
   `docs/cursor/specs/2026-09-21-gemini-veo-video-generation.md`. Start, poll, and
   download live in `lib/engines/gemini.ts` (`generateVideos`,

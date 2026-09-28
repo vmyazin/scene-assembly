@@ -27,6 +27,7 @@ export function useImageResultFeed(): ResultStackItem[] {
               modelId: job.modelId,
               prompt: job.prompt,
               slug: job.slug,
+              relaxed: job.controlValues?.moderation === 'relaxed',
               createdAt: job.createdAt,
               // `updatedAt` is the poll that saw it finish, so this is
               // submit-to-result including queue time. Kie reports no cost

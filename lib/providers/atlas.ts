@@ -1,4 +1,6 @@
 // lib/providers/atlas.ts
+import { applyProviderModeration } from '../moderation/capabilities';
+import { effectiveModerationLevel } from '../moderation/floors';
 import {
   ProviderError,
   readableProviderError,
@@ -70,6 +72,22 @@ function imageBody(request: ImageRequest): Record<string, unknown> {
   const { model, prompt } = request;
   const images = request.images ?? [];
   const base = { model, prompt };
+  const hasReferences = images.length > 0;
+  const body = atlasImageFields(request, base, images);
+  return applyProviderModeration(body, {
+    provider: 'atlas',
+    modelId: model,
+    level: effectiveModerationLevel({ level: request.moderation, prompt, hasReferences }),
+    hasReferences,
+  });
+}
+
+function atlasImageFields(
+  request: ImageRequest,
+  base: { model: string; prompt: string },
+  images: string[]
+): Record<string, unknown> {
+  const { model } = request;
 
   if (isNanoBanana2(model)) {
     // No `size` and no `num_images` here: this family takes a shape and a

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { classifyFailure } from '@/lib/moderation/classify';
 import { routeStatus } from './route-error';
 
 /** How long a failed submission waits before it is sent again on its own. */
@@ -18,6 +19,12 @@ export const AUTO_RETRY_LIMIT = 5;
 const RETRYABLE_STATUSES = new Set([0, 408, 425, 429, 500, 502, 503, 504]);
 
 export function isRetryableFailure(error: unknown): boolean {
+  // A content filter has already decided. Sending it again spends another
+  // attempt on the same refusal, so policy and floor messages are never
+  // retried even when a provider wraps them in a 500.
+  const message = error instanceof Error ? error.message : '';
+  const kind = classifyFailure(message).kind;
+  if (kind === 'policy' || kind === 'floor') return false;
   const status = routeStatus(error);
   if (status !== undefined) return RETRYABLE_STATUSES.has(status);
   // fetch() rejects with a TypeError when the request never left the machine.

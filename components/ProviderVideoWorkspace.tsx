@@ -17,6 +17,11 @@ import PromptPanel from '@/components/PromptPanel';
 import ModelControls, { type ModelControlField } from '@/components/ModelControls';
 import ConnectionGate, { isGated } from '@/components/ConnectionGate';
 import SubmissionError from '@/components/SubmissionError';
+import RelaxedFilterControl from '@/components/RelaxedFilterControl';
+import { trackGenerationResult } from '@/lib/analytics/generation-result';
+import { classifyFailure, refusalPresentation } from '@/lib/moderation/classify';
+import { inspectPrompt } from '@/lib/moderation/floors';
+import { useRelaxedFilter } from '@/lib/moderation/use-relaxed-filter';
 import {
   AUTO_RETRY_DELAY_SECONDS,
   isRetryableFailure,
@@ -244,6 +249,13 @@ export default function ProviderVideoWorkspace({
   >({});
   const values =
     valuesByModel[modelKey] ?? carryOverValues(fields, defaultValuesFor(fields), controlValues);
+  const relaxed = useRelaxedFilter({
+    workspaceKey: 'provider-video',
+    provider,
+    modelId: selectedModel?.id ?? '',
+    prompt,
+    hasReferences: references.length > 0 || Boolean(source),
+  });
 
   const [modelSearch, setModelSearch] = useState('');
 
@@ -569,6 +581,11 @@ export default function ProviderVideoWorkspace({
       setError('Describe the clip you want before generating.');
       return;
     }
+    const floor = inspectPrompt(prompt, relaxed.levelRef.current);
+    if (floor.blocked && floor.message) {
+      setError(floor.message);
+      return;
+    }
     if (inputMode === 'image' && references.length === 0) {
       setError('Add the image this clip should start from.');
       return;
@@ -595,6 +612,7 @@ export default function ProviderVideoWorkspace({
           ...(isEdit && selectedModel.videoEdit?.draftRate ? {draft:values.draft === true} : {}),
           ...(!isEdit && selectedModel?.supportsAudio ? {audio:values.audio === true} : {}),
           ...(!isEdit && selectedModel?.aspectRatios ? {aspectRatio:String(values.aspectRatio)} : {}),
+          ...relaxed.attach(),
         }}, inputMode === 'text' ? [] : references.map(reference => reference.file), prompt.trim(), isEdit ? source?.file : undefined);
         if (isEdit && source) setSubmittedEditJob({epoch: source.epoch, jobId: job.id});
         autoRetry.reset();
@@ -627,6 +645,7 @@ export default function ProviderVideoWorkspace({
         ...(isEdit && selectedModel.videoEdit?.draftRate ? {draft:values.draft === true} : {}),
         ...(!isEdit && selectedModel?.supportsAudio ? {audio:values.audio === true} : {}),
         ...(!isEdit && selectedModel?.aspectRatios ? {aspectRatio:String(values.aspectRatio)} : {}),
+        ...relaxed.attach(),
       });
       usePromptLibraryStore.getState().remember(submittedPrompt);
       const jobId = useProviderJobsStore.getState().startJob({
@@ -636,7 +655,7 @@ export default function ProviderVideoWorkspace({
         ...(sourceVideo ? {sourceVideoId: sourceVideo} : {}),
         prompt: submittedPrompt,
         inputMode,
-        controlValues: values,
+        controlValues: { ...values, ...relaxed.attach() },
         state: 'queued',
         urls: [],
       });
@@ -646,12 +665,14 @@ export default function ProviderVideoWorkspace({
       const started = useProviderJobsStore.getState().jobs.find((job) => job.id === jobId);
       if (started) void pollJob(started);
       autoRetry.reset();
+      trackGenerationResult({ engine: provider, route: selectedModel.id, model: selectedModel.label, level: relaxed.levelRef.current, outcome: 'ok', media: 'video' });
       toast.success('Task queued.');
     } catch (submissionError) {
       const message =
         submissionError instanceof Error
           ? submissionError.message
           : `${label} could not start this task.`;
+      trackGenerationResult({ engine: provider, route: selectedModel?.id ?? provider, model: selectedModel?.label ?? provider, level: relaxed.levelRef.current, outcome: classifyFailure(message).kind, media: 'video' });
       setError(message);
       // Sent again only when the request never reached a decision — a bad key or
       // an empty balance would fail identically five more times, and the retry
@@ -663,6 +684,16 @@ export default function ProviderVideoWorkspace({
       if (mountedRef.current) { setIsSubmitting(false); setUploadProgress(null); }
     }
   };
+
+  const refusal = error
+    ? refusalPresentation(error, {
+        providerLabel: label,
+        modelLabel: selectedModel?.label ?? provider,
+        level: relaxed.effective,
+        route: { provider, modelId: selectedModel?.id ?? '' },
+        hasReferences: references.length > 0 || Boolean(source),
+      })
+    : null;
 
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-3.5 sm:space-y-4">
@@ -849,7 +880,7 @@ export default function ProviderVideoWorkspace({
             </section>
           )}
 
-          {fields.length > 0 && (
+          {(fields.length > 0 || relaxed.offered) && (
             <section className="glass-card space-y-3 p-3.5 md:p-4">
               <div>
                 <h3 className="display text-base font-semibold">Model controls</h3>
@@ -864,6 +895,7 @@ export default function ProviderVideoWorkspace({
                   values={values}
                   onChange={updateValues}
                 />
+                <RelaxedFilterControl filter={relaxed} />
               </div>
             </section>
           )}
@@ -931,7 +963,13 @@ export default function ProviderVideoWorkspace({
             </button>
             <CloudExecutionNotice workspace={cloudWorkspace} />
             {error && (
-              <SubmissionError message={error} retry={autoRetry.pending} onCancelRetry={autoRetry.cancel} />
+              <SubmissionError
+                message={refusal?.message ?? error}
+                retry={autoRetry.pending}
+                onCancelRetry={autoRetry.cancel}
+                offerTryRelaxed={refusal?.offerTryRelaxed}
+                onTryRelaxed={() => relaxed.requestRelaxed(() => void submit())}
+              />
             )}
           </>
         }
