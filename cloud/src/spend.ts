@@ -21,7 +21,12 @@ export async function recordAccountSpend(env:Env,job:JobRow):Promise<boolean> {
       .bind(entry.id,job.user_id,job.id,JSON.stringify(entry),entry.at,job.user_id).run();
     // An agent's reservation becomes the ledger's figure. Idempotent, so the
     // reconcile pass repeating it for an already-recorded job changes nothing.
-    await settleCharge(env, job.id, entry);
+    // Isolated: the spend row above is already committed, so a settle failure
+    // (e.g. the charge or its table is gone) must not report that committed
+    // insert as unrecorded — reconcileSpend only retries jobs with no
+    // account_spend row, so a `false` here would hide a real spend entry
+    // from reconciliation forever, not just delay its settle.
+    try { await settleCharge(env, job.id, entry); } catch { /* best-effort settle; see comment above */ }
     return Boolean(inserted.meta.changes);
   } catch {
     return false;

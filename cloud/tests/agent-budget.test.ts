@@ -115,4 +115,15 @@ describe('agent budget', () => {
     await recordAccountSpend(env, db.prepare("SELECT * FROM account_jobs WHERE id='job-l'").get() as unknown as JobRow);
     expect(db.prepare("SELECT actual_micros FROM account_agent_charges WHERE job_id='job-l'").get()).toEqual({ actual_micros: 3000 });
   });
+
+  it('still reports a recorded spend entry as recorded when settling its charge fails', async () => {
+    const { db, env } = agentEnv();
+    const request = { provider: 'atlas', modelId: 'black-forest-labs/flux-schnell', mediaType: 'image', inputMode: 'text', prompt: 'p', values: {}, referenceIds: [] };
+    db.prepare(`INSERT INTO account_jobs (id,user_id,request_token,request_digest,provider,request_json,reservation_bytes,created_at,updated_at,state,result_json)
+      VALUES ('job-settle-fail',?,'settle-fail-token','d','atlas',?,1,1,1,'saved',?)`).run(OWNER, JSON.stringify(request), JSON.stringify({ sources: [{ objectKey: 'k' }] }));
+    db.exec('DROP TABLE account_agent_charges');
+    const job = db.prepare("SELECT * FROM account_jobs WHERE id='job-settle-fail'").get() as unknown as JobRow;
+    expect(await recordAccountSpend(env, job)).toBe(true);
+    expect(db.prepare("SELECT job_id FROM account_spend WHERE job_id='job-settle-fail'").get()).toEqual({ job_id: 'job-settle-fail' });
+  });
 });
