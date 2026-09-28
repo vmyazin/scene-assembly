@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { acceptJob } from '../src/jobs';
+import { reserveCharge } from '../src/mcp/budget';
+import { agentJobToken } from '../src/mcp/tools/jobs';
 import { storeUpload } from '../src/uploads';
 import { agentEnv, connectProvider, OWNER, seedAgent, seedAsset, seedUser } from './agent-fixtures';
 import { connectAgent, fakeTime, structured } from './mcp-harness';
@@ -13,6 +15,8 @@ function setup(settings = {}) {
   return { db, env, objects, create, agent: seedAgent(env, settings) };
 }
 const flux = { provider: 'atlas', modelId: 'black-forest-labs/flux-schnell', mediaType: 'image', inputMode: 'text', prompt: 'a red kite' };
+const fluxRequestJson = () => JSON.stringify({ ...flux, values: {}, referenceIds: [] });
+const seedance = { provider: 'atlas', modelId: 'bytedance/seedance-2.0-fast/text-to-video', mediaType: 'video', inputMode: 'text', prompt: 'x', values: { size: '720p', durationSeconds: 10 } };
 const seedreamEdit = (references: { assetId?: string; uploadId?: string }[]) =>
   ({ provider: 'atlas', modelId: 'bytedance/seedream-v5.0-pro/edit', mediaType: 'image', inputMode: 'image', prompt: 'x', references });
 const local = { provider: 'local-test' as const, modelId: 'local-test', mediaType: 'image' as const, inputMode: 'text' as const, prompt: 'p', values: {}, referenceIds: [] };
@@ -178,6 +182,139 @@ describe('generate', () => {
     const result = await (await connectAgent(env, await agent)).callTool({ name: 'generate', arguments: seedreamEdit([{ uploadId: staged.id }]) });
     expect(structured(result)).toMatchObject({ code: 'active_jobs' });
     expect(db.prepare('SELECT state FROM account_uploads WHERE id = ?').get(staged.id)).toEqual({ state: 'ready' });
+  });
+
+  // Fix round 2, the open Critical: reserveCharge's created:false fallback
+  // used to let a sibling's still-held reservation stand in for THIS call's
+  // own budget check, so a second, differently priced request could ride in
+  // on a cheap reservation someone else made. (iii-a) from the reviewer's
+  // probe: the sibling never gets far enough to accept a job, so the second
+  // call must refuse rather than spend the sibling's room.
+  it('refuses with request_in_progress when a sibling call still holds the reservation for this key', async () => {
+    const { db, env, agent: agentP } = setup({ budgetUsd: 0.5 });
+    const agent = await agentP;
+    const token = await agentJobToken(agent.id, 'sibling-holds');
+    expect(await reserveCharge(env, agent, token, { costUsd: 0.003, confidence: 'estimated' })).toMatchObject({ ok: true, created: true });
+    const client = await connectAgent(env, agent);
+    const result = await client.callTool({ name: 'generate', arguments: { ...seedance, idempotencyKey: 'sibling-holds' } });
+    expect(structured(result)).toMatchObject({ code: 'request_in_progress', retryable: true });
+    expect(jobs(db)).toHaveLength(0);
+    expect(charges(db)).toHaveLength(1); // only the sibling's original reservation — no new one
+  });
+
+  // (iii-b) from the probe: even if the sibling's reservation is dropped
+  // (its own refusal running concurrently) at the worst possible moment —
+  // right as this call re-reads for a job — this call must still never end
+  // up accepting a job for free.
+  it('never creates an uncharged job when the sibling\'s reservation drops mid-flight', async () => {
+    const { db, env, agent: agentP } = setup({ budgetUsd: 0.5 });
+    const agent = await agentP;
+    const token = await agentJobToken(agent.id, 'sibling-drops');
+    await reserveCharge(env, agent, token, { costUsd: 0.003, confidence: 'estimated' });
+    const originalPrepare = env.DB.prepare.bind(env.DB);
+    let seen = 0;
+    const spy = vi.spyOn(env.DB, 'prepare').mockImplementation(((query: string) => {
+      if (query === 'SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?') {
+        seen += 1;
+        // 1st: the up-front existing lookup (no job yet). 2nd: the re-read
+        // after reserveCharge returns created:false. Simulate the sibling's
+        // own refusal dropping its reservation exactly then.
+        if (seen === 2) db.prepare('DELETE FROM account_agent_charges WHERE id = ? AND job_id IS NULL').run(token);
+      }
+      return originalPrepare(query);
+    }) as typeof env.DB.prepare);
+    const client = await connectAgent(env, agent);
+    const result = await client.callTool({ name: 'generate', arguments: { ...seedance, idempotencyKey: 'sibling-drops' } });
+    spy.mockRestore();
+    expect(structured(result)).toMatchObject({ code: 'request_in_progress' });
+    expect(jobs(db)).toHaveLength(0);
+    expect(charges(db)).toHaveLength(0);
+  });
+
+  // Only the call that created a reservation may resolve references and
+  // accept a job; a call that finds one already held (created:false) must
+  // resume the job it names, not just refuse, once that job exists.
+  it('resumes the sibling\'s job once it exists, for a call that only ever sees created:false', async () => {
+    const { db, env, agent: agentP } = setup();
+    const agent = await agentP;
+    const token = await agentJobToken(agent.id, 'sibling-ready');
+    const originalPrepare = env.DB.prepare.bind(env.DB);
+    const spy = vi.spyOn(env.DB, 'prepare').mockImplementation(((query: string) => {
+      // Right before this call's own reserveCharge INSERT runs, simulate a
+      // sibling's whole flow (reserve, accept, attach) having already landed.
+      if (query.startsWith('INSERT INTO account_agent_charges')) {
+        db.prepare(`INSERT INTO account_jobs (id,user_id,request_token,request_digest,provider,request_json,reservation_bytes,created_at,updated_at,agent_id)
+          VALUES ('sibling-job',?,?,'sibling-digest','atlas',?,1,1,1,?)`).run(OWNER, token, fluxRequestJson(), agent.id);
+        db.prepare('INSERT INTO account_agent_charges (id,agent_id,job_id,estimate_micros,actual_micros,confidence,released,at) VALUES (?,?,?,?,?,?,0,?)')
+          .run(token, agent.id, 'sibling-job', 3000, null, 'estimated', 1);
+      }
+      return originalPrepare(query);
+    }) as typeof env.DB.prepare);
+    const client = await connectAgent(env, agent);
+    const result = await client.callTool({ name: 'generate', arguments: { ...flux, idempotencyKey: 'sibling-ready' } });
+    spy.mockRestore();
+    expect(structured(result)).toMatchObject({ job: { id: 'sibling-job' } });
+    expect(jobs(db)).toHaveLength(1);
+    expect(charges(db)).toHaveLength(1);
+  });
+
+  // Fix round 2, Minor leftover (jobs.ts:101-103): acceptJob can throw after
+  // its own write already committed, if its own internal read-back is what
+  // failed. The job that now exists under this token is THIS call's own —
+  // only this call was ever allowed to reach acceptJob for it — so it must be
+  // finished exactly as the normal path would, never discarded or dropped.
+  it('finishes the job when acceptJob commits but its own read-back throws', async () => {
+    const { db, env, objects, agent } = setup();
+    objects.set(seedAsset(db, { id: 'asset-v', jobId: null, bytes: PNG.length }), { bytes: PNG, contentType: 'image/png' });
+    const originalPrepare = env.DB.prepare.bind(env.DB);
+    let seen = 0;
+    const spy = vi.spyOn(env.DB, 'prepare').mockImplementation(((query: string) => {
+      if (query === 'SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?') {
+        seen += 1;
+        // 1: generate's existing lookup. 2: acceptJob's own existing check.
+        // 3: acceptJob's own read-back after its batch has already committed.
+        if (seen === 3) throw new Error('transient D1 read failure');
+      }
+      return originalPrepare(query);
+    }) as typeof env.DB.prepare);
+    const result = await (await connectAgent(env, await agent)).callTool({ name: 'generate', arguments: seedreamEdit([{ assetId: 'asset-v' }]) });
+    spy.mockRestore();
+    expect(result.isError).toBeFalsy();
+    const out = structured<{ job: { id: string } }>(result);
+    expect(jobs(db)).toHaveLength(1);
+    expect(jobs(db)[0]).toMatchObject({ id: out.job.id });
+    expect(charges(db)[0]).toMatchObject({ job_id: out.job.id, released: 0 });
+    expect(readyUploads(db)).toBe(1); // this call's own copy — kept, not discarded
+  });
+
+  // The safety net the "own job" check above sits in front of: a job under
+  // this token that does NOT reference any of this call's own copies really
+  // is someone else's. Only then are the copies unused and the charge someone
+  // else's to keep.
+  it('discards this call\'s copies but keeps the charge when another job already won the token', async () => {
+    const { db, env, objects, agent } = setup();
+    const agentRow = await agent;
+    objects.set(seedAsset(db, { id: 'asset-w', jobId: null, bytes: PNG.length }), { bytes: PNG, contentType: 'image/png' });
+    const token = await agentJobToken(agentRow.id, 'foreign-wins');
+    const originalPrepare = env.DB.prepare.bind(env.DB);
+    const spy = vi.spyOn(env.DB, 'prepare').mockImplementation(((query: string) => {
+      // Right before acceptJob's own INSERT attempt, plant a foreign job
+      // under the same token — as if some other acceptance had already
+      // claimed it. This single-threaded harness cannot reproduce the real
+      // race directly (D1 serializes the conditional INSERT itself), so the
+      // plant stands in for whatever real-world condition would land one.
+      if (query.startsWith('SELECT id,mime_type FROM account_uploads')) {
+        db.prepare(`INSERT INTO account_jobs (id,user_id,request_token,request_digest,provider,request_json,reservation_bytes,created_at,updated_at)
+          VALUES ('foreign-job',?,?,'foreign-digest','atlas',?,1,1,1)`)
+          .run(OWNER, token, JSON.stringify({ provider: 'atlas', modelId: 'foreign-model', mediaType: 'image', inputMode: 'text', prompt: 'y', values: {}, referenceIds: [] }));
+      }
+      return originalPrepare(query);
+    }) as typeof env.DB.prepare);
+    const result = await (await connectAgent(env, agentRow)).callTool({ name: 'generate', arguments: { ...seedreamEdit([{ assetId: 'asset-w' }]), idempotencyKey: 'foreign-wins' } });
+    spy.mockRestore();
+    expect(structured(result)).toMatchObject({ code: 'token_conflict' });
+    expect(charges(db)[0]).toMatchObject({ released: 0 }); // kept — it belongs to the foreign job now
+    expect(readyUploads(db)).toBe(0); // this call's own copy discarded
   });
 });
 

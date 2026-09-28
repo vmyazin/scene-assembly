@@ -1,5 +1,5 @@
 import * as z from 'zod';
-import type { CloudJobRequest, CloudJobState } from '../../../../lib/account/contracts';
+import { jobInputIds, type CloudJobRequest, type CloudJobState } from '../../../../lib/account/contracts';
 import { estimateCloudJob } from '../../../../lib/spend/estimate';
 import { jobAssets } from '../../assets';
 import { acceptJob, AccountError, dispatchJob, getJob, jobView, type JobRow } from '../../jobs';
@@ -35,6 +35,26 @@ async function started(ctx: ToolContext, job: JobRow, estimate: ReturnType<typeo
   };
 }
 
+/** Shared by the up-front existing-token lookup and the reserveCharge
+ *  created:false path: a job already sitting under this token is either the
+ *  exact same run (resume it) or a genuine conflict (refuse either way). */
+function resumeExistingJob(ctx: ToolContext, job: JobRow, request: CloudJobRequest, estimate: ReturnType<typeof estimateCloudJob>) {
+  if (job.deleted) throw new AccountError('That idempotencyKey belongs to a job that was removed. Use a new idempotencyKey.', 409, 'token_conflict');
+  if (!sameRun(JSON.parse(job.request_json), request)) throw new AccountError('Submission token already used.', 409, 'token_conflict');
+  return started(ctx, job, estimate);
+}
+
+/** True when `job`'s own saved request uses any upload id in `copiedIds` — ids
+ *  only this call's resolveReferences could have produced (each copy is a
+ *  fresh crypto.randomUUID()), so this can only be true when `job` is this
+ *  call's own job: acceptJob's write committed and its own read-back then
+ *  threw, never a sibling's independently resolved copies. */
+function jobUsesAnyOf(job: JobRow, copiedIds: string[]): boolean {
+  if (!copiedIds.length) return false;
+  const used = new Set(jobInputIds(JSON.parse(job.request_json) as CloudJobRequest));
+  return copiedIds.some(id => used.has(id));
+}
+
 export const generate = defineTool({
   name: 'generate',
   title: 'Generate an image or video',
@@ -52,13 +72,22 @@ export const generate = defineTool({
     // than fall through to reserveCharge, which would book a second charge for
     // a token that already named a (now gone) job.
     const existing = await env.DB.prepare('SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?').bind(agent.user_id, token).first<JobRow>();
-    if (existing) {
-      if (existing.deleted) throw new AccountError('That idempotencyKey belongs to a job that was removed. Use a new idempotencyKey.', 409, 'token_conflict');
-      if (!sameRun(JSON.parse(existing.request_json), prepared.request)) throw new AccountError('Submission token already used.', 409, 'token_conflict');
-      return started(ctx, existing, estimate);
-    }
+    if (existing) return resumeExistingJob(ctx, existing, prepared.request, estimate);
     const outcome = await reserveCharge(env, agent, token, estimate, ctx.now());
     if (!outcome.ok) throw budgetRefusal(outcome, estimate);
+    if (!outcome.created) {
+      // A sibling call already holds this exact reservation. Only the call
+      // that created it may resolve references and accept a job — otherwise
+      // this call would go on to accept ITS OWN (possibly bigger, possibly
+      // over-limit) request under a reservation someone else's budget check
+      // already passed for a different one, or, if the sibling then drops it
+      // on its own refusal, accept a job for free. Re-read instead: the
+      // sibling's job may already exist (resume it), or the token may simply
+      // still be starting.
+      const job = await env.DB.prepare('SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?').bind(agent.user_id, token).first<JobRow>();
+      if (job) return resumeExistingJob(ctx, job, prepared.request, estimate);
+      throw new AccountError('A request with this idempotencyKey is still starting. Retry in a few seconds, or call list_jobs.', 425, 'request_in_progress');
+    }
 
     // Everything from here down to acceptJob returning a job is undone on
     // failure: a reservation whose job never got made paid for nothing, and a
@@ -91,17 +120,36 @@ export const generate = defineTool({
     try {
       job = await acceptJob(env, agent.user_id, token, request, agent.id);
     } catch (error) {
-      // Two concurrent calls with the same idempotencyKey can each resolve an
-      // { assetId } reference into a different copied upload id, so their
-      // digests differ and acceptJob's own uniqueness check picks one winner;
-      // the loser lands here with a token_conflict even though a job now
-      // exists under this token. That job — not this call — owns the shared
-      // charge (the winner's own attachCharge claims it), so only the copies
-      // this call made are ours to discard.
-      const winner = await env.DB.prepare('SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?').bind(agent.user_id, token).first<JobRow>();
-      if (winner) {
+      // acceptJob can throw after its own write already committed — its
+      // internal read-back can itself fail transiently — in which case the
+      // job that now exists under this token is THIS call's own, not a
+      // sibling's: only this call was ever allowed to reach acceptJob for it
+      // (the created:false path above never does), so the only other job
+      // that could legitimately be sitting here is this one. Recognize it by
+      // referencing one of the uploads this call itself just copied — no
+      // other job ever could, since each copy is a fresh id — and finish
+      // exactly as the normal path would, never discarding or dropping.
+      //
+      // Guard the re-read itself: if IT throws, that is a fresh problem with
+      // the read path, not evidence about the write that already committed —
+      // surface the original acceptJob error and touch nothing.
+      let reread: JobRow | null;
+      try {
+        reread = await env.DB.prepare('SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?').bind(agent.user_id, token).first<JobRow>() ?? null;
+      } catch {
+        throw error;
+      }
+      if (reread && jobUsesAnyOf(reread, references.copiedIds)) {
+        await attachCharge(env, token, reread.id);
+        if (!reread.dispatched) await dispatchJob(env, reread).catch(() => {});
+        return started(ctx, (await getJob(env, reread.id, agent.user_id)) ?? reread, estimate);
+      }
+      if (reread) {
+        // A job under this token that does not use any of our own copies is
+        // someone else's — it owns the shared charge via its own
+        // attachCharge, so only the copies this call made are ours to discard.
         if (references.copiedIds.length) await discardUploads(env, agent.user_id, references.copiedIds).catch(() => {});
-        if (sameRun(JSON.parse(winner.request_json), prepared.request)) return started(ctx, winner, estimate);
+        if (sameRun(JSON.parse(reread.request_json), prepared.request)) return started(ctx, reread, estimate);
         throw error;
       }
       if (outcome.created) await dropCharge(env, token).catch(() => {});
