@@ -17,6 +17,7 @@ import { cleanupImports, importRoutes, publicImportMedia } from './imports';
 import { applyIngress, cleanupExpiredIngress } from './ingress';
 import { cleanupOrphanCharges } from './mcp/budget';
 import { agentRoutes } from './mcp/agent-routes';
+import { authorize, authorizationRoutes, cleanupAuthorizations, finish } from './mcp/auth';
 
 interface OAuthAttempt { verifier: string; nonce: string; return_to: string }
 const bootstrapped = new WeakMap<object, Promise<void>>();
@@ -47,6 +48,10 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if(importMediaResponse)return importMediaResponse;
     const url = new URL(request.url);
     const path = url.pathname;
+    // The browser legs of connecting an agent. Both are GETs the library sends the
+    // browser to; neither changes anything without the library's binding cookie.
+    if (path === '/oauth/authorize' && request.method === 'GET') return authorize(request, env);
+    if (path === '/oauth/finish' && request.method === 'GET') return finish(request, env);
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && request.headers.get('origin') !== env.APP_ORIGIN) return json({ error: 'Request origin is not allowed.' }, 403);
     const expectedOwner=request.headers.get('x-account-id');
     if(expectedOwner&&(await currentAccount(request,env))?.id!==expectedOwner)return json({error:'Your account changed. Refresh before continuing.'},409);
@@ -66,6 +71,8 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (connectionResponse) return connectionResponse;
     const agentResponse = await agentRoutes(request, env);
     if (agentResponse) return agentResponse;
+    const authorizationResponse = await authorizationRoutes(request, env);
+    if (authorizationResponse) return authorizationResponse;
     if (path === '/health' && request.method === 'GET') return json({ ok: true });
     if (path === '/api/account/session' && request.method === 'GET') {
       const account=await currentAccount(request,env);
@@ -134,6 +141,7 @@ export async function runScheduledMaintenance(env:Env) {
     ()=>cleanupObjects(env),
     ()=>cleanupExpiredIngress(env),
     ()=>cleanupOrphanCharges(env),
+    ()=>cleanupAuthorizations(env),
     ()=>env.DB.prepare('DELETE FROM account_oauth WHERE expires_at <= ?').bind(Date.now()).run(),
     ()=>env.DB.prepare('DELETE FROM account_sessions WHERE expires_at <= ?').bind(Date.now()).run(),
   ];

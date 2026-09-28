@@ -51,3 +51,11 @@ export function jobInputIds(request: Pick<CloudJobRequest, 'referenceIds' | 'sou
 
 /** One connected MCP client, as the account page's panel shows it. */
 export interface ConnectedAgent { id: string; name: string; connectedAt: number; lastUsedAt: number | null; budgetUsd: number; usedUsd: number; allowUnknownCost: boolean; allowDelete: boolean }
+
+/** A pending agent connection, as the consent page shows it. */
+export interface AgentAuthorizationView {
+  id: string; clientName: string; clientDomain: string | null; redirectHost: string; redirectIsLoopback: boolean; expiresAt: number;
+  unknownPriceProviders: { label: string; scope: 'all' | 'some' }[];
+  defaults: { budgetUsd: number; allowUnknownCost: boolean; allowDelete: boolean };
+  limits: { minUsd: number; maxUsd: number };
+}
