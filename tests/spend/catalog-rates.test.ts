@@ -43,6 +43,22 @@ describe('provider catalog rates', () => {
       'minimax/h3-developer/text-to-video': { usdByResolution: { '480P': 0.015, '768P': 0.015 }, per: 'second' },
       'minimax/h3-developer/image-to-video': { usdByResolution: { '480P': 0.015, '768P': 0.015 }, per: 'second' },
       'minimax/h3-developer/reference-to-video': { usdByResolution: { '480P': 0.015, '768P': 0.015 }, per: 'second' },
+      // Atlas quotes one starting rate per tier, so only the smallest size is
+      // priced and the rest record as unknown.
+      'ltx/ltx-2.3-fast/text-to-video': { usdByResolution: { '720p': 0.03 }, per: 'second' },
+      'ltx/ltx-2.3-fast/image-to-video': { usdByResolution: { '720p': 0.03 }, per: 'second' },
+      'ltx/ltx-2.3-pro/text-to-video': { usdByResolution: { '720p': 0.04 }, per: 'second' },
+      'ltx/ltx-2.3-pro/image-to-video': { usdByResolution: { '720p': 0.04 }, per: 'second' },
+      'ltx/ltx-2.5-fast/text-to-video': { usdByResolution: { '720p': 0.09 }, per: 'second' },
+      'ltx/ltx-2.5-fast/image-to-video': { usdByResolution: { '720p': 0.09 }, per: 'second' },
+      'ltx/ltx-2.5-pro/text-to-video': { usdByResolution: { '720p': 0.12 }, per: 'second' },
+      'ltx/ltx-2.5-pro/image-to-video': { usdByResolution: { '720p': 0.12 }, per: 'second' },
+      'luma/ray-3.2/text-to-video': { usdByResolution: { '540p': 0.06 }, per: 'second' },
+      'luma/ray-3.2/image-to-video': { usdByResolution: { '540p': 0.06 }, per: 'second' },
+      'luma/uni-1/text-to-image': { usd: 0.04, per: 'image' },
+      'luma/uni-1/edit': { usd: 0.043, per: 'image' },
+      'luma/uni-1-max/text-to-image': { usd: 0.1, per: 'image' },
+      'luma/uni-1-max/edit': { usd: 0.103, per: 'image' },
     });
   });
 
@@ -81,6 +97,25 @@ describe('Atlas billing settings', () => {
     ['fast', '1080p (upscaled)'], ['fast', '1440p (upscaled)'],
   ])('does not substitute the cheapest %s price for size %s', (tier, size) => {
     expect(resolveCatalogRate(findModel('atlas', `bytedance/seedance-2.0-${tier}/text-to-video`), 5, 1, { size }))
+      .toMatchObject({ costUsd: null, confidence: 'unknown' });
+  });
+
+  it.each([
+    ['ltx/ltx-2.3-fast/text-to-video', '720p', 20, 0.6],
+    ['ltx/ltx-2.5-pro/image-to-video', '720p', 10, 1.2],
+    ['luma/ray-3.2/text-to-video', '540p', 5, 0.3],
+  ])('prices %s at its starting size', (id, size, seconds, expected) => {
+    const figure = resolveCatalogRate(findModel('atlas', id), seconds, 1, { size });
+    expect(figure.costUsd).toBeCloseTo(expected, 6);
+    expect(figure.confidence).toBe('estimated');
+  });
+
+  it.each([
+    ['ltx/ltx-2.3-fast/text-to-video', '1080p'],
+    ['ltx/ltx-2.5-pro/text-to-video', '4K'],
+    ['luma/ray-3.2/image-to-video', '720p'],
+  ])('does not bill %s at %s from the starting rate', (id, size) => {
+    expect(resolveCatalogRate(findModel('atlas', id), 5, 1, { size }))
       .toMatchObject({ costUsd: null, confidence: 'unknown' });
   });
 

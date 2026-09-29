@@ -14,6 +14,7 @@ import {
   ATLAS_IMAGE_DIMENSIONS,
   ATLAS_SEEDREAM_DIMENSIONS,
   isGptImage25,
+  isLumaUni,
   isNanoBanana2,
   isSeedream,
   ratioDimensions,
@@ -95,6 +96,20 @@ function imageBody(request: ImageRequest): Record<string, unknown> {
       size: `${width}x${height}`,
       n: 1,
       ...(images.length ? { images } : {}),
+    };
+  }
+
+  if (isLumaUni(model)) {
+    // Luma's enum has no 3:2 or 2:3, and a value outside an enum is refused,
+    // so those two snap to the nearest shape it does publish. No ratio means
+    // square here, as for every other image model — Luma's own default is 16:9.
+    const snapped: Record<string, string> = { '3:2': '4:3', '2:3': '3:4' };
+    const ratio = request.aspectRatio ?? '1:1';
+    return {
+      ...base,
+      aspect_ratio: snapped[ratio] ?? ratio,
+      // One source image, as a string rather than an array.
+      ...(images.length && model.endsWith('/edit') ? { image: images[0] } : {}),
     };
   }
 
