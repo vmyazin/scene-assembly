@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ConnectedAgentsPanel from '@/components/account/ConnectedAgentsPanel';
 import { accountRequest } from '@/lib/account/client';
 import type { ConnectedAgent } from '@/lib/account/contracts';
+import { formatAbsoluteTime } from '@/lib/results/meta';
 
 vi.mock('@/lib/account/client', () => ({ accountRequest: vi.fn() }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -43,6 +44,22 @@ describe('connected agents panel', () => {
     expect(await screen.findByText('Claude Code')).toBeInTheDocument();
     expect(screen.getByText('https://mcp-sceneassembly.mzork.com/mcp')).toBeInTheDocument();
     expect(screen.getByText('$1.20 of $5.00 in the last 24 hours')).toBeInTheDocument();
+  });
+
+  // Every reconnect adds a row, so two rows with the same name are told apart
+  // by when each was connected and whether it is still in use.
+  it('says when each agent was connected and when it was last used', async () => {
+    const connectedAt = Date.UTC(2026, 8, 1, 15, 4);
+    answer([{ ...agent, connectedAt, lastUsedAt: Date.now() - 2 * 3_600_000 }]);
+    render(<ConnectedAgentsPanel ownerId="owner-1" />);
+    expect(await screen.findByRole('listitem')).toHaveTextContent(`Connected ${formatAbsoluteTime(connectedAt)} · Last used 2h ago`);
+  });
+
+  it('says an agent that has not made a call yet was never used', async () => {
+    const connectedAt = Date.UTC(2026, 8, 1, 15, 4);
+    answer([{ ...agent, connectedAt, lastUsedAt: null }]);
+    render(<ConnectedAgentsPanel ownerId="owner-1" />);
+    expect(await screen.findByRole('listitem')).toHaveTextContent(`Connected ${formatAbsoluteTime(connectedAt)} · Last used never`);
   });
 
   it('says when nothing is connected', async () => {

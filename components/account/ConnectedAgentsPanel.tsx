@@ -6,6 +6,8 @@ import { toast } from 'sonner';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { accountRequest } from '@/lib/account/client';
 import type { ConnectedAgent } from '@/lib/account/contracts';
+import { useElapsedSeconds } from '@/lib/jobs/use-elapsed';
+import { formatAbsoluteTime, formatRelativeTime } from '@/lib/results/meta';
 import { formatUsdTotal } from '@/lib/spend/format';
 
 interface AgentsResponse { accountId: string; mcpUrl: string | null; limits: { minUsd: number; maxUsd: number }; agents: ConnectedAgent[] }
@@ -123,6 +125,7 @@ function AgentRow({ agent, limits, disconnecting, onSave, onDisconnect }: { agen
   return (
     <li className="rounded-lg border border-[var(--border)] p-3">
       <p className="text-sm font-medium text-[var(--foreground)]">{agent.name}</p>
+      <AgentDates connectedAt={agent.connectedAt} lastUsedAt={agent.lastUsedAt} />
       <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">{formatUsdTotal(agent.usedUsd)} of {formatUsdTotal(agent.budgetUsd)} in the last 24 hours</p>
       <label htmlFor={`${id}-limit`} className="field-sublabel mt-3 block">Limit per 24 hours</label>
       <input id={`${id}-limit`} type="number" inputMode="decimal" min={limits.minUsd} max={limits.maxUsd} step="0.5" value={budget} onChange={event => setBudget(event.target.value)} className="mt-1 w-full" />
@@ -139,5 +142,19 @@ function AgentRow({ agent, limits, disconnecting, onSave, onDisconnect }: { agen
         <button type="button" disabled={disconnecting} onClick={onDisconnect} className="btn-secondary flex flex-1 justify-center text-red-300">Disconnect</button>
       </div>
     </li>
+  );
+}
+
+/** Every reconnect adds a row under the same name, so these two dates are what
+ *  tells a working agent from last month's. Its own component so the relative
+ *  clock's once-a-second tick repaints this line, not the row's form. */
+function AgentDates({ connectedAt, lastUsedAt }: Pick<ConnectedAgent, 'connectedAt' | 'lastUsedAt'>) {
+  const secondsAgo = useElapsedSeconds(lastUsedAt ?? undefined);
+  return (
+    <p className="mt-0.5 text-xs text-[var(--foreground-subtle)]">
+      Connected <time dateTime={new Date(connectedAt).toISOString()}>{formatAbsoluteTime(connectedAt)}</time>
+      {' · Last used '}
+      {lastUsedAt === null ? 'never' : <time dateTime={new Date(lastUsedAt).toISOString()} title={formatAbsoluteTime(lastUsedAt)}>{formatRelativeTime(secondsAgo)}</time>}
+    </p>
   );
 }
