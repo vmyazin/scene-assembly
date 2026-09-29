@@ -61,7 +61,9 @@ export const generate = defineTool({
   title: 'Generate an image or video',
   description: 'Start a background image or video job with this account\'s connected provider key. It returns at once with a job; call get_job with waitSeconds to follow it. Settings left out take the model\'s defaults, written into the request so the price and the run match. The estimate is charged against this agent\'s 24-hour spend limit before the job starts. Pass an idempotencyKey (any string you choose, reused on retry) so a retried call cannot start and pay for a second job.',
   kind: 'submit',
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  // Not idempotent as such: only a call that passes an idempotencyKey is, and a
+  // client trusting the hint could retry a keyless call into a second paid job.
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   input: z.object({ ...requestShape, idempotencyKey: z.string().min(1).max(200).optional() }),
   async run(ctx, args) {
     const { env, agent } = ctx;

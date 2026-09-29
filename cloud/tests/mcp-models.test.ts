@@ -35,6 +35,9 @@ describe('the MCP endpoint', () => {
       expect(tool.description!.length).toBeGreaterThan(40);
       expect(tool.annotations?.readOnlyHint).toBe(true);
     }
+    // Only a call that passes an idempotencyKey is safe to repeat; a keyless
+    // retry books and pays for a second job, so the hint must not promise it.
+    expect(tools.find(candidate => candidate.name === 'generate')!.annotations?.idempotentHint).toBe(false);
   });
 
   it("still advertises each tool's real input schema, even though the copy handed to registerTool accepts anything", async () => {
