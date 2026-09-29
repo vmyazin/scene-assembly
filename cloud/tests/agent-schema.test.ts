@@ -28,6 +28,15 @@ describe('agent schema', () => {
     for (const statement of AGENT_SCHEMA.split(';').map(normalize).filter(Boolean)) expect(migration).toContain(statement);
   });
 
+  // 0013 becomes immutable once production applies it, so its comments are
+  // permanent: they carry the rationale, word for word the same in both texts,
+  // and nothing about how the review that produced them went.
+  it('keeps the comments identical and free of review-process wording', () => {
+    const migration = readFileSync(new URL('0013_agents.sql', migrations), 'utf8');
+    expect(migration).toContain(AGENT_SCHEMA.trim());
+    for (const text of [migration, AGENT_SCHEMA]) expect(text).not.toMatch(/fix round|finding \d/i);
+  });
+
   it('gives a fresh local database the agent tables and the job column', () => {
     db = new DatabaseSync(':memory:');
     db.exec(LOCAL_SCHEMA);

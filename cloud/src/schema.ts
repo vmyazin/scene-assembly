@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS account_agent_authorizations (
   settings_json TEXT,
   -- One-time secret (hashed) for the approving browser, checked at /oauth/finish
   -- alongside the library's own binding cookie: the cookie proves which browser
-  -- *started* the request, not which one *approved* it (fix round 1, finding 1).
+  -- *started* the request, not which one *approved* it.
   finish_hash TEXT,
   expires_at INTEGER NOT NULL
 );
