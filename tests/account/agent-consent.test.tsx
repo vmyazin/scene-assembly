@@ -6,6 +6,7 @@ import { accountRequest } from '@/lib/account/client';
 import { RouteError } from '@/lib/providers/route-error';
 import { useAccountStore } from '@/store/useAccountStore';
 import type { AgentAuthorizationView } from '@/lib/account/contracts';
+import { UNPRICED_MODELS_HINT } from '@/lib/account/agent-copy';
 
 const replace = vi.fn();
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace }) }));
@@ -47,6 +48,19 @@ describe('agent consent page', () => {
     expect(screen.getByText('Affects: Kie.ai and some fal.ai models.')).toBeInTheDocument();
     expect(screen.getByLabelText(/allow models without a published price/i)).not.toBeChecked();
     expect(screen.getByLabelText(/allow deleting files from your library/i)).not.toBeChecked();
+  });
+
+  it('says in plain words everything the agent will be able to do', async () => {
+    signIn(); answer();
+    render(<AgentConsent requestId="req-1" />);
+    await screen.findByText('Claude Code');
+    const abilities = screen.getAllByRole('listitem').map(item => item.textContent);
+    expect(abilities).toEqual(expect.arrayContaining([
+      'Cancel, resume or stop tracking jobs, including ones you started in the browser',
+      'Copy files from any web link, including ones it finds itself, into your account’s temporary storage',
+      'Read your providers’ remaining balances with your connected keys',
+    ]));
+    expect(screen.getByText(UNPRICED_MODELS_HINT)).toBeInTheDocument();
   });
 
   it('names a verified domain instead', async () => {

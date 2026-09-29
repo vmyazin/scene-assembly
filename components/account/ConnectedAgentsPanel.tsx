@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { accountRequest } from '@/lib/account/client';
 import type { ConnectedAgent } from '@/lib/account/contracts';
+import { UNPRICED_MODELS_HINT } from '@/lib/account/agent-copy';
 import { useElapsedSeconds } from '@/lib/jobs/use-elapsed';
 import { formatAbsoluteTime, formatRelativeTime } from '@/lib/results/meta';
 import { formatUsdTotal } from '@/lib/spend/format';
@@ -131,8 +132,12 @@ function AgentRow({ agent, limits, disconnecting, onSave, onDisconnect }: { agen
       <input id={`${id}-limit`} type="number" inputMode="decimal" min={limits.minUsd} max={limits.maxUsd} step="0.5" value={budget} onChange={event => setBudget(event.target.value)} className="mt-1 w-full" />
       <label htmlFor={`${id}-unknown`} className="mt-2 flex items-center justify-between gap-3 text-xs text-[var(--foreground-muted)]">
         Allow unpriced models
-        <input id={`${id}-unknown`} type="checkbox" checked={allowUnknownCost} onChange={event => setAllowUnknownCost(event.target.checked)} className="h-4 w-4 accent-[var(--neon-cyan)]" />
+        <input id={`${id}-unknown`} type="checkbox" aria-describedby={`${id}-unknown-hint`} checked={allowUnknownCost} onChange={event => setAllowUnknownCost(event.target.checked)} className="h-4 w-4 accent-[var(--neon-cyan)]" />
       </label>
+      {/* The consent page's own sentence: switched on here later, these runs
+          go outside the dollar limit just the same. The panel has no list of
+          the providers it affects, so the sentence stands alone. */}
+      <p id={`${id}-unknown-hint`} className="mt-1 text-xs text-[var(--foreground-subtle)]">{UNPRICED_MODELS_HINT}</p>
       <label htmlFor={`${id}-delete`} className="mt-2 flex items-center justify-between gap-3 text-xs text-[var(--foreground-muted)]">
         Allow deleting files
         <input id={`${id}-delete`} type="checkbox" checked={allowDelete} onChange={event => setAllowDelete(event.target.checked)} className="h-4 w-4 accent-[var(--neon-cyan)]" />

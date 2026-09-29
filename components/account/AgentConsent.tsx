@@ -7,6 +7,7 @@ import { AccountSurface } from './AccountSurface';
 import { accountRequest } from '@/lib/account/client';
 import { RouteError } from '@/lib/providers/route-error';
 import type { AgentAuthorizationView } from '@/lib/account/contracts';
+import { UNPRICED_MODELS_HINT } from '@/lib/account/agent-copy';
 import { formatUsdTotal } from '@/lib/spend/format';
 import { useAccountStore } from '@/store/useAccountStore';
 
@@ -104,7 +105,10 @@ export default function AgentConsent({ requestId, navigate = url => window.locat
             </p>
             <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-[var(--foreground-muted)]">
               <li>Start image and video jobs with the provider keys connected to this account</li>
+              <li>Cancel, resume or stop tracking jobs, including ones you started in the browser</li>
+              <li>Copy files from any web link, including ones it finds itself, into your account’s temporary storage</li>
               <li>See your jobs, library and spend</li>
+              <li>Read your providers’ remaining balances with your connected keys</li>
               <li>It cannot see or change your provider keys</li>
             </ul>
             <label htmlFor="agent-budget" className="field-label mt-6 block">Spend limit per 24 hours</label>
@@ -113,7 +117,7 @@ export default function AgentConsent({ requestId, navigate = url => window.locat
             <label htmlFor="agent-unknown" className="mt-4 flex items-center justify-between gap-4 rounded-lg border border-[var(--border)] bg-[var(--background-elevated)]/60 p-3">
               <span>
                 <span className="block text-sm font-medium text-[var(--foreground)]">Allow models without a published price</span>
-                <span className="mt-1 block text-xs text-[var(--foreground-muted)]">These don’t count toward the limit unless the provider reports what they cost.</span>
+                <span className="mt-1 block text-xs text-[var(--foreground-muted)]">{UNPRICED_MODELS_HINT}</span>
                 {affects.length > 0 && <span className="mt-1 block text-xs text-[var(--foreground-muted)]">Affects: {list.format(affects)}.</span>}
               </span>
               <input id="agent-unknown" type="checkbox" checked={allowUnknownCost} onChange={event => setAllowUnknownCost(event.target.checked)} className="h-4 w-4 accent-[var(--neon-cyan)]" />

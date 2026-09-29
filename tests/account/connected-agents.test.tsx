@@ -5,6 +5,7 @@ import ConnectedAgentsPanel from '@/components/account/ConnectedAgentsPanel';
 import { accountRequest } from '@/lib/account/client';
 import type { ConnectedAgent } from '@/lib/account/contracts';
 import { formatAbsoluteTime } from '@/lib/results/meta';
+import { UNPRICED_MODELS_HINT } from '@/lib/account/agent-copy';
 
 vi.mock('@/lib/account/client', () => ({ accountRequest: vi.fn() }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -88,6 +89,16 @@ describe('connected agents panel', () => {
     await waitFor(() => expect(accountRequest).toHaveBeenCalledWith('agents/agent-1', expect.objectContaining({ method: 'POST' })));
     const [, init] = vi.mocked(accountRequest).mock.calls.find(([path, options]) => path === 'agents/agent-1' && options?.method === 'POST')!;
     expect(JSON.parse(String(init!.body))).toEqual({ budgetUsd: 10, allowUnknownCost: false, allowDelete: true });
+  });
+
+  // Switched on later from here, the toggle lets models run outside the dollar
+  // limit, so it says so in the consent page's own words.
+  it('says what allowing unpriced models means, as the consent page does', async () => {
+    expect(UNPRICED_MODELS_HINT).toBe('These don’t count toward the limit unless the provider reports what they cost.');
+    answer();
+    render(<ConnectedAgentsPanel ownerId="owner-1" />);
+    const row = within(await screen.findByRole('listitem'));
+    expect(row.getByLabelText('Allow unpriced models')).toHaveAccessibleDescription(UNPRICED_MODELS_HINT);
   });
 
   it('keeps Save disabled until something changes', async () => {
