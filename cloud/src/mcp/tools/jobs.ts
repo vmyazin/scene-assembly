@@ -2,7 +2,8 @@ import * as z from 'zod';
 import { jobInputIds, type CloudJobRequest, type CloudJobState } from '../../../../lib/account/contracts';
 import { estimateCloudJob } from '../../../../lib/spend/estimate';
 import { jobAssets } from '../../assets';
-import { acceptJob, AccountError, dispatchJob, getJob, jobView, type JobRow } from '../../jobs';
+import { acceptJob, AccountError, cancelQueuedJob, dismissAttentionJob, dispatchJob, getJob, jobView, type JobRow } from '../../jobs';
+import { resumeJob } from '../../job-routes';
 import { mediaAccess } from '../../media';
 import { hash, randomToken } from '../../security';
 import { discardUploads } from '../../uploads';
@@ -226,5 +227,58 @@ export const listJobs = defineTool({
       .bind(ctx.agent.user_id, states, states, limit).all<JobRow>();
     const jobs = rows.results.map(jobView);
     return { structured: { jobs }, text: `${jobs.length} job${jobs.length === 1 ? '' : 's'}.` };
+  },
+});
+
+const jobId = z.object({ jobId: z.string().min(1).max(64) });
+
+/** Ownership is checked before any state change, so another account's job
+ *  always reads not_found rather than leaking a state-conflict refusal. */
+async function ownJob(ctx: ToolContext, id: string) {
+  const job = await getJob(ctx.env, id, ctx.agent.user_id);
+  if (!job) throw new ToolError('not_found', 'No job with that id on this account.');
+  return job;
+}
+
+export const cancelJob = defineTool({
+  name: 'cancel_job',
+  title: 'Cancel a job',
+  description: 'Cancel a job that is still queued, before the provider has it. Its charge against this agent\'s limit is released. A job the provider already started cannot be cancelled and stays tracked.',
+  kind: 'write',
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  input: jobId,
+  async run(ctx, args) {
+    await ownJob(ctx, args.jobId);
+    const job = await cancelQueuedJob(ctx.env, args.jobId, ctx.agent.user_id);
+    if (!job) throw new ToolError('not_found', 'No job with that id on this account.');
+    return { structured: { job: jobView(job) }, text: `Job ${job.id} is cancelled.` };
+  },
+});
+
+export const resumeJobTool = defineTool({
+  name: 'resume_job',
+  title: 'Resume a job',
+  description: 'Try again on a job that needs attention, when the reason it stopped can be fixed by trying again (the job\'s failureReason says). Refused for results that cannot be recovered and after three attempts; dismiss_job clears those.',
+  kind: 'write',
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  input: jobId,
+  async run(ctx, args) {
+    const job = await resumeJob(ctx.env, await ownJob(ctx, args.jobId), ctx.agent.user_id);
+    return { structured: { job: jobView(job) }, text: `Job ${job.id} is ${job.state} again.` };
+  },
+});
+
+export const dismissJob = defineTool({
+  name: 'dismiss_job',
+  title: 'Stop tracking a job',
+  description: 'Stop tracking a job that needs attention. The provider may still finish it and charge for it. Pass remove: true to take it off the list as well.',
+  kind: 'write',
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  input: z.object({ jobId: z.string().min(1).max(64), remove: z.boolean().optional() }),
+  async run(ctx, args) {
+    await ownJob(ctx, args.jobId);
+    const job = await dismissAttentionJob(ctx.env, args.jobId, ctx.agent.user_id, args.remove === true);
+    if (!job) throw new ToolError('not_found', 'No job with that id on this account.');
+    return { structured: { job: jobView(job), removed: args.remove === true }, text: `Job ${job.id} is no longer tracked.` };
   },
 });
