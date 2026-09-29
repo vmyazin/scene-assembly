@@ -386,7 +386,7 @@ needs its own namespace, migration, and domain step, beyond the Worker deploy ab
 2. `pnpm --dir cloud exec wrangler d1 migrations apply scene-assembly-accounts --remote`, which
    applies `0013_agents.sql`. The deploy workflow stops on a pending migration rather than
    applying it.
-3. Confirm `mcp-sceneassembly.mzork.com` is attached as a custom domain on the Worker, or skip
+3. Confirm `mcp-sceneassembly.smoxu.com` is attached as a custom domain on the Worker, or skip
    this step when `MCP_ORIGIN` is the workers.dev hostname.
 4. Merge; the Worker deploys, then the app. Between the two, `/oauth/authorize` redirects to a
    page that is not there yet, which is harmless because the MCP URL is only published by the

@@ -8,7 +8,7 @@ describe('the setup guide page', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Connect an agent');
     expect(container.querySelector('h2#tools')).toHaveTextContent('Tools');
     expect(container.querySelector('h2#errors')).toHaveTextContent('Errors');
-    expect(container.textContent).toContain('https://mcp-sceneassembly.mzork.com/mcp');
+    expect(container.textContent).toContain('https://mcp-sceneassembly.smoxu.com/mcp');
     // Markdown that reached the page unrendered would show up as literal syntax.
     expect(container.textContent).not.toMatch(/^#+ /m);
     expect(screen.getByRole('link', { name: 'Back to studio' })).toHaveAttribute('href', '/');

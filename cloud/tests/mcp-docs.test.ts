@@ -181,11 +181,11 @@ describe('the MCP setup guide', () => {
 });
 
 describe('pointers to the guide', () => {
-  const libraryMetadata = () => new Response(JSON.stringify({ resource: 'https://mcp-sceneassembly.mzork.com/mcp', resource_name: 'Scene Assembly' }), {
+  const libraryMetadata = () => new Response(JSON.stringify({ resource: 'https://mcp-sceneassembly.smoxu.com/mcp', resource_name: 'Scene Assembly' }), {
     headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
   });
-  const metadataRequest = (method = 'GET') => new Request('https://mcp-sceneassembly.mzork.com/.well-known/oauth-protected-resource/mcp', { method });
-  const production = () => agentEnv({ APP_ORIGIN: 'https://sceneassembly.mzork.com', MCP_ORIGIN: 'https://mcp-sceneassembly.mzork.com' }).env;
+  const metadataRequest = (method = 'GET') => new Request('https://mcp-sceneassembly.smoxu.com/.well-known/oauth-protected-resource/mcp', { method });
+  const production = () => agentEnv({ APP_ORIGIN: 'https://sceneassembly.mzork.com', MCP_ORIGIN: 'https://mcp-sceneassembly.smoxu.com' }).env;
 
   it('adds resource_documentation to the protected-resource metadata, keeping status and headers', async () => {
     const response = await withResourceDocumentation(metadataRequest(), libraryMetadata(), production());
@@ -193,7 +193,7 @@ describe('pointers to the guide', () => {
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
     expect(response.headers.get('Content-Type')).toBe('application/json');
     expect(await response.json()).toEqual({
-      resource: 'https://mcp-sceneassembly.mzork.com/mcp',
+      resource: 'https://mcp-sceneassembly.smoxu.com/mcp',
       resource_name: 'Scene Assembly',
       resource_documentation: 'https://sceneassembly.mzork.com/docs/mcp',
     });
@@ -202,7 +202,7 @@ describe('pointers to the guide', () => {
   it('leaves every other response alone', async () => {
     const env = production();
     const other = libraryMetadata();
-    expect(await withResourceDocumentation(new Request('https://mcp-sceneassembly.mzork.com/.well-known/oauth-authorization-server'), other, env)).toBe(other);
+    expect(await withResourceDocumentation(new Request('https://mcp-sceneassembly.smoxu.com/.well-known/oauth-authorization-server'), other, env)).toBe(other);
     const head = libraryMetadata();
     expect(await withResourceDocumentation(metadataRequest('HEAD'), head, env)).toBe(head);
     const missing = new Response(null, { status: 404 });
@@ -210,7 +210,7 @@ describe('pointers to the guide', () => {
     const unset = libraryMetadata();
     expect(await withResourceDocumentation(metadataRequest(), unset, { ...env, APP_ORIGIN: '' })).toBe(unset);
     const lookalike = libraryMetadata();
-    expect(await withResourceDocumentation(new Request('https://mcp-sceneassembly.mzork.com/.well-known/oauth-protected-resource-other'), lookalike, env)).toBe(lookalike);
+    expect(await withResourceDocumentation(new Request('https://mcp-sceneassembly.smoxu.com/.well-known/oauth-protected-resource-other'), lookalike, env)).toBe(lookalike);
     const text = new Response('{}', { headers: { 'Content-Type': 'text/plain' } });
     expect(await withResourceDocumentation(metadataRequest(), text, env)).toBe(text);
     const array = new Response('[]', { headers: { 'Content-Type': 'application/json' } });

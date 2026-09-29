@@ -27,7 +27,7 @@ describe('the guide for agents', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe('text/markdown; charset=utf-8');
     const body = await response.text();
-    expect(body).toContain('https://mcp-sceneassembly.mzork.com/mcp');
+    expect(body).toContain('https://mcp-sceneassembly.smoxu.com/mcp');
     expect(body).toBe(readMcpGuide());
   });
 

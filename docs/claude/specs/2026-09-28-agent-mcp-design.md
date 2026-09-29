@@ -31,7 +31,7 @@ superseded text.
 4. **Registration rate limit lives in the entry wrapper.** The library's
    `clientRegistrationCallback` receives no `env`, so `/oauth/register` is
    counted in `cloud/src/entry.ts` before the provider runs.
-5. **New var `MCP_ORIGIN`** (production `https://mcp-sceneassembly.mzork.com`,
+5. **New var `MCP_ORIGIN`** (production `https://mcp-sceneassembly.smoxu.com`,
    local `http://localhost:8797`): the `/oauth/finish` redirect, the panel's MCP
    URL and the `add_reference` own-host list read it.
 6. **Estimates are the ledger.** `estimateCloudJob(request)` is
@@ -148,6 +148,15 @@ superseded text.
     DNS record, so the Workers custom domain can claim it. `workers_dev` stays
     on in `cloud/wrangler.jsonc` (follow-up 5 and the Goals section's MCP URL
     are corrected to the new host).
+21. **The MCP host is `mcp-sceneassembly.smoxu.com`** (2026-09-29), superseding
+    follow-up 20. The first production deploy could not attach
+    `mcp-sceneassembly.mzork.com`: the mzork.com zone belongs to a different
+    Cloudflare account from the Worker, and a Worker can only claim a custom
+    domain in its own account's zones (a cross-account CNAME to workers.dev is
+    refused as well). smoxu.com is the person's domain for projects like this
+    one; the new host sits one level under it, so Universal SSL covers it. The
+    app stays at `sceneassembly.mzork.com`, which only matters for the consent
+    redirect and the guide's links, both of which already use `APP_ORIGIN`.
 
 ## Context
 
@@ -172,7 +181,7 @@ limit they set.
 ## Goals
 
 - **One hosted MCP endpoint per deployment**, served by the account Worker at
-  `https://mcp-sceneassembly.mzork.com/mcp` (a Workers custom domain on the same
+  `https://mcp-sceneassembly.smoxu.com/mcp` (a Workers custom domain on the same
   Worker), authorised with OAuth 2.1 so a person connects an agent by signing in
   with the Google account they already use.
 - **The whole generation loop**: discover runnable models with their settings,
