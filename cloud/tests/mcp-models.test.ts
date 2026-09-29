@@ -17,7 +17,10 @@ describe('the MCP endpoint', () => {
     db.prepare('UPDATE account_agents SET revoked_at = 1').run();
     const refused = await serveMcp(post('{}'), env, { userId: OWNER, agentId: agent.id });
     expect(refused.status).toBe(401);
-    expect(refused.headers.get('WWW-Authenticate')).toContain('invalid_token');
+    // The same challenge the OAuth library sends, so a client refused here (KV
+    // revocation failed, or the account is gone) can still rediscover how to
+    // connect again: the MCP authorization spec wants resource_metadata on every 401.
+    expect(refused.headers.get('WWW-Authenticate')).toBe('Bearer realm="OAuth", resource_metadata="http://localhost:8797/.well-known/oauth-protected-resource/mcp", error="invalid_token"');
   });
 
   it('refuses a body over 64 KB', async () => {
