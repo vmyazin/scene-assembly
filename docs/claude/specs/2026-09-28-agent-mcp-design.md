@@ -31,7 +31,7 @@ superseded text.
 4. **Registration rate limit lives in the entry wrapper.** The library's
    `clientRegistrationCallback` receives no `env`, so `/oauth/register` is
    counted in `cloud/src/entry.ts` before the provider runs.
-5. **New var `MCP_ORIGIN`** (production `https://mcp.sceneassembly.mzork.com`,
+5. **New var `MCP_ORIGIN`** (production `https://mcp-sceneassembly.mzork.com`,
    local `http://localhost:8797`): the `/oauth/finish` redirect, the panel's MCP
    URL and the `add_reference` own-host list read it.
 6. **Estimates are the ledger.** `estimateCloudJob(request)` is
@@ -140,6 +140,14 @@ superseded text.
     `account_agents` row, with no dedupe on `client_id`. The person
     disconnects the old one from the panel. This is current behaviour;
     name-based dedupe is left for later.
+20. **The MCP host is `mcp-sceneassembly.mzork.com`, not
+    `mcp.sceneassembly.mzork.com`** (2026-09-28). The zone's Universal SSL
+    certificate on `mzork.com` covers one subdomain level; the originally
+    planned host is two levels deep and Universal SSL does not cover it, while
+    `mcp-sceneassembly.mzork.com` sits at the covered level and had no existing
+    DNS record, so the Workers custom domain can claim it. `workers_dev` stays
+    on in `cloud/wrangler.jsonc` (follow-up 5 and the Goals section's MCP URL
+    are corrected to the new host).
 
 ## Context
 
@@ -164,7 +172,7 @@ limit they set.
 ## Goals
 
 - **One hosted MCP endpoint per deployment**, served by the account Worker at
-  `https://mcp.sceneassembly.mzork.com/mcp` (a Workers custom domain on the same
+  `https://mcp-sceneassembly.mzork.com/mcp` (a Workers custom domain on the same
   Worker), authorised with OAuth 2.1 so a person connects an agent by signing in
   with the Google account they already use.
 - **The whole generation loop**: discover runnable models with their settings,

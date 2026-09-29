@@ -11,7 +11,7 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 const agent: ConnectedAgent = { id: 'agent-1', name: 'Claude Code', connectedAt: 1, lastUsedAt: null, budgetUsd: 5, usedUsd: 1.2, allowUnknownCost: false, allowDelete: false };
 function answer(agents: ConnectedAgent[] = [agent]) {
   vi.mocked(accountRequest).mockImplementation(async (path, init) => {
-    if (path === 'agents') return { accountId: 'owner-1', mcpUrl: 'https://mcp.sceneassembly.mzork.com/mcp', limits: { minUsd: 0.5, maxUsd: 500 }, agents };
+    if (path === 'agents') return { accountId: 'owner-1', mcpUrl: 'https://mcp-sceneassembly.mzork.com/mcp', limits: { minUsd: 0.5, maxUsd: 500 }, agents };
     if (path === 'agents/agent-1' && init?.method === 'POST') return { agent: { ...agent, ...JSON.parse(String(init.body)) } };
     if (path === 'agents/agent-1' && init?.method === 'DELETE') return { ok: true };
     throw new Error(`Unexpected ${path}`);
@@ -41,7 +41,7 @@ describe('connected agents panel', () => {
     answer();
     render(<ConnectedAgentsPanel ownerId="owner-1" />);
     expect(await screen.findByText('Claude Code')).toBeInTheDocument();
-    expect(screen.getByText('https://mcp.sceneassembly.mzork.com/mcp')).toBeInTheDocument();
+    expect(screen.getByText('https://mcp-sceneassembly.mzork.com/mcp')).toBeInTheDocument();
     expect(screen.getByText('$1.20 of $5.00 in the last 24 hours')).toBeInTheDocument();
   });
 
@@ -57,7 +57,7 @@ describe('connected agents panel', () => {
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     render(<ConnectedAgentsPanel ownerId="owner-1" />);
     await userEvent.click(await screen.findByRole('button', { name: 'Copy MCP URL' }));
-    expect(writeText).toHaveBeenCalledWith('https://mcp.sceneassembly.mzork.com/mcp');
+    expect(writeText).toHaveBeenCalledWith('https://mcp-sceneassembly.mzork.com/mcp');
   });
 
   it('saves a new limit and toggles', async () => {
@@ -91,7 +91,7 @@ describe('connected agents panel', () => {
   it('locks the row while its disconnect is in flight, and fires exactly one DELETE', async () => {
     const gate = deferred<{ ok: true }>();
     vi.mocked(accountRequest).mockImplementation(async (path, init) => {
-      if (path === 'agents') return { accountId: 'owner-1', mcpUrl: 'https://mcp.sceneassembly.mzork.com/mcp', limits: { minUsd: 0.5, maxUsd: 500 }, agents: [agent] };
+      if (path === 'agents') return { accountId: 'owner-1', mcpUrl: 'https://mcp-sceneassembly.mzork.com/mcp', limits: { minUsd: 0.5, maxUsd: 500 }, agents: [agent] };
       if (path === 'agents/agent-1' && init?.method === 'DELETE') return gate.promise;
       throw new Error(`Unexpected ${path}`);
     });
@@ -116,7 +116,7 @@ describe('connected agents panel', () => {
   it('re-enables the row when the disconnect fails', async () => {
     const gate = deferred<{ ok: true }>();
     vi.mocked(accountRequest).mockImplementation(async (path, init) => {
-      if (path === 'agents') return { accountId: 'owner-1', mcpUrl: 'https://mcp.sceneassembly.mzork.com/mcp', limits: { minUsd: 0.5, maxUsd: 500 }, agents: [agent] };
+      if (path === 'agents') return { accountId: 'owner-1', mcpUrl: 'https://mcp-sceneassembly.mzork.com/mcp', limits: { minUsd: 0.5, maxUsd: 500 }, agents: [agent] };
       if (path === 'agents/agent-1' && init?.method === 'DELETE') return gate.promise;
       throw new Error(`Unexpected ${path}`);
     });

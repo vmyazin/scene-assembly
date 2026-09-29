@@ -377,14 +377,16 @@ Connecting agents over MCP
 ([`docs/claude/specs/2026-09-28-agent-mcp-design.md`](claude/specs/2026-09-28-agent-mcp-design.md))
 needs its own namespace, migration, and domain step, beyond the Worker deploy above:
 
-1. Create the two namespaces with `pnpm --dir cloud exec wrangler kv namespace create OAUTH_KV`
-   and `pnpm --dir cloud exec wrangler kv namespace create OAUTH_KV_PREVIEW`, and put their ids in
-   `cloud/wrangler.jsonc` / `cloud/wrangler.preview.jsonc` in place of the
-   `local-placeholder-oauth-kv` placeholders.
+1. Both namespaces were created on 2026-09-28; their ids are already in
+   `cloud/wrangler.jsonc` (production `OAUTH_KV`) and `cloud/wrangler.preview.jsonc` (preview
+   `OAUTH_KV`). Nothing to do here on a normal rollout. If a namespace ever has to be recreated,
+   run `pnpm --dir cloud exec wrangler kv namespace create OAUTH_KV` (production) or
+   `pnpm --dir cloud exec wrangler kv namespace create OAUTH_KV_PREVIEW` (preview) and put the new
+   id in the matching wrangler file.
 2. `pnpm --dir cloud exec wrangler d1 migrations apply scene-assembly-accounts --remote`, which
    applies `0013_agents.sql`. The deploy workflow stops on a pending migration rather than
    applying it.
-3. Confirm `mcp.sceneassembly.mzork.com` is attached as a custom domain on the Worker, or skip
+3. Confirm `mcp-sceneassembly.mzork.com` is attached as a custom domain on the Worker, or skip
    this step when `MCP_ORIGIN` is the workers.dev hostname.
 4. Merge; the Worker deploys, then the app. Between the two, `/oauth/authorize` redirects to a
    page that is not there yet, which is harmless because the MCP URL is only published by the

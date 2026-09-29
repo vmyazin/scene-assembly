@@ -24,14 +24,14 @@ describe('reference URLs', () => {
     expect(() => checkReferenceUrl(value, env)).toThrow(message);
   });
   it('refuses the Worker and MCP hosts as well as the app', () => {
-    const production = { ...env, APP_ORIGIN: 'https://sceneassembly.mzork.com', PUBLIC_WORKER_ORIGIN: 'https://w.example.workers.dev', MCP_ORIGIN: 'https://mcp.sceneassembly.mzork.com' };
-    for (const host of ['sceneassembly.mzork.com', 'w.example.workers.dev', 'mcp.sceneassembly.mzork.com']) {
+    const production = { ...env, APP_ORIGIN: 'https://sceneassembly.mzork.com', PUBLIC_WORKER_ORIGIN: 'https://w.example.workers.dev', MCP_ORIGIN: 'https://mcp-sceneassembly.mzork.com' };
+    for (const host of ['sceneassembly.mzork.com', 'w.example.workers.dev', 'mcp-sceneassembly.mzork.com']) {
       expect(() => checkReferenceUrl(`https://${host}/media/download/x`, production)).toThrow(/this service/);
     }
     expect(checkReferenceUrl('https://images.example.com/a.png', production).hostname).toBe('images.example.com');
   });
   it('refuses a trailing-dot production host the same way', () => {
-    const production = { ...env, APP_ORIGIN: 'https://sceneassembly.mzork.com', PUBLIC_WORKER_ORIGIN: 'https://w.example.workers.dev', MCP_ORIGIN: 'https://mcp.sceneassembly.mzork.com' };
+    const production = { ...env, APP_ORIGIN: 'https://sceneassembly.mzork.com', PUBLIC_WORKER_ORIGIN: 'https://w.example.workers.dev', MCP_ORIGIN: 'https://mcp-sceneassembly.mzork.com' };
     expect(() => checkReferenceUrl('https://sceneassembly.mzork.com./x', production)).toThrow(/this service/);
   });
   it('refuses a sibling workers.dev preview or version host under the same account', () => {
