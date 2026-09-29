@@ -3,10 +3,13 @@ import { AccountError } from '../jobs';
 import { currentAccount } from '../sessions';
 import { json, type Env } from '../security';
 import { AGENT_BUDGET, parseAgentSettings, revokeAgent, updateAgent, type AgentRow } from './agents';
+import { mcpResource } from './auth';
 import { budgetStatus } from './budget';
 
+/** The URL a person adds to their MCP client is the advertised resource itself,
+ *  so the panel can never show one the OAuth library would refuse. */
 export function mcpUrl(env: Env): string | null {
-  return env.MCP_ORIGIN ? `${env.MCP_ORIGIN}/mcp` : null;
+  return mcpResource(env);
 }
 
 export async function listAgents(env: Env, userId: string, now = Date.now()): Promise<ConnectedAgent[]> {

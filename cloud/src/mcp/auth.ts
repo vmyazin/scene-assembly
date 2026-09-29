@@ -43,6 +43,19 @@ export function mcpResource(env: Env): string | null {
   return isLocal(env) ? LOCAL_MCP_RESOURCE : null;
 }
 
+/**
+ * The origin `/mcp` is served from: `mcpResource` without its path, with the same
+ * local fallback and the same `null` for "not configured". Every URL this Worker
+ * builds on the MCP host — the `/oauth/finish` redirect, the 401's metadata link —
+ * starts here rather than at the raw `MCP_ORIGIN`, so a trailing slash or a path in
+ * that var can never make one of them disagree with the resource the library
+ * advertises.
+ */
+export function mcpOrigin(env: Env): string | null {
+  const resource = mcpResource(env);
+  return resource ? new URL(resource).origin : null;
+}
+
 /** Plain text: unlike `/oauth/register` (an OAuth client), `/oauth/authorize` and
  *  `/oauth/finish` are pages a browser navigates to directly. */
 function tooManyRequests(retryAfter: string) {
@@ -89,6 +102,7 @@ const AGENT_SCOPE = ['scene-assembly'];
 const EXPIRED = 'This connection request has expired or was already used. Start connecting again from your agent.';
 const WRONG_BROWSER = 'Finish connecting in the browser that opened this page, then start again from your agent.';
 const CONNECT_FAILED = 'Connecting this agent failed. Start connecting again from your agent.';
+const NOT_CONFIGURED = 'Agent connections are not configured on this server.';
 
 interface AuthorizationRow {
   id: string; consent_handle: string; description_json: string; client_id: string; client_name: string; redirect_host: string;
@@ -109,7 +123,7 @@ function page(status: number, message: string) {
  */
 export async function authorize(request: Request, env: Env, now = Date.now()): Promise<Response> {
   const helpers = env.OAUTH_PROVIDER;
-  if (!helpers || !env.MCP_ORIGIN) return page(503, 'Agent connections are not configured on this server.');
+  if (!helpers || !mcpResource(env)) return page(503, NOT_CONFIGURED);
   let description: ConsentDescription, consent: { handle: string; headers: Headers }, authRequest;
   try {
     authRequest = await helpers.parseAuthRequest(request);
@@ -158,6 +172,10 @@ export async function authorizationRoutes(request: Request, env: Env, now = Date
   try { body = JSON.parse((await request.text()) || '{}'); } catch { return json({ error: 'Invalid request.' }, 400); }
   const decision = body.decision === 'approve' ? 'approved' : body.decision === 'deny' ? 'denied' : null;
   if (!decision) return json({ error: 'Choose Approve or Deny.', code: 'invalid_request' }, 400);
+  // Checked before the decision is recorded: a decision with no finish link to
+  // follow would strand the request until it expires.
+  const origin = mcpOrigin(env);
+  if (!origin) return json({ error: NOT_CONFIGURED }, 503);
   let settings: AgentSettings | null = null;
   if (decision === 'approved') {
     try { settings = parseAgentSettings(body); }
@@ -171,7 +189,7 @@ export async function authorizationRoutes(request: Request, env: Env, now = Date
   const recorded = await env.DB.prepare('UPDATE account_agent_authorizations SET decision = ?, user_id = ?, settings_json = ?, finish_hash = ? WHERE id = ? AND decision IS NULL AND expires_at > ?')
     .bind(decision, account.id, settings ? JSON.stringify(settings) : null, await hash(secret), row.id, now).run();
   if (!recorded.meta.changes) return json({ error: 'This request was already answered.', code: 'already_decided' }, 409);
-  return json({ redirectTo: `${env.MCP_ORIGIN}/oauth/finish?request=${row.id}&t=${secret}` });
+  return json({ redirectTo: `${origin}/oauth/finish?request=${row.id}&t=${secret}` });
 }
 
 /**
@@ -196,7 +214,7 @@ export async function authorizationRoutes(request: Request, env: Env, now = Date
  */
 export async function finish(request: Request, env: Env, now = Date.now()): Promise<Response> {
   const helpers = env.OAUTH_PROVIDER;
-  if (!helpers) return page(503, 'Agent connections are not configured on this server.');
+  if (!helpers) return page(503, NOT_CONFIGURED);
   const params = new URL(request.url).searchParams;
   const id = params.get('request');
   const t = params.get('t');

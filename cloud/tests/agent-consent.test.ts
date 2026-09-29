@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { handleRequest } from '../src/index';
-import { cleanupAuthorizations } from '../src/mcp/auth';
+import { authorize, cleanupAuthorizations } from '../src/mcp/auth';
 import type { Env } from '../src/security';
-import { agentEnv, connectProvider, signIn as signedIn } from './agent-fixtures';
+import { accountCall, agentEnv, connectProvider, signIn as signedIn } from './agent-fixtures';
 import { fakeOAuth } from './fake-oauth';
 
-function setup() {
-  const { db, env } = agentEnv({ CLOUD_GENERATION_PROVIDERS: 'kie,atlas' });
+function setup(extra: Partial<Env> = {}) {
+  const { db, env } = agentEnv({ CLOUD_GENERATION_PROVIDERS: 'kie,atlas', ...extra });
   const oauth = fakeOAuth();
   env.OAUTH_PROVIDER = oauth.helpers;
   return { db, env, oauth };
@@ -166,6 +166,34 @@ describe('agent consent', () => {
       expect(db.prepare('SELECT COUNT(*) AS n FROM account_agent_authorizations').get()).toEqual({ n: 0 });
       expect((await visitFinish(env, redirectTo, { cookie: consentCookie })).status).toBe(400);
       expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 0 });
+    });
+  });
+
+  // MCP_ORIGIN is written by hand per environment. A trailing slash or a path in
+  // it must not leak into any URL built on the MCP host, and every one of them
+  // must agree with the resource the OAuth library advertises.
+  describe('the MCP origin', () => {
+    it.each(['https://mcp.example.test/', 'https://mcp.example.test/some/path'])('publishes <origin>/mcp and finishes at <origin>/oauth/finish for %s', async MCP_ORIGIN => {
+      const { env } = setup({ MCP_ORIGIN });
+      const cookie = await signedIn(env);
+      expect((await (await accountCall(env, 'agents', 'GET', cookie)).json()).mcpUrl).toBe('https://mcp.example.test/mcp');
+      const { id } = await begin(env);
+      const { redirectTo } = await (await api(env, id, cookie, approve)).json();
+      expect(redirectTo).toMatch(new RegExp(`^https://mcp\\.example\\.test/oauth/finish\\?request=${id}&t=[A-Za-z0-9_-]{20,}$`));
+    });
+
+    it('connects through the local fallback when a local env has no MCP_ORIGIN', async () => {
+      const { env } = setup({ MCP_ORIGIN: undefined });
+      const { response, id } = await begin(env);
+      expect(response.status).toBe(303);
+      const { redirectTo } = await (await api(env, id, await signedIn(env), approve)).json();
+      expect(redirectTo).toMatch(new RegExp(`^http://localhost:8797/oauth/finish\\?request=${id}&t=`));
+    });
+
+    it('refuses to start a connection when there is no MCP origin at all', async () => {
+      const { env } = setup({ APP_ORIGIN: 'https://sceneassembly.mzork.com', MCP_ORIGIN: undefined });
+      const response = await authorize(new Request('https://account.example.test/oauth/authorize?client_id=client-1&response_type=code'), env);
+      expect(response.status).toBe(503);
     });
   });
 
