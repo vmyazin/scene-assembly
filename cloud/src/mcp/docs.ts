@@ -27,7 +27,8 @@ const PROTECTED_RESOURCE_METADATA = '/.well-known/oauth-protected-resource';
  */
 export async function withResourceDocumentation(request: Request, response: Response, env: Env): Promise<Response> {
   if (request.method !== 'GET' || response.status !== 200) return response;
-  if (!new URL(request.url).pathname.startsWith(PROTECTED_RESOURCE_METADATA)) return response;
+  const path = new URL(request.url).pathname;
+  if (path !== PROTECTED_RESOURCE_METADATA && !path.startsWith(`${PROTECTED_RESOURCE_METADATA}/`)) return response;
   if (!response.headers.get('Content-Type')?.startsWith('application/json')) return response;
   const documentation = mcpGuideUrl(env);
   if (!documentation) return response;
