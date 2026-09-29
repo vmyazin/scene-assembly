@@ -1,6 +1,8 @@
 import { McpServer, type CallToolResult, type StandardSchemaWithJSON } from '@modelcontextprotocol/server';
 import type * as z from 'zod';
 import { consume } from '../ingress';
+import type { Env } from '../security';
+import { mcpGuideUrl } from './docs';
 import { refusal, toRefusal } from './errors';
 import type { AnyTool, ToolContext } from './tool';
 import { TOOLS } from './tools';
@@ -8,12 +10,18 @@ import { TOOLS } from './tools';
 /** Per agent per minute. Submissions are the ones that cost money. */
 export const AGENT_RATE_LIMITS = { read: 300, write: 60, submit: 10 } as const;
 
-export const SERVER_INSTRUCTIONS = [
-  'Scene Assembly generates images and video with the provider keys connected to this person\'s account and saves every result to their library.',
-  'Work in this order: list_models (pass provider and modelId to see a model\'s settings), estimate_cost, generate with an idempotencyKey you reuse when retrying the same request, get_job with waitSeconds until the job is saved, then view_asset to look at an image.',
-  'Every job is charged against a spend limit the person set for this agent. A budget_exceeded refusal includes roomAt, when enough room frees up: tell the person rather than retrying sooner.',
-  'Download links expire after a few minutes and work for anyone holding them. Do not share them.',
-].join('\n');
+/** What an agent is told when it connects. The last line points at the public
+ *  guide, and is left out when this deployment has no app origin to serve it. */
+export function serverInstructions(env: Env): string {
+  const guide = mcpGuideUrl(env, 'markdown');
+  return [
+    'Scene Assembly generates images and video with the provider keys connected to this person\'s account and saves every result to their library.',
+    'Work in this order: list_models (pass provider and modelId to see a model\'s settings), estimate_cost, generate with an idempotencyKey you reuse when retrying the same request, get_job with waitSeconds until the job is saved, then view_asset to look at an image.',
+    'Every job is charged against a spend limit the person set for this agent. A budget_exceeded refusal includes roomAt, when enough room frees up: tell the person rather than retrying sooner.',
+    'Download links expire after a few minutes and work for anyone holding them. Do not share them.',
+    ...(guide ? [`Setup, every tool and every refusal code: ${guide}`] : []),
+  ].join('\n');
+}
 
 /**
  * `registerTool` validates `tools/call` arguments against `inputSchema` itself,
@@ -32,7 +40,7 @@ function passthroughSchema(schema: z.ZodTypeAny): StandardSchemaWithJSON {
 }
 
 export function createServer(ctx: ToolContext): McpServer {
-  const server = new McpServer({ name: 'scene-assembly', version: '1.0.0' }, { instructions: SERVER_INSTRUCTIONS });
+  const server = new McpServer({ name: 'scene-assembly', version: '1.0.0' }, { instructions: serverInstructions(ctx.env) });
   for (const tool of TOOLS) {
     if (tool.available && !tool.available(ctx.agent)) continue;
     server.registerTool(tool.name, { title: tool.title, description: tool.description, inputSchema: passthroughSchema(tool.input), annotations: tool.annotations },

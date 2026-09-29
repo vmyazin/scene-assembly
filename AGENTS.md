@@ -138,7 +138,10 @@
   whether a token still works, which is why disconnecting is immediate. A charge is released
   only when the provider certainly never ran the job. Test tools through a real MCP client
   wired to `serveMcp` (`cloud/tests/mcp-harness.ts`), never hand-written JSON-RPC: the SDK
-  serves two protocol eras and a hand-rolled request tests only one.
+  serves two protocol eras and a hand-rolled request tests only one. A new tool or refusal code
+  also needs a line in the public guide, `app/docs/mcp/guide.md` (served at `/docs/mcp` and
+  `/docs/mcp.md`), because agents are told it lists every one; `cloud/tests/mcp-docs.test.ts`
+  scans the tool list and the refusal codes and fails on anything the guide leaves out.
 
 - **Video generation workspace layout** → first read
   `docs/codex/specs/2026-08-30-wan3-reference-video-design.md`, then compose setup,

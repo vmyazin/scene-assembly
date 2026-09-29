@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -88,7 +89,10 @@ export default function ConnectedAgentsPanel({ ownerId }: { ownerId: string }) {
       <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--foreground-subtle)]">Connected agents</p>
       {data?.mcpUrl && (
         <div className="mt-2">
-          <p className="text-xs text-[var(--foreground-muted)]">Add this URL to an MCP client to connect an agent:</p>
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="text-xs text-[var(--foreground-muted)]">Add this URL to an MCP client to connect an agent:</p>
+            <Link href="/docs/mcp" className="shrink-0 text-xs text-[var(--neon-cyan)] underline-offset-2 hover:underline">Setup guide</Link>
+          </div>
           <div className="mt-1.5 flex items-center gap-2">
             <code className="min-w-0 flex-1 truncate text-xs text-[var(--foreground)]">{data.mcpUrl}</code>
             <button type="button" aria-label="Copy MCP URL" onClick={() => void copy(data.mcpUrl!)} className="btn-secondary px-2 py-1"><Copy size={13} aria-hidden="true" /></button>

@@ -47,6 +47,12 @@ describe('connected agents panel', () => {
     expect(screen.getByText('$1.20 of $5.00 in the last 24 hours')).toBeInTheDocument();
   });
 
+  it('links the setup guide next to the MCP URL', async () => {
+    answer();
+    render(<ConnectedAgentsPanel ownerId="owner-1" />);
+    expect(await screen.findByRole('link', { name: 'Setup guide' })).toHaveAttribute('href', '/docs/mcp');
+  });
+
   // Every reconnect adds a row, so two rows with the same name are told apart
   // by when each was connected and whether it is still in use.
   it('says when each agent was connected and when it was last used', async () => {

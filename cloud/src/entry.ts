@@ -1,6 +1,7 @@
 import { OAuthProvider } from '@cloudflare/workers-oauth-provider';
 import { ensureLocalSchema, handleRequest, runScheduledMaintenance } from './index';
 import { ACCESS_TOKEN_TTL_SECONDS, guardRegistration, mcpResource, REFRESH_TOKEN_TTL_SECONDS } from './mcp/auth';
+import { withResourceDocumentation } from './mcp/docs';
 import { mcpApiHandler } from './mcp/handler';
 import { json, type Env } from './security';
 export { GenerationWorkflow } from './workflow';
@@ -48,7 +49,9 @@ function providerFor(resource: string): OAuthProvider<Env> {
       // through DCR and shows as unverified until that decision is made (design doc
       // follow-up 15).
       clientIdMetadataDocumentEnabled: false,
-      resourceMetadata: { resource },
+      // `resource_documentation` is added by withResourceDocumentation below:
+      // the library serializes resource_name but drops fields it does not know.
+      resourceMetadata: { resource, resource_name: 'Scene Assembly' },
     });
     providers.set(resource, provider);
   }
@@ -75,7 +78,7 @@ export default {
       if (registrationLimited) return registrationLimited;
       const resource = mcpResource(env);
       if (!resource) return isOAuthLibraryPath(new URL(request.url).pathname) ? NOT_CONFIGURED() : handleRequest(request, env);
-      return await providerFor(resource).fetch(request, env, ctx);
+      return await withResourceDocumentation(request, await providerFor(resource).fetch(request, env, ctx), env);
     } catch {
       return UNAVAILABLE();
     }
