@@ -1,0 +1,77 @@
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import ConnectedAgentsPanel from '@/components/account/ConnectedAgentsPanel';
+import { accountRequest } from '@/lib/account/client';
+import type { ConnectedAgent } from '@/lib/account/contracts';
+
+vi.mock('@/lib/account/client', () => ({ accountRequest: vi.fn() }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+
+const agent: ConnectedAgent = { id: 'agent-1', name: 'Claude Code', connectedAt: 1, lastUsedAt: null, budgetUsd: 5, usedUsd: 1.2, allowUnknownCost: false, allowDelete: false };
+function answer(agents: ConnectedAgent[] = [agent]) {
+  vi.mocked(accountRequest).mockImplementation(async (path, init) => {
+    if (path === 'agents') return { accountId: 'owner-1', mcpUrl: 'https://mcp.sceneassembly.mzork.com/mcp', limits: { minUsd: 0.5, maxUsd: 500 }, agents };
+    if (path === 'agents/agent-1' && init?.method === 'POST') return { agent: { ...agent, ...JSON.parse(String(init.body)) } };
+    if (path === 'agents/agent-1' && init?.method === 'DELETE') return { ok: true };
+    throw new Error(`Unexpected ${path}`);
+  });
+}
+// Braces, not an expression body: `mockReset()` returns the mock itself, and
+// Vitest treats a value `beforeEach` returns as a teardown to run after the
+// test — an expression body here would hand it `accountRequest` and it would
+// get invoked with no arguments once the test ends.
+beforeEach(() => { vi.mocked(accountRequest).mockReset(); });
+
+describe('connected agents panel', () => {
+  it('shows the MCP URL and each agent\'s use of its limit', async () => {
+    answer();
+    render(<ConnectedAgentsPanel ownerId="owner-1" />);
+    expect(await screen.findByText('Claude Code')).toBeInTheDocument();
+    expect(screen.getByText('https://mcp.sceneassembly.mzork.com/mcp')).toBeInTheDocument();
+    expect(screen.getByText('$1.20 of $5.00 in the last 24 hours')).toBeInTheDocument();
+  });
+
+  it('says when nothing is connected', async () => {
+    answer([]);
+    render(<ConnectedAgentsPanel ownerId="owner-1" />);
+    expect(await screen.findByText('No agents connected.')).toBeInTheDocument();
+  });
+
+  it('copies the MCP URL', async () => {
+    answer();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    render(<ConnectedAgentsPanel ownerId="owner-1" />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Copy MCP URL' }));
+    expect(writeText).toHaveBeenCalledWith('https://mcp.sceneassembly.mzork.com/mcp');
+  });
+
+  it('saves a new limit and toggles', async () => {
+    answer();
+    render(<ConnectedAgentsPanel ownerId="owner-1" />);
+    const row = within(await screen.findByRole('listitem'));
+    const limit = row.getByLabelText('Limit per 24 hours');
+    await userEvent.clear(limit); await userEvent.type(limit, '10');
+    await userEvent.click(row.getByLabelText('Allow deleting files'));
+    await userEvent.click(row.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(accountRequest).toHaveBeenCalledWith('agents/agent-1', expect.objectContaining({ method: 'POST' })));
+    const [, init] = vi.mocked(accountRequest).mock.calls.find(([path, options]) => path === 'agents/agent-1' && options?.method === 'POST')!;
+    expect(JSON.parse(String(init!.body))).toEqual({ budgetUsd: 10, allowUnknownCost: false, allowDelete: true });
+  });
+
+  it('keeps Save disabled until something changes', async () => {
+    answer();
+    render(<ConnectedAgentsPanel ownerId="owner-1" />);
+    expect(within(await screen.findByRole('listitem')).getByRole('button', { name: 'Save' })).toBeDisabled();
+  });
+
+  it('disconnects after confirmation', async () => {
+    answer();
+    render(<ConnectedAgentsPanel ownerId="owner-1" />);
+    await userEvent.click(within(await screen.findByRole('listitem')).getByRole('button', { name: 'Disconnect' }));
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Disconnect' }));
+    await waitFor(() => expect(accountRequest).toHaveBeenCalledWith('agents/agent-1', expect.objectContaining({ method: 'DELETE' })));
+    expect(await screen.findByText('No agents connected.')).toBeInTheDocument();
+  });
+});

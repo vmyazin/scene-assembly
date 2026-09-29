@@ -19,6 +19,7 @@ vi.mock('@/components/account/CloudAssetGrid', () => ({
   default: ({ ownerId }: { ownerId: string }) => <section>Cloud assets for {ownerId}</section>,
 }));
 vi.mock('@/components/account/AccountConnections', () => ({ default: () => <section>Saved connections</section> }));
+vi.mock('@/components/account/ConnectedAgentsPanel', () => ({ default: ({ ownerId }: { ownerId: string }) => <section>Connected agents for {ownerId}</section> }));
 vi.mock('@/components/account/AccountKeyImport', () => ({
   default: ({ ownerId }: { ownerId: string }) => <section>Key import for {ownerId}</section>,
 }));
@@ -64,6 +65,7 @@ describe('account pages', () => {
     expect(screen.getByText('ada@example.test')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Cloud library' })).toBeInTheDocument();
     expect(screen.getByText('Saved connections')).toBeInTheDocument();
+    expect(screen.getByText('Connected agents for owner-1')).toBeInTheDocument();
     expect(screen.getByText('Deletion for owner-1')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'View spend' })).toHaveAttribute('href', '/spend');
     // Nothing is staged in this browser, so the import section is absent

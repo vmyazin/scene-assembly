@@ -12,6 +12,7 @@ import LibraryFilters, { type LibraryFilterId } from './LibraryFilters';
 import AccountAvatar from './AccountAvatar';
 import AccountConnections from './AccountConnections';
 import AccountDeletion from './AccountDeletion';
+import ConnectedAgentsPanel from './ConnectedAgentsPanel';
 import BrowserImportDialog from './BrowserImportDialog';
 import { accountRequest } from '@/lib/account/client';
 import { browserKeyCandidates } from '@/lib/account/key-import';
@@ -281,6 +282,10 @@ export default function AccountConsole({
 
         <RailBlock>
           <AccountConnections onManage={onManageKeys} />
+        </RailBlock>
+
+        <RailBlock>
+          <ConnectedAgentsPanel ownerId={ownerId} />
         </RailBlock>
 
         {/* Absent, not empty: an account with nothing staged on this device has
