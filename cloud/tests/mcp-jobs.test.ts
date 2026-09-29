@@ -40,6 +40,17 @@ describe('generate', () => {
     expect(create).toHaveBeenCalledTimes(1);
   });
 
+  it('names the agent that started the job in generate and get_job, as list_jobs does', async () => {
+    const { env, agent } = setup();
+    const client = await connectAgent(env, await agent);
+    const started = structured<{ job: { id: string; startedBy: { agentId: string; name: string | null } } }>(
+      await client.callTool({ name: 'generate', arguments: { ...flux, idempotencyKey: 'kite-named' } }));
+    expect(started.job.startedBy).toEqual({ agentId: (await agent).id, name: 'Claude Code' });
+    const fetched = structured<{ job: { startedBy: { name: string | null } } }>(
+      await client.callTool({ name: 'get_job', arguments: { jobId: started.job.id } }));
+    expect(fetched.job.startedBy.name).toBe('Claude Code');
+  });
+
   it('starts one job and books one charge however often the same key is retried', async () => {
     const { db, env, create, agent } = setup();
     const client = await connectAgent(env, await agent);

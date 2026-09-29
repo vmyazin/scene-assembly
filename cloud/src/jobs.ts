@@ -76,8 +76,10 @@ export function jobView(row: JobRow): CloudJobView {
     request: JSON.parse(row.request_json), createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }
+/** Joins the starting agent's name, as the job list does, so every job view
+ *  built from this row says "via <name>" rather than a bare agent id. */
 export async function getJob(env: Env, id: string, owner?: string) {
-  return env.DB.prepare(`SELECT * FROM account_jobs WHERE id = ? AND deleted = 0${owner ? ' AND user_id = ?' : ''}`).bind(...(owner ? [id, owner] : [id])).first<JobRow>();
+  return env.DB.prepare(`SELECT j.*, g.client_name AS agent_name FROM account_jobs j LEFT JOIN account_agents g ON g.id = j.agent_id WHERE j.id = ? AND j.deleted = 0${owner ? ' AND j.user_id = ?' : ''}`).bind(...(owner ? [id, owner] : [id])).first<JobRow>();
 }
 export async function acceptJob(env: Env, owner: string, token: string, request: CloudJobRequest, agentId: string | null = null): Promise<JobRow> {
   if (!/^[a-zA-Z0-9_-]{16,128}$/.test(token)) throw new AccountError('Invalid submission token.', 400, 'invalid_token');
