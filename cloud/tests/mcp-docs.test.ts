@@ -135,6 +135,17 @@ function refusalCodes(): Found {
   return found;
 }
 
+/**
+ * Codes the walk finds on a tool's path that still never reach an agent as a
+ * `{ code, message, retryable }` refusal. The walk errs toward collecting, so
+ * each entry says where the code is caught and renamed. Keep this short: an
+ * entry here is a code the guide deliberately leaves out.
+ */
+const NOT_A_REFUSAL = new Map<string, string>([
+  ['result_type', 'writeOutput: tool paths only store types sniffMime or the library already accepted; in the Workflow, failure.ts captureFailureReason renames it result_wrong_type on the job'],
+  ['result_size', 'writeOutput: storeStreamedUpload (uploads.ts) renames it reference_fetch_failed; in the Workflow, failure.ts captureFailureReason renames it result_too_large on the job'],
+]);
+
 describe('the MCP setup guide', () => {
   it('names every tool the server offers', () => {
     const missing = TOOLS.map(tool => tool.name).filter(name => !guide.includes(`\`${name}\``));
@@ -153,8 +164,15 @@ describe('the MCP setup guide', () => {
     for (const known of ['budget_exceeded', 'cost_unknown', 'rate_limited', 'invalid_field', 'internal_error', 'request_in_progress', 'connection_required', 'active_jobs', 'input_capacity', 'reference_fetch_failed', 'resume_exhausted', 'invalid_settings']) {
       expect(codes).toContain(known);
     }
-    const missing = [...codes].filter(code => !guide.includes(`\`${code}\``)).sort();
+    const missing = [...codes].filter(code => !NOT_A_REFUSAL.has(code) && !guide.includes(`\`${code}\``)).sort();
     expect(missing).toEqual([]);
+  });
+
+  it('keeps out of the guide the codes that never reach an agent as a refusal', () => {
+    const { codes } = refusalCodes();
+    // A stale exclusion (the code is gone, or renamed) must be noticed, not kept forever.
+    expect([...NOT_A_REFUSAL.keys()].filter(code => !codes.has(code))).toEqual([]);
+    expect([...NOT_A_REFUSAL.keys()].filter(code => guide.includes(`\`${code}\``))).toEqual([]);
   });
 
   it('gives the production MCP URL that the Worker serves', () => {

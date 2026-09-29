@@ -239,8 +239,6 @@ An HTTP 401 from the server is not a refusal. It means the connection was discon
 | `reference_fetch_failed` | No | A reference URL was refused or could not be downloaded: not https, an IP address, a Scene Assembly address, too many redirects, an error status, a type other than PNG, JPEG, WebP, AVIF, MP4 or WebM, or a file over the size limit. The message says which. |
 | `invalid_upload` | No | `add_reference` was asked for an upload of an unsupported type or size. |
 | `upload_size` | Yes | A library file passed as `{ "assetId": … }` did not copy intact for the job. Retry the same `generate` call, with the same `idempotencyKey`. |
-| `result_type` | No | A file could not be stored as a reference because its type is not one Scene Assembly stores. Use a PNG, JPEG, WebP, AVIF, MP4 or WebM file. |
-| `result_size` | No | A file was larger than the limit while it was being stored. Use a smaller file. |
 | `input_capacity` | No | Too many staged references are still in use: an account holds up to 32, 256 MB in all. Wait for the jobs using them to finish. |
 | `reference_unavailable` | No | A staged upload has expired, was never finished, or was already cleaned up, or a library file cannot be used as a reference (too large or the wrong type). Stage it again. |
 | `inline_input_size` | No | Gemini and CometAPI take up to 12 MB of reference images per job in all. Use smaller images. |
