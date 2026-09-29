@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeAgent, createAgent, parseAgentSettings, touchAgent } from '../src/mcp/agents';
+import { activeAgent, createAgent, normalizeClientName, parseAgentSettings, touchAgent } from '../src/mcp/agents';
 import { agentEnv, OWNER, seedAgent, seedUser } from './agent-fixtures';
 
 describe('agent settings', () => {
@@ -14,11 +14,38 @@ describe('agent settings', () => {
   });
 });
 
+// A client names itself at registration, and that name is shown on the consent
+// page and as "via <name>" on jobs. React escapes markup, but a bidi override
+// (U+202E and friends) would still let a name render as something it is not.
+describe('client names', () => {
+  it('drops a right-to-left override and the other control and format characters', () => {
+    expect(normalizeClientName('Claude\u202E edoC')).toBe('Claude edoC');
+    expect(normalizeClientName('\u2066Claude\u2069 Code\u200B\u0007')).toBe('Claude Code');
+  });
+  it('collapses runs of whitespace, including tabs and newlines, and trims', () => {
+    expect(normalizeClientName('  Claude\n\t  Code \u202E ')).toBe('Claude Code');
+  });
+  it('names a client whose name was only control characters, or nothing', () => {
+    expect(normalizeClientName('\u202E\u0000\u2066\u200F')).toBe('Unnamed agent');
+    expect(normalizeClientName('   ')).toBe('Unnamed agent');
+    expect(normalizeClientName(undefined)).toBe('Unnamed agent');
+  });
+  it('keeps at most 120 characters', () => {
+    expect(normalizeClientName('a'.repeat(200))).toBe('a'.repeat(120));
+  });
+});
+
 describe('agent rows', () => {
   it('stores the limit in micro-dollars and names an unnamed client', async () => {
     const { env } = agentEnv();
     const agent = await createAgent(env, { userId: OWNER, clientId: 'c', clientName: '   ', settings: { budgetUsd: 2.5, allowUnknownCost: false, allowDelete: true } });
     expect(agent).toMatchObject({ user_id: OWNER, client_name: 'Unnamed agent', budget_micros: 2_500_000, allow_unknown_cost: 0, allow_delete: 1, revoked_at: null });
+  });
+
+  it('stores the client name without bidi overrides', async () => {
+    const { env } = agentEnv();
+    const agent = await createAgent(env, { userId: OWNER, clientId: 'c', clientName: 'Claude\u202E edoC', settings: { budgetUsd: 5, allowUnknownCost: false, allowDelete: false } });
+    expect(agent.client_name).toBe('Claude edoC');
   });
 
   it('finds an agent only for its owner, and never once revoked or orphaned', async () => {

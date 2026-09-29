@@ -28,10 +28,28 @@ export function parseAgentSettings(value: unknown): AgentSettings {
   return { budgetUsd: Math.round(budgetUsd * 100) / 100, allowUnknownCost, allowDelete };
 }
 
+const UNNAMED_AGENT = 'Unnamed agent';
+const CLIENT_NAME_MAX = 120;
+
+/**
+ * A client names itself at registration, and that name is shown on the consent
+ * page and as "via <name>" on its jobs. Bounded, and never trusted as markup
+ * (React escapes it) — but escaping does nothing about a right-to-left override
+ * (U+202E) or an isolate (U+2066–U+2069), which would let a name render as
+ * something other than what it says. So every control and format character goes,
+ * whitespace (tabs and newlines included) collapses to single spaces, and a name
+ * with nothing left is an unnamed agent. The consent row and the agent row both
+ * store the result of this one function.
+ */
+export function normalizeClientName(name: string | null | undefined): string {
+  const cleaned = (name ?? '').replace(/\s/gu, ' ').replace(/[\p{Cc}\p{Cf}]/gu, '').replace(/\s+/gu, ' ').trim();
+  // By code point, so the bound never splits a surrogate pair into a lone half.
+  return Array.from(cleaned).slice(0, CLIENT_NAME_MAX).join('').trim() || UNNAMED_AGENT;
+}
+
 export async function createAgent(env: Env, args: { userId: string; clientId: string; clientName: string; settings: AgentSettings }, now = Date.now()): Promise<AgentRow> {
   const id = crypto.randomUUID();
-  // The name comes from the client's own registration: bounded, and never trusted as markup.
-  const name = args.clientName.trim().slice(0, 120) || 'Unnamed agent';
+  const name = normalizeClientName(args.clientName);
   await env.DB.prepare(`INSERT INTO account_agents (id,user_id,client_id,client_name,budget_micros,allow_unknown_cost,allow_delete,created_at)
     VALUES (?,?,?,?,?,?,?,?)`)
     .bind(id, args.userId, args.clientId, name, toMicros(args.settings.budgetUsd), args.settings.allowUnknownCost ? 1 : 0, args.settings.allowDelete ? 1 : 0, now).run();

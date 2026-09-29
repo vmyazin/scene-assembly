@@ -44,6 +44,17 @@ describe('agent consent', () => {
     expect(db.prepare('SELECT client_name, redirect_host, decision FROM account_agent_authorizations').get()).toEqual({ client_name: 'Claude Code', redirect_host: '127.0.0.1', decision: null });
   });
 
+  it('parks the client\'s name without control or bidi characters', async () => {
+    const { db, env, oauth } = setup();
+    const original = oauth.helpers.describeConsent;
+    env.OAUTH_PROVIDER!.describeConsent = async request => ({ ...await original(request), clientName: '\u202EClaude\u0000  Code' });
+    await begin(env);
+    expect(db.prepare('SELECT client_name FROM account_agent_authorizations').get()).toEqual({ client_name: 'Claude Code' });
+    env.OAUTH_PROVIDER!.describeConsent = async request => ({ ...await original(request), clientName: '\u2066\u202E\u0007' });
+    await begin(env);
+    expect(db.prepare('SELECT client_name FROM account_agent_authorizations ORDER BY rowid DESC').get()).toEqual({ client_name: 'Unnamed agent' });
+  });
+
   it('shows the request to the signed-in person with the providers a default grant refuses', async () => {
     const { db, env } = setup();
     connectProvider(db, 'kie');

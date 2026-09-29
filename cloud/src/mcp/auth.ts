@@ -8,7 +8,7 @@ import { enabledProviders } from '../providers';
 import { hash, isLocal, json, randomToken, type Env } from '../security';
 import { currentAccount } from '../sessions';
 import { listConnections } from '../vault';
-import { AGENT_BUDGET, createAgent, DEFAULT_AGENT_SETTINGS, parseAgentSettings, type AgentSettings } from './agents';
+import { AGENT_BUDGET, createAgent, DEFAULT_AGENT_SETTINGS, normalizeClientName, parseAgentSettings, type AgentSettings } from './agents';
 
 /** Open client registration is otherwise a free way to write to KV. */
 export const REGISTRATIONS_PER_MINUTE = 20;
@@ -135,7 +135,7 @@ export async function authorize(request: Request, env: Env, now = Date.now()): P
   const id = crypto.randomUUID();
   await env.DB.prepare(`INSERT INTO account_agent_authorizations (id, consent_handle, description_json, client_id, client_name, redirect_host, expires_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)`)
-    .bind(id, consent.handle, JSON.stringify(description), description.clientId, description.clientName.trim().slice(0, 120) || 'Unnamed agent', description.redirectHost, now + AUTHORIZATION_TTL_MS).run();
+    .bind(id, consent.handle, JSON.stringify(description), description.clientId, normalizeClientName(description.clientName), description.redirectHost, now + AUTHORIZATION_TTL_MS).run();
   const headers = new Headers(consent.headers);
   headers.set('Location', `${env.APP_ORIGIN}/connect-agent?request=${id}`);
   headers.set('Cache-Control', 'no-store');
