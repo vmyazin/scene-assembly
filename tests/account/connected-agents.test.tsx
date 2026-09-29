@@ -17,6 +17,19 @@ function answer(agents: ConnectedAgent[] = [agent]) {
     throw new Error(`Unexpected ${path}`);
   });
 }
+/** A promise the test settles by hand, so it can inspect the UI while a DELETE
+ *  is still on the wire instead of it having already resolved by the time the
+ *  next assertion runs. */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
+async function confirmDisconnect(row: ReturnType<typeof within>) {
+  await userEvent.click(row.getByRole('button', { name: 'Disconnect' }));
+  await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Disconnect' }));
+}
 // Braces, not an expression body: `mockReset()` returns the mock itself, and
 // Vitest treats a value `beforeEach` returns as a teardown to run after the
 // test — an expression body here would hand it `accountRequest` and it would
@@ -73,5 +86,48 @@ describe('connected agents panel', () => {
     await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Disconnect' }));
     await waitFor(() => expect(accountRequest).toHaveBeenCalledWith('agents/agent-1', expect.objectContaining({ method: 'DELETE' })));
     expect(await screen.findByText('No agents connected.')).toBeInTheDocument();
+  });
+
+  it('locks the row while its disconnect is in flight, and fires exactly one DELETE', async () => {
+    const gate = deferred<{ ok: true }>();
+    vi.mocked(accountRequest).mockImplementation(async (path, init) => {
+      if (path === 'agents') return { accountId: 'owner-1', mcpUrl: 'https://mcp.sceneassembly.mzork.com/mcp', limits: { minUsd: 0.5, maxUsd: 500 }, agents: [agent] };
+      if (path === 'agents/agent-1' && init?.method === 'DELETE') return gate.promise;
+      throw new Error(`Unexpected ${path}`);
+    });
+    render(<ConnectedAgentsPanel ownerId="owner-1" />);
+    const row = within(await screen.findByRole('listitem'));
+    await confirmDisconnect(row);
+
+    // The DELETE has not settled yet: the row locks both of its own buttons.
+    await waitFor(() => expect(row.getByRole('button', { name: 'Disconnect' })).toBeDisabled());
+    expect(row.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(vi.mocked(accountRequest).mock.calls.filter(([path, init]) => path === 'agents/agent-1' && init?.method === 'DELETE')).toHaveLength(1);
+
+    // A second confirmation for the same agent while it is locked must not
+    // fire a second DELETE — the button is disabled, so this click is a no-op.
+    await userEvent.click(row.getByRole('button', { name: 'Disconnect' }));
+    expect(vi.mocked(accountRequest).mock.calls.filter(([path, init]) => path === 'agents/agent-1' && init?.method === 'DELETE')).toHaveLength(1);
+
+    gate.resolve({ ok: true });
+    expect(await screen.findByText('No agents connected.')).toBeInTheDocument();
+  });
+
+  it('re-enables the row when the disconnect fails', async () => {
+    const gate = deferred<{ ok: true }>();
+    vi.mocked(accountRequest).mockImplementation(async (path, init) => {
+      if (path === 'agents') return { accountId: 'owner-1', mcpUrl: 'https://mcp.sceneassembly.mzork.com/mcp', limits: { minUsd: 0.5, maxUsd: 500 }, agents: [agent] };
+      if (path === 'agents/agent-1' && init?.method === 'DELETE') return gate.promise;
+      throw new Error(`Unexpected ${path}`);
+    });
+    render(<ConnectedAgentsPanel ownerId="owner-1" />);
+    const row = within(await screen.findByRole('listitem'));
+    await confirmDisconnect(row);
+    await waitFor(() => expect(row.getByRole('button', { name: 'Disconnect' })).toBeDisabled());
+
+    gate.reject(new Error('Could not disconnect.'));
+    await waitFor(() => expect(row.getByRole('button', { name: 'Disconnect' })).not.toBeDisabled());
+    // Still connected: the failed DELETE never removed it from the list.
+    expect(screen.getByText('Claude Code')).toBeInTheDocument();
   });
 });

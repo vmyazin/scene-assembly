@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -17,6 +17,13 @@ export default function ConnectedAgentsPanel({ ownerId }: { ownerId: string }) {
   const [data, setData] = useState<AgentsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<ConnectedAgent | null>(null);
+  // Which agent ids have a DELETE in flight. A ref for the synchronous re-entry
+  // guard — `AccountDeletion`'s `pending` ref, scoped per agent instead of one
+  // shared flag — plus mirrored state so the row can actually render disabled;
+  // a ref alone never triggers a re-render, and state alone lags one tick behind
+  // a second click fired before React re-renders.
+  const disconnectingIdsRef = useRef<Set<string>>(new Set());
+  const [pendingDisconnectIds, setPendingDisconnectIds] = useState<Set<string>>(new Set());
 
   // Defined inline rather than as a `useCallback` called by reference: the
   // linter's `set-state-in-effect` check reads a `setState` reached through a
@@ -47,6 +54,12 @@ export default function ConnectedAgentsPanel({ ownerId }: { ownerId: string }) {
   }
 
   async function disconnect(agent: ConnectedAgent) {
+    // Ignore a second confirmation for the same agent: the row's own Disconnect
+    // button is disabled the instant this starts, but the ref check is what
+    // actually stops a re-entrant call rather than relying on the DOM alone.
+    if (disconnectingIdsRef.current.has(agent.id)) return;
+    disconnectingIdsRef.current.add(agent.id);
+    setPendingDisconnectIds(current => new Set(current).add(agent.id));
     setDisconnecting(null);
     try {
       await accountRequest(`agents/${agent.id}`, { method: 'DELETE', headers: { 'X-Account-Id': ownerId } });
@@ -54,6 +67,11 @@ export default function ConnectedAgentsPanel({ ownerId }: { ownerId: string }) {
       toast.success(`${agent.name} disconnected.`);
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : 'Please try again.');
+    } finally {
+      // Re-enable on failure (the row is still there); a no-op on success,
+      // since the row that held this id is gone from `data.agents` already.
+      disconnectingIdsRef.current.delete(agent.id);
+      setPendingDisconnectIds(current => { const next = new Set(current); next.delete(agent.id); return next; });
     }
   }
 
@@ -78,7 +96,7 @@ export default function ConnectedAgentsPanel({ ownerId }: { ownerId: string }) {
       {data && data.agents.length === 0 && <p className="mt-3 text-xs text-[var(--foreground-muted)]">No agents connected.</p>}
       {data && data.agents.length > 0 && (
         <ul className="mt-3 space-y-3">
-          {data.agents.map(agent => <AgentRow key={agent.id} agent={agent} limits={data.limits} onSave={settings => save(agent, settings)} onDisconnect={() => setDisconnecting(agent)} />)}
+          {data.agents.map(agent => <AgentRow key={agent.id} agent={agent} limits={data.limits} disconnecting={pendingDisconnectIds.has(agent.id)} onSave={settings => save(agent, settings)} onDisconnect={() => setDisconnecting(agent)} />)}
         </ul>
       )}
       <ConfirmDialog
@@ -93,7 +111,7 @@ export default function ConnectedAgentsPanel({ ownerId }: { ownerId: string }) {
   );
 }
 
-function AgentRow({ agent, limits, onSave, onDisconnect }: { agent: ConnectedAgent; limits: AgentsResponse['limits']; onSave(settings: Settings): Promise<void>; onDisconnect(): void }) {
+function AgentRow({ agent, limits, disconnecting, onSave, onDisconnect }: { agent: ConnectedAgent; limits: AgentsResponse['limits']; disconnecting: boolean; onSave(settings: Settings): Promise<void>; onDisconnect(): void }) {
   const [budget, setBudget] = useState(String(agent.budgetUsd));
   const [allowUnknownCost, setAllowUnknownCost] = useState(agent.allowUnknownCost);
   const [allowDelete, setAllowDelete] = useState(agent.allowDelete);
@@ -117,8 +135,8 @@ function AgentRow({ agent, limits, onSave, onDisconnect }: { agent: ConnectedAge
         <input id={`${id}-delete`} type="checkbox" checked={allowDelete} onChange={event => setAllowDelete(event.target.checked)} className="h-4 w-4 accent-[var(--neon-cyan)]" />
       </label>
       <div className="mt-3 flex gap-2">
-        <button type="button" disabled={!changed || !valid || busy} onClick={async () => { setBusy(true); await onSave({ budgetUsd, allowUnknownCost, allowDelete }); setBusy(false); }} className="btn-secondary flex flex-1 justify-center">Save</button>
-        <button type="button" onClick={onDisconnect} className="btn-secondary flex flex-1 justify-center text-red-300">Disconnect</button>
+        <button type="button" disabled={!changed || !valid || busy || disconnecting} onClick={async () => { setBusy(true); await onSave({ budgetUsd, allowUnknownCost, allowDelete }); setBusy(false); }} className="btn-secondary flex flex-1 justify-center">Save</button>
+        <button type="button" disabled={disconnecting} onClick={onDisconnect} className="btn-secondary flex flex-1 justify-center text-red-300">Disconnect</button>
       </div>
     </li>
   );
