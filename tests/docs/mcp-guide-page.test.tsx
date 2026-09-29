@@ -14,6 +14,22 @@ describe('the setup guide page', () => {
     expect(screen.getByRole('link', { name: 'Back to studio' })).toHaveAttribute('href', '/');
   });
 
+  it('gives every element a unique id, and every in-page link a target', () => {
+    const { container } = render(<McpDocsPage />);
+    const ids = [...container.querySelectorAll('[id]')].map(element => element.id);
+    expect(ids.filter((id, index) => ids.indexOf(id) !== index)).toEqual([]);
+    for (const link of container.querySelectorAll('a[href^="#"]')) {
+      expect(ids).toContain(link.getAttribute('href')!.slice(1));
+    }
+  });
+
+  it('puts every table in a scrolling wrapper, so a narrow screen scrolls the table and not the page', () => {
+    const { container } = render(<McpDocsPage />);
+    const tables = [...container.querySelectorAll('.doc-prose table')];
+    expect(tables.length).toBeGreaterThan(0);
+    for (const table of tables) expect(table.parentElement).toHaveClass('doc-table');
+  });
+
   it('is indexable, static, and points agents at the Markdown', () => {
     expect(dynamic).toBe('force-static');
     expect(metadata.title).toBe('Connect an agent · Scene Assembly');

@@ -1001,6 +1001,7 @@ textarea::placeholder {
    the page. */
 .doc-prose {
   max-width: 72ch;
+  overflow-wrap: break-word;
   color: var(--foreground);
   font-size: 0.9375rem;
   line-height: 1.7;
@@ -1083,12 +1084,22 @@ textarea::placeholder {
   padding: 0;
   overflow-wrap: normal;
 }
-.doc-prose table {
-  display: block;
+/* The renderer wraps every table in .doc-table, which scrolls sideways by
+   itself, so a wide table never widens the page on a phone. Codes in a cell
+   stay on one line: broken mid-word ("invali / d_fiel / d") they cannot be
+   read or copied as the identifiers they are. */
+.doc-prose .doc-table {
   max-width: 100%;
   overflow-x: auto;
+}
+.doc-prose table {
   border-collapse: collapse;
   font-size: 0.875rem;
+}
+.doc-prose td code,
+.doc-prose th code {
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 .doc-prose th,
 .doc-prose td {

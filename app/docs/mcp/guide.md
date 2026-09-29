@@ -28,7 +28,14 @@ Then run `/mcp` inside Claude Code, choose `scene-assembly` and sign in.
 
 ### Claude.ai and Claude Desktop
 
-Open Settings → Connectors, add a custom connector, and paste the MCP URL. When you connect it, Claude opens the Scene Assembly page.
+Custom connectors are available in Claude on the web and in Claude Desktop. On a Free, Pro or Max plan (Free allows one custom connector):
+
+1. Open Customize → Connectors (claude.ai/customize/connectors).
+2. Click **+**, then **Add custom connector**.
+3. Paste the MCP URL and click **Add**. Leave Advanced settings empty: Scene Assembly registers the client itself.
+4. Connect it, and Claude opens the Scene Assembly page.
+
+On a Team or Enterprise plan, an Owner adds the connector first: Organization settings → Connectors (claude.ai/admin-settings/connectors), **Add**, hover over **Custom** and choose **Web**, paste the MCP URL and click **Add**. Each member then opens Customize → Connectors, finds the connector and clicks **Connect**.
 
 ### Cursor
 
@@ -52,7 +59,7 @@ The server speaks Streamable HTTP and uses OAuth 2.1 with dynamic client registr
 
 ### Reconnecting
 
-A connection lasts 30 days from the day you approve it and is not extended by use, so expect to reconnect about once a month. When it lapses, the agent's calls fail with HTTP 401; connect again the same way you did the first time. Each approval creates a new entry in the Connected agents panel with its own limit; the lapsed one leaves the panel on its own.
+A connection lasts 30 days from the day you approve it and is not extended by use, so expect to reconnect about once a month. When it lapses, the agent's calls fail with HTTP 401; connect again the same way you did the first time. Each approval creates a new entry in the Connected agents panel with its own limit; the lapsed one leaves the panel on its own. Each entry shows when it was connected and last used, which tells a working connection from an old one with the same name.
 
 ## What you approve
 
@@ -108,7 +115,7 @@ Each step is one tool call. The arguments are examples.
 
 ### Idempotency
 
-The `idempotencyKey` is any string you choose, up to 200 characters, and it belongs to this agent only. Reuse the key when you retry the same request, for example after a timeout: you get the same job back and are not charged again. A new key, or no key at all, starts a new job and a new charge. Reusing a key with a different request, or with a job that was removed, is refused with `token_conflict`. If the first call with a key is still starting, a second one is refused with `request_in_progress`; wait a few seconds and retry, or call `list_jobs`.
+The `idempotencyKey` is any string you choose, up to 200 characters, and it belongs to this agent only. Reuse the key when you retry the same request, for example after a timeout: you get the same job back and are not charged again. A new key, or no key at all, starts a new job and a new charge. Reusing a key with a different request, or with a job that was removed, is refused with `token_conflict`. If the first call with a key is still starting, a second one is refused with `request_in_progress`; wait a few seconds and retry, or call `list_jobs`. Both refusals are described under [Errors](#idempotency-2).
 
 ## References
 
@@ -137,9 +144,11 @@ The response has a `putUrl`. PUT exactly that many bytes there within 15 minutes
 curl -T cat.png -H "Content-Type: image/png" "<putUrl>"
 ```
 
+A different type or byte count is refused by the upload link itself with an HTTP 400, not by a tool; ask for a new link with the right figures.
+
 `mimeType` is one of `image/png`, `image/jpeg`, `image/webp`, `image/avif`, `video/mp4` or `video/webm`, with the same size limits as links.
 
-**Using it.** An `uploadId` lasts 24 hours. It is cleaned up soon after the jobs that used it finish, so stage the file again for a later job. A file already in your library needs no staging: pass its `assetId`.
+**Using it.** An `uploadId` lasts 24 hours. It is cleaned up soon after the jobs that used it finish, so stage the file again for a later job. A file already in your library needs no staging: pass its `assetId`. The refusals these steps can return are listed under [Errors](#references-2).
 
 ```json
 { "provider": "gemini", "modelId": "gemini-3-pro-image-preview", "mediaType": "image", "inputMode": "image", "prompt": "The same kite, in watercolour", "references": [{ "uploadId": "<from add_reference>" }, { "assetId": "<from list_assets>" }], "idempotencyKey": "harbour-kite-watercolour" }
@@ -194,7 +203,7 @@ An HTTP 401 from the server is not a refusal. It means the connection was discon
 | `invalid_references` | No | The same reference was passed twice, or a file is in the wrong role: images go in `references`, a video goes in `sourceVideo`. |
 | `invalid_token` | No | Scene Assembly built an invalid submission token. This should not happen; report it. |
 | `not_found` | No | No job or file with that id on this account. |
-| `local_fixture_mode` | No | Only on a local development server running without provider keys, which generates images only. |
+| `local_fixture_mode` | No | Only on a local development server with fake generation switched on, which runs image jobs and edits only. |
 
 ### Providers
 
@@ -212,7 +221,7 @@ An HTTP 401 from the server is not a refusal. It means the connection was discon
 | `rate_limited` | Yes | This agent is calling too often. Wait `retryAfterSeconds`, then retry. |
 | `active_jobs` | No | The account already has 10 jobs running. Wait for one to finish (`list_jobs` with `state: "active"`), or cancel one. |
 | `service_capacity` | Yes | Background generation is busy for everyone. Try again shortly. |
-| `capacity` | No | The account's storage has no room for this job's output, or the job could not be started for another reason. Delete files from the library, or ask the person to. |
+| `capacity` | No | Either the account's storage has no room for this job's output, or the job could not be started for another reason. Read the message: if it says the storage is full, delete files from the library or ask the person to; if it says to try again shortly, wait and retry once. |
 | `reserved_capacity` | No | Jobs in progress are holding the rest of the account's storage. Wait for them to finish. |
 | `temporary_results` | No | The account has results saved only temporarily because its storage was full. Download and delete them (`list_assets` with `temporaryOnly: true`), or wait for them to expire, before starting another job. |
 
@@ -229,7 +238,9 @@ An HTTP 401 from the server is not a refusal. It means the connection was discon
 | --- | --- | --- |
 | `reference_fetch_failed` | No | A reference URL was refused or could not be downloaded: not https, an IP address, a Scene Assembly address, too many redirects, an error status, a type other than PNG, JPEG, WebP, AVIF, MP4 or WebM, or a file over the size limit. The message says which. |
 | `invalid_upload` | No | `add_reference` was asked for an upload of an unsupported type or size. |
-| `upload_size` | Yes | A stored reference did not match its expected size. Stage it again. |
+| `upload_size` | Yes | A library file passed as `{ "assetId": … }` did not copy intact for the job. Retry the same `generate` call, with the same `idempotencyKey`. |
+| `result_type` | No | A file could not be stored as a reference because its type is not one Scene Assembly stores. Use a PNG, JPEG, WebP, AVIF, MP4 or WebM file. |
+| `result_size` | No | A file was larger than the limit while it was being stored. Use a smaller file. |
 | `input_capacity` | No | Too many staged references are still in use: an account holds up to 32, 256 MB in all. Wait for the jobs using them to finish. |
 | `reference_unavailable` | No | A staged upload has expired, was never finished, or was already cleaned up, or a library file cannot be used as a reference (too large or the wrong type). Stage it again. |
 | `inline_input_size` | No | Gemini and CometAPI take up to 12 MB of reference images per job in all. Use smaller images. |
