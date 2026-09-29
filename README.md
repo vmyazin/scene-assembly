@@ -163,6 +163,8 @@ Signed-in accounts can let Claude, Claude Code, Cursor, or any MCP client genera
 2. A browser page asks for a 24-hour spend limit and two permissions
 3. Disconnect from the same panel
 
+The full setup guide, with every tool and error code, is at https://sceneassembly.mzork.com/docs/mcp (Markdown for agents at `/docs/mcp.md`).
+
 Local development: `claude mcp add --transport http scene-assembly-local http://localhost:8797/mcp`
 
 ## 🛠️ Tech Stack

@@ -994,3 +994,114 @@ textarea::placeholder {
   width: 12px;
   height: 12px;
 }
+
+/* Rendered Markdown documentation (/docs/mcp). One class scopes every rule, so
+   the prose styles never reach the studio. The measure stays near 72 characters;
+   tables and code blocks scroll sideways inside themselves rather than widening
+   the page. */
+.doc-prose {
+  max-width: 72ch;
+  color: var(--foreground);
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}
+.doc-prose > * + * {
+  margin-top: 1rem;
+}
+.doc-prose h2 {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+}
+.doc-prose h3 {
+  margin-top: 2rem;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.doc-prose h2 + *,
+.doc-prose h3 + * {
+  margin-top: 0.75rem;
+}
+.doc-prose p,
+.doc-prose li {
+  color: var(--foreground-muted);
+}
+.doc-prose strong {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.doc-prose a {
+  color: var(--neon-cyan);
+  text-underline-offset: 2px;
+}
+.doc-prose a:hover {
+  text-decoration: underline;
+}
+.doc-prose ul,
+.doc-prose ol {
+  padding-left: 1.4rem;
+}
+.doc-prose ul {
+  list-style: disc;
+}
+.doc-prose ol {
+  list-style: decimal;
+}
+.doc-prose li + li {
+  margin-top: 0.4rem;
+}
+.doc-prose li::marker {
+  color: var(--foreground-subtle);
+}
+.doc-prose code {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.85em;
+  color: var(--foreground);
+  background: var(--background-elevated);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.1em 0.35em;
+  overflow-wrap: anywhere;
+}
+.doc-prose pre {
+  overflow-x: auto;
+  background: var(--background-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.875rem 1rem;
+  line-height: 1.55;
+}
+.doc-prose pre code {
+  font-size: 0.8125rem;
+  background: none;
+  border: 0;
+  padding: 0;
+  overflow-wrap: normal;
+}
+.doc-prose table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.doc-prose th,
+.doc-prose td {
+  border: 1px solid var(--border-hover);
+  padding: 0.45rem 0.7rem;
+  text-align: left;
+  vertical-align: top;
+}
+.doc-prose th {
+  color: var(--foreground);
+  font-weight: 600;
+  background: var(--background-elevated);
+}
+.doc-prose td {
+  color: var(--foreground-muted);
+}
