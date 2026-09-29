@@ -45,7 +45,7 @@ async function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>) {
   try { await reader.cancel(); } catch { /* The stream may already be closed or errored. */ }
 }
 
-async function boundedBody(request: Request, limit: number): Promise<Uint8Array> {
+export async function boundedBody(request: Request, limit: number): Promise<Uint8Array> {
   if (declaredTooLarge(request, limit)) {
     if (request.body) await cancelReader(request.body.getReader());
     throw new BodyTooLargeError();
@@ -79,7 +79,7 @@ async function boundedBody(request: Request, limit: number): Promise<Uint8Array>
   return body;
 }
 
-class BodyTooLargeError extends Error {}
+export class BodyTooLargeError extends Error {}
 
 async function rebuildBoundedPost(request: Request, limit: number): Promise<Request> {
   const bytes = await boundedBody(request, limit);
@@ -92,7 +92,7 @@ async function rebuildBoundedPost(request: Request, limit: number): Promise<Requ
   });
 }
 
-async function consume(
+export async function consume(
   env: Env,
   rawBucket: string,
   limit: number,

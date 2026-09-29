@@ -10,7 +10,8 @@
   },
   "vars": {
     "APP_ORIGIN": "https://scene-assembly-ohuguqu4p-mzork.vercel.app",
-    "PUBLIC_WORKER_ORIGIN": "https://scene-assembly-accounts-preview.vasily-or-simon-account.workers.dev"
+    "PUBLIC_WORKER_ORIGIN": "https://scene-assembly-accounts-preview.vasily-or-simon-account.workers.dev",
+    "MCP_ORIGIN": "https://scene-assembly-accounts-preview.vasily-or-simon-account.workers.dev"
   },
   "d1_databases": [
     {
@@ -26,6 +27,17 @@
       "bucket_name": "scene-assembly-assets-preview"
     }
   ],
+  // OAuth clients, grants and tokens for connected agents (workers-oauth-provider).
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV",
+      "id": "aa7c476a1130484f9807287374bf70e7"
+    }
+  ],
+  // Inline previews for the agents' view_asset tool. Local by default in Wrangler 4.
+  "images": {
+    "binding": "IMAGES"
+  },
   "workflows": [
     {
       "binding": "GENERATION",

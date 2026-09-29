@@ -18,12 +18,13 @@ const request: CloudJobRequest = {
 const startedAt = Date.now() - 79_000;
 const running: CloudJobView = { id: 'job-1', provider: 'fal', state: 'running', errorCode: null, request, createdAt: startedAt, updatedAt: startedAt };
 const queued: CloudJobView = { ...running, id: 'job-2', state: 'queued', request: { ...request, mediaType: 'image', prompt: 'A canal at dusk' } };
+const runningViaAgent: CloudJobView = { ...running, id: 'job-3', request: { ...request, prompt: 'A robot busking on Mars' }, startedBy: { agentId: 'a1', name: 'Claude Code' } };
 const saved: CloudAsset = { id: 'image-1', kind: 'image', mimeType: 'image/png', bytes: 1200, createdAt: 2, metadata: { ...request, prompt: 'A tram at dawn' }, jobId: 'job-0' };
 
 const refresh = vi.fn();
 vi.mock('@/lib/account/use-library', () => ({
   useAccountLibrary: () => ({
-    jobs: [running, queued], assets: [saved], storage: null,
+    jobs: [running, queued, runningViaAgent], assets: [saved], storage: null,
     counts: { all: 1, image: 1, video: 0, temporary: 0 }, error: null,
     loading: false, cursor: null, nextCursor: null, page: vi.fn(), refresh,
   }),
@@ -69,6 +70,13 @@ describe('a job still running in the cloud library', () => {
     const bar = screen.getAllByRole('progressbar')[0];
     expect(bar).toHaveAttribute('aria-valuetext', expect.stringContaining('The provider is working on it.'));
     expect(bar).not.toHaveAttribute('aria-valuenow');
+  });
+
+  it('marks a job an agent started', async () => {
+    await openGenerating();
+
+    const started = card('A robot busking on Mars');
+    expect(started).toHaveTextContent('fal · video · Veo 3.1 Standard · via Claude Code');
   });
 
   it('keeps the cancel a queued job still allows', async () => {

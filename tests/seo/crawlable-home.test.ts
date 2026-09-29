@@ -76,7 +76,7 @@ describe('sitemap.xml', () => {
   it('lists the studio in the same form as its canonical', () => {
     // Next resolves `canonical: '/'` against metadataBase to the bare origin;
     // a sitemap with a trailing slash would disagree with the tag it points at.
-    expect(urls).toEqual([brand.siteUrl]);
+    expect(urls).toEqual([brand.siteUrl, `${brand.siteUrl}/docs/mcp`]);
   });
 
   it('lists nothing that carries a noindex', () => {

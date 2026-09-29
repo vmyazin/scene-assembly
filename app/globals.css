@@ -994,3 +994,133 @@ textarea::placeholder {
   width: 12px;
   height: 12px;
 }
+
+/* Rendered Markdown documentation (/docs/mcp). One class scopes every rule, so
+   the prose styles never reach the studio. The measure stays near 72 characters;
+   tables and code blocks scroll sideways inside themselves rather than widening
+   the page. */
+.doc-prose {
+  max-width: 72ch;
+  overflow-wrap: break-word;
+  color: var(--foreground);
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}
+.doc-prose > * + * {
+  margin-top: 1rem;
+}
+.doc-prose h2 {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+}
+.doc-prose h3 {
+  margin-top: 2rem;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.doc-prose h2 + *,
+.doc-prose h3 + * {
+  margin-top: 0.75rem;
+}
+.doc-prose p,
+.doc-prose li {
+  color: var(--foreground-muted);
+}
+.doc-prose strong {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.doc-prose a {
+  color: var(--neon-cyan);
+  text-underline-offset: 2px;
+}
+.doc-prose a:hover {
+  text-decoration: underline;
+}
+.doc-prose ul,
+.doc-prose ol {
+  padding-left: 1.4rem;
+}
+.doc-prose ul {
+  list-style: disc;
+}
+.doc-prose ol {
+  list-style: decimal;
+}
+.doc-prose li + li {
+  margin-top: 0.4rem;
+}
+.doc-prose li::marker {
+  color: var(--foreground-subtle);
+}
+.doc-prose code {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.85em;
+  color: var(--foreground);
+  background: var(--background-elevated);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.1em 0.35em;
+  overflow-wrap: anywhere;
+}
+.doc-prose pre {
+  overflow-x: auto;
+  background: var(--background-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.875rem 1rem;
+  line-height: 1.55;
+}
+.doc-prose pre code {
+  font-size: 0.8125rem;
+  background: none;
+  border: 0;
+  padding: 0;
+  overflow-wrap: normal;
+}
+/* The renderer wraps every table in .doc-table, which scrolls sideways by
+   itself, so a wide table never widens the page on a phone. Codes in a cell
+   stay on one line: broken mid-word ("invali / d_fiel / d") they cannot be
+   read or copied as the identifiers they are. */
+.doc-prose .doc-table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.doc-prose table {
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.doc-prose td code,
+.doc-prose th code {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+/* With the code column unable to wrap, a table fitting a phone took its width
+   from the last column, the sentence that says what to do, until it was a few
+   characters wide. A floor on that column makes the table wider than the
+   wrapper instead, and the wrapper scrolls. */
+.doc-prose th:last-child,
+.doc-prose td:last-child {
+  min-width: 14rem;
+}
+.doc-prose th,
+.doc-prose td {
+  border: 1px solid var(--border-hover);
+  padding: 0.45rem 0.7rem;
+  text-align: left;
+  vertical-align: top;
+}
+.doc-prose th {
+  color: var(--foreground);
+  font-weight: 600;
+  background: var(--background-elevated);
+}
+.doc-prose td {
+  color: var(--foreground-muted);
+}

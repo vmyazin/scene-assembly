@@ -101,7 +101,7 @@ function CloudJobCard({ job, busy, onCancel }: { job: CloudJobView; busy: boolea
             provider, media type, and what made it — with the model named rather
             than left as a vendor id. */}
         <p className="mt-1 text-[0.625rem] text-sky-200">
-          {job.provider} · {job.request.mediaType} · {jobModelLabel(job.provider, job.request.modelId)}
+          {job.provider} · {job.request.mediaType} · {jobModelLabel(job.provider, job.request.modelId)}{job.startedBy ? ` · via ${job.startedBy.name ?? 'an agent'}` : ''}
         </p>
         <p className="mt-1 text-[0.625rem] text-[var(--foreground-subtle)]">{stage.say}</p>
       </div>

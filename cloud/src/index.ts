@@ -15,23 +15,30 @@ import { googleAuthorization, googleEnabled, googleIdentity } from './google';
 import { createSession, currentAccount, revokeSession } from './sessions';
 import { cleanupImports, importRoutes, publicImportMedia } from './imports';
 import { applyIngress, cleanupExpiredIngress } from './ingress';
+import { cleanupOrphanCharges } from './mcp/budget';
+import { agentRoutes } from './mcp/agent-routes';
+import { authorize, authorizationRoutes, cleanupAuthorizations, finish, retireUnreachableAgents } from './mcp/auth';
 
 interface OAuthAttempt { verifier: string; nonce: string; return_to: string }
 const bootstrapped = new WeakMap<object, Promise<void>>();
+/** Local dev creates its schema on first request. Exported because the entry
+ *  wrapper reads D1 (the registration limit) before handleRequest runs. */
+export async function ensureLocalSchema(env: Env) {
+  if (!isLocal(env)) return;
+  // Share the upgrade across simultaneous first requests; retry after a failure.
+  let ready = bootstrapped.get(env.DB);
+  if (!ready) {
+    ready = bootstrapLocalSchema(env.DB).catch(error => { bootstrapped.delete(env.DB); throw error; });
+    bootstrapped.set(env.DB, ready);
+  }
+  await ready;
+}
 export async function handleRequest(request: Request, env: Env): Promise<Response> {
   try {
     if (!validOrigin(env)) return json({ error: 'Account service is not configured.' }, 503);
     // The local shortcut must stay absent even before production migrations exist.
     if(new URL(request.url).pathname==='/api/account/local-sign-in'&&!isLocal(env))return json({error:'Not found.'},404);
-    if (isLocal(env)) {
-      // Share the upgrade across simultaneous first requests; retry after a failure.
-      let ready = bootstrapped.get(env.DB);
-      if (!ready) {
-        ready = bootstrapLocalSchema(env.DB).catch(error => { bootstrapped.delete(env.DB); throw error; });
-        bootstrapped.set(env.DB, ready);
-      }
-      await ready;
-    }
+    await ensureLocalSchema(env);
     const ingress = await applyIngress(request, env);
     if (ingress.response) return ingress.response;
     request = ingress.request;
@@ -41,6 +48,15 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if(importMediaResponse)return importMediaResponse;
     const url = new URL(request.url);
     const path = url.pathname;
+    // The browser legs of connecting an agent, both GETs the library sends the browser
+    // to and both rate-limited per IP by guardRegistration in entry.ts before this runs.
+    // authorize only ever inserts a fresh pending row; finish only ever completes one
+    // the signed-in POST to authorizationRoutes (below) already decided, and requires
+    // both that decision's one-time secret (?t=, checked against finish_hash) and the
+    // library's own cookie binding to the browser that started the request — proving,
+    // respectively, who approved it and that this is the browser that asked.
+    if (path === '/oauth/authorize' && request.method === 'GET') return authorize(request, env);
+    if (path === '/oauth/finish' && request.method === 'GET') return finish(request, env);
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && request.headers.get('origin') !== env.APP_ORIGIN) return json({ error: 'Request origin is not allowed.' }, 403);
     const expectedOwner=request.headers.get('x-account-id');
     if(expectedOwner&&(await currentAccount(request,env))?.id!==expectedOwner)return json({error:'Your account changed. Refresh before continuing.'},409);
@@ -58,6 +74,10 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if(billingResponse)return billingResponse;
     const connectionResponse = await connectionRoutes(request, env);
     if (connectionResponse) return connectionResponse;
+    const agentResponse = await agentRoutes(request, env);
+    if (agentResponse) return agentResponse;
+    const authorizationResponse = await authorizationRoutes(request, env);
+    if (authorizationResponse) return authorizationResponse;
     if (path === '/health' && request.method === 'GET') return json({ ok: true });
     if (path === '/api/account/session' && request.method === 'GET') {
       const account=await currentAccount(request,env);
@@ -125,6 +145,9 @@ export async function runScheduledMaintenance(env:Env) {
     ()=>cleanupTerminalJobObjects(env),
     ()=>cleanupObjects(env),
     ()=>cleanupExpiredIngress(env),
+    ()=>cleanupOrphanCharges(env),
+    ()=>cleanupAuthorizations(env),
+    ()=>retireUnreachableAgents(env),
     ()=>env.DB.prepare('DELETE FROM account_oauth WHERE expires_at <= ?').bind(Date.now()).run(),
     ()=>env.DB.prepare('DELETE FROM account_sessions WHERE expires_at <= ?').bind(Date.now()).run(),
   ];

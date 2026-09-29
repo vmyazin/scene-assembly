@@ -7,12 +7,16 @@ import { deleteQueuedObject } from './cleanup';
 export const MAX_OUTPUT_BYTES = 1_000_000_000;
 export const MAX_JOB_OUTPUTS = 8;
 export const MAX_JOB_OUTPUT_BYTES = 1_000_000_000;
-interface AssetRow { id: string; user_id: string; job_id: string | null; object_key: string; kind: 'image'|'video'; mime_type: string; bytes: number; metadata_json: string; created_at: number; deleted: number; expires_at?:number|null }
+export interface AssetRow { id: string; user_id: string; job_id: string | null; object_key: string; kind: 'image'|'video'; mime_type: string; bytes: number; metadata_json: string; created_at: number; deleted: number; expires_at?:number|null; agent_id?: string | null; agent_name?: string | null }
 export interface ResultSource { url?: string; objectKey?: string; mimeType?: string }
 export interface ProviderResult { sources: ResultSource[]; cost?: number; usage?: { promptTokens: number; outputTokens: number } }
 export const isSupportedOutputMime = (mimeType:string) => /^(image\/(png|jpeg|webp|avif)|video\/(mp4|webm))$/.test(mimeType);
-export function assetView(row: AssetRow): CloudAsset { return { id:row.id, jobId:row.job_id, kind:row.kind, mimeType:row.mime_type, bytes:row.bytes, createdAt:row.created_at, metadata:JSON.parse(row.metadata_json),...(row.expires_at?{expiresAt:row.expires_at}:{}) }; }
+export function assetView(row: AssetRow): CloudAsset { return { id:row.id, jobId:row.job_id, kind:row.kind, mimeType:row.mime_type, bytes:row.bytes, createdAt:row.created_at, metadata:JSON.parse(row.metadata_json),...(row.expires_at?{expiresAt:row.expires_at}:{}),...(row.agent_id?{startedBy:{agentId:row.agent_id,name:row.agent_name??null}}:{}) }; }
 export async function getAsset(env:Env,id:string,owner:string) { return env.DB.prepare('SELECT a.*,r.expires_at FROM account_assets a LEFT JOIN account_asset_retention r ON r.asset_id=a.id WHERE a.id = ? AND a.user_id = ? AND a.deleted = 0 AND (r.expires_at IS NULL OR r.expires_at>?)').bind(id,owner,Date.now()).first<AssetRow>(); }
+/** What a saved job produced, in the order it was written. */
+export async function jobAssets(env:Env,owner:string,jobId:string) {
+  return (await env.DB.prepare('SELECT a.*,r.expires_at FROM account_assets a LEFT JOIN account_asset_retention r ON r.asset_id=a.id WHERE a.user_id=? AND a.job_id=? AND a.deleted=0 AND (r.expires_at IS NULL OR r.expires_at>?) ORDER BY a.created_at,a.id').bind(owner,jobId,Date.now()).all<AssetRow>()).results;
+}
 
 /** Host allowlist prevents a provider result from turning the capture worker into a URL proxy. */
 export function safeResultUrl(value:string): URL {

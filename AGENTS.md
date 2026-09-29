@@ -125,6 +125,23 @@
   clicked from inside the app. Spec:
   `docs/claude/specs/2026-09-21-queue-finished-jobs-design.md`.
 - **Accounts, sign-in, or cloud persistence** → first read `docs/codex/account-development.md` and `docs/codex/specs/2026-09-04-optional-cloud-accounts-design.md`. Authentication entry pages live at `/sign-in` and `/sign-up`; signed-in management lives at `/account`, composing the existing account panels. Do not add account calls to action to the existing studio layout. The legacy admin gate is separate because enabling it would block guest routes.
+- **Agents connecting over MCP, their budgets, or the consent page** → first read
+  `docs/claude/specs/2026-09-28-agent-mcp-design.md` (its Follow-up decisions override its
+  body) and `docs/claude/plans/2026-09-28-agent-mcp.md`. The server is `cloud/src/mcp/`, and
+  every tool calls the functions the `/api/account/*` routes call (`acceptJob`, `resumeJob`,
+  `listAssets`, `listSpend`, `readAccountBilling`) — never a copy — because a refusal an agent
+  reads and one a person reads must be the same check. Model settings come from
+  `lib/account/model-schema.ts` and prices from `lib/spend/estimate.ts`, which *is* the ledger's
+  `buildAccountSpendEntry`; `cloud/tests/model-schema.test.ts` sends every advertised model,
+  mode and option through `validateRequest`, so when it fails, narrow the descriptor rather
+  than loosen a validator. The `account_agents` row, not the OAuth grant in KV, decides
+  whether a token still works, which is why disconnecting is immediate. A charge is released
+  only when the provider certainly never ran the job. Test tools through a real MCP client
+  wired to `serveMcp` (`cloud/tests/mcp-harness.ts`), never hand-written JSON-RPC: the SDK
+  serves two protocol eras and a hand-rolled request tests only one. A new tool or refusal code
+  also needs a line in the public guide, `app/docs/mcp/guide.md` (served at `/docs/mcp` and
+  `/docs/mcp.md`), because agents are told it lists every one; `cloud/tests/mcp-docs.test.ts`
+  scans the tool list and the refusal codes and fails on anything the guide leaves out.
 
 - **Video generation workspace layout** → first read
   `docs/codex/specs/2026-08-30-wan3-reference-video-design.md`, then compose setup,
@@ -323,6 +340,10 @@ cp ../../../next-env.d.ts .                # gitignored; without it tsc can't ty
 cp ../../../public/thumbnails/*.jpg public/thumbnails/ 2>/dev/null || true  # gitignored local assets
 cp cloud/.dev.vars.example cloud/.dev.vars # then set DEV_FAKE_GENERATION=1 for credential-free jobs
 ```
+
+If either `pnpm install` fails in sharp's install script with "Please add node-addon-api to
+your dependencies", sharp found a global libvips and tried to build from source; rerun the
+same install with `SHARP_IGNORE_GLOBAL_LIBVIPS=1` in front.
 
 Install rather than symlink `node_modules`: `ln -s ../../../node_modules` still
 satisfies `tsc` and `vitest`, but Turbopack treats the worktree as its filesystem

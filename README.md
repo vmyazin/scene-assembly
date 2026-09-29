@@ -155,6 +155,18 @@ Guest provider credentials, including the fal key, persist in this browser’s `
 
 fal inference submissions send `X-Fal-Store-IO: 0`, which opts the JSON request/response payload out of fal history; it does **not** prevent media storage. Uploaded references are configured to expire after one day, and generated outputs after seven days. Both are served from publicly accessible temporary [fal CDN](https://fal.ai/docs/documentation/model-apis/fal-cdn) URLs, so anyone with a URL can access it until expiration—download results promptly and avoid sensitive media.
 
+### Connect an agent
+
+Signed-in accounts can let Claude, Claude Code, Cursor, or any MCP client generate with the provider keys connected to the account.
+
+1. Add the MCP URL shown under **Connected agents** on the account page
+2. A browser page asks for a 24-hour spend limit and two permissions
+3. Disconnect from the same panel
+
+The full setup guide, with every tool and error code, is at https://sceneassembly.mzork.com/docs/mcp (Markdown for agents at `/docs/mcp.md`).
+
+Local development: `claude mcp add --transport http scene-assembly-local http://localhost:8797/mcp`
+
 ## 🛠️ Tech Stack
 
 - **Framework**: Next.js 16 (App Router)
@@ -229,6 +241,7 @@ scene-assembly/
 - Guest jobs and generated media are stored **locally in your own browser** via IndexedDB; saved prompts live in `localStorage`. Both stay in that browser profile until you clear them — use **Library → Clear library** on a shared machine
 - When the optional account service is enabled, signed-in background jobs run through a Cloudflare Workflow and save private media to R2. The cloud library and account spend ledger are separate from the browser library and browser ledger
 - Cloud account support is implemented but is not enabled on the production site yet. All eight background-provider flags default off until each provider has passed a credentialed production-like check; no real provider calls or production OAuth/resource setup have been completed
+- Agents connect with OAuth 2.1 to the account Worker; they never see provider keys, and every job they start is charged against the spend limit the person set
 
 ## ✅ Verification
 

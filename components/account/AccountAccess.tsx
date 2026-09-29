@@ -7,26 +7,28 @@ import { RefreshCw } from 'lucide-react';
 import AccountPageShell from './AccountPageShell';
 import { AccountSurface } from './AccountSurface';
 import { accountChanged, refreshAccount } from '@/lib/account/session';
+import { afterSignIn } from '@/lib/account/return-path';
 import { useAccountStore } from '@/store/useAccountStore';
 
-export default function AccountAccess({ mode, signInFailed = false }: { mode: 'sign-in' | 'sign-up'; signInFailed?: boolean }) {
+export default function AccountAccess({ mode, signInFailed = false, returnTo }: { mode: 'sign-in' | 'sign-up'; signInFailed?: boolean; returnTo?: string }) {
   const router = useRouter();
   const session = useAccountStore(state => state.session);
   const status = useAccountStore(state => state.status);
   const [error, setError] = useState<string | null>(signInFailed ? 'Google sign-in was not completed. Please try again.' : null);
   const [busy, setBusy] = useState(false);
   const signup = mode === 'sign-up';
+  const destination = afterSignIn(returnTo);
 
   useEffect(() => {
-    if (status === 'ready' && session?.account) router.replace('/account');
-  }, [router, session?.account, status]);
+    if (status === 'ready' && session?.account) router.replace(destination);
+  }, [router, session?.account, status, destination]);
 
   async function retry() {
     setBusy(true);
     setError(null);
     try {
       const next = await refreshAccount();
-      if (next.account) router.replace('/account');
+      if (next.account) router.replace(destination);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not check your account.');
     } finally {
@@ -41,18 +43,18 @@ export default function AccountAccess({ mode, signInFailed = false }: { mode: 's
       const response = await fetch(`/api/account/${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ returnTo: '/account' }),
+        body: JSON.stringify({ returnTo: destination }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? 'Please try again.');
       if (path === 'sign-in/google') {
-        const destination = new URL(data.url);
-        if (destination.origin !== 'https://accounts.google.com') throw new Error('Invalid sign-in response.');
-        window.location.assign(destination.href);
+        const googleUrl = new URL(data.url);
+        if (googleUrl.origin !== 'https://accounts.google.com') throw new Error('Invalid sign-in response.');
+        window.location.assign(googleUrl.href);
       } else {
         accountChanged();
         const next = await refreshAccount();
-        if (next.account) router.replace('/account');
+        if (next.account) router.replace(destination);
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Please try again.');
@@ -84,7 +86,17 @@ export default function AccountAccess({ mode, signInFailed = false }: { mode: 's
         )}
         {error && <p role="alert" className="mt-4 text-sm leading-relaxed text-[var(--neon-pink)]">{error}</p>}
       </AccountSurface>
-      {status === 'ready' && !session?.account && <p className="mt-6 text-center text-sm text-[var(--foreground-muted)]">{signup ? 'Already have an account?' : 'New to Scene Assembly?'}{' '}<Link className="text-[var(--foreground)] underline underline-offset-4" href={signup ? '/sign-in' : '/sign-up'}>{signup ? 'Sign in' : 'Create an account'}</Link></p>}
+      {status === 'ready' && !session?.account && (() => {
+        const carry = destination === '/account' ? '' : `?returnTo=${encodeURIComponent(destination)}`;
+        return (
+          <p className="mt-6 text-center text-sm text-[var(--foreground-muted)]">
+            {signup ? 'Already have an account?' : 'New to Scene Assembly?'}{' '}
+            <Link className="text-[var(--foreground)] underline underline-offset-4" href={signup ? `/sign-in${carry}` : `/sign-up${carry}`}>
+              {signup ? 'Sign in' : 'Create an account'}
+            </Link>
+          </p>
+        );
+      })()}
     </AccountPageShell>
   );
 }
