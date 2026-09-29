@@ -144,12 +144,27 @@ describe('agent consent', () => {
       expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 0 });
     });
 
-    it('refuses a wrong secret', async () => {
+    // A wrong secret must not burn the request: if it did, anyone holding the
+    // `?request=` id could cancel someone else's pending approval with a guess.
+    it('refuses a wrong secret and leaves the request for the right one', async () => {
       const { db, env } = setup();
       const { id, consentCookie } = await begin(env);
-      await api(env, id, await signedIn(env), approve);
+      const { redirectTo } = await (await api(env, id, await signedIn(env), approve)).json();
       const response = await worker(env, `/oauth/finish?request=${id}&t=wrong-secret-value`, { headers: { cookie: consentCookie } });
       expect(response.status).toBe(400);
+      expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 0 });
+      const finished = await visitFinish(env, redirectTo, { cookie: consentCookie });
+      expect(finished.status).toBe(302);
+      expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 1 });
+    });
+
+    it('spends the request when the right secret is opened in a browser that did not start it', async () => {
+      const { db, env } = setup();
+      const { id, consentCookie } = await begin(env);
+      const { redirectTo } = await (await api(env, id, await signedIn(env), approve)).json();
+      expect((await visitFinish(env, redirectTo, { cookie: 'consent=someone-else' })).status).toBe(400);
+      expect(db.prepare('SELECT COUNT(*) AS n FROM account_agent_authorizations').get()).toEqual({ n: 0 });
+      expect((await visitFinish(env, redirectTo, { cookie: consentCookie })).status).toBe(400);
       expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 0 });
     });
   });

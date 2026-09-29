@@ -175,10 +175,13 @@ export async function authorizationRoutes(request: Request, env: Env, now = Date
 }
 
 /**
- * GET /oauth/finish?request=<id>&t=<secret>. Consumes the decided request, then
- * lets the library check the browser binding. Consumed first, so a link opened
- * with the wrong secret or in the wrong browser burns the request instead of
- * leaving it to be tried again.
+ * GET /oauth/finish?request=<id>&t=<secret>. A wrong or missing secret leaves
+ * the pending request untouched and usable: the consuming `DELETE` matches only
+ * on `finish_hash`, so guessing at someone else's `?request=` id cannot cancel
+ * their approval. The correct secret consumes the request, and only then does
+ * the library check the browser binding — so if that correct-secret link is
+ * opened in a browser without the binding cookie, the request is consumed and
+ * the approval fails, and the person starts over from their agent.
  *
  * The binding cookie alone proves which browser *started* the request, not
  * which one *approved* it — `/oauth/finish` cannot see the session cookie
