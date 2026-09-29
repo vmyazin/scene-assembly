@@ -3,6 +3,7 @@ import { AccountError, type JobRow } from './jobs';
 import type { Env } from './security';
 import { AVAILABLE_CAPACITY, OVERFLOW_TTL_MS, promoteTemporaryAsset } from './retention';
 import { deleteQueuedObject } from './cleanup';
+import { peekMediaType } from './media-type';
 
 export const MAX_OUTPUT_BYTES = 1_000_000_000;
 export const MAX_JOB_OUTPUTS = 8;
@@ -86,12 +87,21 @@ export async function captureResult(env:Env,job:JobRow,result:ProviderResult) {
       }
       if(!source.url)throw new AccountError('The provider reported success without a result to fetch.',502,'result_missing');
       const response=await fetchOutput(source.url);
-      const mime=(response.headers.get('content-type')||source.mimeType||'').split(';')[0].trim().toLowerCase();
-      if(!mime.startsWith(`${request.mediaType}/`)){await response.body?.cancel();throw new AccountError('The provider returned a different kind of file than this job asked for.',502,'result_type');}
+      let mime=(response.headers.get('content-type')||source.mimeType||'').split(';')[0].trim().toLowerCase();
+      let body=response.body!;
+      // A label that does not name the job's kind of file is not trusted either
+      // way: some storage serves finished files as application/octet-stream
+      // (Atlas's bucket did, 2026-09-29), so the bytes decide.
+      if(!mime.startsWith(`${request.mediaType}/`)){
+        const peeked=await peekMediaType(body.getReader());
+        body=peeked.body;
+        if(!peeked.mimeType?.startsWith(`${request.mediaType}/`)){await body.cancel().catch(()=>{});throw new AccountError('The provider returned a different kind of file than this job asked for.',502,'result_type');}
+        mime=peeked.mimeType;
+      }
       // Multipart completion can omit httpMetadata even though R2 stored it.
       // Keep the MIME that passed writeOutput validation for the D1 asset row.
       storedMime=mime;
-      object=await writeOutput(env,key,response.body!,mime,MAX_JOB_OUTPUT_BYTES-totalBytes);
+      object=await writeOutput(env,key,body,mime,MAX_JOB_OUTPUT_BYTES-totalBytes);
     }
     if(object.size<=0)throw new AccountError('The stored result is empty.',502,'result_empty');
     totalBytes+=object.size;
