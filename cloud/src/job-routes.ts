@@ -6,6 +6,7 @@ import { acceptJob, AccountError, cancelQueuedJob, dismissAttentionJob, dispatch
 import { adapterFor, validateRequest } from './providers';
 import { isRecoverable, MAX_RESUME_ATTEMPTS } from './failure';
 import { assetView, deleteAsset, getAsset, type AssetRow } from './assets';
+import type { CloudJobState, CloudJobView } from '../../lib/account/contracts';
 
 export async function jobRoutes(request:Request,env:Env):Promise<Response|null>{
   const path=new URL(request.url).pathname;
@@ -27,10 +28,7 @@ export async function jobRoutes(request:Request,env:Env):Promise<Response|null>{
       if(!job.dispatched)await dispatchJob(env,job).catch(()=>{});
       return json({job:jobView(job)},202);
     }
-    if(path==='/api/account/jobs'&&request.method==='GET'){
-      const rows=await env.DB.prepare('SELECT j.*,g.client_name AS agent_name FROM account_jobs j LEFT JOIN account_agents g ON g.id=j.agent_id WHERE j.user_id = ? AND j.deleted = 0 ORDER BY j.created_at DESC LIMIT 100').bind(account.id).all<JobRow>();
-      return json({accountId:account.id,jobs:rows.results.map(jobView)});
-    }
+    if(path==='/api/account/jobs'&&request.method==='GET')return json({accountId:account.id,jobs:await listJobs(env,account.id,{states:null,limit:100})});
     const jobMatch=path.match(/^\/api\/account\/jobs\/([a-zA-Z0-9-]+)(\/(?:resume|cancel|dismiss))?$/);
     if(jobMatch){
       const job=await getJob(env,jobMatch[1],account.id);if(!job)return json({error:'Job not found.'},404);
@@ -97,6 +95,21 @@ export async function resumeJob(env:Env,job:JobRow,owner:string):Promise<JobRow>
   const resumed=await getJob(env,job.id,owner);
   if(resumed)await dispatchJob(env,resumed).catch(()=>{});
   return resumed!;
+}
+
+/** The job list, shared by the account route and the agent tool, so what the
+ *  list hides (removed jobs) and how it names an agent-started job are one
+ *  query rather than two that drift. `states: null` lists every state. The
+ *  state filter runs inside SQL, before LIMIT: filtering in JS after fetching
+ *  only the newest rows can miss a match older than the cutoff, e.g. a
+ *  needs_attention job that has sat untouched while a hundred newer active
+ *  ones were created. */
+export async function listJobs(env:Env,owner:string,options:{states:CloudJobState[]|null;limit:number}):Promise<CloudJobView[]>{
+  const states=options.states?JSON.stringify(options.states):null;
+  const rows=await env.DB.prepare(`SELECT j.*,g.client_name AS agent_name FROM account_jobs j LEFT JOIN account_agents g ON g.id=j.agent_id
+    WHERE j.user_id = ? AND j.deleted = 0 AND (? IS NULL OR j.state IN (SELECT value FROM json_each(?)))
+    ORDER BY j.created_at DESC LIMIT ?`).bind(owner,states,states,options.limit).all<JobRow>();
+  return rows.results.map(jobView);
 }
 
 export async function listAssets(env:Env,owner:string,options:{kind:string|null;cursor:string|null;temporaryOnly:boolean},now=Date.now()){

@@ -3,7 +3,7 @@ import { jobInputIds, type CloudJobRequest, type CloudJobState } from '../../../
 import { estimateCloudJob } from '../../../../lib/spend/estimate';
 import { jobAssets } from '../../assets';
 import { acceptJob, AccountError, cancelQueuedJob, dismissAttentionJob, dispatchJob, getJob, jobView, type JobRow } from '../../jobs';
-import { resumeJob } from '../../job-routes';
+import { listJobs, resumeJob } from '../../job-routes';
 import { mediaAccess } from '../../media';
 import { hash, randomToken } from '../../security';
 import { discardUploads } from '../../uploads';
@@ -210,7 +210,7 @@ const LIST_STATES: Record<'active' | 'needs_attention' | 'finished', CloudJobSta
   finished: ['saved', 'failed', 'cancelled'],
 };
 
-export const listJobs = defineTool({
+export const listJobsTool = defineTool({
   name: 'list_jobs',
   title: 'List jobs',
   description: 'This account\'s most recent jobs, newest first, including ones started in the browser. Filter by state: active (still running), needs_attention (stopped and waiting on a decision), finished, or all.',
@@ -218,16 +218,7 @@ export const listJobs = defineTool({
   annotations: { readOnlyHint: true, openWorldHint: false },
   input: z.object({ state: z.enum(['active', 'needs_attention', 'finished', 'all']).optional(), limit: z.number().int().min(1).max(100).optional() }),
   async run(ctx, { state = 'all', limit = 20 }) {
-    // The state filter has to run inside SQL, before LIMIT: filtering in JS
-    // after fetching only the newest rows can miss a match that is older than
-    // the cutoff, e.g. a needs_attention job that has sat untouched while a
-    // hundred newer active ones were created.
-    const states = state === 'all' ? null : JSON.stringify(LIST_STATES[state]);
-    const rows = await ctx.env.DB.prepare(`SELECT j.*, g.client_name AS agent_name FROM account_jobs j LEFT JOIN account_agents g ON g.id = j.agent_id
-      WHERE j.user_id = ? AND j.deleted = 0 AND (? IS NULL OR j.state IN (SELECT value FROM json_each(?)))
-      ORDER BY j.created_at DESC LIMIT ?`)
-      .bind(ctx.agent.user_id, states, states, limit).all<JobRow>();
-    const jobs = rows.results.map(jobView);
+    const jobs = await listJobs(ctx.env, ctx.agent.user_id, { states: state === 'all' ? null : LIST_STATES[state], limit });
     return { structured: { jobs }, text: `${jobs.length} job${jobs.length === 1 ? '' : 's'}.` };
   },
 });
