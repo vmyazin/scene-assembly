@@ -259,7 +259,10 @@ export const resumeJobTool = defineTool({
   name: 'resume_job',
   title: 'Resume a job',
   description: 'Try again on a job that needs attention, when the reason it stopped can be fixed by trying again (the job\'s failureReason says). Refused for results that cannot be recovered and after three attempts; dismiss_job clears those.',
-  kind: 'write',
+  // 'submit', not 'write': a successful resume dispatches the provider again,
+  // the same paid work generate starts, so it shares generate's 10/minute
+  // submission budget rather than the looser 60/minute write bucket.
+  kind: 'submit',
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   input: jobId,
   async run(ctx, args) {

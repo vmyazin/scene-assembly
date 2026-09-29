@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { acceptJob } from '../src/jobs';
 import { reserveCharge, attachCharge } from '../src/mcp/budget';
+import { runTool } from '../src/mcp/server';
+import { resumeJobTool } from '../src/mcp/tools/jobs';
+import type { ToolContext } from '../src/mcp/tool';
 import { agentEnv, connectProvider, OWNER, seedAgent, seedUser } from './agent-fixtures';
 import { connectAgent, structured } from './mcp-harness';
 
@@ -60,5 +63,18 @@ describe('job control', () => {
     for (const name of ['cancel_job', 'resume_job', 'dismiss_job']) {
       expect(structured(await client.callTool({ name, arguments: { jobId: theirs.id } })), name).toMatchObject({ code: 'not_found' });
     }
+  });
+
+  it('spends the submission budget, not the write budget, even on a refusal', async () => {
+    const { db, env, agent } = await setup();
+    seedUser(db, 'other');
+    const theirs = await acceptJob(env, 'other', 'control-token-000007', local);
+    // Same clock on every call, so all ten (and the eleventh) land in one rate-limit window.
+    const ctx: ToolContext = { env, agent, now: () => 1_800_000_000_000, sleep: async () => {} };
+    for (let index = 0; index < 10; index++) {
+      expect(structured(await runTool(ctx, resumeJobTool, { jobId: theirs.id })), `call ${index}`).toMatchObject({ code: 'not_found' });
+    }
+    const limited = await runTool(ctx, resumeJobTool, { jobId: theirs.id });
+    expect(structured(limited)).toMatchObject({ code: 'rate_limited' });
   });
 });
