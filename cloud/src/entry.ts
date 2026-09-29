@@ -1,6 +1,6 @@
 import { OAuthProvider } from '@cloudflare/workers-oauth-provider';
 import { ensureLocalSchema, handleRequest, runScheduledMaintenance } from './index';
-import { guardRegistration, mcpResource } from './mcp/auth';
+import { ACCESS_TOKEN_TTL_SECONDS, guardRegistration, mcpResource, REFRESH_TOKEN_TTL_SECONDS } from './mcp/auth';
 import { mcpApiHandler } from './mcp/handler';
 import { json, type Env } from './security';
 export { GenerationWorkflow } from './workflow';
@@ -39,8 +39,10 @@ function providerFor(resource: string): OAuthProvider<Env> {
       tokenEndpoint: '/oauth/token',
       clientRegistrationEndpoint: '/oauth/register',
       scopesSupported: ['scene-assembly'],
-      accessTokenTTL: 3600,
-      refreshTokenTTL: 30 * 86_400,
+      // The scheduled cleanup reads the same two constants to retire agent rows
+      // no token can reach any more (retireUnreachableAgents).
+      accessTokenTTL: ACCESS_TOKEN_TTL_SECONDS,
+      refreshTokenTTL: REFRESH_TOKEN_TTL_SECONDS,
       // Off for now: enabling this flips global_fetch_strictly_public for every outbound
       // fetch this Worker makes, which needs its own decision. Every client registers
       // through DCR and shows as unverified until that decision is made (design doc

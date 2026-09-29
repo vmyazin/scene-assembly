@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { CloudJobRequest } from '../../lib/account/contracts';
+import { runScheduledMaintenance } from '../src/index';
+import { listJobs } from '../src/job-routes';
+import { acceptJob } from '../src/jobs';
+import { listAgents } from '../src/mcp/agent-routes';
 import { activeAgent, createAgent, normalizeClientName, parseAgentSettings, touchAgent } from '../src/mcp/agents';
+import { ACCESS_TOKEN_TTL_SECONDS, AUTHORIZATION_CODE_TTL_SECONDS, REFRESH_TOKEN_TTL_SECONDS, retireUnreachableAgents } from '../src/mcp/auth';
 import { agentEnv, OWNER, seedAgent, seedUser } from './agent-fixtures';
 
 describe('agent settings', () => {
@@ -69,5 +75,53 @@ describe('agent rows', () => {
     expect(db.prepare('SELECT last_used_at FROM account_agents').get()).toEqual({ last_used_at: 100_000 });
     await touchAgent(env, agent.id, 161_000);
     expect(db.prepare('SELECT last_used_at FROM account_agents').get()).toEqual({ last_used_at: 161_000 });
+  });
+});
+
+// Every reconnect makes a new row, and refresh tokens are fixed at 30 days from
+// the code exchange (spec follow-up 17), so without this each month's stale row
+// would sit on the panel looking connected forever.
+describe('retiring agents no token can reach', () => {
+  const settings = { budgetUsd: 5, allowUnknownCost: false, allowDelete: false };
+  const connectedAt = 1_800_000_000_000;
+  // The code can be exchanged up to its lifetime after the row is made; the
+  // refresh token's 30 days start there, and the last access token it mints
+  // outlives it by one access-token lifetime.
+  const reachableFor = (AUTHORIZATION_CODE_TTL_SECONDS + REFRESH_TOKEN_TTL_SECONDS + ACCESS_TOKEN_TTL_SECONDS) * 1000;
+  const request: CloudJobRequest = { provider: 'local-test', modelId: 'local-test', mediaType: 'image', inputMode: 'text', prompt: 'a kite', values: {}, referenceIds: [] };
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('keeps an agent while a token could still reach it, then retires it without deleting it', async () => {
+    const { db, env } = agentEnv();
+    const agent = await createAgent(env, { userId: OWNER, clientId: 'c', clientName: 'Claude Code', settings }, connectedAt);
+    await acceptJob(env, OWNER, 'retire-token-0000001', request, agent.id);
+    await retireUnreachableAgents(env, connectedAt + reachableFor);
+    expect(await activeAgent(env, agent.id, OWNER)).not.toBeNull();
+    await retireUnreachableAgents(env, connectedAt + reachableFor + 1);
+    expect(await activeAgent(env, agent.id, OWNER)).toBeNull();
+    expect(db.prepare('SELECT client_name, revoked_at FROM account_agents WHERE id = ?').get(agent.id)).toEqual({ client_name: 'Claude Code', revoked_at: connectedAt + reachableFor + 1 });
+    expect(await listAgents(env, OWNER, connectedAt + reachableFor + 1)).toEqual([]);
+    // The row stays, so the work it started still says who started it.
+    const [job] = await listJobs(env, OWNER, { states: null, limit: 10 });
+    expect(job.startedBy).toEqual({ agentId: agent.id, name: 'Claude Code' });
+  });
+
+  it('leaves a disconnected agent\'s own disconnect time alone', async () => {
+    const { db, env } = agentEnv();
+    const agent = await createAgent(env, { userId: OWNER, clientId: 'c', clientName: 'Claude Code', settings }, connectedAt);
+    db.prepare('UPDATE account_agents SET revoked_at = ? WHERE id = ?').run(connectedAt + 5, agent.id);
+    await retireUnreachableAgents(env, connectedAt + reachableFor + 1);
+    expect(db.prepare('SELECT revoked_at FROM account_agents WHERE id = ?').get(agent.id)).toEqual({ revoked_at: connectedAt + 5 });
+  });
+
+  it('runs with the scheduled maintenance', async () => {
+    const { db, env } = agentEnv();
+    const stale = await createAgent(env, { userId: OWNER, clientId: 'c', clientName: 'Old laptop', settings }, connectedAt);
+    const fresh = await createAgent(env, { userId: OWNER, clientId: 'c', clientName: 'Claude Code', settings }, connectedAt + 29 * 86_400_000);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(connectedAt + reachableFor + 60_000);
+    await runScheduledMaintenance(env);
+    expect(db.prepare('SELECT revoked_at FROM account_agents WHERE id = ?').get(stale.id)).toEqual({ revoked_at: connectedAt + reachableFor + 60_000 });
+    expect(db.prepare('SELECT revoked_at FROM account_agents WHERE id = ?').get(fresh.id)).toEqual({ revoked_at: null });
   });
 });

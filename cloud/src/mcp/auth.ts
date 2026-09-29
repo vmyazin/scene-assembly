@@ -98,6 +98,20 @@ export async function guardRegistration(request: Request, env: Env, now = Date.n
 
 /** The library's consent transaction lives 600 s; ours matches it. */
 export const AUTHORIZATION_TTL_MS = 600_000;
+
+/** The token lifetimes entry.ts hands the OAuth provider, in its unit (seconds).
+ *  They live here, not in entry.ts, because entry.ts loads the library — and
+ *  `cloudflare:workers` with it — which the scheduled cleanup below, index.ts and
+ *  their tests cannot import. */
+export const ACCESS_TOKEN_TTL_SECONDS = 3600;
+/** Counted from the code exchange and never extended: no `refreshTokenIdleTTL` is
+ *  set, so rotating the refresh token keeps the grant's first expiry (spec
+ *  follow-up 17). */
+export const REFRESH_TOKEN_TTL_SECONDS = 30 * 86_400;
+/** How long the library keeps a completed authorization's code redeemable (a
+ *  fixed 600 s in `completeAuthorization`; not configurable). The refresh
+ *  token's 30 days start at the exchange, so up to this long after the agent row. */
+export const AUTHORIZATION_CODE_TTL_SECONDS = 600;
 const AGENT_SCOPE = ['scene-assembly'];
 const EXPIRED = 'This connection request has expired or was already used. Start connecting again from your agent.';
 const WRONG_BROWSER = 'Finish connecting in the browser that opened this page, then start again from your agent.';
@@ -257,4 +271,19 @@ export async function finish(request: Request, env: Env, now = Date.now()): Prom
 
 export async function cleanupAuthorizations(env: Env, now = Date.now()) {
   await env.DB.prepare('DELETE FROM account_agent_authorizations WHERE expires_at <= ?').bind(now).run();
+}
+
+/**
+ * Retires every agent no token can reach any more. `/oauth/finish` makes the row
+ * and the grant together; the client exchanges the code within
+ * AUTHORIZATION_CODE_TTL, its refresh token lapses REFRESH_TOKEN_TTL after that,
+ * and the last access token minted just before then lapses ACCESS_TOKEN_TTL
+ * later. Past all three the row only looks connected — and since every reconnect
+ * makes a new row, each month would otherwise leave one more on the panel.
+ * `revoked_at` hides it exactly as a Disconnect does; the row is never deleted,
+ * so "via <name>" on the jobs and assets it started still resolves.
+ */
+export async function retireUnreachableAgents(env: Env, now = Date.now()) {
+  const reachableFor = (AUTHORIZATION_CODE_TTL_SECONDS + REFRESH_TOKEN_TTL_SECONDS + ACCESS_TOKEN_TTL_SECONDS) * 1000;
+  await env.DB.prepare('UPDATE account_agents SET revoked_at = ? WHERE revoked_at IS NULL AND created_at < ?').bind(now, now - reachableFor).run();
 }

@@ -17,7 +17,7 @@ import { cleanupImports, importRoutes, publicImportMedia } from './imports';
 import { applyIngress, cleanupExpiredIngress } from './ingress';
 import { cleanupOrphanCharges } from './mcp/budget';
 import { agentRoutes } from './mcp/agent-routes';
-import { authorize, authorizationRoutes, cleanupAuthorizations, finish } from './mcp/auth';
+import { authorize, authorizationRoutes, cleanupAuthorizations, finish, retireUnreachableAgents } from './mcp/auth';
 
 interface OAuthAttempt { verifier: string; nonce: string; return_to: string }
 const bootstrapped = new WeakMap<object, Promise<void>>();
@@ -147,6 +147,7 @@ export async function runScheduledMaintenance(env:Env) {
     ()=>cleanupExpiredIngress(env),
     ()=>cleanupOrphanCharges(env),
     ()=>cleanupAuthorizations(env),
+    ()=>retireUnreachableAgents(env),
     ()=>env.DB.prepare('DELETE FROM account_oauth WHERE expires_at <= ?').bind(Date.now()).run(),
     ()=>env.DB.prepare('DELETE FROM account_sessions WHERE expires_at <= ?').bind(Date.now()).run(),
   ];
