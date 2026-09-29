@@ -295,6 +295,13 @@
       "cwd": "${workspaceFolder}"
     },
     {
+      "name": "Running job wave card smoke test",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "ACCOUNT_WORKER_PORT=8889 DEV_FAKE_GENERATION=1 npm run dev -- --port 3189",
+      "cwd": "${workspaceFolder}"
+    },
+    {
       "name": "Atlas H3 audio smoke test",
       "type": "node-terminal",
       "request": "launch",

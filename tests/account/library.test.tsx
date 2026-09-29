@@ -52,6 +52,24 @@ describe('AccountLibrary',()=>{
     expect(await screen.findByText(/via Claude Code/)).toBeInTheDocument();
   });
 
+  it('draws a running job as a card with the wave in place of its thumbnail, and a stopped one as a row',async()=>{
+    const job=(id:string,state:'running'|'failed',prompt:string)=>({id,provider:'gemini' as const,state,errorCode:null,request:{...request,prompt},createdAt:1,updatedAt:1});
+    vi.mocked(accountRequest).mockImplementation(async(path)=>{
+      if(path==='jobs')return {jobs:[job('run','running','Painting in progress'),job('stop','failed','Stopped painting')]};
+      if(path==='storage')return {storage:{limitBytes:1_000_000_000,usedBytes:0,reservedBytes:0,activeJobs:1}};
+      if(path==='assets')return {assets:[],nextCursor:null};
+      throw new Error(`Unexpected path: ${path}`);
+    });
+    const {container}=render(<AccountLibrary ownerId="owner-1"/>);
+
+    const running=(await screen.findByText('Painting in progress')).closest('li');
+    expect(running).toHaveTextContent('Generating');
+    expect(running?.querySelector('svg.job-wave-field')).not.toBeNull();
+    // The one that stopped is still the list's kind of row: no card, no wave.
+    expect(screen.getByText('Stopped painting').closest('li')?.querySelector('svg.job-wave-field')).toBeNull();
+    expect(container.querySelectorAll('svg.job-wave-field')).toHaveLength(1);
+  });
+
   it('shows a recoverable load error',async()=>{
     vi.mocked(accountRequest).mockRejectedValueOnce(new Error('Cloud is unavailable'));
     render(<AccountLibrary ownerId="owner-1"/>);

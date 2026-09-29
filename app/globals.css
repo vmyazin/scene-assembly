@@ -504,27 +504,28 @@ textarea::placeholder {
    don't-compete rule rules out. One sheen, one breath, one travelling
    highlight — all on the same unhurried beat, and all off under reduced
    motion, where the stage bar alone still reports progress. */
-.job-card-sheen {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.07) 50%, transparent 62%);
-  background-size: 260% 100%;
-  animation: job-card-sheen 3.2s ease-in-out infinite;
+/* The wave a running card shows in place of its thumbnail (JobWaveField). Each
+   stroke swings about its own resting angle (--a); the per-stroke delay set
+   inline is what makes the swings a travelling wave rather than a shimmer. The
+   edges fade so the field reads as a picture with a subject, not a pattern
+   clipped by its box. */
+.job-wave-field {
+  opacity: 0.7;
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 40%, transparent 100%);
+  mask-image: radial-gradient(ellipse at center, #000 40%, transparent 100%);
 }
 
-@keyframes job-card-sheen {
-  0% { background-position: 150% 0; }
-  60%, 100% { background-position: -50% 0; }
+.job-wave-line {
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  transform: rotate(var(--a));
+  animation: job-wave 5.6s ease-in-out infinite alternate;
 }
 
-.job-card-mark {
-  position: relative;
-  animation: job-card-mark 3.2s ease-in-out infinite;
-}
-
-@keyframes job-card-mark {
-  0%, 100% { opacity: 0.55; transform: scale(0.97); }
-  50% { opacity: 1; transform: scale(1); }
+@keyframes job-wave {
+  from { transform: rotate(calc(var(--a) - 26deg)); }
+  to { transform: rotate(calc(var(--a) + 26deg)); }
 }
 
 /* The stage fill. Width is set inline per job state and eased rather than
@@ -552,8 +553,7 @@ textarea::placeholder {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .job-card-sheen { animation: none; opacity: 0.5; }
-  .job-card-mark { animation: none; opacity: 1; transform: none; }
+  .job-wave-line { animation: none; }
   .job-card-stage { transition: none; }
   .job-card-stage::after { animation: none; display: none; }
 }

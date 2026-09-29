@@ -43,7 +43,12 @@
 
 - **Cloud library, imports, or spend** → first read `docs/codex/account-development.md`. Reuse `CloudAssetGrid` / `useAccountLibrary` for cloud files, `prepareReferences` for reference insertion, and `SpendReport` with the canonical spend resolvers for either ledger. Import controls read browser stores only after explicit selection; account requests must retain owner/epoch guards because a session can change during a file transfer. Two rules the cloud grid pays for when they are broken: **size gates go after `prepareReferences`, never before** — a cloud result is a full-resolution provider PNG and the conversion is what decides the payload, so gating on `asset.bytes` rejected every background-mode image the pipeline could have handled; and **it reports outcomes the way `GalleryGrid` does, in a toast**, because both grids sit behind the two tabs of one picker and an inline alert above a scrolled list is invisible at the moment it is written, which reads as a button that does nothing.
 - **A job shown in the cloud library while it is still running** → `CloudJobCardGrid`, not
-  `CloudJobList`. The library's two job tabs deliberately have two shapes: work in flight is the
+  `CloudJobList`, **on every surface that lists jobs** — the Account page's Active tab, the
+  studio's library picker (`AccountLibrary`, browse mode) and the result rail (`CloudJobPanel`,
+  one column) — because two of the three kept the text row and a running job read as a log
+  line beside finished cards. Each surface splits `isActiveJob` jobs to the card grid and leaves
+  the rest to `CloudJobList`. The rail's own spinner frames are dropped while a card is up, since
+  they said the same thing twice. The library's two job tabs deliberately have two shapes: work in flight is the
   library's own content arriving, so it takes the same card, grid and meta-line order as
   `CloudAssetGrid` (the breakpoints live in `components/account/library-grid.ts`, shared by both,
   because a running job laid out on its own rhythm reads as a different screen on the same page);
@@ -51,9 +56,11 @@
   card's progress bar is **indeterminate on purpose** — no provider in the catalog reports a
   percentage, so it steps through `JOB_STATE_LABELS` with a travelling highlight and carries
   `aria-valuetext` with no `aria-valuenow`; a fabricated 43% would be the one thing on that card
-  that is not true. Motion is a slow sheen rather than a spinner, since the card sits in a wall of
-  finished results (DESIGN.md's don't-compete rule), and every animation is off under reduced
-  motion while the bar still reports the stage.
+  that is not true. The thumbnail well is `JobWaveField`: a 16 × 9 field of short strokes swinging out of
+  step, so it reads as a frame that is about to exist rather than a spinner, and stays slow
+  because the card sits in a wall of finished results (DESIGN.md's don't-compete rule). It is
+  SVG + CSS with nothing running per frame; under reduced motion it freezes on its resting
+  angles, which is still a picture, and the bar still reports the stage.
 - **A job stuck in "Needs attention", or copy about why one stopped** → the reason lives in
   `lib/account/job-failure.ts`, not in `error_code`. `error_code` names the arm of the runner that
   gave up, so one `save_failed` covered an expired provider link, an oversized clip and a transient

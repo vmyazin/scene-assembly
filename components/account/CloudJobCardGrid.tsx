@@ -8,6 +8,7 @@ import type { CloudJobState, CloudJobView } from '@/lib/account/contracts';
 import { jobModelLabel } from '@/lib/account/job-label';
 import { studioLocationForJob } from '@/lib/account/job-location';
 import { JOB_STATE_LABELS, JOB_STATE_TONES } from '@/lib/account/job-status';
+import JobWaveField from './JobWaveField';
 import { libraryGridClass } from './library-grid';
 
 /**
@@ -49,7 +50,7 @@ export default function CloudJobCardGrid({
   onCancel,
 }: {
   jobs: CloudJobView[];
-  columns?: 2 | 4;
+  columns?: 1 | 2 | 4;
   busy?: boolean;
   onCancel?: (id: string) => void;
 }) {
@@ -76,11 +77,13 @@ function CloudJobCard({ job, busy, onCancel }: { job: CloudJobView; busy: boolea
     <li className="space-y-2.5 rounded-xl border border-sky-300/30 bg-[var(--background-elevated)]/80 p-2.5">
       {/* The well stands in for the thumbnail that does not exist yet, at the
           same aspect ratio the finished card will use, so the grid does not
-          reflow when the result lands. */}
-      <div className="relative flex aspect-video flex-col items-center justify-center gap-1.5 overflow-hidden rounded-lg bg-black/40">
-        <span aria-hidden="true" className="job-card-sheen" />
-        <Mark size={22} aria-hidden="true" className={`job-card-mark ${tone}`} />
-        <span className="relative flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em]">
+          reflow when the result lands. The wave is the picture; the state and
+          the clock sit over it in a chip, because a field of moving strokes
+          under bare text is not something anyone can read. */}
+      <div className="relative aspect-video overflow-hidden rounded-lg bg-black/40">
+        <JobWaveField className={tone} />
+        <span className="absolute bottom-3 left-2.5 flex items-center gap-1.5 rounded-md bg-black/55 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] backdrop-blur-sm">
+          <Mark size={12} aria-hidden="true" className={tone} />
           <span className={tone}>{label}</span>
           <JobElapsed className="text-[var(--foreground-muted)]" startedAt={job.createdAt} />
         </span>
