@@ -10,6 +10,17 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Same pointers as the <head> links, for a client that only reads
+        // headers (curl -I, a fetch tool) and never parses the HTML.
+        source: "/",
+        headers: [
+          {
+            key: "Link",
+            value: '</docs/mcp.md>; rel="service-doc"; type="text/markdown", </llms.txt>; rel="describedby"; type="text/plain"',
+          },
+        ],
+      },
+      {
         source: "/connect-agent",
         headers: [
           { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },

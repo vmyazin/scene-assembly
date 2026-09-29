@@ -38,6 +38,7 @@ describe('the guide for agents', () => {
     const body = await response.text();
     expect(body.startsWith('# Scene Assembly\n')).toBe(true);
     expect(body).toContain(`> ${brand.description}`);
+    expect(body).toContain(`MCP server: ${brand.mcpUrl}`);
     expect(body).toContain('## Docs');
     expect(body).toContain('- [Connect an agent over MCP](https://sceneassembly.mzork.com/docs/mcp.md): ');
   });
