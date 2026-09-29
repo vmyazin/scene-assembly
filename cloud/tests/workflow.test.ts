@@ -62,6 +62,10 @@ describe('background generation and capture',()=>{
     for(const url of ['http://fal.media/file','https://127.0.0.1/file','https://fal.media.evil.test/file','https://user:secret@fal.media/file'])expect(()=>safeResultUrl(url)).toThrow();
     expect(safeResultUrl('https://v3.fal.media/files/result.png').hostname).toBe('v3.fal.media');
   });
+  it('accepts the bucket Atlas delivers results from, and no other bucket on the same storage host',()=>{
+    expect(safeResultUrl('https://atlas-media.oss-us-west-1.aliyuncs.com/outputs/result.png').hostname).toBe('atlas-media.oss-us-west-1.aliyuncs.com');
+    for(const url of ['https://someone-else.oss-us-west-1.aliyuncs.com/file','https://oss-us-west-1.aliyuncs.com/file','https://aliyuncs.com/file'])expect(()=>safeResultUrl(url)).toThrow();
+  });
 });
 
 describe('private video range downloads',()=>{
