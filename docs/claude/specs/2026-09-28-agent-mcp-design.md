@@ -37,13 +37,15 @@ superseded text.
 6. **Estimates are the ledger.** `estimateCloudJob(request)` is
    `buildAccountSpendEntry` over a one-output synthetic result, so they agree by
    construction. Reading every branch showed the unknown set is larger than the
-   spec assumed: **Kie, Runware, Cloudflare and Pollinations are always
-   `unknown`** in the account ledger; Gemini is `estimated` from its
+   spec assumed: **Kie, Runware, Cloudflare, Pollinations and Comet are always
+   `unknown`** in the account ledger — every `COMET_MODELS` entry carries
+   `price: 'metered'` with no `rate`; Gemini is `estimated` from its
    per-resolution rate and settles to reported tokens (slightly higher, since
-   the prompt's own tokens count); fal, Atlas, Comet and PiAPI are `estimated`
+   the prompt's own tokens count); fal, Atlas and PiAPI are `estimated`
    from catalog rates. With the default grant an agent therefore cannot use Kie,
-   Runware, Cloudflare or Pollinations until the person allows unknown prices.
-   The consent screen lists them. Overrides the estimate bullet in *Budget*.
+   Runware, Cloudflare, Pollinations or Comet until the person allows unknown
+   prices. The consent screen lists them. Overrides the estimate bullet in
+   *Budget*.
 7. **`generate` writes schema defaults into `values`** before estimating and
    submitting. The ledger reads raw `values` (a fal Veo job without `duration`
    prices as unknown, while the adapter would have used the default), so an
@@ -101,6 +103,43 @@ superseded text.
     buckets), next to `/oauth/register`'s existing 20, since both are
     unauthenticated GETs that write to D1. Overrides follow-up 2 and Task 9
     Steps 1 and 3 in the plan.
+19. **The four items in "Verify before building on it" held, and the local
+    smoke tests mostly passed** (2026-09-28). Item 1: verified — two
+    end-to-end smokes ran `@cloudflare/workers-oauth-provider` 1.2.1 and
+    `createMcpHandler` from `@modelcontextprotocol/server` 2.1.0 under
+    `wrangler dev --local` (Wrangler 4.113, `compatibility_date`
+    2026-07-20): registration, authorize, sign-in return, consent, finish,
+    token exchange, MCP tool calls, 401 without a token. Item 2: verified —
+    `cloud/src/entry.ts` wraps the provider in `{ fetch, scheduled }` and the
+    consent helpers on `env.OAUTH_PROVIDER` work. Item 3: props arrive on
+    `ctx.props` in `mcpApiHandler.fetch` (`cloud/src/mcp/handler.ts`), which
+    `cloud/src/entry.ts` wires as the `OAuthProvider`'s `apiHandler`;
+    `serveMcp` (same file) reloads the agent row and passes an `AuthInfo` to
+    the MCP handler. `completeAuthorization` returns only `{ redirectTo }`
+    (`@cloudflare/workers-oauth-provider`'s type declarations) — it does not
+    expose the grant id — so revoke lists grants with `listUserGrants` and
+    matches `metadata.agentId` (`cloud/src/mcp/agents.ts`, `revokeUserGrants`,
+    around line 79). Item 4: the Images binding runs locally under `wrangler
+    dev --local`; `cloud/wrangler.jsonc` declares `"images": { "binding":
+    "IMAGES" }`.
+
+    Smoke coverage: the key-free parts passed — `tools/list` shows 12 tools
+    for a default grant (`delete_asset` hidden); `list_models`, `get_spend`,
+    `list_jobs`, `list_assets` answer; `generate` without a provider
+    connection refuses with `connection_required`; `get_job` with an unknown
+    id refuses with `not_found`; the account panel shows the MCP URL,
+    per-agent 24-hour usage against its limit, the toggles, and Disconnect,
+    after which the same token gets 401 `invalid_token`. Not exercised
+    locally: `generate` → `get_job` → `view_asset` with a saved provider key,
+    the budget refusal loop, and `add_reference` against a live URL; unit
+    tests cover them, and Rollout step 4's production live check is where
+    they are first run end to end.
+
+    Each reconnect of the same client creates a separate connected agent
+    with its own limit — `createAgent` always inserts a new
+    `account_agents` row, with no dedupe on `client_id`. The person
+    disconnects the old one from the panel. This is current behaviour;
+    name-based dedupe is left for later.
 
 ## Context
 

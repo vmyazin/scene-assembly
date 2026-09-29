@@ -371,6 +371,26 @@ procedure and complete a restore exercise. Configure an
 to abort incomplete multipart uploads after one day. Do not add a blanket asset
 expiry rule: permanent account assets must remain until the user deletes them.
 
+## Agent MCP rollout
+
+Connecting agents over MCP
+([`docs/claude/specs/2026-09-28-agent-mcp-design.md`](claude/specs/2026-09-28-agent-mcp-design.md))
+needs its own namespace, migration, and domain step, beyond the Worker deploy above:
+
+1. Create the two namespaces with `pnpm --dir cloud exec wrangler kv namespace create OAUTH_KV`
+   and `pnpm --dir cloud exec wrangler kv namespace create OAUTH_KV_PREVIEW`, and put their ids in
+   `cloud/wrangler.jsonc` / `cloud/wrangler.preview.jsonc` in place of the
+   `local-placeholder-oauth-kv` placeholders.
+2. `pnpm --dir cloud exec wrangler d1 migrations apply scene-assembly-accounts --remote`, which
+   applies `0013_agents.sql`. The deploy workflow stops on a pending migration rather than
+   applying it.
+3. Confirm `mcp.sceneassembly.mzork.com` is attached as a custom domain on the Worker, or skip
+   this step when `MCP_ORIGIN` is the workers.dev hostname.
+4. Merge; the Worker deploys, then the app. Between the two, `/oauth/authorize` redirects to a
+   page that is not there yet, which is harmless because the MCP URL is only published by the
+   panel that ships with the app.
+5. The live check from the spec's Rollout step 4.
+
 ## Self-hosting (the former VPS path)
 
 `scripts/deploy-production.sh` plus the units in `deploy/systemd/` still
