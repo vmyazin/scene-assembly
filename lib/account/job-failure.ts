@@ -27,7 +27,8 @@ export type FailureReason = typeof FAILURE_REASONS[number];
  * Reasons where trying the same job again could genuinely end differently.
  *
  * Deliberately short. Everything absent is deterministic for *this* job, so the
- * row stops offering Resume rather than inviting the loop. `storage_full` is
+ * row stops offering Resume rather than inviting the loop. `result_location`
+ * has a per-job exception when the Worker now accepts all stored URLs. `storage_full` is
  * here because freeing space is what changes the outcome, and the person
  * reading the row is the one who frees it.
  */
@@ -54,7 +55,7 @@ export interface JobFailure { sentence: string; detail: string | null; resumable
 
 const SENTENCES: Record<FailureReason, string> = {
   result_link_expired: 'The provider’s download link for this result expired before it could be saved. Trying again cannot bring it back.',
-  result_location: 'The provider delivered the result from an address this app does not accept.',
+  result_location: 'Your result was generated, but we could not save it from the provider’s download address.',
   result_missing: 'The provider reported success but sent no file to save.',
   result_wrong_type: 'The provider returned a different kind of file than this job asked for.',
   result_too_large: 'The result is larger than the supported output size, so it could not be saved.',
@@ -86,7 +87,7 @@ function legacySentence(errorCode: string | null): string {
   return 'Tracking or saving needs another attempt. Resume this job without generating again.';
 }
 
-type FailingJob = Pick<CloudJobView, 'state' | 'errorCode' | 'failureReason' | 'failureDetail' | 'attempts'>;
+type FailingJob = Pick<CloudJobView, 'state' | 'errorCode' | 'failureReason' | 'failureDetail' | 'attempts' | 'canRetrySave'>;
 
 /** A Worker deployed before this field existed sends nothing, which reads as
  *  zero resumes — the same thing it meant for every row that predates it. */
@@ -98,7 +99,7 @@ export function describeFailure(job: FailingJob): JobFailure {
     sentence: reason ? SENTENCES[reason] : legacySentence(job.errorCode),
     // Provider text is stored only for a refusal the Worker sanitized first.
     detail: reason === 'provider_rejected' || reason === 'provider_policy' ? job.failureDetail ?? null : null,
-    resumable: isRecoverable(job.failureReason),
+    resumable: isRecoverable(job.failureReason) || (job.failureReason === 'result_location' && job.canRetrySave === true),
   };
 }
 
@@ -106,5 +107,5 @@ export function describeFailure(job: FailingJob): JobFailure {
  *  a row that offers a button the Worker answers 409 to is worse than a row
  *  that offers nothing, because the reader has no way to tell them apart. */
 export function canResumeJob(job: FailingJob): boolean {
-  return job.state === 'needs_attention' && isRecoverable(job.failureReason) && resumeAttempts(job) < MAX_RESUME_ATTEMPTS;
+  return job.state === 'needs_attention' && describeFailure(job).resumable && resumeAttempts(job) < MAX_RESUME_ATTEMPTS;
 }

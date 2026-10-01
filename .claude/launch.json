@@ -317,6 +317,13 @@
       "request": "launch",
       "command": "ACCOUNT_WORKER_PORT=8893 NEXT_PUBLIC_RELAXED_FILTER=all npm run dev -- --port 3193",
       "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Provider result recovery smoke test",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "ACCOUNT_WORKER_PORT=8867 DEV_FAKE_GENERATION=1 npm run dev -- --port 3167",
+      "cwd": "${workspaceFolder}"
     }
   ]
 }

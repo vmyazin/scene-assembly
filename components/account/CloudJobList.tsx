@@ -7,6 +7,7 @@ import type { CloudJobView } from '@/lib/account/contracts';
 import { JOB_STATE_LABELS as labels, JOB_STATE_TONES as tones, isActiveJob, isClearableJob, isRemovableJob } from '@/lib/account/job-status';
 import { canResumeJob, describeFailure, MAX_RESUME_ATTEMPTS, resumeAttempts } from '@/lib/account/job-failure';
 import JobElapsed from '@/components/JobElapsed';
+import ProviderResultRecovery from './ProviderResultRecovery';
 const stopTrackingDescription='The provider may still finish and charge for this job. Scene Assembly will stop checking and saving new outputs, and this row will be removed from your list. Existing saved assets remain; temporary downloads keep their existing deadline. Check the provider history before starting another generation.';
 /** Recovery is a read of what the provider already produced, not a resume:
  *  these adapters can find a staged output for a submission whose confirmation
@@ -52,8 +53,10 @@ export default function CloudJobList({jobs,onResume,onCancel,onDismiss,onClear,b
           whose cause could never be retried, blaming the cap would point at the
           wrong thing and imply a fourth attempt might have worked. */}
       {attempts>0&&<p className="mt-1 text-[var(--foreground-muted)]">Resumed {attempts===1?'once':`${attempts} times`} already{failure.resumable&&!canResumeJob(job)?` — the limit is ${MAX_RESUME_ATTEMPTS}`:''}.</p>}
-      {canResumeJob(job)&&<button disabled={busy} type="button" onClick={()=>onResume(job.id)} className="mt-2 underline underline-offset-4">Resume existing job</button>}
+      {job.failureReason==='result_location'&&canResumeJob(job)&&<p className="mt-1 text-[var(--foreground-muted)]">This download address is now supported. Save the existing result without generating again.</p>}
+      {canResumeJob(job)&&<button disabled={busy} type="button" onClick={()=>onResume(job.id)} className="mt-2 underline underline-offset-4">{job.failureReason==='result_location'?'Retry saving':'Resume existing job'}</button>}
     </div>}
+    {job.state==='needs_attention'&&job.failureReason==='result_location'&&<ProviderResultRecovery key={job.id} jobId={job.id} busy={busy}/>}
     {canCheckForOutput(job)&&<button disabled={busy} type="button" onClick={()=>onResume(job.id)} className="mt-2 text-xs text-amber-200 underline underline-offset-4">Check for a saved output</button>}
     {/* One action, not two. Stopping tracking used to leave the row behind as
         "Tracking stopped" beside an X, which reads as a button that did

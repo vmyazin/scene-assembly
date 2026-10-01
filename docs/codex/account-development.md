@@ -289,3 +289,40 @@ no vendor. Release verification still requires real Google OAuth and one
 credentialed end-to-end job for each enabled provider, including background
 completion after closing the browser, private download, spend classification,
 and failure/reconciliation behavior.
+
+## Recovery for a blocked result address
+
+`result_location` is no longer permanently terminal: the Worker projects `canRetrySave`
+when all stored URLs pass the current capture allowlist. **Retry saving** uses the
+existing `/resume` route and the existing three-attempt cap; it never resubmits to a
+provider. Deploy both the Worker and web app for this capability. No migration is needed.
+
+**Get provider download** requests temporary HTTPS links explicitly through the
+owner-authenticated `/jobs/:id/recovery` endpoint. The browser shows the external
+hostname and opens only on a separate click, without a referrer/opener. These URLs
+are not server-fetch permissions, are not in normal job list responses, and never
+join the account store. A missing link falls back to a selectable provider task
+reference (or application job reference). Provider expiry still applies.
+
+Local review uses web 3167 and Worker 8867 in the named launch configuration.
+Install both pnpm projects inside the worktree and copy `../../../next-env.d.ts`.
+This checkout has no `.env.local` to copy; the launcher creates `.dev.vars` from
+its example, so credential-free review needs no browser API keys. If `node`/`npm`
+are absent from PATH on this host, run:
+
+```sh
+export PATH=/Users/vsm/.local/share/node-v24.21.0/bin:$PATH
+pnpm install --frozen-lockfile --prefer-offline
+pnpm --dir cloud install --frozen-lockfile
+cp ../../../next-env.d.ts .
+ACCOUNT_WORKER_PORT=8867 DEV_FAKE_GENERATION=1 npm run dev -- --port 3167
+# In another terminal inside the same worktree:
+ACCOUNT_DEMO_ORIGIN=http://localhost:3167 node scripts/seed-result-recovery.mjs
+```
+
+Sign in with **Use local test account**, then open `/account#jobs` and its
+**Needs attention** tab. The retry fixture uses staged local PNG bytes. The manual
+fixture's example.com link is illustrative; do not expect it to download a file.
+Neither seed nor smoke tests fetch provider media or submit paid work. Repeating the
+seed preserves retry counts; pass `--fresh` for a new retry example after reaching
+the three-attempt limit.

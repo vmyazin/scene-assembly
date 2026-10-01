@@ -69,6 +69,14 @@
   because the card sits in a wall of finished results (DESIGN.md's don't-compete rule). It is
   SVG + CSS with nothing running per frame; under reduced motion it freezes on its resting
   angles, which is still a picture, and the bar still reports the stage.
+- **A completed result blocked by its download address** → first read
+  `docs/codex/specs/2026-10-01-provider-result-recovery.md`. Capture's host policy lives
+  in `lib/account/result-location.ts`; `canRetryResultLocation` re-evaluates old failures
+  against it, because approving a host must also unblock existing jobs. Browser-only
+  recovery links are exposed by the owner-authenticated `/jobs/:id/recovery` read,
+  never by job lists or a server fetch proxy. `ProviderResultRecovery` guards the
+  account epoch, because a late response can otherwise expose another account's file.
+
 - **A job stuck in "Needs attention", or copy about why one stopped** → the reason lives in
   `lib/account/job-failure.ts`, not in `error_code`. `error_code` names the arm of the runner that
   gave up, so one `save_failed` covered an expired provider link, an oversized clip and a transient

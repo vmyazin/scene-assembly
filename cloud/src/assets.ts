@@ -4,6 +4,7 @@ import type { Env } from './security';
 import { AVAILABLE_CAPACITY, OVERFLOW_TTL_MS, promoteTemporaryAsset } from './retention';
 import { deleteQueuedObject } from './cleanup';
 import { peekMediaType } from './media-type';
+import { acceptedResultUrl } from '../../lib/account/result-location';
 
 export const MAX_OUTPUT_BYTES = 1_000_000_000;
 export const MAX_JOB_OUTPUTS = 8;
@@ -19,13 +20,10 @@ export async function jobAssets(env:Env,owner:string,jobId:string) {
   return (await env.DB.prepare('SELECT a.*,r.expires_at FROM account_assets a LEFT JOIN account_asset_retention r ON r.asset_id=a.id WHERE a.user_id=? AND a.job_id=? AND a.deleted=0 AND (r.expires_at IS NULL OR r.expires_at>?) ORDER BY a.created_at,a.id').bind(owner,jobId,Date.now()).all<AssetRow>()).results;
 }
 
-/** Host allowlist prevents a provider result from turning the capture worker into a URL proxy.
- *  Atlas delivers from its own bucket on Alibaba Cloud storage (seen on a live job, 2026-09-29);
- *  only that bucket is listed, because anyone can open another one under aliyuncs.com. */
+/** Every redirect passes the same policy as the original provider result. */
 export function safeResultUrl(value:string): URL {
-  const url=new URL(value);
-  const domains=['fal.media','fal.ai','kie.ai','kieai.redpandaai.co','tempfile.ai','tempfile.redpandaai.co','redpandaai.co','runware.ai','atlascloud.ai','atlas-media.oss-us-west-1.aliyuncs.com','cometapi.com','filesystem.site','piapi.ai','theapi.app'];
-  if(url.protocol!=='https:' || url.username || url.password || (url.port && url.port!=='443') || !domains.some(d=>url.hostname===d||url.hostname.endsWith(`.${d}`))) throw new AccountError('Provider returned an unsupported result location.',502,'result_location');
+  const url=acceptedResultUrl(value);
+  if(!url)throw new AccountError('Provider returned an unsupported result location.',502,'result_location');
   return url;
 }
 async function fetchOutput(url:string):Promise<Response> {

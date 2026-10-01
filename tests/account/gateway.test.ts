@@ -57,7 +57,7 @@ describe('account gateway', () => {
   it('forwards explicit job lifecycle routes, preserves retry timing, and rejects adjacent actions', async () => {
     vi.stubEnv('ACCOUNT_WORKER_ORIGIN', 'https://accounts.test');
     const fetcher=vi.fn().mockResolvedValue(Response.json({error:'Busy.'},{status:429,headers:{'Retry-After':'12'}}));vi.stubGlobal('fetch',fetcher);
-    for(const action of ['cancel','dismiss']){
+    for(const action of ['cancel','dismiss','recovery']){
       const response=await accountGateway(new Request(`https://app.test/api/account/jobs/job-1/${action}`,{method:'POST',headers:{origin:'https://app.test','X-Account-Id':'owner'}}));
       expect(response.status).toBe(429);expect(response.headers.get('retry-after')).toBe('12');
     }

@@ -1,3 +1,4 @@
+import { canRetryResultLocation } from './result-recovery';
 import { jobInputIds } from '../../lib/account/contracts';
 import { isEditVideoMime } from '../../lib/providers/video-edit';
 import type { CloudJobRequest, CloudJobState, CloudJobView } from '../../lib/account/contracts';
@@ -69,6 +70,7 @@ function canonical(value: unknown): string {
 export function jobView(row: JobRow): CloudJobView {
   return {
     id: row.id, provider: row.provider, state: row.state, errorCode: row.error_code,
+    canRetrySave: canRetryResultLocation(row),
     // `attempts` is the resume count, not a retry count: the row uses it to say
     // "attempt 2" and to stop offering a button the Worker would now refuse.
     failureReason: row.failure_reason ?? null, failureDetail: row.failure_detail ?? null, attempts: row.workflow_attempt,

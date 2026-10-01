@@ -1,3 +1,4 @@
+import { canRetryResultLocation, resultRecovery } from './result-recovery';
 import { mediaAccess } from './media';
 export { byteRange } from './range';
 import { currentAccount } from './sessions';
@@ -43,9 +44,13 @@ export async function jobRoutes(request:Request,env:Env):Promise<Response|null>{
       return json({job:jobView(job)},202);
     }
     if(path==='/api/account/jobs'&&request.method==='GET')return json({accountId:account.id,jobs:await listJobs(env,account.id,{states:null,limit:100})});
-    const jobMatch=path.match(/^\/api\/account\/jobs\/([a-zA-Z0-9-]+)(\/(?:resume|cancel|dismiss))?$/);
+    const jobMatch=path.match(/^\/api\/account\/jobs\/([a-zA-Z0-9-]+)(\/(?:resume|cancel|dismiss|recovery))?$/);
     if(jobMatch){
       const job=await getJob(env,jobMatch[1],account.id);if(!job)return json({error:'Job not found.'},404);
+      if(request.method==='GET'&&jobMatch[2]==='/recovery'){
+        if(job.state!=='needs_attention'||job.failure_reason!=='result_location')return json({error:'This job does not need download recovery.'},409);
+        return json(resultRecovery(job));
+      }
       if(request.method==='GET'&&!jobMatch[2])return json({job:jobView(job)});
       // Removal is the last step of a finished job, never a way out of a live
       // one: `removeFinishedJob` rejects anything still holding a reservation.
@@ -101,8 +106,9 @@ export async function resumeJob(env:Env,job:JobRow,owner:string):Promise<JobRow>
   // every attempt, so resuming is not a slower path to the result — it is
   // the same failure with a fresh timestamp. A recovery that just found a
   // staged output is exempt: the reason on the row describes the
-  // submission that was lost, not the save that is now possible.
-  if(!recovered&&!isRecoverable(job.failure_reason))throw new AccountError('This result cannot be recovered by trying again. Stop tracking the job to clear it.',409,'unrecoverable');
+  // submission that was lost, not the save that is now possible. A blocked
+  // location can also recover after the capture policy has approved its host.
+  if(!recovered&&!canRetryResultLocation(job)&&!isRecoverable(job.failure_reason))throw new AccountError('This result cannot be recovered by trying again. Stop tracking the job to clear it.',409,'unrecoverable');
   if(job.workflow_attempt>=MAX_RESUME_ATTEMPTS)throw new AccountError(`This job has already been resumed ${MAX_RESUME_ATTEMPTS} times without finishing. Stop tracking it to clear it.`,409,'resume_exhausted');
   const claimed=await env.DB.prepare("UPDATE account_jobs SET state = ?, workflow_attempt = workflow_attempt + 1, dispatched = 0, error_code = NULL, failure_reason = NULL, failure_detail = NULL WHERE id = ? AND state = 'needs_attention'").bind(job.result_json?'saving':'running',job.id).run();
   if(!claimed.meta.changes)throw new AccountError('This generation is no longer waiting for a tracking decision.',409,'tracking_state_changed');

@@ -13,7 +13,13 @@ export interface CloudJobRequest {
 export type CloudJobState = 'queued' | 'submitting' | 'running' | 'saving' | 'saved' | 'needs_attention' | 'failed' | 'cancelled';
 /** The agent that started a job, kept after it disconnects so old work stays attributed. */
 export interface StartedBy { agentId: string; name: string | null }
+export interface JobResultRecovery {
+  links: { url: string; hostname: string }[];
+  providerTaskId: string | null;
+}
 export interface CloudJobView {
+  /** Current Worker capture policy accepts a previously blocked result. */
+  canRetrySave?: boolean;
   id: string; provider: CloudProvider; state: CloudJobState; errorCode: string | null;
   /** All three are optional because the browser and the Worker deploy
    *  separately and can sit at different commits: a Worker from before this
