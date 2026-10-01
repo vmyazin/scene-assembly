@@ -181,6 +181,18 @@ const veoRate = (standard: [number, number], uhd: [number, number]): FalRate =>
     '4k': { audioOff: uhd[0], audioOn: uhd[1] },
   });
 
+/**
+ * https://fal.ai/models/fal-ai/veo3.1/lite — read 2026-10-01, and the same
+ * sentence on the image-to-video and first-last-frame pages. Lite has no 4K
+ * tier. 720p is $0.03/s silent and $0.05/s with audio; 1080p is $0.05/s silent
+ * and $0.08/s with audio.
+ */
+const veoLiteRate = (): FalRate =>
+  perSecond({
+    '720p': { audioOff: 0.03, audioOn: 0.05 },
+    '1080p': { audioOff: 0.05, audioOn: 0.08 },
+  });
+
 /** Seedance bills 480p and 4K per output token, which needs a frame size we do not have. */
 const seedanceRate = (usdPerSecond: Record<string, number>): FalRate =>
   perSecond(
@@ -205,6 +217,9 @@ export const FAL_RATES: Record<string, FalRate> = {
   'fal-ai/veo3.1/fast': veoRate([0.1, 0.15], [0.3, 0.35]),
   'fal-ai/veo3.1/fast/image-to-video': veoRate([0.1, 0.15], [0.3, 0.35]),
   'fal-ai/veo3.1/fast/first-last-frame-to-video': veoRate([0.1, 0.15], [0.3, 0.35]),
+  'fal-ai/veo3.1/lite': veoLiteRate(),
+  'fal-ai/veo3.1/lite/image-to-video': veoLiteRate(),
+  'fal-ai/veo3.1/lite/first-last-frame-to-video': veoLiteRate(),
 
   'bytedance/seedance-2.0/text-to-video': seedanceRate({ '720p': 0.3034, '1080p': 0.682 }),
   'bytedance/seedance-2.0/image-to-video': seedanceRate({ '720p': 0.3034, '1080p': 0.682 }),

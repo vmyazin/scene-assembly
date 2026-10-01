@@ -1,3 +1,4 @@
+// app/api/providers/video/route.ts
 import { editSettingsError } from '@/lib/providers/video-edit';
 import { runwareDeleteMedia } from '@/lib/providers/runware';
 import { NextRequest, NextResponse } from 'next/server';
@@ -159,6 +160,22 @@ export async function POST(request: NextRequest) {
 
   if (body.provider === 'piapi' && body.audio !== undefined && typeof body.audio !== 'boolean') return NextResponse.json({success:false,error:'Audio must be on or off.'},{status:400});
 
+  const requestedDuration = typeof body.durationSeconds === 'number' ? body.durationSeconds : undefined;
+  // Other models snap a stale length to the nearest one they list. Lite's
+  // validator rejects instead, so a 5s or 4K request cannot leave as a 4s 720p
+  // clip the caller did not ask for.
+  if (model === 'google:veo@3.1-lite') {
+    if (requestedDuration !== undefined && resolveDuration(body.provider, model, requestedDuration) !== requestedDuration) {
+      return NextResponse.json({ success: false, error: 'Veo 3.1 Lite accepts only 4, 6, or 8 seconds.' }, { status: 400 });
+    }
+    if (typeof body.size === 'string' && !modelRecord?.sizes?.some((option) => option.label === body.size)) {
+      return NextResponse.json({ success: false, error: 'Veo 3.1 Lite accepts only 720p or 1080p at 16:9 or 9:16.' }, { status: 400 });
+    }
+    if (typeof body.aspectRatio === 'string' && modelRecord?.aspectRatios && !modelRecord.aspectRatios.includes(body.aspectRatio)) {
+      return NextResponse.json({ success: false, error: 'Veo 3.1 Lite accepts only 16:9 or 9:16.' }, { status: 400 });
+    }
+  }
+
   try {
     const { taskId } = await adapter.createVideo({
       apiKey,
@@ -172,12 +189,12 @@ export async function POST(request: NextRequest) {
       durationSeconds: resolveDuration(
         body.provider,
         model,
-        typeof body.durationSeconds === 'number' ? body.durationSeconds : undefined
+        requestedDuration
       ),
       width: size?.width,
       height: size?.height,
       resolution: size?.preset,
-      ...(body.provider === 'piapi' ? {audio: body.audio === true} : {}),
+      ...(body.provider === 'piapi' || modelRecord?.supportsAudio ? {audio: body.audio === true} : {}),
       aspectRatio: typeof body.aspectRatio === 'string' ? body.aspectRatio : undefined,
     });
     return NextResponse.json({ success: true, taskId });

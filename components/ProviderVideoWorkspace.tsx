@@ -1,4 +1,5 @@
 'use client';
+// components/ProviderVideoWorkspace.tsx
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpDown, Download, ImagePlus, Loader2, Search, Sparkles, Video } from 'lucide-react';
@@ -153,8 +154,22 @@ function controlFieldsFor(model: ProviderModel | undefined): ModelControlField[]
       })),
     });
   }
-  if (model.aspectRatios?.length) fields.push({ key: 'aspectRatio', label: 'Aspect ratio', type: 'select', defaultValue: model.aspectRatios[0], options: model.aspectRatios.map(value => ({ label: value, value })) });
-  if (model.supportsAudio) fields.push({ key: 'audio', label: 'Generate audio', type: 'boolean', defaultValue: false, description: 'Audio changes the price per second.' });
+  const sizeNamesAspect = model.sizes?.some((size) => size.label.includes('·')) ?? false;
+  if (model.aspectRatios?.length && !sizeNamesAspect) fields.push({ key: 'aspectRatio', label: 'Aspect ratio', type: 'select', defaultValue: model.aspectRatios[0], options: model.aspectRatios.map(value => ({ label: value, value })) });
+  if (model.supportsAudio) {
+    const silent = model.rate?.usdByResolution;
+    const spoken = model.rate?.audioUsdByResolution;
+    const audioMovesPrice = !silent || !spoken || Object.keys(spoken).some((key) => spoken[key] !== silent[key]);
+    fields.push({
+      key: 'audio',
+      label: 'Generate audio',
+      type: 'boolean',
+      defaultValue: false,
+      description: audioMovesPrice
+        ? 'Audio changes the price per second.'
+        : 'Optional synchronized audio. The published rate is the same either way.',
+    });
+  }
   return fields;
 }
 

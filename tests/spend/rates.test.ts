@@ -1,3 +1,4 @@
+// tests/spend/rates.test.ts
 import { describe, expect, it } from 'vitest';
 
 import { FAL_IMAGE_MODEL, FAL_VIDEO_MODELS } from '@/lib/fal/catalog';
@@ -99,6 +100,24 @@ describe('fal published rates', () => {
     expect(
       falPublishedCost('fal-ai/veo3.1', { resolution: '4k', audio: true, durationSeconds: 4 })?.costUsd
     ).toBeCloseTo(2.4, 6);
+  });
+
+  it('prices Veo 3.1 Lite from the published audio and resolution table', () => {
+    // https://fal.ai/models/fal-ai/veo3.1/lite — 720p $0.03 silent / $0.05 with
+    // audio, 1080p $0.05 silent / $0.08 with audio. No 4K tier.
+    expect(
+      falPublishedCost('fal-ai/veo3.1/lite', { resolution: '720p', audio: false, durationSeconds: 8 })
+    ).toEqual({ costUsd: expect.closeTo(0.24, 6), unit: 'second', quantity: 8 });
+    expect(
+      falPublishedCost('fal-ai/veo3.1/lite/image-to-video', { resolution: '720p', audio: true, durationSeconds: 4 })?.costUsd
+    ).toBeCloseTo(0.2, 6);
+    expect(
+      falPublishedCost('fal-ai/veo3.1/lite/first-last-frame-to-video', { resolution: '1080p', audio: false, durationSeconds: 6 })?.costUsd
+    ).toBeCloseTo(0.3, 6);
+    expect(
+      falPublishedCost('fal-ai/veo3.1/lite', { resolution: '1080p', audio: true, durationSeconds: 8 })?.costUsd
+    ).toBeCloseTo(0.64, 6);
+    expect(falPublishedCost('fal-ai/veo3.1/lite', { resolution: '4k', audio: true, durationSeconds: 8 })).toBeNull();
   });
 
   it('prices a Kling run, which has no resolution control', () => {

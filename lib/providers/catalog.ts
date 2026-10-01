@@ -232,6 +232,41 @@ const RUNWARE_MODELS: ProviderModel[] = [
     ],
     note: 'Image-to-video only. Cheapest video option here.',
   },
+  {
+    // Read 2026-10-01 from https://runware.ai/docs/models/google-veo-3-1-lite.
+    // The page publishes one rate per resolution ($0.05 at 720p, $0.08 at
+    // 1080p) and does not list a silent discount. generateAudio still exists
+    // and defaults to true on the vendor; the two tables match so the estimate
+    // stays the published figure either way. Capacity for this model is limited.
+    id: 'google:veo@3.1-lite',
+    label: 'Veo 3.1 Lite',
+    fileCode: 'veo-3_1-lite',
+    kind: 'video',
+    modes: ['text', 'image', 'frames'],
+    price: '$0.05 / s @ 720p · $0.08 / s @ 1080p',
+    rate: {
+      per: 'second',
+      usdByResolution: { '720p': 0.05, '1080p': 0.08 },
+      audioUsdByResolution: { '720p': 0.05, '1080p': 0.08 },
+    },
+    maxInputImages: 2,
+    videoInputs: {
+      image: { field: 'frameImages', maxImages: 1 },
+      frames: { field: 'frameImages', maxImages: 2 },
+    },
+    durations: [4, 6, 8],
+    // The vendor's dimension table. Two frame images must be sent as
+    // `resolution` instead of width/height; the adapter makes that switch.
+    sizes: [
+      { label: '720p · 16:9', width: 1280, height: 720 },
+      { label: '720p · 9:16', width: 720, height: 1280 },
+      { label: '1080p · 16:9', width: 1920, height: 1080 },
+      { label: '1080p · 9:16', width: 1080, height: 1920 },
+    ],
+    supportsAudio: true,
+    aspectRatios: ['16:9', '9:16'],
+    note: 'Optional audio. Runware publishes one rate per resolution. Capacity for this model is limited.',
+  },
 ];
 
 /**

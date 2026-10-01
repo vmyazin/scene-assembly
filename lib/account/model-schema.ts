@@ -1,3 +1,4 @@
+// lib/account/model-schema.ts
 /**
  * One description of every model the account Worker can run in the background,
  * in the vocabulary an agent reads: which input modes, how many references, and
@@ -98,9 +99,14 @@ function kieModels(): ModelDescriptor[] {
   }));
 }
 
-function aspectRatioField(provider: ProviderId, model: ProviderModel): ModelField {
-  const allowed = provider === 'piapi' && model.aspectRatios ? ASPECT_RATIOS.filter(ratio => model.aspectRatios!.includes(ratio)) : ASPECT_RATIOS;
+function aspectRatioField(_provider: ProviderId, model: ProviderModel): ModelField {
+  const allowed = model.aspectRatios?.length ? ASPECT_RATIOS.filter(ratio => model.aspectRatios!.includes(ratio)) : ASPECT_RATIOS;
   return select('aspectRatio', 'Aspect ratio', allowed);
+}
+
+/** `720p · 16:9` already names the ratio. A second control can disagree with it. */
+function sizeNamesAspect(model: ProviderModel): boolean {
+  return Boolean(model.sizes?.some(size => size.label.includes('·')));
 }
 
 function aggregatorImageFields(provider: ProviderId, model: ProviderModel): ModelField[] {
@@ -111,13 +117,14 @@ function aggregatorImageFields(provider: ProviderId, model: ProviderModel): Mode
 }
 
 function aggregatorVideoFields(provider: ProviderId, model: ProviderModel): ModelField[] {
-  const fields = [aspectRatioField(provider, model)];
+  const fields: ModelField[] = [];
+  if (!(model.aspectRatios?.length && sizeNamesAspect(model))) fields.push(aspectRatioField(provider, model));
   if (model.sizes?.length) fields.push(select('size', 'Output size', model.sizes.map(size => size.label), { default: model.sizes[0].label }));
   const duration = model.duration;
   if (duration?.type === 'options' && duration.values.length) fields.push(select('durationSeconds', 'Duration (seconds)', duration.values, { default: duration.values[0] }));
   else if (duration?.type === 'range') fields.push({ key: 'durationSeconds', label: 'Duration (seconds)', type: 'number', min: duration.min, max: duration.max, step: 1, default: duration.default });
   else if (model.durations?.length) fields.push(select('durationSeconds', 'Duration (seconds)', model.durations, { default: model.durations[0] }));
-  if (provider === 'piapi' && model.supportsAudio) fields.push({ key: 'audio', label: 'Audio', type: 'boolean' });
+  if (model.supportsAudio) fields.push({ key: 'audio', label: 'Audio', type: 'boolean' });
   return fields;
 }
 
