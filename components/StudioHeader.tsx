@@ -14,6 +14,7 @@ import { brand } from '@/lib/brand';
 import { setUiSoundsEnabled } from '@/lib/notify/chime';
 import { useAppStore } from '@/store/useAppStore';
 import { useConnectionsDialog } from '@/store/useConnectionsDialog';
+import { useLibraryDialog } from '@/store/useLibraryDialog';
 import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
 
 interface StudioHeaderProps {
@@ -129,13 +130,12 @@ export default function StudioHeader({
   const setKeyDialogOpen = useConnectionsDialog((s) => s.setOpen);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [libraryOpen, setLibraryOpen] = useState(false);
-  // ⌘K can aim at either library section; the header button always opens results.
-  const [libraryTab, setLibraryTab] = useState<'results' | 'prompts'>('results');
-  const openLibrary = (tab: 'results' | 'prompts' = 'results') => {
-    setLibraryTab(tab);
-    setLibraryOpen(true);
-  };
+  // ⌘K and the workspaces' prompt panels can aim at either library section;
+  // the header button always opens results.
+  const libraryOpen = useLibraryDialog((s) => s.open);
+  const libraryTab = useLibraryDialog((s) => s.tab);
+  const openLibrary = useLibraryDialog((s) => s.openLibrary);
+  const setLibraryOpen = useLibraryDialog((s) => s.setOpen);
 
   const pill = 'rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm';
   const idle = 'text-[var(--foreground-muted)] hover:text-[var(--foreground)]';
@@ -306,8 +306,9 @@ export default function StudioHeader({
       />
 
       {/* Kept results and saved prompts */}
-      {/* Keyed on the tab: ⌘K's "Saved prompts" remounts the overlay so it
-          lands on that section instead of whatever was last selected. */}
+      {/* Keyed on the tab: ⌘K's "Saved prompts" and the prompt panels' button
+          remount the overlay so it lands on that section instead of whatever
+          was last selected. */}
       {/* A clip added from the library has nowhere visible to land unless the
           editor comes forward with it, so this is the one caller that follows
           the clip instead of only closing. Already on /timeline, closing is the

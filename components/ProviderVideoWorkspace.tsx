@@ -14,6 +14,7 @@ import { uploadRunwareVideo } from '@/lib/providers/upload-video';
 import LastFrameActions from '@/components/LastFrameActions';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import PromptPanel from '@/components/PromptPanel';
+import SavedPromptsButton from '@/components/SavedPromptsButton';
 import ModelControls, { type ModelControlField } from '@/components/ModelControls';
 import ConnectionGate, { isGated } from '@/components/ConnectionGate';
 import SubmissionError from '@/components/SubmissionError';
@@ -875,20 +876,23 @@ export default function ProviderVideoWorkspace({
               <label htmlFor="provider-video-prompt" className="display block text-base font-semibold">
                 Prompt
               </label>
-              {!isEdit && <button
-                type="button"
-                onClick={() => void generateExample()}
-                disabled={isGeneratingExample}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--brand-accent)]/30 bg-[var(--brand-accent)]/10 px-2.5 py-1.5 text-xs font-medium text-[var(--brand-accent)] transition-colors hover:text-[var(--neon-cyan)] disabled:cursor-not-allowed disabled:opacity-60"
-                title="Generate an example prompt with the shared fast model, or your own Gemini key"
-              >
-                {isGeneratingExample ? (
-                  <Loader2 className="animate-spin" size={14} />
-                ) : (
-                  <Sparkles size={14} />
-                )}
-                {isGeneratingExample ? 'Thinking…' : 'Gen Example'}
-              </button>}
+              <div className="flex items-center gap-1.5">
+                <SavedPromptsButton />
+                {!isEdit && <button
+                  type="button"
+                  onClick={() => void generateExample()}
+                  disabled={isGeneratingExample}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--brand-accent)]/30 bg-[var(--brand-accent)]/10 px-2.5 py-1.5 text-xs font-medium text-[var(--brand-accent)] transition-colors hover:text-[var(--neon-cyan)] disabled:cursor-not-allowed disabled:opacity-60"
+                  title="Generate an example prompt with the shared fast model, or your own Gemini key"
+                >
+                  {isGeneratingExample ? (
+                    <Loader2 className="animate-spin" size={14} />
+                  ) : (
+                    <Sparkles size={14} />
+                  )}
+                  {isGeneratingExample ? 'Thinking…' : 'Gen Example'}
+                </button>}
+              </div>
             </div>
             {isEdit && <div className="flex flex-wrap gap-2">{Object.entries(EDIT_PROMPTS).map(([label, text]) => <button key={label} type="button" className="btn-secondary px-2.5 py-1.5 text-xs" onClick={() => setPrompt(selectedModel?.videoEdit?.promptSyntax === 'image-index' ? text.replace('@Video1', 'the source video').replace(/@Image(\d+)/g, 'image $1') : text)}>{label}</button>)}</div>}
             <AutoExpandingPrompt
