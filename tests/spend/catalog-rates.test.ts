@@ -1,3 +1,4 @@
+// tests/spend/catalog-rates.test.ts
 import { describe, expect, it } from 'vitest';
 
 import { findModel, PROVIDER_MODELS } from '@/lib/providers/catalog';
@@ -233,6 +234,20 @@ describe('Runware tiers reach the same resolver as Atlas', () => {
     // the tier the per-second price is quoted at.
     expect(sizeRateKey({ label: '480p · 16:9', width: 864, height: 496 })).toBe('480p');
     expect(sizeRateKey({ label: '1080p (upscaled)', preset: '1080p-SR' })).toBe('1080p-SR');
+  });
+
+  it('prices Veo 3.1 Lite silent and with audio at the published per-second rates', () => {
+    // https://runware.ai/docs/models/google-veo-3-1-lite — 720p is $0.03/s
+    // silent and $0.05/s with audio; 1080p is $0.05/s silent and $0.08/s
+    // with audio.
+    const lite = findModel('runware', 'google:veo@3.1-lite');
+    expect(resolveCatalogRate(lite, 4, 1, { size: '720p · 16:9', audio: false }).costUsd).toBeCloseTo(0.12, 6);
+    expect(resolveCatalogRate(lite, 8, 1, { size: '720p · 16:9', audio: false }).costUsd).toBeCloseTo(0.24, 6);
+    expect(resolveCatalogRate(lite, 8, 1, { size: '720p · 9:16', audio: true }).costUsd).toBeCloseTo(0.4, 6);
+    expect(resolveCatalogRate(lite, 6, 1, { size: '1080p · 16:9', audio: true }).costUsd).toBeCloseTo(0.48, 6);
+    expect(resolveCatalogRate(lite, 4, 1, { size: '1080p · 9:16', audio: false }).costUsd).toBeCloseTo(0.2, 6);
+    expect(resolveCatalogRate(lite, 6, 1, { size: '1080p · 16:9', audio: false }).costUsd).toBeCloseTo(0.3, 6);
+    expect(resolveCatalogRate(lite, 8, 1, { size: '4k · 16:9' })).toMatchObject({ costUsd: null, confidence: 'unknown' });
   });
 
   it('leaves a size the vendor never priced unpriced, rather than guessing', () => {

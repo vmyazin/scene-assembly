@@ -43,9 +43,9 @@ Kie’s in-app catalog intentionally covers these flagship families:
 - **Image (8):** Nano Banana Pro, Nano Banana 2, GPT Image 2, FLUX.2 Pro, Seedream 5 Pro, Imagen 4 Ultra, Ideogram V3, Z-Image
 - **Video (7):** Veo 3.1, Kling 3.0, Seedance 2, Wan 2.7, Hailuo 2.3 Pro, Grok Imagine, PixVerse V6
 
-fal.ai has a separate, static catalog of exactly nine curated and verified video choices: **Veo 3.1 Standard**, **Veo 3.1 Fast**, **Seedance 2.0 Standard**, **Seedance 2.0 Fast**, **Kling 3 Standard**, **Kling 3 Pro**, **MiniMax Hailuo 2.3 Standard**, **MiniMax Hailuo 2.3 Pro**, and **Wan 2.7**. Each supports text-to-video and image-to-video.
+fal.ai has a separate, static catalog of exactly ten curated and verified video choices: **Veo 3.1 Standard**, **Veo 3.1 Fast**, **Veo 3.1 Lite**, **Seedance 2.0 Standard**, **Seedance 2.0 Fast**, **Kling 3 Standard**, **Kling 3 Pro**, **MiniMax Hailuo 2.3 Standard**, **MiniMax Hailuo 2.3 Pro**, and **Wan 2.7**. Each supports text-to-video and image-to-video.
 
-Seven of them also take **two source images** — a first and a last frame — and generate the motion between them. Veo 3.1 Standard and Fast run this on fal's dedicated `first-last-frame-to-video` endpoints; Seedance 2.0 (both tiers), Kling 3 (both tiers), and Wan 2.7 accept a closing frame alongside the opening one on their image-to-video endpoints. Only the two MiniMax Hailuo 2.3 models are opening-frame only, so they drop out of the picker in this mode.
+Eight of them also take **two source images** — a first and a last frame — and generate the motion between them. Veo 3.1 Standard, Fast, and Lite run this on fal's dedicated `first-last-frame-to-video` endpoints; Seedance 2.0 (both tiers), Kling 3 (both tiers), and Wan 2.7 accept a closing frame alongside the opening one on their image-to-video endpoints. Only the two MiniMax Hailuo 2.3 models are opening-frame only, so they drop out of the picker in this mode.
 
 Browser-only execution for both providers creates tab-local, in-memory jobs. For fal, the app uses the [asynchronous queue](https://fal.ai/docs/documentation/model-apis/inference/queue) to submit, check status, retrieve results, and cancel. Polling stops at success/failure or after 15 minutes; the app never auto-resubmits, and job history is not restored after a reload. Download completed media promptly because provider URLs are temporary.
 
@@ -147,7 +147,7 @@ Guest provider credentials, including the fal key, persist in this browser’s `
 ### Generating Video with fal.ai
 
 1. Select **Video** in the header, switch the provider to **fal.ai**, and choose text-to-video, image-to-video, or first & last frame
-2. Connect a fal key and select one of the nine curated models (seven in first-and-last-frame mode)
+2. Connect a fal key and select one of the ten curated models (eight in first-and-last-frame mode)
 3. Add reference images when required, adjust the model-specific controls, and submit
    - In first-and-last-frame mode, pick two stills in order — opening then closing — and use **Swap first and last** if they land the wrong way round
 4. Keep the tab open while the app polls the fal queue; you can cancel an active job from its job card
@@ -226,7 +226,7 @@ scene-assembly/
   All support every mode, the aspect-ratio control, and reference images
 - **Pollinations**: `image.pollinations.ai` — FLUX text-to-image, aspect-ratio mapping, no auth
 - **Cloudflare**: Workers AI `flux-1-schnell` — fixed output size, 8 inference steps
-- **fal.ai**: Nano Banana 2 for all six image modes plus nine curated video choices. The `lib/fal` adapter uses fal’s [async queue](https://fal.ai/docs/documentation/model-apis/inference/queue), [CDN](https://fal.ai/docs/documentation/model-apis/fal-cdn), and authenticated [pricing API](https://fal.ai/docs/documentation/model-apis/pricing) for key validation.
+- **fal.ai**: Nano Banana 2 for all six image modes plus ten curated video choices. The `lib/fal` adapter uses fal’s [async queue](https://fal.ai/docs/documentation/model-apis/inference/queue), [CDN](https://fal.ai/docs/documentation/model-apis/fal-cdn), and authenticated [pricing API](https://fal.ai/docs/documentation/model-apis/pricing) for key validation.
 - **Kie.ai**: static typed catalog of 15 flagship image/video families; marketplace tasks use Kie’s unified task endpoint while Veo 3.1 uses Kie’s dedicated Veo protocol. See the [Kie catalog](https://docs.kie.ai/llms.txt), [task lifecycle](https://docs.kie.ai/market/common/get-task-detail), and [file upload API](https://docs.kie.ai/file-upload-api/quickstart).
 
 ## 🔒 Security

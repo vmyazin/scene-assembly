@@ -1,3 +1,4 @@
+// cloud/src/provider-adapters/aggregators.ts
 import { editSettingsError } from '../../../lib/providers/video-edit';
 import { piapiCreateImage, piapiCreateVideo, piapiPollTask } from '../../../lib/providers/piapi';
 import { findModel, resolveDuration, resolveSize, resolveVideoInput } from '../../../lib/providers/catalog';
@@ -59,6 +60,8 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
     if (audio !== undefined && (!model.supportsAudio || typeof audio !== 'boolean')) return invalid('Audio must be on or off for a supported video model.');
     if (aspectRatio !== undefined && model.aspectRatios && !model.aspectRatios.includes(String(aspectRatio))) return invalid('Choose an aspect ratio this model supports.');
   }
+  if (r.provider !== 'piapi' && model.aspectRatios && aspectRatio !== undefined && !model.aspectRatios.includes(String(aspectRatio))) return invalid(`"${String(aspectRatio)}" is not an aspect ratio ${model.label} publishes. Pick one from the list.`);
+  if (r.provider !== 'piapi' && model.supportsAudio && audio !== undefined && typeof audio !== 'boolean') return invalid('Audio must be on or off for a supported video model.');
   // Only some Atlas image models publish a tier, so the catalog entry is what
   // says whether one is accepted and which labels are real.
   if (r.provider === 'atlas' && resolution !== undefined && (r.mediaType !== 'image' || !model.sizes?.some(s => s.label === String(resolution)))) return invalid(`"${String(resolution)}" is not a resolution ${model.label} publishes. Pick one from the list.`);
@@ -69,6 +72,7 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
     ? ['aspectRatio','size','durationSeconds','resolution','audio']
     : r.provider === 'atlas' ? ['aspectRatio','size','durationSeconds','resolution']
       : ['aspectRatio','size','durationSeconds'];
+  if (model.supportsAudio && !accepted.includes('audio')) accepted.push('audio');
   const stray = Object.keys(r.values).find(key => !accepted.includes(key));
   if (stray) return invalid(`"${stray}" is not a setting this provider accepts.`);
 }
@@ -124,7 +128,7 @@ export const aggregatorAdapter: GenerationAdapter = {
     const size = resolveSize(provider, r.modelId, r.values.size as string | undefined);
     const create = provider === 'piapi' ? piapiCreateVideo : provider === 'runware' ? runwareCreateVideo : provider === 'comet' ? cometCreateVideo : atlasCreateVideo;
     const result = await create({
-      ...common, inputMode: r.inputMode, ...(provider === 'piapi' ? {audio: r.values.audio === true} : {}),
+      ...common, inputMode: r.inputMode, ...(provider === 'piapi' || model.supportsAudio ? {audio: r.values.audio === true} : {}),
       inputField: resolveVideoInput(provider, r.modelId, r.inputMode)?.field,
       durationSeconds: resolveDuration(provider, r.modelId, r.values.durationSeconds as number | undefined),
       width: size?.width, height: size?.height, resolution: size?.preset,

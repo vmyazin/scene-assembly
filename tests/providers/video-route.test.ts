@@ -1,3 +1,4 @@
+// tests/providers/video-route.test.ts
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { POST } from '@/app/api/providers/video/route';
@@ -96,6 +97,67 @@ describe('POST /api/providers/video', () => {
 
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
     expect(body).not.toHaveProperty('duration');
+  });
+
+  it('rejects an unsupported Veo 3.1 Lite duration, size, or aspect before payment', async () => {
+    const fetchMock = mockFetch({ data: [{}] });
+    const base = { provider: 'runware', apiKey: 'rw', prompt: 'a lantern', model: 'google:veo@3.1-lite', inputMode: 'text' };
+
+    expect((await post({ ...base, durationSeconds: 5 })).status).toBe(400);
+    expect((await post({ ...base, size: '4k · 16:9' })).status).toBe(400);
+    expect((await post({ ...base, aspectRatio: '1:1' })).status).toBe(400);
+    expect((await post({ ...base, aspectRatio: 'undefined' })).status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('accepts a Veo 3.1 Lite run whose size already names the ratio', async () => {
+    const fetchMock = mockFetch({ data: [{ taskUUID: 'lite-task' }] });
+    const response = await post({
+      provider: 'runware',
+      apiKey: 'rw',
+      prompt: 'a lantern',
+      model: 'google:veo@3.1-lite',
+      inputMode: 'text',
+      durationSeconds: 4,
+      size: '720p · 16:9',
+      audio: false,
+    });
+
+    expect(response.status).toBe(200);
+    const [task] = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(task).toMatchObject({
+      model: 'google:veo@3.1-lite',
+      width: 1280,
+      height: 720,
+      duration: 4,
+      providerSettings: { google: { generateAudio: false } },
+    });
+    expect(task).not.toHaveProperty('aspectRatio');
+  });
+
+  it('returns the Veo 3.1 Lite capacity message once, without a retryable status', async () => {
+    const fetchMock = mockFetch(
+      { errors: [{ code: 'modelUnavailable', message: 'Model capacity is limited.' }] },
+      { ok: false, status: 503 }
+    );
+
+    const response = await post({
+      provider: 'runware',
+      apiKey: 'rw',
+      prompt: 'a lantern',
+      model: 'google:veo@3.1-lite',
+      inputMode: 'text',
+      durationSeconds: 4,
+      size: '720p · 16:9',
+      audio: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: expect.stringMatching(/no free capacity on Runware/),
+    });
   });
 
   it('passes a provider failure through with its status', async () => {

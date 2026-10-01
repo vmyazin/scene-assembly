@@ -1,4 +1,5 @@
 'use client';
+// components/ProviderVideoWorkspace.tsx
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpDown, Download, ImagePlus, Loader2, Search, Sparkles, Video } from 'lucide-react';
@@ -153,8 +154,22 @@ function controlFieldsFor(model: ProviderModel | undefined): ModelControlField[]
       })),
     });
   }
-  if (model.aspectRatios?.length) fields.push({ key: 'aspectRatio', label: 'Aspect ratio', type: 'select', defaultValue: model.aspectRatios[0], options: model.aspectRatios.map(value => ({ label: value, value })) });
-  if (model.supportsAudio) fields.push({ key: 'audio', label: 'Generate audio', type: 'boolean', defaultValue: false, description: 'Audio changes the price per second.' });
+  const sizeNamesAspect = model.sizes?.some((size) => size.label.includes('·')) ?? false;
+  if (model.aspectRatios?.length && !sizeNamesAspect) fields.push({ key: 'aspectRatio', label: 'Aspect ratio', type: 'select', defaultValue: model.aspectRatios[0], options: model.aspectRatios.map(value => ({ label: value, value })) });
+  if (model.supportsAudio) {
+    const silent = model.rate?.usdByResolution;
+    const spoken = model.rate?.audioUsdByResolution;
+    const audioMovesPrice = !silent || !spoken || Object.keys(spoken).some((key) => spoken[key] !== silent[key]);
+    fields.push({
+      key: 'audio',
+      label: 'Generate audio',
+      type: 'boolean',
+      defaultValue: false,
+      description: audioMovesPrice
+        ? 'Audio changes the price per second.'
+        : 'Optional synchronized audio. The published rate is the same either way.',
+    });
+  }
   return fields;
 }
 
@@ -164,6 +179,28 @@ function defaultValuesFor(fields: ModelControlField[]): Record<string, string | 
       .filter((field) => field.defaultValue !== undefined)
       .map((field) => [field.key, field.defaultValue as string | number | boolean])
   );
+}
+
+/**
+ * The aspect to send with a run. The control is omitted when a size label
+ * already names the ratio, so a fresh Lite draft has no `values.aspectRatio`.
+ * `String(undefined)` is the literal "undefined", which the guest route and
+ * the account validator both reject. A chosen ratio wins; otherwise the ratio
+ * is read out of the selected size (`720p · 9:16`). Nothing is sent when
+ * neither is a ratio this model lists.
+ */
+function submittedAspectRatio(
+  model: ProviderModel | undefined,
+  values: Record<string, string | number | boolean>,
+): string | undefined {
+  const listed = model?.aspectRatios;
+  if (!listed?.length) return undefined;
+  const chosen = values.aspectRatio;
+  if (typeof chosen === 'string' && listed.includes(chosen)) return chosen;
+  const label = typeof values.size === 'string' ? values.size : '';
+  const named = label.match(/(\d+)\s*:\s*(\d+)/);
+  const derived = named ? `${named[1]}:${named[2]}` : undefined;
+  return derived && listed.includes(derived) ? derived : undefined;
 }
 
 /** References are held as Files; every provider here wants a data URI. */
@@ -587,6 +624,7 @@ export default function ProviderVideoWorkspace({
     setError(null);
     setIsSubmitting(true);
     submitFlight.current = true;
+    const aspectRatio = !isEdit ? submittedAspectRatio(selectedModel, values) : undefined;
     try {
       if (isEdit && source && selectedModel.videoEdit) validateEditSource(source, selectedModel.videoEdit);
       if (cloudWorkspace.cloud) {
@@ -595,7 +633,7 @@ export default function ProviderVideoWorkspace({
           ...((!isEdit || selectedModel.videoEdit?.sizes.length) && typeof values.size === 'string' ? {size:values.size} : {}),
           ...(isEdit && selectedModel.videoEdit?.draftRate ? {draft:values.draft === true} : {}),
           ...(!isEdit && selectedModel?.supportsAudio ? {audio:values.audio === true} : {}),
-          ...(!isEdit && selectedModel?.aspectRatios ? {aspectRatio:String(values.aspectRatio)} : {}),
+          ...(aspectRatio ? { aspectRatio } : {}),
         }}, inputMode === 'text' ? [] : references.map(reference => reference.file), prompt.trim(), isEdit ? source?.file : undefined);
         if (isEdit && source) setSubmittedEditJob({epoch: source.epoch, jobId: job.id});
         autoRetry.reset();
@@ -627,7 +665,7 @@ export default function ProviderVideoWorkspace({
         size: (!isEdit || selectedModel.videoEdit?.sizes.length) && typeof values.size === 'string' ? values.size : undefined,
         ...(isEdit && selectedModel.videoEdit?.draftRate ? {draft:values.draft === true} : {}),
         ...(!isEdit && selectedModel?.supportsAudio ? {audio:values.audio === true} : {}),
-        ...(!isEdit && selectedModel?.aspectRatios ? {aspectRatio:String(values.aspectRatio)} : {}),
+        ...(aspectRatio ? { aspectRatio } : {}),
       });
       usePromptLibraryStore.getState().remember(submittedPrompt);
       const jobId = useProviderJobsStore.getState().startJob({

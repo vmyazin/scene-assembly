@@ -1,3 +1,4 @@
+// cloud/tests/aggregators.test.ts
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { adapter } from './database';
@@ -129,6 +130,23 @@ describe('durable aggregator adapters', () => {
       })
       .map(model => `${provider}:${model.id}`));
     expect(refused).toEqual([]);
+  });
+  it('rejects Veo 3.1 Lite durations, aspects, and sizes the model page does not list', () => {
+    const lite: CloudJobRequest = {
+      ...request,
+      modelId: 'google:veo@3.1-lite',
+      mediaType: 'video',
+      inputMode: 'text',
+      values: { size: '720p · 16:9', durationSeconds: 8, audio: false },
+    };
+    expect(() => validateRequest(env, lite)).not.toThrow();
+    expect(() => validateRequest(env, { ...lite, values: { ...lite.values, durationSeconds: 5 } })).toThrow(/not a length/);
+    expect(() => validateRequest(env, { ...lite, values: { ...lite.values, aspectRatio: '1:1' } })).toThrow(/not an aspect ratio/);
+    expect(() => validateRequest(env, { ...lite, values: { ...lite.values, aspectRatio: 'undefined' } })).toThrow(/not an aspect ratio/);
+    expect(() => validateRequest(env, { ...lite, values: { ...lite.values, aspectRatio: '16:9' } })).not.toThrow();
+    expect(() => validateRequest(env, { ...lite, values: { ...lite.values, size: '4k · 16:9' } })).toThrow(/not an output size/);
+    expect(() => validateRequest(env, { ...lite, values: { ...lite.values, audio: 'yes' } })).toThrow(/Audio must be on or off/);
+    expect(() => validateRequest(env, { ...lite, inputMode: 'frames', referenceIds: ['a', 'b'], values: { size: '1080p · 9:16', durationSeconds: 4, audio: true } })).not.toThrow();
   });
   it('rejects invalid media, references, arbitrary fields and unsupported size before intake', () => {
     for (const patch of [{modelId:'arbitrary-model'},{mediaType:'video'},{inputMode:'image'}, {values:{size:'imaginary'}}, {values:{durationSeconds:8}}, {values:{apiKey:'untrusted'}}]) {
