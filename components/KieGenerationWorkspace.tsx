@@ -46,7 +46,7 @@ import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
 import ConnectionGate, { isGated } from '@/components/ConnectionGate';
 import SubmissionError from '@/components/SubmissionError';
 import RelaxedFilterControl from '@/components/RelaxedFilterControl';
-import { trackGenerationResult } from '@/lib/analytics/generation-result';
+import { trackGenerationResult, trackGenerationSubmitted } from '@/lib/analytics/generation-result';
 import { classifyFailure, refusalPresentation } from '@/lib/moderation/classify';
 import { inspectPrompt } from '@/lib/moderation/floors';
 import { useRelaxedFilter } from '@/lib/moderation/use-relaxed-filter';
@@ -462,7 +462,7 @@ export default function KieGenerationWorkspace({
       // Runs alongside the generation so the name is ready before the result is.
       void attachSlug(taskId, submittedPrompt);
       autoRetry.reset();
-      trackGenerationResult({ engine: 'kie', route: selectedModel.id, model: selectedModel.label, level: relaxed.levelRef.current, outcome: 'ok', media: mediaType });
+      trackGenerationSubmitted({ engine: 'kie', route: selectedModel.id, model: selectedModel.label, level: relaxed.levelRef.current, media: mediaType });
       toast.success('Task queued.');
     } catch (submissionError) {
       const message = submissionError instanceof Error ? submissionError.message : 'Kie could not start this task.';

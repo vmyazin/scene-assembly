@@ -18,7 +18,7 @@ import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
 import ConnectionGate, { isGated } from '@/components/ConnectionGate';
 import SubmissionError from '@/components/SubmissionError';
 import RelaxedFilterControl from '@/components/RelaxedFilterControl';
-import { trackGenerationResult } from '@/lib/analytics/generation-result';
+import { trackGenerationResult, trackGenerationSubmitted } from '@/lib/analytics/generation-result';
 import { classifyFailure, refusalPresentation } from '@/lib/moderation/classify';
 import { inspectPrompt } from '@/lib/moderation/floors';
 import { useRelaxedFilter } from '@/lib/moderation/use-relaxed-filter';
@@ -639,7 +639,7 @@ function FalGenerationWorkspaceSession({
       // Runs alongside the generation so the name is ready before the video is.
       void attachSlug(requestId, submittedPrompt);
       autoRetry.reset();
-      trackGenerationResult({ engine: 'fal', route: selectedModel.id, model: selectedModel.label, level: relaxed.levelRef.current, outcome: 'ok', media: 'video' });
+      trackGenerationSubmitted({ engine: 'fal', route: selectedModel.id, model: selectedModel.label, level: relaxed.levelRef.current, media: 'video' });
     } catch (submitFailure) {
       if (isCurrent() && !operation.controller.signal.aborted) {
         const message = safeFailureText(submitFailure, apiKey.trim(), submissionError);

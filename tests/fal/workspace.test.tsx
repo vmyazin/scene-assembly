@@ -921,4 +921,18 @@ describe('FalGenerationWorkspace', () => {
     expect(screen.getByText('fal could not complete this job.')).toBeInTheDocument();
     expect(screen.getByText('fal reported an update.')).toBeInTheDocument();
   });
+
+  it('records an accepted video as submitted, not as a finished result', async () => {
+    const plausible = vi.fn();
+    Object.defineProperty(window, 'plausible', { configurable: true, writable: true, value: plausible });
+    renderWorkspace('text');
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A red kite over a green field' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Generate video/ }));
+    await waitFor(() => expect(submitFalJobMock).toHaveBeenCalledOnce());
+    const names = plausible.mock.calls.map((call) => call[0]);
+    expect(names).toContain('generation_submitted');
+    expect(names).not.toContain('generation_result');
+    expect(plausible.mock.calls.find((call) => call[0] === 'generation_submitted')?.[1].props.level).toBe('standard');
+    delete (window as { plausible?: unknown }).plausible;
+  });
 });

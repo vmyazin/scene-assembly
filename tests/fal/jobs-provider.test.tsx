@@ -139,6 +139,40 @@ describe('FalJobsProvider', () => {
     expect(useSpendStore.getState().entries[0]).toMatchObject({ id: `fal-${initial.id}`, provider: 'fal', kind: 'video', costUsd: 0.5 });
   });
 
+  it('emits generation_result only when the job finishes, using the submitted level', async () => {
+    const plausible = vi.fn();
+    Object.defineProperty(window, 'plausible', { configurable: true, writable: true, value: plausible });
+    const initial = makeJob({
+      modelId: 'veo-3-1-fast',
+      controlValues: { moderation: 'relaxed' },
+    });
+    getFalJobStatus
+      .mockResolvedValueOnce({ requestId: initial.requestId, state: 'running', logs: ['Rendering'] })
+      .mockResolvedValueOnce({
+        requestId: initial.requestId,
+        state: 'fail',
+        logs: [],
+        error: 'IMAGE_SAFETY',
+      });
+    useFalJobsStore.getState().upsertJob(initial);
+    render(<FalJobsProvider><div /></FalJobsProvider>);
+
+    await advance(nextFalPollDelay(0));
+    expect(plausible.mock.calls.map((call) => call[0])).not.toContain('generation_result');
+
+    await advance(nextFalPollDelay(1));
+    const result = plausible.mock.calls.find((call) => call[0] === 'generation_result');
+    expect(result?.[1].props).toMatchObject({
+      engine: 'fal',
+      route: 'veo-3-1-fast',
+      level: 'relaxed',
+      outcome: 'policy',
+      media: 'video',
+    });
+    expect(plausible.mock.calls.filter((call) => call[0] === 'generation_result')).toHaveLength(1);
+    delete (window as { plausible?: unknown }).plausible;
+  });
+
   it('files nothing in the spend ledger for a failed job', async () => {
     getFalJobStatus.mockResolvedValueOnce({ requestId: 'request_0001', state: 'fail', logs: [], error: 'nope' });
     useFalJobsStore.getState().upsertJob(makeJob());

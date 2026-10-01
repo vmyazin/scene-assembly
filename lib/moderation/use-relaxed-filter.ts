@@ -12,6 +12,7 @@ import { FLOOR_STANDARD_NOTE, inspectPrompt } from './floors';
 import {
   RELAXED_POLICY_VERSION,
   consentIsCurrent,
+  consentStorageKey,
   type ModerationLevel,
   type RelaxedConsent,
 } from './level';
@@ -28,7 +29,8 @@ export interface RelaxedFilterInput extends ModerationRoute {
  * the new preference.
  */
 export function useRelaxedFilter(input: RelaxedFilterInput) {
-  const consent = useAppStore((state) => state.relaxedFilter);
+  const accountId = useAccountStore((state) => state.session?.account?.id ?? null);
+  const consent = useAppStore((state) => state.relaxedConsents[consentStorageKey(accountId)]);
   const preferred = useAppStore((state) => state.preferredLevel[input.workspaceKey] ?? 'standard');
   const setConsent = useAppStore((state) => state.setRelaxedConsent);
   const setPreferred = useAppStore((state) => state.setPreferredLevel);
@@ -41,7 +43,11 @@ export function useRelaxedFilter(input: RelaxedFilterInput) {
   const offered = relaxedFilterEnabled() && capability.relaxable;
   const floor = inspectPrompt(input.prompt, preferred);
   const locked = input.hasReferences || floor.forceStandard;
-  const effective: ModerationLevel = offered && preferred === 'relaxed' && !locked && consentIsCurrent(consent)
+  // Consent has to belong to this identity. A guest confirmation, or another
+  // account's, must not light the toggle: the Worker only honors Relaxed after
+  // it has stored consent for the signed-in account.
+  const consented = consentIsCurrent(consent, accountId);
+  const effective: ModerationLevel = offered && preferred === 'relaxed' && !locked && consented
     ? 'relaxed'
     : 'standard';
   // Submit reads the ref, including a resubmit fired from the consent handler
@@ -59,7 +65,7 @@ export function useRelaxedFilter(input: RelaxedFilterInput) {
       return;
     }
     if (locked) return;
-    if (!consentIsCurrent(consent)) {
+    if (!consented) {
       setConsentError(null);
       setOpen(true);
       return;
@@ -70,7 +76,7 @@ export function useRelaxedFilter(input: RelaxedFilterInput) {
 
   const requestRelaxed = (after?: () => void) => {
     if (!offered || locked) return;
-    if (!consentIsCurrent(consent)) {
+    if (!consented) {
       afterConsent.current = after ?? null;
       setConsentError(null);
       setOpen(true);
@@ -82,8 +88,8 @@ export function useRelaxedFilter(input: RelaxedFilterInput) {
   };
 
   const confirm = async () => {
-    const signedIn = Boolean(useAccountStore.getState().session?.account?.id);
-    if (signedIn) {
+    const signedInId = useAccountStore.getState().session?.account?.id ?? null;
+    if (signedInId) {
       try {
         await accountRequest('relaxed-consent', {
           method: 'POST',
@@ -99,6 +105,7 @@ export function useRelaxedFilter(input: RelaxedFilterInput) {
       consentedAt: new Date().toISOString(),
       policyVersion: RELAXED_POLICY_VERSION,
       ageConfirmed: true,
+      accountId: signedInId,
     };
     setConsent(record);
     setPreferred(input.workspaceKey, 'relaxed');

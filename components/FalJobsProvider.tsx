@@ -1,8 +1,11 @@
+// components/FalJobsProvider.tsx
 'use client';
 
 import { useEffect, useRef } from 'react';
 
+import { trackQueuedTerminal } from '@/lib/analytics/generation-result';
 import { getFalJobStatus } from '@/lib/fal/browser';
+import { falModelLabel } from '@/lib/fal/catalog';
 import { FAL_JOB_TIMEOUT_MS, isFalJobTerminal, nextFalPollDelay } from '@/lib/fal/queue';
 import type { FalJob, FalTask } from '@/lib/fal/types';
 import { useAppStore } from '@/store/useAppStore';
@@ -37,6 +40,18 @@ function timedOutJob(job: FalJob, updatedAt: number): FalJob {
     error: FAL_TIMEOUT_MESSAGE,
     updatedAt,
   };
+}
+
+function reportFalTerminal(job: FalJob, succeeded: boolean, error?: string): void {
+  trackQueuedTerminal({
+    engine: 'fal',
+    route: job.modelId,
+    model: falModelLabel(job.modelId),
+    media: job.mediaType,
+    controlValues: job.controlValues,
+    succeeded,
+    error,
+  });
 }
 
 function taskSnapshot(job: FalJob, task: FalTask, updatedAt: number): FalJob {
@@ -111,6 +126,7 @@ export default function FalJobsProvider({ children }: { children: React.ReactNod
       operation.timer = undefined;
       operations.delete(job.id);
       operation.controller?.abort();
+      reportFalTerminal(job, false, FAL_TIMEOUT_MESSAGE);
       upsertJob(timedOutJob(job, now));
     };
 
@@ -130,10 +146,15 @@ export default function FalJobsProvider({ children }: { children: React.ReactNod
       operation.controller = undefined;
       if (task) {
         // Poll stops at a terminal state, so this transition happens once.
+        // Running and queued updates are not a result: a later refusal would
+        // otherwise already have been counted as a success.
         if (task.state === 'success') {
+          reportFalTerminal(job, true);
           recordFinishedJob('fal', { ...job, mimeType: task.mimeType }, task.resultUrl);
           captureFalJob(job, operation.apiKey);
           playGenerationChime();
+        } else if (task.state === 'fail' || task.state === 'timed_out') {
+          reportFalTerminal(job, false, task.error);
         }
         upsertJob(taskSnapshot(job, task, now));
         return;
@@ -153,6 +174,7 @@ export default function FalJobsProvider({ children }: { children: React.ReactNod
       const now = Date.now();
       const remaining = FAL_JOB_TIMEOUT_MS - (now - job.createdAt);
       if (remaining <= 0) {
+        reportFalTerminal(job, false, FAL_TIMEOUT_MESSAGE);
         upsertJob(timedOutJob(job, now));
         continue;
       }

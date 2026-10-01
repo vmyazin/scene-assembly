@@ -487,4 +487,24 @@ describe('Kie generation workspace', () => {
 
     expect(screen.getByRole('radio', { name: next }).getAttribute('aria-checked')).toBe('true');
   });
+
+  it('records an accepted task as submitted, not as a finished result', async () => {
+    const plausible = vi.fn();
+    Object.defineProperty(window, 'plausible', { configurable: true, writable: true, value: plausible });
+    render(
+      <KieGenerationWorkspace
+        mediaType="image"
+        inputMode="text"
+        onBack={() => undefined}
+        onOpenConnections={() => undefined}
+      />
+    );
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A glass forest' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate image' }));
+    await waitFor(() => expect(submitKieJobMock).toHaveBeenCalledOnce());
+    const names = plausible.mock.calls.map((call) => call[0]);
+    expect(names).toContain('generation_submitted');
+    expect(names).not.toContain('generation_result');
+    delete (window as { plausible?: unknown }).plausible;
+  });
 });

@@ -19,7 +19,7 @@ import ModelControls, { type ModelControlField } from '@/components/ModelControl
 import ConnectionGate, { isGated } from '@/components/ConnectionGate';
 import SubmissionError from '@/components/SubmissionError';
 import RelaxedFilterControl from '@/components/RelaxedFilterControl';
-import { trackGenerationResult } from '@/lib/analytics/generation-result';
+import { trackGenerationResult, trackGenerationSubmitted, trackQueuedTerminal } from '@/lib/analytics/generation-result';
 import { classifyFailure, refusalPresentation } from '@/lib/moderation/classify';
 import { inspectPrompt } from '@/lib/moderation/floors';
 import { useRelaxedFilter } from '@/lib/moderation/use-relaxed-filter';
@@ -53,7 +53,7 @@ import {
 import { downloadFilenameBase } from '@/lib/download-name';
 import { requestExamplePrompt, requestPromptSlug } from '@/lib/micro-ai/browser';
 import { getProviderVideoStatus, pollDelayMs, submitProviderVideo } from '@/lib/providers/browser';
-import { modelsFor } from '@/lib/providers/catalog';
+import { findModel, modelsFor } from '@/lib/providers/catalog';
 import ModelListbox from '@/components/ModelListbox';
 import { PROVIDER_VIDEO_COLUMNS, providerVideoSpecs } from '@/lib/models/listbox-specs';
 import { frameSlotLabel } from '@/lib/providers/frames';
@@ -473,6 +473,17 @@ export default function ProviderVideoWorkspace({
 
   const pollJob = async (job: ProviderJob) => {
     let attempt = job.pollAttempt;
+    const reportTerminal = (succeeded: boolean, error?: string) => {
+      trackQueuedTerminal({
+        engine: provider,
+        route: job.modelId,
+        model: findModel(provider, job.modelId)?.label ?? job.modelId,
+        media: 'video',
+        controlValues: job.controlValues,
+        succeeded,
+        error,
+      });
+    };
     try {
       while (attempt < MAX_POLL_ATTEMPTS) {
         await new Promise((resolve) => setTimeout(resolve, pollDelayMs(attempt)));
@@ -493,6 +504,7 @@ export default function ProviderVideoWorkspace({
         });
 
         if (task.state === 'success') {
+          reportTerminal(true);
           const current = useProviderJobsStore.getState().jobs.find((entry) => entry.id === job.id);
           recordFinishedJob(
             provider,
@@ -514,18 +526,23 @@ export default function ProviderVideoWorkspace({
           return;
         }
         if (task.state === 'error') {
+          reportTerminal(false, task.error);
           toast.error(task.error || `${label} could not finish this video.`);
           return;
         }
       }
+      const timeoutMessage = `${label} is taking longer than expected. Check your provider dashboard for this task.`;
+      reportTerminal(false, timeoutMessage);
       patchJob(job.id, {
         state: 'error',
-        error: `${label} is taking longer than expected. Check your provider dashboard for this task.`,
+        error: timeoutMessage,
       });
     } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Polling failed.';
+      reportTerminal(false, message);
       patchJob(job.id, {
         state: 'error',
-        error: cause instanceof Error ? cause.message : 'Polling failed.',
+        error: message,
       });
     }
   };
@@ -666,7 +683,7 @@ export default function ProviderVideoWorkspace({
       const started = useProviderJobsStore.getState().jobs.find((job) => job.id === jobId);
       if (started) void pollJob(started);
       autoRetry.reset();
-      trackGenerationResult({ engine: provider, route: selectedModel.id, model: selectedModel.label, level: relaxed.levelRef.current, outcome: 'ok', media: 'video' });
+      trackGenerationSubmitted({ engine: provider, route: selectedModel.id, model: selectedModel.label, level: relaxed.levelRef.current, media: 'video' });
       toast.success('Task queued.');
     } catch (submissionError) {
       const message =
