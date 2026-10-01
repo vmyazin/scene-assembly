@@ -24,6 +24,10 @@ on:
       # `lib/engines/gemini-catalog.ts`. Verify the current list with:
       #   rg -o "from '(\.\./)+lib/[^']+'" cloud/src
       - 'lib/**'
+      # Shared provider modules resolve their SDKs from the root installation.
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
       # A change to this file must be able to deploy itself.
       - '.github/workflows/deploy-account-worker.yml'
   # Escape hatch: redeploy the current `main` without an empty commit, e.g.
@@ -71,10 +75,16 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: cloud/pnpm-lock.yaml
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            cloud/pnpm-lock.yaml
 
-      # The Worker is its own pnpm project; the root install is not needed to
-      # bundle or test it.
+      # Shared lib/ provider code imports root SDKs such as @fal-ai/client.
+      # Install both projects before tests/bundling: cloud-only installs fail
+      # module resolution even though a fully installed local checkout passes.
+      - name: Install shared provider dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Install Worker dependencies
         working-directory: cloud
         run: pnpm install --frozen-lockfile

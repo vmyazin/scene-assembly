@@ -27,3 +27,6 @@ Provider adapters, generation submission, generation-runner, pricing/spend, stor
 - The bundled pnpm 11 wrapper forwarded `--` such that the initial test command ran the whole suite. The broad root run timed out unrelated UI tests under host load and was stopped; only the focused root run above is claimed as passing.
 - Local fixture recovery initially retained a quota-overflow journal from a missing storage row. Seed now bootstraps account storage and clears only its own retention records before resetting its assets. Workflow attempts are preserved to avoid reusing an old local Workflow instance; `--fresh` creates another retry example for review.
 - No production provider requests, commit, or push. Preview remains running pending user review.
+
+## Follow-up decision — 2026-10-01 shipping
+The user approved shipping. The Worker CI run (also the three preceding runs) failed before deployment because its cloud-only installation cannot resolve `@fal-ai/client` imported by `lib/fal/server.ts`. Extend the file map to `.github/workflows/deploy-account-worker.yml`: install both root and Worker dependencies, cache both locks, and trigger Worker deployments on root dependency changes. This is a deployment prerequisite and does not alter the reviewed UX. Verify through the full Worker CI suite, typecheck, deployment and health check.
