@@ -232,6 +232,40 @@ const RUNWARE_MODELS: ProviderModel[] = [
     ],
     note: 'Image-to-video only. Cheapest video option here.',
   },
+  {
+    // Read 2026-10-01 from https://runware.ai/docs/models/google-veo-3-1-lite.
+    // Pricing on that page: 720p without audio $0.03, with audio $0.05;
+    // 1080p without audio $0.05, with audio $0.08. The silent table is what
+    // a run estimates while Generate audio is off. Capacity is limited.
+    id: 'google:veo@3.1-lite',
+    label: 'Veo 3.1 Lite',
+    fileCode: 'veo-3_1-lite',
+    kind: 'video',
+    modes: ['text', 'image', 'frames'],
+    price: '$0.03 / s silent · $0.05 / s with audio @ 720p · $0.05 / s silent · $0.08 / s with audio @ 1080p',
+    rate: {
+      per: 'second',
+      usdByResolution: { '720p': 0.03, '1080p': 0.05 },
+      audioUsdByResolution: { '720p': 0.05, '1080p': 0.08 },
+    },
+    maxInputImages: 2,
+    videoInputs: {
+      image: { field: 'frameImages', maxImages: 1 },
+      frames: { field: 'frameImages', maxImages: 2 },
+    },
+    durations: [4, 6, 8],
+    // The vendor's dimension table. Two frame images must be sent as
+    // `resolution` instead of width/height; the adapter makes that switch.
+    sizes: [
+      { label: '720p · 16:9', width: 1280, height: 720 },
+      { label: '720p · 9:16', width: 720, height: 1280 },
+      { label: '1080p · 16:9', width: 1920, height: 1080 },
+      { label: '1080p · 9:16', width: 1080, height: 1920 },
+    ],
+    supportsAudio: true,
+    aspectRatios: ['16:9', '9:16'],
+    note: 'Optional audio. Silent is $0.03/s at 720p and $0.05/s at 1080p; with audio those are $0.05/s and $0.08/s. Capacity for this model is limited.',
+  },
 ];
 
 /**
@@ -518,7 +552,11 @@ function minimaxH3Developer(): ProviderModel[] {
       { label: '1440p (upscaled)', preset: '1440p-sr' },
       { label: '4K (upscaled)', preset: '4k-sr' },
     ],
-    supportsAudio: true,
+    // No `supportsAudio`. That flag draws an on/off switch and puts `audio` in
+    // the request, but H3 always generates its soundtrack and none of the three
+    // schemas names an audio field, at one flat rate. The switch did nothing in
+    // the browser and made the Worker refuse every signed-in H3 job.
+    note: 'Every clip comes with a generated soundtrack; there is no silent option.',
   };
   // The endpoint publishes no 3:2 or 2:3, so those are left off rather than
   // sent and silently reshaped.
@@ -562,6 +600,170 @@ function minimaxH3Developer(): ProviderModel[] {
         reference: { field: 'referenceImages', maxImages: 5, clientMaxImages: 5 },
       },
       note: 'Anchors characters, products and styles to your reference images, with native audio.',
+    },
+  ];
+}
+
+/**
+ * LTX-2 on Atlas (Lightricks' native API), four tiers × two endpoints. Read
+ * 2026-09-29 from `https://api.atlascloud.ai/api/v1/models` and each
+ * `https://www.atlascloud.ai/models/ltx/ltx-{version}-{tier}/{mode}/llms.txt`.
+ * The field names are the ones `atlas.ts` already sends (`image`,
+ * `last_image`, `duration`, `resolution`, `aspect_ratio`), so these need no
+ * wire mapping of their own.
+ *
+ * **Only 720p is priced.** Atlas quotes one per-second figure per tier with no
+ * table, and the Seedance pricing spec found that figure is the starting rate,
+ * not a flat one — Runware bills the same LTX-2.5 Fast higher at 1080p. So the
+ * larger sizes record as unknown rather than at the cheapest tier.
+ *
+ * The Fast tiers stop at 1080p on purpose. Their 12–20 s lengths are refused
+ * at 1440p and 4K, and this control cannot tie a length to a size, so offering
+ * both would let the two controls build a request the endpoint rejects. 4K
+ * stays reachable through the Pro tiers, which publish 6–10 s at every size.
+ *
+ * The `audio-to-video` endpoints are left out: this studio has no audio input.
+ * No `supportsAudio` either — that switch is not an Atlas setting the Worker
+ * accepts, so each tier keeps its endpoint's default: 2.3 Fast silent, every
+ * other tier with generated sound.
+ */
+function ltx2(version: '2.3' | '2.5', tier: 'fast' | 'pro'): ProviderModel[] {
+  const usd = { '2.3': { fast: 0.03, pro: 0.04 }, '2.5': { fast: 0.09, pro: 0.12 } }[version][tier];
+  const fast = tier === 'fast';
+  const name = `LTX-${version} ${fast ? 'Fast' : 'Pro'}`;
+  const code = `ltx-${version.replace('.', '_')}-${tier}`;
+  const shared = {
+    kind: 'video' as const,
+    price: `$${usd} / s @ 720p · larger sizes: price unknown`,
+    rate: { usdByResolution: { '720p': usd }, per: 'second' as const },
+    // Durations above 10 s exist on the Fast tiers only (with `-1`, "let the
+    // model choose", on 2.5 — not offered, since it cannot be priced).
+    durations: fast ? [6, 8, 10, 12, 14, 16, 18, 20] : [6, 8, 10],
+    sizes: [
+      { label: '720p', preset: '720p' },
+      { label: '1080p', preset: '1080p' },
+      ...(fast ? [] : [{ label: '1440p', preset: '1440p' }, { label: '4K', preset: '4k' }]),
+    ],
+    aspectRatios: ['16:9', '9:16'],
+    note: [
+      fast ? 'Up to 20 seconds in one pass. 1440p and 4K are on the Pro tier.' : 'Up to 4K, in clips of 6–10 seconds.',
+      version === '2.3' && fast ? 'Silent — this tier generates no audio.' : 'Comes with generated sound.',
+    ].join(' '),
+  };
+
+  return [
+    {
+      ...shared,
+      id: `ltx/ltx-${version}-${tier}/text-to-video`,
+      label: name,
+      fileCode: `${code}-t2v`,
+      modes: ['text'],
+    },
+    {
+      ...shared,
+      id: `ltx/ltx-${version}-${tier}/image-to-video`,
+      label: name,
+      fileCode: `${code}-i2v`,
+      // `last_image` is optional, so one still opens the clip and two bookend it.
+      modes: ['image', 'frames'],
+      maxInputImages: 2,
+      videoInputs: {
+        image: { field: 'frameImages', maxImages: 1 },
+        frames: { field: 'frameImages', maxImages: 2 },
+      },
+    },
+  ];
+}
+
+/**
+ * Luma Ray 3.2, read 2026-09-29 from
+ * `https://www.atlascloud.ai/models/luma/ray-3.2/{mode}/llms.txt`. Priced at
+ * 540p alone for the reason LTX is priced at 720p alone above; Atlas's own
+ * announcement quotes a 720p clip above the per-second figure, which is what
+ * that rule is there for.
+ *
+ * `loop` and `hdr` are not offered — they are switches with no control here
+ * yet. The `video-to-video` and `reframe` endpoints are left out because Edit
+ * video submits through Runware only.
+ */
+function lumaRay32(): ProviderModel[] {
+  const shared = {
+    label: 'Luma Ray 3.2',
+    kind: 'video' as const,
+    price: '$0.06 / s @ 540p · 720p, 1080p: price unknown',
+    rate: { usdByResolution: { '540p': 0.06 }, per: 'second' as const },
+    durations: [5, 10],
+    sizes: [
+      { label: '540p', preset: '540p' },
+      { label: '720p', preset: '720p' },
+      { label: '1080p', preset: '1080p' },
+    ],
+  };
+
+  return [
+    {
+      ...shared,
+      id: 'luma/ray-3.2/text-to-video',
+      fileCode: 'luma-ray-3_2-t2v',
+      modes: ['text'],
+      // The endpoint also lists 9:21, which the account Worker's ratio check
+      // does not accept, so it would pass in the browser and fail as a job.
+      aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
+    },
+    {
+      ...shared,
+      id: 'luma/ray-3.2/image-to-video',
+      fileCode: 'luma-ray-3_2-i2v',
+      modes: ['image', 'frames'],
+      maxInputImages: 2,
+      videoInputs: {
+        image: { field: 'frameImages', maxImages: 1 },
+        frames: { field: 'frameImages', maxImages: 2 },
+      },
+      // No `aspectRatios`: this endpoint has no ratio field; the frame sets it.
+    },
+  ];
+}
+
+/**
+ * Luma Uni 1 and Uni 1 Max, read 2026-09-29 from
+ * `https://www.atlascloud.ai/models/luma/{uni-1,uni-1-max}/{mode}/llms.txt`.
+ * One flat price per image, and edits cost slightly more than generation.
+ * `atlas.ts` sends these a ratio from Luma's own enum and a single `image`,
+ * never the `size` the older models take.
+ */
+function lumaUni1(variant: 'standard' | 'max'): ProviderModel[] {
+  const max = variant === 'max';
+  const family = max ? 'uni-1-max' : 'uni-1';
+  const label = max ? 'Luma Uni 1 Max' : 'Luma Uni 1';
+  const generate = max ? 0.1 : 0.04;
+  const edit = max ? 0.103 : 0.043;
+  // 9:21 is published too, and left off for the Worker reason given on Ray.
+  const aspectRatios = ['1:1', '4:3', '3:4', '16:9', '9:16', '21:9'];
+
+  return [
+    {
+      id: `luma/${family}/text-to-image`,
+      label,
+      fileCode: `luma-${family}`,
+      kind: 'image',
+      modes: ['text'],
+      price: `$${generate} / image`,
+      rate: { usd: generate, per: 'image' },
+      aspectRatios,
+      note: '3:2 and 2:3 are not published, so they render as 4:3 and 3:4.',
+    },
+    {
+      id: `luma/${family}/edit`,
+      label: `${label} Edit`,
+      fileCode: `luma-${family}-edit`,
+      kind: 'image',
+      modes: ['image'],
+      price: `$${edit} / image`,
+      rate: { usd: edit, per: 'image' },
+      maxInputImages: 1,
+      aspectRatios,
+      note: 'Editing only — it needs one reference image.',
     },
   ];
 }
@@ -675,6 +877,14 @@ const ATLAS_MODELS: ProviderModel[] = [
   ...gptImage25Developer('sunburst'),
   ...gptImage25Developer('flare'),
   ...minimaxH3Developer(),
+  // Added 2026-09-29 from Atlas's LTX-2 / Luma drop. See each block above.
+  ...ltx2('2.3', 'fast'),
+  ...ltx2('2.3', 'pro'),
+  ...ltx2('2.5', 'fast'),
+  ...ltx2('2.5', 'pro'),
+  ...lumaRay32(),
+  ...lumaUni1('standard'),
+  ...lumaUni1('max'),
 ];
 
 const COMET_MODELS: ProviderModel[] = [

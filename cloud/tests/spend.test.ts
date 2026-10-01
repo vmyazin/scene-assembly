@@ -31,7 +31,7 @@ async function api(path:string,method='GET',ownerToken=token){
 
 beforeEach(async()=>{
   db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON');
-  db.exec(migration('0001_accounts.sql'));db.exec(migration('0002_connections.sql'));db.exec(migration('0003_jobs.sql'));db.exec(migration('0008_spend.sql'));db.exec(migration('0011_account_avatar.sql'));
+  db.exec(migration('0001_accounts.sql'));db.exec(migration('0002_connections.sql'));db.exec(migration('0003_jobs.sql'));db.exec(migration('0008_spend.sql'));db.exec(migration('0011_account_avatar.sql'));db.exec(migration('0013_agents.sql'));
   db.prepare("INSERT INTO account_users (id,google_subject,email,name,created_at) VALUES ('owner','google-owner','owner@example.test','Owner',1),('other','google-other','other@example.test','Other',1)").run();
   db.prepare('INSERT INTO account_sessions VALUES (?,?,?)').run(await hash(token),'owner',Date.now()+60_000);
   env={DB:adapter(db),APP_ORIGIN:'https://app.example.test',ACCOUNT_ENCRYPTION_VERSION:'1',ACCOUNT_ENCRYPTION_KEYS:JSON.stringify({'1':btoa('x'.repeat(32))})};

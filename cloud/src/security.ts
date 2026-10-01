@@ -1,3 +1,5 @@
+import type { OAuthHelpers } from '@cloudflare/workers-oauth-provider';
+
 declare const __LOCAL_DEV__: boolean;
 export interface Env {
   PUBLIC_WORKER_ORIGIN?: string;
@@ -13,6 +15,11 @@ export interface Env {
   DEV_FAKE_GENERATION?: string;
   ACCOUNT_ENCRYPTION_KEYS?: string;
   ACCOUNT_ENCRYPTION_VERSION?: string;
+  MCP_ORIGIN?: string;
+  /** Injected by workers-oauth-provider before any handler runs. */
+  OAUTH_PROVIDER?: OAuthHelpers;
+  OAUTH_KV?: KVNamespace;
+  IMAGES?: ImagesBinding;
 }
 export function isLocal(env: Env): boolean {
   return typeof __LOCAL_DEV__ !== 'undefined' && __LOCAL_DEV__ === true
@@ -43,11 +50,7 @@ export async function hash(value: string) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest), n => n.toString(16).padStart(2, '0')).join('');
 }
-export function returnPath(value: unknown): string {
-  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.includes('\\') || /[\x00-\x1f]/.test(value)) return '/';
-  const url = new URL(value, 'https://return.invalid');
-  return url.origin === 'https://return.invalid' && !url.pathname.startsWith('/api/') ? `${url.pathname}${url.search}` : '/';
-}
+export { returnPath } from '../../lib/account/return-path';
 export function json(value: unknown, status = 200, cookies: string[] = []) {
   const headers = new Headers({ 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
   for (const value of cookies) headers.append('Set-Cookie', value);

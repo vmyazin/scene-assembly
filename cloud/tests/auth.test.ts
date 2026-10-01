@@ -24,7 +24,7 @@ describe('account boundary', () => {
     const responses = await Promise.all([request('session'), request('session')]);
     expect(responses.map(response => response.status)).toEqual([200, 200]);
     await bootstrapLocalSchema(env.DB);
-    expect(db.prepare('SELECT id, picture FROM account_users').get()).toEqual({ id: 'existing', picture: null });
+    expect(db.prepare('SELECT id, picture, relaxed_consent_at, relaxed_policy_version FROM account_users').get()).toEqual({ id: 'existing', picture: null, relaxed_consent_at: null, relaxed_policy_version: null });
   });
   it('persists, refreshes and clears the Google photo for the same subject', async () => {
     await request('session');

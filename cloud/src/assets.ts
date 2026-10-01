@@ -3,21 +3,28 @@ import { AccountError, type JobRow } from './jobs';
 import type { Env } from './security';
 import { AVAILABLE_CAPACITY, OVERFLOW_TTL_MS, promoteTemporaryAsset } from './retention';
 import { deleteQueuedObject } from './cleanup';
+import { peekMediaType } from './media-type';
 
 export const MAX_OUTPUT_BYTES = 1_000_000_000;
 export const MAX_JOB_OUTPUTS = 8;
 export const MAX_JOB_OUTPUT_BYTES = 1_000_000_000;
-interface AssetRow { id: string; user_id: string; job_id: string | null; object_key: string; kind: 'image'|'video'; mime_type: string; bytes: number; metadata_json: string; created_at: number; deleted: number; expires_at?:number|null }
+export interface AssetRow { id: string; user_id: string; job_id: string | null; object_key: string; kind: 'image'|'video'; mime_type: string; bytes: number; metadata_json: string; created_at: number; deleted: number; expires_at?:number|null; agent_id?: string | null; agent_name?: string | null }
 export interface ResultSource { url?: string; objectKey?: string; mimeType?: string }
 export interface ProviderResult { sources: ResultSource[]; cost?: number; usage?: { promptTokens: number; outputTokens: number } }
 export const isSupportedOutputMime = (mimeType:string) => /^(image\/(png|jpeg|webp|avif)|video\/(mp4|webm))$/.test(mimeType);
-export function assetView(row: AssetRow): CloudAsset { return { id:row.id, jobId:row.job_id, kind:row.kind, mimeType:row.mime_type, bytes:row.bytes, createdAt:row.created_at, metadata:JSON.parse(row.metadata_json),...(row.expires_at?{expiresAt:row.expires_at}:{}) }; }
+export function assetView(row: AssetRow): CloudAsset { return { id:row.id, jobId:row.job_id, kind:row.kind, mimeType:row.mime_type, bytes:row.bytes, createdAt:row.created_at, metadata:JSON.parse(row.metadata_json),...(row.expires_at?{expiresAt:row.expires_at}:{}),...(row.agent_id?{startedBy:{agentId:row.agent_id,name:row.agent_name??null}}:{}) }; }
 export async function getAsset(env:Env,id:string,owner:string) { return env.DB.prepare('SELECT a.*,r.expires_at FROM account_assets a LEFT JOIN account_asset_retention r ON r.asset_id=a.id WHERE a.id = ? AND a.user_id = ? AND a.deleted = 0 AND (r.expires_at IS NULL OR r.expires_at>?)').bind(id,owner,Date.now()).first<AssetRow>(); }
+/** What a saved job produced, in the order it was written. */
+export async function jobAssets(env:Env,owner:string,jobId:string) {
+  return (await env.DB.prepare('SELECT a.*,r.expires_at FROM account_assets a LEFT JOIN account_asset_retention r ON r.asset_id=a.id WHERE a.user_id=? AND a.job_id=? AND a.deleted=0 AND (r.expires_at IS NULL OR r.expires_at>?) ORDER BY a.created_at,a.id').bind(owner,jobId,Date.now()).all<AssetRow>()).results;
+}
 
-/** Host allowlist prevents a provider result from turning the capture worker into a URL proxy. */
+/** Host allowlist prevents a provider result from turning the capture worker into a URL proxy.
+ *  Atlas delivers from its own bucket on Alibaba Cloud storage (seen on a live job, 2026-09-29);
+ *  only that bucket is listed, because anyone can open another one under aliyuncs.com. */
 export function safeResultUrl(value:string): URL {
   const url=new URL(value);
-  const domains=['fal.media','fal.ai','kie.ai','kieai.redpandaai.co','tempfile.ai','tempfile.redpandaai.co','redpandaai.co','runware.ai','atlascloud.ai','cometapi.com','filesystem.site','piapi.ai','theapi.app'];
+  const domains=['fal.media','fal.ai','kie.ai','kieai.redpandaai.co','tempfile.ai','tempfile.redpandaai.co','redpandaai.co','runware.ai','atlascloud.ai','atlas-media.oss-us-west-1.aliyuncs.com','cometapi.com','filesystem.site','piapi.ai','theapi.app'];
   if(url.protocol!=='https:' || url.username || url.password || (url.port && url.port!=='443') || !domains.some(d=>url.hostname===d||url.hostname.endsWith(`.${d}`))) throw new AccountError('Provider returned an unsupported result location.',502,'result_location');
   return url;
 }
@@ -80,12 +87,21 @@ export async function captureResult(env:Env,job:JobRow,result:ProviderResult) {
       }
       if(!source.url)throw new AccountError('The provider reported success without a result to fetch.',502,'result_missing');
       const response=await fetchOutput(source.url);
-      const mime=(response.headers.get('content-type')||source.mimeType||'').split(';')[0].trim().toLowerCase();
-      if(!mime.startsWith(`${request.mediaType}/`)){await response.body?.cancel();throw new AccountError('The provider returned a different kind of file than this job asked for.',502,'result_type');}
+      let mime=(response.headers.get('content-type')||source.mimeType||'').split(';')[0].trim().toLowerCase();
+      let body=response.body!;
+      // A label that does not name the job's kind of file is not trusted either
+      // way: some storage serves finished files as application/octet-stream
+      // (Atlas's bucket did, 2026-09-29), so the bytes decide.
+      if(!mime.startsWith(`${request.mediaType}/`)){
+        const peeked=await peekMediaType(body.getReader());
+        body=peeked.body;
+        if(!peeked.mimeType?.startsWith(`${request.mediaType}/`)){await body.cancel().catch(()=>{});throw new AccountError('The provider returned a different kind of file than this job asked for.',502,'result_type');}
+        mime=peeked.mimeType;
+      }
       // Multipart completion can omit httpMetadata even though R2 stored it.
       // Keep the MIME that passed writeOutput validation for the D1 asset row.
       storedMime=mime;
-      object=await writeOutput(env,key,response.body!,mime,MAX_JOB_OUTPUT_BYTES-totalBytes);
+      object=await writeOutput(env,key,body,mime,MAX_JOB_OUTPUT_BYTES-totalBytes);
     }
     if(object.size<=0)throw new AccountError('The stored result is empty.',502,'result_empty');
     totalBytes+=object.size;

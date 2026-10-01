@@ -1,16 +1,16 @@
 import { jobInputIds } from '../../lib/account/contracts';
 import { MAX_EDIT_VIDEO_BYTES, isEditVideoMime } from '../../lib/providers/video-edit';
 import { AccountError, type JobRow } from './jobs';
-import { writeOutput } from './assets';
+import { getAsset, writeOutput } from './assets';
 import { mediaAccess, mediaCors, mediaOrigin, mediaToken, readMedia } from './media';
 import { currentAccount } from './sessions';
 import { json, type Env } from './security';
 export const MAX_INPUT_BYTES=20_000_000;
 export const MAX_TEMP_BYTES=256_000_000;
 export const MAX_GLOBAL_TEMP_BYTES=10_000_000_000;
-const INPUT_TTL=86_400_000;
+export const INPUT_TTL=86_400_000;
 interface Upload {id:string;user_id:string;object_key:string;mime_type:string;expected_bytes:number;state:string;expires_at:number}
-export async function reserveUpload(env:Env,owner:string,bytes:number,mime:string) {
+export async function reserveUpload(env:Env,owner:string,bytes:number,mime:string,purpose:'upload'|'agent-upload'|null='upload'):Promise<{id:string;objectKey:string;expiresAt:number;url?:string;urlExpiresAt?:number}> {
   mediaOrigin(env);
   if(!Number.isSafeInteger(bytes)||bytes<=0||bytes>(isEditVideoMime(mime)?MAX_EDIT_VIDEO_BYTES:MAX_INPUT_BYTES)||(!isEditVideoMime(mime)&&!/^image\/(png|jpeg|webp|avif)$/.test(mime)))throw new AccountError('Use an image up to 20 MB or an MP4, MOV or WebM video up to 100 MB.',400,'invalid_upload');
   const id=crypto.randomUUID(),key=`accounts/${owner}/inputs/${id}`,now=Date.now();
@@ -24,7 +24,8 @@ export async function reserveUpload(env:Env,owner:string,bytes:number,mime:strin
   // and the quota it sounds like, the cloud library, is a different table
   // entirely, so people went and found it reassuringly empty.
   if(!inserted.meta.changes)throw new AccountError('Too many references are still in use for background jobs. Wait for the jobs using them to finish, then try again.',409,'input_capacity');
-  return {id,...await mediaAccess(env,owner,id,'upload')};
+  const access=purpose?await mediaAccess(env,owner,id,purpose):null;
+  return {id,objectKey:key,expiresAt:now+INPUT_TTL,...(access?{url:access.url,urlExpiresAt:access.expiresAt}:{})};
 }
 export async function inputUrls(env:Env,job:JobRow):Promise<string[]> {
   const request=JSON.parse(job.request_json) as {referenceIds:string[];sourceVideoId?:string};
@@ -36,17 +37,84 @@ export async function inputUrls(env:Env,job:JobRow):Promise<string[]> {
   }
   return urls;
 }
+/** Stages bytes the Worker already holds in full — a copy of a library file, whose
+ *  exact size is already known — as a ready input with the same 24-hour lifecycle
+ *  as a browser upload. */
+export async function storeUpload(env:Env,owner:string,body:ReadableStream<Uint8Array>|Uint8Array,bytes:number,mime:string):Promise<{id:string;expiresAt:number}> {
+  const reserved=await reserveUpload(env,owner,bytes,mime,null);
+  try{
+    const object=await writeOutput(env,reserved.objectKey,body,mime,bytes);
+    if(object.size!==bytes)throw new AccountError('The stored reference did not match its size.',502,'upload_size');
+    await env.DB.prepare("UPDATE account_uploads SET state='ready' WHERE id=? AND state='pending'").bind(reserved.id).run();
+    return {id:reserved.id,expiresAt:reserved.expiresAt};
+  }catch(error){
+    await env.ASSETS?.delete(reserved.objectKey).catch(()=>{});
+    await env.DB.prepare("UPDATE account_uploads SET state='deleted' WHERE id=?").bind(reserved.id).run();
+    throw error;
+  }
+}
+/** Stages an agent's URL reference while it is still being downloaded: reserves the
+ *  input at the type's cap (images vs. video) rather than a known final size, writes
+ *  bytes through to storage as they arrive instead of buffering the whole file in the
+ *  isolate, then narrows expected_bytes to what actually landed. */
+export async function storeStreamedUpload(env:Env,owner:string,body:ReadableStream<Uint8Array>,mime:string,maxBytes:number):Promise<{id:string;bytes:number;expiresAt:number}> {
+  const reserved=await reserveUpload(env,owner,maxBytes,mime,null);
+  try{
+    const object=await writeOutput(env,reserved.objectKey,body,mime,maxBytes);
+    await env.DB.prepare("UPDATE account_uploads SET expected_bytes=?, state='ready' WHERE id=? AND state='pending'").bind(object.size,reserved.id).run();
+    return {id:reserved.id,bytes:object.size,expiresAt:reserved.expiresAt};
+  }catch(error){
+    await env.ASSETS?.delete(reserved.objectKey).catch(()=>{});
+    await env.DB.prepare("UPDATE account_uploads SET state='deleted' WHERE id=?").bind(reserved.id).run();
+    // writeOutput's own wording talks about "generated files"; an agent needs the
+    // sentence it already read in add_reference's tool description.
+    if(error instanceof AccountError&&error.code==='result_size')throw new AccountError(mime.startsWith('image/')?'Reference images can be up to 20 MB.':'References can be up to 100 MB.',400,'reference_fetch_failed');
+    throw error;
+  }
+}
+/** A library file used as a reference. Copied rather than shared, because inputs
+ *  expire and are cleaned up on their own schedule and a library file must not.
+ *  Size and type are checked before ever reading the object, so an oversized or
+ *  unsupported asset is refused without opening (and having to cancel) its body. */
+export async function copyAssetToUpload(env:Env,owner:string,assetId:string):Promise<string> {
+  const asset=await getAsset(env,assetId,owner);
+  const unavailable=()=>new AccountError('That library file is not available to use as a reference.',404,'reference_unavailable');
+  if(!asset)throw unavailable();
+  const overLimit=isEditVideoMime(asset.mime_type)?asset.bytes>MAX_EDIT_VIDEO_BYTES:!/^image\/(png|jpeg|webp|avif)$/.test(asset.mime_type)||asset.bytes>MAX_INPUT_BYTES;
+  if(overLimit)throw new AccountError('That library file is too large or an unsupported type to use as a reference. Use an image up to 20 MB or a video up to 100 MB.',404,'reference_unavailable');
+  const object=await env.ASSETS?.get(asset.object_key);
+  if(!object)throw unavailable();
+  try{
+    return (await storeUpload(env,owner,object.body,asset.bytes,asset.mime_type)).id;
+  }catch(error){
+    await object.body.cancel().catch(()=>{});
+    throw error;
+  }
+}
+/** Best-effort cleanup for uploads a tool created but no longer wants — a copy made
+ *  mid-way through resolveReferences before a later reference in the same call
+ *  failed. Never touches an id the agent staged itself: only a caller that knows it
+ *  created these ids passes them in. Marking them deleted here is enough;
+ *  cleanupUploads removes their R2 objects on its own schedule. */
+export async function discardUploads(env:Env,owner:string,ids:string[]):Promise<void> {
+  if(!ids.length)return;
+  try{
+    await env.DB.batch(ids.map(id=>env.DB.prepare("UPDATE account_uploads SET state='deleted' WHERE id=? AND user_id=?").bind(id,owner)));
+  }catch{/* Best effort: an id left ready still expires on its own 24-hour clock. */}
+}
 export async function publicMedia(request:Request,env:Env):Promise<Response|null> {
   const path=new URL(request.url).pathname;if(!path.startsWith('/media/'))return null;
   const respond=(response:Response)=>mediaCors(response,env);
   if(request.method==='OPTIONS')return respond(new Response(null,{status:204}));
   const token=await mediaToken(env,path);if(!token)return respond(json({error:'File access expired or is invalid.'},404));
-  if(token.purpose!=='upload'){
+  if(token.purpose!=='upload'&&token.purpose!=='agent-upload'){
     if(!['GET','HEAD'].includes(request.method))return respond(json({error:'Method not allowed.'},405));
     return respond(await readMedia(request,env,token));
   }
   if(request.method!=='PUT')return respond(json({error:'Method not allowed.'},405));
-  if(request.headers.get('origin')!==env.APP_ORIGIN)return respond(json({error:'Request origin is not allowed.'},403));
+  // A browser upload proves it came from the app. An agent's PUT link is itself the
+  // credential: a shell has no Origin to send, and the token is single-resource and short.
+  if(token.purpose==='upload'&&request.headers.get('origin')!==env.APP_ORIGIN)return respond(json({error:'Request origin is not allowed.'},403));
   const upload=await env.DB.prepare("SELECT * FROM account_uploads WHERE id=? AND user_id=? AND state!='deleted' AND expires_at>?").bind(token.resource_id,token.user_id,Date.now()).first<Upload>();
   if(!upload)return respond(json({error:'Upload expired.'},404));
   if(request.headers.get('content-type')?.split(';')[0]!==upload.mime_type || !request.body)return respond(json({error:'Upload type does not match.'},400));
@@ -71,7 +139,7 @@ export async function uploadRoutes(request:Request,env:Env):Promise<Response|nul
   const account=await currentAccount(request,env);if(!account)return json({error:'Sign in to upload references.'},401);
   if(path==='/api/account/uploads'&&request.method==='POST'){
     const text=await request.text();if(text.length>2048)return json({error:'Request is too large.'},413);
-    try{const body=JSON.parse(text);return json(await reserveUpload(env,account.id,body.bytes,body.mimeType),201);}
+    try{const body=JSON.parse(text);const reserved=await reserveUpload(env,account.id,body.bytes,body.mimeType);return json({id:reserved.id,url:reserved.url,expiresAt:reserved.urlExpiresAt},201);}
     catch(error){if(error instanceof AccountError)return json({error:error.message,code:error.code},error.status);if(error instanceof SyntaxError)return json({error:'Invalid request.'},400);throw error;}
   }
   const match=path.match(/^\/api\/account\/uploads\/([a-zA-Z0-9-]+)$/);

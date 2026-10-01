@@ -131,7 +131,7 @@ interface AppState {
   setConvertLibraryImages: (convert: boolean) => void;
   setUiSoundsEnabled: (enabled: boolean) => void;
   setAccountKeyOptOut: (provider: ImportableProvider, optedOut: boolean) => void;
-  setRelaxedConsent: (consent: RelaxedConsent | null) => void;
+  setRelaxedConsent: (consent: RelaxedConsent) => void;
   setPreferredLevel: (workspace: string, level: ModerationLevel) => void;
   setHasHydrated: (v: boolean) => void;
 }

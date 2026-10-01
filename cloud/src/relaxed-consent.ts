@@ -5,7 +5,7 @@ import type { Env } from './security';
 
 /**
  * A relaxed job with no current consent record is stored and run as Standard.
- * The column is added by migration 0013; a Worker that deploys before that
+ * The column is added by migration 0014; a Worker that deploys before that
  * migration treats the missing column as "no consent" and still accepts the
  * job, rather than failing every submission.
  *

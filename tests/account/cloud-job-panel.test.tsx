@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import CloudJobPanel from '@/components/account/CloudJobPanel';
-import type { CloudJobView } from '@/lib/account/contracts';
+import type { CloudAsset, CloudJobView } from '@/lib/account/contracts';
 import { useAccountStore } from '@/store/useAccountStore';
 
 vi.mock('@/lib/account/client', () => ({ accountRequest: vi.fn() }));
@@ -42,6 +42,18 @@ describe('the workspace result panel', () => {
     expect(screen.getByText('Stopped prompt')).toBeInTheDocument();
   });
 
+  it('draws a running job as one card and leaves the pending frame out', () => {
+    const { epoch } = useAccountStore.getState();
+    useAccountStore.getState().applyJobs('owner-1', epoch, [job('running', 'running', 'Still running prompt')], []);
+
+    const { container } = render(<CloudJobPanel provider="gemini" modelId="gemini-3-pro-image-preview" mediaType="image" inputMode="text" />);
+
+    expect(container.querySelectorAll('svg.job-wave-field')).toHaveLength(1);
+    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    // The card is the pending state; a spinner frame beside it said it twice.
+    expect(screen.queryByText('Your job is running.')).toBeNull();
+  });
+
   it('shows image jobs from every provider and model, not just the selected one', () => {
     const { epoch } = useAccountStore.getState();
     const other: CloudJobView = {
@@ -59,5 +71,22 @@ describe('the workspace result panel', () => {
 
     expect(screen.getByText('Gemini prompt')).toBeInTheDocument();
     expect(screen.getByText('Kie prompt')).toBeInTheDocument();
+  });
+
+  it('leaves pasted reference images out of the results', () => {
+    const { epoch } = useAccountStore.getState();
+    const asset = (id: string, metadata: CloudAsset['metadata'], jobId: string | null): CloudAsset =>
+      ({ id, kind: 'image', mimeType: 'image/png', bytes: 1, createdAt: 1, metadata, jobId });
+    useAccountStore.getState().applyJobs('owner-1', epoch, [], [
+      asset('generated', { ...request, prompt: 'Generated' }, 'job-1'),
+      // What `keepUploadedImages` imports for a pasted reference.
+      asset('pasted', { ...request, provider: 'local-test', modelId: 'local', prompt: 'Pasted' }, null),
+    ]);
+
+    const { container } = render(<CloudJobPanel provider="gemini" modelId="gemini-3-pro-image-preview" mediaType="image" inputMode="text" />);
+
+    const sources = [...container.querySelectorAll('img')].map(img => img.getAttribute('src'));
+    expect(sources).toContain('/api/account/assets/generated/content');
+    expect(sources).not.toContain('/api/account/assets/pasted/content');
   });
 });

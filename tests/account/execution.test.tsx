@@ -133,6 +133,19 @@ describe('account execution and isolation',()=>{
     expect(submit.mock.calls[0][1]).toMatchObject({provider:'runware',mediaType:'video',values:{durationSeconds:6,size:'720p · 16:9'}});
     expect(useProviderJobsStore.getState().jobs).toHaveLength(0);
   });
+  it('submits Atlas MiniMax H3 cloud video without an audio switch the Worker refuses',async()=>{
+    const atlasSession:AccountSession={...session,providers:['atlas'],connections:[{id:'atlas-connection',provider:'atlas',revision:1,hint:'test'}]};
+    useAccountStore.getState().applySession(atlasSession);refresh.mockResolvedValue(atlasSession);
+    useAppStore.setState({atlasApiKey:'',atlasVideoModel:'minimax/h3-developer/text-to-video'});useProviderJobsStore.getState().clearJobs();
+    render(<ProviderVideoWorkspace provider="atlas" label="Atlas Cloud" inputMode="text" onBack={()=>{}} onOpenConnections={()=>{}}/>);
+    // H3 always generates its soundtrack; Atlas publishes no switch to turn it off.
+    expect(screen.queryByRole('checkbox',{name:'Generate audio'})).toBeNull();
+    fireEvent.change(screen.getByRole('textbox',{name:'Prompt'}),{target:{value:'Account H3 request'}});
+    fireEvent.click(screen.getByRole('button',{name:/^Generate video/}));
+    await waitFor(()=>expect(submit).toHaveBeenCalledTimes(1));
+    expect(submit.mock.calls[0][1]).toMatchObject({provider:'atlas',modelId:'minimax/h3-developer/text-to-video',mediaType:'video',values:{durationSeconds:8,size:'480p',aspectRatio:'16:9'}});
+    expect(submit.mock.calls[0][1].values).not.toHaveProperty('audio');
+  });
   it('submits with a saved account connection without reading a guest key or creating a guest job',async()=>{
     render(<KieGenerationWorkspace mediaType="image" inputMode="text" onBack={()=>{}} onOpenConnections={()=>{}}/>);
     fireEvent.change(screen.getByRole('textbox',{name:'Prompt'}),{target:{value:'Product photo'}});

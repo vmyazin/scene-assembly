@@ -13,7 +13,7 @@ vi.mock('@/lib/account/client', () => ({
 
 const request:CloudJobRequest={provider:'gemini',modelId:'image-model',mediaType:'image',inputMode:'text',prompt:'Cloud image',values:{},referenceIds:[]};
 const image:CloudAsset={id:'image-1',kind:'image',mimeType:'image/png',bytes:1200,createdAt:2,metadata:request,jobId:'job-1'};
-const video:CloudAsset={id:'video-1',kind:'video',mimeType:'video/mp4',bytes:2400,createdAt:1,metadata:{...request,mediaType:'video',prompt:'Cloud video'},jobId:'job-2'};
+const video:CloudAsset={id:'video-1',kind:'video',mimeType:'video/mp4',bytes:2400,createdAt:1,metadata:{...request,mediaType:'video',prompt:'Cloud video'},jobId:'job-2',startedBy:{agentId:'a1',name:'Claude Code'}};
 
 function applyOwner(id='owner-1'){
   useAccountStore.getState().applySession({account:{id,name:'Owner',email:'owner@example.test'},googleEnabled:true,localSignIn:false,providers:[],connections:[]});
@@ -43,6 +43,31 @@ describe('AccountLibrary',()=>{
     expect(screen.queryByText('Cloud video')).toBeNull();
     expect(screen.getByRole('button',{name:'Latest assets'})).toBeInTheDocument();
     await waitFor(()=>expect(accountRequest).toHaveBeenCalledWith('assets?cursor=older-page',expect.objectContaining({headers:{'X-Account-Id':'owner-1'}})));
+  });
+
+  it('marks an asset an agent started',async()=>{
+    render(<AccountLibrary ownerId="owner-1"/>);
+
+    expect(await screen.findByText('Cloud video')).toBeInTheDocument();
+    expect(await screen.findByText(/via Claude Code/)).toBeInTheDocument();
+  });
+
+  it('draws a running job as a card with the wave in place of its thumbnail, and a stopped one as a row',async()=>{
+    const job=(id:string,state:'running'|'failed',prompt:string)=>({id,provider:'gemini' as const,state,errorCode:null,request:{...request,prompt},createdAt:1,updatedAt:1});
+    vi.mocked(accountRequest).mockImplementation(async(path)=>{
+      if(path==='jobs')return {jobs:[job('run','running','Painting in progress'),job('stop','failed','Stopped painting')]};
+      if(path==='storage')return {storage:{limitBytes:1_000_000_000,usedBytes:0,reservedBytes:0,activeJobs:1}};
+      if(path==='assets')return {assets:[],nextCursor:null};
+      throw new Error(`Unexpected path: ${path}`);
+    });
+    const {container}=render(<AccountLibrary ownerId="owner-1"/>);
+
+    const running=(await screen.findByText('Painting in progress')).closest('li');
+    expect(running).toHaveTextContent('Generating');
+    expect(running?.querySelector('svg.job-wave-field')).not.toBeNull();
+    // The one that stopped is still the list's kind of row: no card, no wave.
+    expect(screen.getByText('Stopped painting').closest('li')?.querySelector('svg.job-wave-field')).toBeNull();
+    expect(container.querySelectorAll('svg.job-wave-field')).toHaveLength(1);
   });
 
   it('shows a recoverable load error',async()=>{

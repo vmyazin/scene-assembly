@@ -51,7 +51,12 @@
 
 - **Cloud library, imports, or spend** → first read `docs/codex/account-development.md`. Reuse `CloudAssetGrid` / `useAccountLibrary` for cloud files, `prepareReferences` for reference insertion, and `SpendReport` with the canonical spend resolvers for either ledger. Import controls read browser stores only after explicit selection; account requests must retain owner/epoch guards because a session can change during a file transfer. Two rules the cloud grid pays for when they are broken: **size gates go after `prepareReferences`, never before** — a cloud result is a full-resolution provider PNG and the conversion is what decides the payload, so gating on `asset.bytes` rejected every background-mode image the pipeline could have handled; and **it reports outcomes the way `GalleryGrid` does, in a toast**, because both grids sit behind the two tabs of one picker and an inline alert above a scrolled list is invisible at the moment it is written, which reads as a button that does nothing.
 - **A job shown in the cloud library while it is still running** → `CloudJobCardGrid`, not
-  `CloudJobList`. The library's two job tabs deliberately have two shapes: work in flight is the
+  `CloudJobList`, **on every surface that lists jobs** — the Account page's Active tab, the
+  studio's library picker (`AccountLibrary`, browse mode) and the result rail (`CloudJobPanel`,
+  one column) — because two of the three kept the text row and a running job read as a log
+  line beside finished cards. Each surface splits `isActiveJob` jobs to the card grid and leaves
+  the rest to `CloudJobList`. The rail's own spinner frames are dropped while a card is up, since
+  they said the same thing twice. The library's two job tabs deliberately have two shapes: work in flight is the
   library's own content arriving, so it takes the same card, grid and meta-line order as
   `CloudAssetGrid` (the breakpoints live in `components/account/library-grid.ts`, shared by both,
   because a running job laid out on its own rhythm reads as a different screen on the same page);
@@ -59,9 +64,11 @@
   card's progress bar is **indeterminate on purpose** — no provider in the catalog reports a
   percentage, so it steps through `JOB_STATE_LABELS` with a travelling highlight and carries
   `aria-valuetext` with no `aria-valuenow`; a fabricated 43% would be the one thing on that card
-  that is not true. Motion is a slow sheen rather than a spinner, since the card sits in a wall of
-  finished results (DESIGN.md's don't-compete rule), and every animation is off under reduced
-  motion while the bar still reports the stage.
+  that is not true. The thumbnail well is `JobWaveField`: a 16 × 9 field of short strokes swinging out of
+  step, so it reads as a frame that is about to exist rather than a spinner, and stays slow
+  because the card sits in a wall of finished results (DESIGN.md's don't-compete rule). It is
+  SVG + CSS with nothing running per frame; under reduced motion it freezes on its resting
+  angles, which is still a picture, and the bar still reports the stage.
 - **A job stuck in "Needs attention", or copy about why one stopped** → the reason lives in
   `lib/account/job-failure.ts`, not in `error_code`. `error_code` names the arm of the runner that
   gave up, so one `save_failed` covered an expired provider link, an oversized clip and a transient
@@ -133,6 +140,23 @@
   clicked from inside the app. Spec:
   `docs/claude/specs/2026-09-21-queue-finished-jobs-design.md`.
 - **Accounts, sign-in, or cloud persistence** → first read `docs/codex/account-development.md` and `docs/codex/specs/2026-09-04-optional-cloud-accounts-design.md`. Authentication entry pages live at `/sign-in` and `/sign-up`; signed-in management lives at `/account`, composing the existing account panels. Do not add account calls to action to the existing studio layout. The legacy admin gate is separate because enabling it would block guest routes.
+- **Agents connecting over MCP, their budgets, or the consent page** → first read
+  `docs/claude/specs/2026-09-28-agent-mcp-design.md` (its Follow-up decisions override its
+  body) and `docs/claude/plans/2026-09-28-agent-mcp.md`. The server is `cloud/src/mcp/`, and
+  every tool calls the functions the `/api/account/*` routes call (`acceptJob`, `resumeJob`,
+  `listAssets`, `listSpend`, `readAccountBilling`) — never a copy — because a refusal an agent
+  reads and one a person reads must be the same check. Model settings come from
+  `lib/account/model-schema.ts` and prices from `lib/spend/estimate.ts`, which *is* the ledger's
+  `buildAccountSpendEntry`; `cloud/tests/model-schema.test.ts` sends every advertised model,
+  mode and option through `validateRequest`, so when it fails, narrow the descriptor rather
+  than loosen a validator. The `account_agents` row, not the OAuth grant in KV, decides
+  whether a token still works, which is why disconnecting is immediate. A charge is released
+  only when the provider certainly never ran the job. Test tools through a real MCP client
+  wired to `serveMcp` (`cloud/tests/mcp-harness.ts`), never hand-written JSON-RPC: the SDK
+  serves two protocol eras and a hand-rolled request tests only one. A new tool or refusal code
+  also needs a line in the public guide, `app/docs/mcp/guide.md` (served at `/docs/mcp` and
+  `/docs/mcp.md`), because agents are told it lists every one; `cloud/tests/mcp-docs.test.ts`
+  scans the tool list and the refusal codes and fails on anything the guide leaves out.
 
 - **Video generation workspace layout** → first read
   `docs/codex/specs/2026-08-30-wan3-reference-video-design.md`, then compose setup,
@@ -331,6 +355,10 @@ cp ../../../next-env.d.ts .                # gitignored; without it tsc can't ty
 cp ../../../public/thumbnails/*.jpg public/thumbnails/ 2>/dev/null || true  # gitignored local assets
 cp cloud/.dev.vars.example cloud/.dev.vars # then set DEV_FAKE_GENERATION=1 for credential-free jobs
 ```
+
+If either `pnpm install` fails in sharp's install script with "Please add node-addon-api to
+your dependencies", sharp found a global libvips and tried to build from source; rerun the
+same install with `SHARP_IGNORE_GLOBAL_LIBVIPS=1` in front.
 
 Install rather than symlink `node_modules`: `ln -s ../../../node_modules` still
 satisfies `tsc` and `vitest`, but Turbopack treats the worktree as its filesystem

@@ -19,6 +19,12 @@ export const brand = {
   shortName: 'Scene Assembly',
   githubUrl: 'https://github.com/vmyazin/scene-assembly',
   siteUrl: 'https://sceneassembly.mzork.com',
+  /**
+   * The production MCP server agents connect to: the account Worker's
+   * `MCP_ORIGIN` plus `/mcp`. The setup guide at /docs/mcp prints this one
+   * value; cloud/tests/mcp-docs.test.ts fails if it drifts from the Worker.
+   */
+  mcpUrl: 'https://mcp-sceneassembly.smoxu.com/mcp',
   /** Document / social card title: "Scene Assembly — Multi-engine image & video studio" */
   metaTitle: 'Scene Assembly — Multi-engine image & video studio',
   /**

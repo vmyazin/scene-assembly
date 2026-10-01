@@ -148,7 +148,7 @@ describe('Relaxed filter control', () => {
     await user.click(screen.getByRole('button', { name: 'Turn on' }));
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0][0])).toBe('/api/account/relaxed-consent');
+    expect(fetchMock).toHaveBeenCalledWith('/api/account/relaxed-consent', expect.objectContaining({ method: 'POST' }));
     expect(screen.getByTestId('level')).toHaveTextContent('relaxed');
     expect(useAppStore.getState().relaxedConsents[consentStorageKey('account-a')]?.accountId).toBe('account-a');
     expect(useAppStore.getState().relaxedConsents[GUEST_CONSENT_KEY]?.accountId).toBeNull();

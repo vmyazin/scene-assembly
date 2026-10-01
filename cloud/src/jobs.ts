@@ -58,6 +58,7 @@ export interface JobRow {
   result_json: string | null; error_code: string | null; failure_reason: string | null; failure_detail: string | null;
   reservation_bytes: number; reservation_accounted: number;
   request_digest: string; workflow_attempt: number; dispatched: number; deleted: number; created_at: number; updated_at: number;
+  agent_id: string | null; agent_name?: string | null;
 }
 export class AccountError extends Error { constructor(message: string, public status: number, public code: string) { super(message); } }
 function canonical(value: unknown): string {
@@ -71,13 +72,16 @@ export function jobView(row: JobRow): CloudJobView {
     // `attempts` is the resume count, not a retry count: the row uses it to say
     // "attempt 2" and to stop offering a button the Worker would now refuse.
     failureReason: row.failure_reason ?? null, failureDetail: row.failure_detail ?? null, attempts: row.workflow_attempt,
+    ...(row.agent_id ? { startedBy: { agentId: row.agent_id, name: row.agent_name ?? null } } : {}),
     request: JSON.parse(row.request_json), createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }
+/** Joins the starting agent's name, as the job list does, so every job view
+ *  built from this row says "via <name>" rather than a bare agent id. */
 export async function getJob(env: Env, id: string, owner?: string) {
-  return env.DB.prepare(`SELECT * FROM account_jobs WHERE id = ? AND deleted = 0${owner ? ' AND user_id = ?' : ''}`).bind(...(owner ? [id, owner] : [id])).first<JobRow>();
+  return env.DB.prepare(`SELECT j.*, g.client_name AS agent_name FROM account_jobs j LEFT JOIN account_agents g ON g.id = j.agent_id WHERE j.id = ? AND j.deleted = 0${owner ? ' AND j.user_id = ?' : ''}`).bind(...(owner ? [id, owner] : [id])).first<JobRow>();
 }
-export async function acceptJob(env: Env, owner: string, token: string, request: CloudJobRequest): Promise<JobRow> {
+export async function acceptJob(env: Env, owner: string, token: string, request: CloudJobRequest, agentId: string | null = null): Promise<JobRow> {
   if (!/^[a-zA-Z0-9_-]{16,128}$/.test(token)) throw new AccountError('Invalid submission token.', 400, 'invalid_token');
   const inputIds=jobInputIds(request);
   if(new Set(inputIds).size!==inputIds.length)throw new AccountError('Duplicate references are not supported.',400,'invalid_references');
@@ -101,9 +105,9 @@ export async function acceptJob(env: Env, owner: string, token: string, request:
   const reservation = request.mediaType === 'video' ? VIDEO_RESERVATION : IMAGE_RESERVATION;
   await env.DB.batch([
     env.DB.prepare('INSERT OR IGNORE INTO account_storage (user_id) VALUES (?)').bind(owner),
-    env.DB.prepare(`INSERT OR IGNORE INTO account_jobs (id,user_id,request_token,request_digest,connection_id,connection_revision,provider,request_json,reservation_bytes,created_at,updated_at)
-      SELECT ?,?,?,?,?,?,?,?,?,?,? FROM account_storage WHERE user_id = ? AND used_bytes + reserved_bytes + ? <= limit_bytes AND (${RUNNING_JOB_COUNT}) < ? AND (${GLOBAL_OCCUPIED_SLOTS}) < ${MAX_GLOBAL_ACTIVE_JOBS} AND NOT EXISTS (${OWNER_OVERFLOW}) AND (SELECT COUNT(*) FROM account_uploads WHERE user_id=? AND state='ready' AND expires_at>? AND id IN (SELECT value FROM json_each(?)))=?`)
-      .bind(id, owner, token, digest, connection?.id ?? null, connection?.revision ?? null, request.provider, JSON.stringify(request), reservation, now, now, owner, reservation, owner, MAX_ACTIVE_JOBS, owner, owner, now, references, inputIds.length),
+    env.DB.prepare(`INSERT OR IGNORE INTO account_jobs (id,user_id,request_token,request_digest,connection_id,connection_revision,provider,request_json,reservation_bytes,created_at,updated_at,agent_id)
+      SELECT ?,?,?,?,?,?,?,?,?,?,?,? FROM account_storage WHERE user_id = ? AND used_bytes + reserved_bytes + ? <= limit_bytes AND (${RUNNING_JOB_COUNT}) < ? AND (${GLOBAL_OCCUPIED_SLOTS}) < ${MAX_GLOBAL_ACTIVE_JOBS} AND NOT EXISTS (${OWNER_OVERFLOW}) AND (SELECT COUNT(*) FROM account_uploads WHERE user_id=? AND state='ready' AND expires_at>? AND id IN (SELECT value FROM json_each(?)))=?`)
+      .bind(id, owner, token, digest, connection?.id ?? null, connection?.revision ?? null, request.provider, JSON.stringify(request), reservation, now, now, agentId, owner, reservation, owner, MAX_ACTIVE_JOBS, owner, owner, now, references, inputIds.length),
     env.DB.prepare('UPDATE account_storage SET reserved_bytes = reserved_bytes + ?, active_jobs = active_jobs + 1 WHERE user_id = ? AND EXISTS (SELECT 1 FROM account_jobs WHERE id = ? AND reservation_accounted = 0)').bind(reservation, owner, id),
     env.DB.prepare('UPDATE account_jobs SET reservation_accounted = 1 WHERE id = ?').bind(id),
     env.DB.prepare('INSERT OR IGNORE INTO account_job_inputs (job_id,upload_id) SELECT ?,id FROM account_uploads WHERE user_id=? AND id IN (SELECT value FROM json_each(?)) AND EXISTS (SELECT 1 FROM account_jobs WHERE id=?)').bind(id,owner,references,id),
@@ -192,6 +196,9 @@ export async function cancelQueuedJob(env: Env, id: string, owner: string): Prom
     env.DB.prepare(`UPDATE account_storage SET reserved_bytes = reserved_bytes - (SELECT reservation_bytes FROM account_jobs WHERE id = ?), active_jobs = active_jobs - 1
       WHERE user_id = (SELECT user_id FROM account_jobs WHERE id = ? AND user_id = ? AND reservation_accounted = 1 AND deleted = 0 AND state = 'queued' AND provider_task IS NULL AND result_json IS NULL)`).bind(id, id, owner),
     env.DB.prepare("UPDATE account_jobs SET state = 'cancelled', error_code = NULL, reservation_accounted = 0, updated_at = ? WHERE id = ? AND user_id = ? AND deleted = 0 AND state = 'queued' AND provider_task IS NULL AND result_json IS NULL").bind(now, id, owner),
+    // An agent's reservation for a job the provider never saw is released in the
+    // same transaction, so a cancel from the browser frees the agent's budget too.
+    env.DB.prepare("UPDATE account_agent_charges SET released = 1 WHERE job_id = ? AND EXISTS (SELECT 1 FROM account_jobs WHERE id = ? AND user_id = ? AND state = 'cancelled')").bind(id, id, owner),
   ]);
   const job = await getJob(env, id, owner);
   if (!job) return null;

@@ -51,6 +51,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        {/* For an agent that was given only the site URL: the MCP setup guide
+            (RFC 8631 service-doc) and the llms.txt index, on every page. */}
+        <link rel="service-doc" type="text/markdown" href="/docs/mcp.md" title="Connect an agent over MCP" />
+        <link rel="llms-txt" type="text/plain" href="/llms.txt" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

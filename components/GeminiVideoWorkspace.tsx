@@ -11,6 +11,7 @@ import JobElapsed from '@/components/JobElapsed';
 import LastFrameActions from '@/components/LastFrameActions';
 import ModelControls, { type ModelControlField } from '@/components/ModelControls';
 import PromptPanel from '@/components/PromptPanel';
+import SavedPromptsButton from '@/components/SavedPromptsButton';
 import ProviderLogo from '@/components/ProviderLogo';
 import ReferenceStack from '@/components/ReferenceStack';
 import StoredImagePicker from '@/components/StoredImagePicker';
@@ -634,8 +635,12 @@ export default function GeminiVideoWorkspace({
         setup={setup}
         prompt={
           <PromptPanel paused={gated} hasPrompt={prompt.trim().length > 0}>
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor="gemini-video-prompt" className="display block text-base font-semibold">Prompt</label>
+              <SavedPromptsButton />
+            </div>
             <AutoExpandingPrompt
-              aria-label="Prompt"
+              id="gemini-video-prompt"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder={`Describe the video you want to create${isImageMode ? ' (the image will be animated)' : ''}...`}

@@ -33,6 +33,7 @@ import { downloadFilenameBase } from '@/lib/download-name';
 import ProviderLogo from '@/components/ProviderLogo';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import PromptPanel from '@/components/PromptPanel';
+import SavedPromptsButton from '@/components/SavedPromptsButton';
 import { useAppStore } from '@/store/useAppStore';
 import { modelsFor, resolveModel } from '@/lib/providers/catalog';
 import ModelListbox from '@/components/ModelListbox';
@@ -1334,6 +1335,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                 Prompt
               </h3>
               <div className="flex items-center gap-1.5">
+                <SavedPromptsButton className="px-2 py-1" />
                 {feature.examplePrompt && (
                   <button
                     onClick={handleUseExample}

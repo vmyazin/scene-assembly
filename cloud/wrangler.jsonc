@@ -15,12 +15,22 @@
   // stop work already accepted by that vendor; it only refuses new jobs and hides the
   // provider from the session response, so the workspace falls back to browser-only
   // generation rather than failing at submit.
-  "vars": { "CLOUD_GENERATION_PROVIDERS": "fal,kie,runware,atlas,comet,gemini,cloudflare,pollinations,piapi", "APP_ORIGIN": "https://sceneassembly.mzork.com", "PUBLIC_WORKER_ORIGIN": "https://scene-assembly-accounts.vasily-or-simon-account.workers.dev" },
+  "vars": { "CLOUD_GENERATION_PROVIDERS": "fal,kie,runware,atlas,comet,gemini,cloudflare,pollinations,piapi", "APP_ORIGIN": "https://sceneassembly.mzork.com", "PUBLIC_WORKER_ORIGIN": "https://scene-assembly-accounts.vasily-or-simon-account.workers.dev", "MCP_ORIGIN": "https://mcp-sceneassembly.smoxu.com" },
   // Keep the existing local D1 identity stable; this preview ID is local-only, not a remote preview database.
   "d1_databases": [{ "binding": "DB", "database_name": "scene-assembly-accounts", "database_id": "a5146fdd-41c6-47d3-adff-8c7aeddc3071", "preview_database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }],
   "r2_buckets": [{ "binding": "ASSETS", "bucket_name": "scene-assembly-assets" }],
+  // OAuth clients, grants and tokens for connected agents (workers-oauth-provider).
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "8d853a0cfbe34ea3af1319e3714719a5" }],
+  // Inline previews for the agents' view_asset tool. Local by default in Wrangler 4.
+  "images": { "binding": "IMAGES" },
   "workflows": [{ "binding": "GENERATION", "name": "scene-assembly-generation", "class_name": "GenerationWorkflow" }],
   // File capabilities live in URL paths. Do not retain request URLs in invocation logs.
   "observability": { "enabled": true, "logs": { "invocation_logs": false } },
-  "triggers": { "crons": ["*/5 * * * *"] }
+  "triggers": { "crons": ["*/5 * * * *"] },
+  // The MCP server's own hostname, a Workers custom domain. smoxu.com must be a zone on this
+  // Worker's account (mzork.com is not, so it cannot hold one); one level under the zone,
+  // so its Universal SSL certificate covers it.
+  "routes": [{ "pattern": "mcp-sceneassembly.smoxu.com", "custom_domain": true }],
+  // Stays on: media links (PUBLIC_WORKER_ORIGIN) and the app gateway use the workers.dev hostname.
+  "workers_dev": true
 }

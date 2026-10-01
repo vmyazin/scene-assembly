@@ -40,6 +40,7 @@ import LastFrameActions from '@/components/LastFrameActions';
 import ResultStack, { type ResultStackItem } from '@/components/ResultStack';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import PromptPanel from '@/components/PromptPanel';
+import SavedPromptsButton from '@/components/SavedPromptsButton';
 import ModelControls, { type ModelControlField } from '@/components/ModelControls';
 import StoredImagePicker from '@/components/StoredImagePicker';
 import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
@@ -646,16 +647,19 @@ export default function KieGenerationWorkspace({
           <PromptPanel paused={gated} hasPrompt={prompt.trim().length > 0}>
             <div className="flex items-center justify-between gap-3">
               <label htmlFor="kie-prompt" className="display block text-base font-semibold">Prompt</label>
-              <button
-                type="button"
-                onClick={() => void generateExample()}
-                disabled={isGeneratingExample}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--brand-accent)]/30 bg-[var(--brand-accent)]/10 px-2.5 py-1.5 text-xs font-medium text-[var(--brand-accent)] transition-colors hover:text-[var(--neon-cyan)] disabled:cursor-not-allowed disabled:opacity-60"
-                title="Generate an example prompt with the shared fast model, or your own Gemini key"
-              >
-                {isGeneratingExample ? <Loader2 className="animate-spin" size={14} /> : <Sparkles size={14} />}
-                {isGeneratingExample ? 'Thinking…' : 'Gen Example'}
-              </button>
+              <div className="flex items-center gap-1.5">
+                <SavedPromptsButton />
+                <button
+                  type="button"
+                  onClick={() => void generateExample()}
+                  disabled={isGeneratingExample}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--brand-accent)]/30 bg-[var(--brand-accent)]/10 px-2.5 py-1.5 text-xs font-medium text-[var(--brand-accent)] transition-colors hover:text-[var(--neon-cyan)] disabled:cursor-not-allowed disabled:opacity-60"
+                  title="Generate an example prompt with the shared fast model, or your own Gemini key"
+                >
+                  {isGeneratingExample ? <Loader2 className="animate-spin" size={14} /> : <Sparkles size={14} />}
+                  {isGeneratingExample ? 'Thinking…' : 'Gen Example'}
+                </button>
+              </div>
             </div>
             <AutoExpandingPrompt
               id="kie-prompt"

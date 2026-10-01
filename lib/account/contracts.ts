@@ -11,6 +11,8 @@ export interface CloudJobRequest {
   sourceVideoId?: string;
 }
 export type CloudJobState = 'queued' | 'submitting' | 'running' | 'saving' | 'saved' | 'needs_attention' | 'failed' | 'cancelled';
+/** The agent that started a job, kept after it disconnects so old work stays attributed. */
+export interface StartedBy { agentId: string; name: string | null }
 export interface CloudJobView {
   id: string; provider: CloudProvider; state: CloudJobState; errorCode: string | null;
   /** All three are optional because the browser and the Worker deploy
@@ -30,6 +32,8 @@ export interface CloudJobView {
   /** Resumes so far. The row says "attempt 2" with it, and stops offering a
    *  button the Worker would now refuse. */
   attempts?: number;
+  /** Absent for jobs started in the browser, and from Workers that predate agents. */
+  startedBy?: StartedBy;
   request: CloudJobRequest; createdAt: number; updatedAt: number;
 }
 export interface CloudAssetCounts {
@@ -42,9 +46,22 @@ export interface CloudAsset {
   metadata: CloudJobRequest; jobId: string | null;
   /** Present only for overflow awaiting space in the permanent library. */
   expiresAt?: number;
+  /** Absent for jobs started in the browser, and from Workers that predate agents. */
+  startedBy?: StartedBy;
 }
 
 /** Every temporary input must share the same ownership and retention lifecycle. */
 export function jobInputIds(request: Pick<CloudJobRequest, 'referenceIds' | 'sourceVideoId'>): string[] {
   return [...request.referenceIds, ...(request.sourceVideoId ? [request.sourceVideoId] : [])];
+}
+
+/** One connected MCP client, as the account page's panel shows it. */
+export interface ConnectedAgent { id: string; name: string; connectedAt: number; lastUsedAt: number | null; budgetUsd: number; usedUsd: number; allowUnknownCost: boolean; allowDelete: boolean }
+
+/** A pending agent connection, as the consent page shows it. */
+export interface AgentAuthorizationView {
+  id: string; clientName: string; clientDomain: string | null; redirectHost: string; redirectIsLoopback: boolean; expiresAt: number;
+  unknownPriceProviders: { label: string; scope: 'all' | 'some' }[];
+  defaults: { budgetUsd: number; allowUnknownCost: boolean; allowDelete: boolean };
+  limits: { minUsd: number; maxUsd: number };
 }

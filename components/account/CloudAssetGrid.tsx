@@ -110,7 +110,7 @@ export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLi
               <img loading="lazy" src={`/api/account/assets/${asset.id}/content`} alt={asset.metadata.prompt||'Saved cloud image'} className="h-full w-full object-contain"/>:
             <VideoPlayer crossOrigin reveal="always" src={`/api/account/assets/${asset.id}/content`} label={asset.metadata.prompt||'Saved cloud video'} className="h-full w-full"/>}
         </div>
-        <div><p className={`line-clamp-2 font-medium text-[var(--foreground)] ${dense?'text-[0.8125rem] leading-snug':'text-sm'}`}>{asset.metadata.prompt||'Untitled result'}</p><p className={`mt-1 text-cyan-200 ${dense?'text-[0.625rem]':'text-xs'}`}>{asset.metadata.provider} · {asset.kind} · {formatAccountBytes(asset.bytes)}{asset.metadata.values.moderation === 'relaxed' ? ' · Relaxed' : ''}{asset.expiresAt?' · Temporary':''}</p></div>
+        <div><p className={`line-clamp-2 font-medium text-[var(--foreground)] ${dense?'text-[0.8125rem] leading-snug':'text-sm'}`}>{asset.metadata.prompt||'Untitled result'}</p><p className={`mt-1 text-cyan-200 ${dense?'text-[0.625rem]':'text-xs'}`}>{asset.metadata.provider} · {asset.kind} · {formatAccountBytes(asset.bytes)}{asset.metadata.values.moderation === 'relaxed' ? ' · Relaxed' : ''}{asset.expiresAt?' · Temporary':''}{asset.startedBy?` · via ${asset.startedBy.name??'an agent'}`:''}</p></div>
         <div className={`flex flex-wrap ${dense?'gap-1.5':'gap-2'}`}>
           {/* Shortened on the face, spelled out for assistive tech: the full
               phrase stays the accessible name, and it still contains the

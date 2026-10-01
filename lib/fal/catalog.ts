@@ -221,6 +221,28 @@ const VEO_IMAGE_FIELDS = [
   selectField('aspect_ratio', 'Aspect ratio', 'auto', ['auto', '16:9', '9:16']),
 ];
 
+/**
+ * Veo 3.1 Lite, read 2026-10-01 from
+ * https://fal.ai/models/fal-ai/veo3.1/lite/llms.txt and the image-to-video and
+ * first-last-frame siblings. Same duration and aspect enums as Veo 3.1, but
+ * resolution stops at 1080p — there is no 4k option on these endpoints.
+ */
+const VEO_LITE_BASE_FIELDS = [
+  selectField('duration', 'Duration', '8s', ['4s', '6s', '8s']),
+  selectField('resolution', 'Resolution', '720p', ['720p', '1080p']),
+  booleanField('generate_audio', 'Generate audio', true),
+];
+
+const VEO_LITE_TEXT_FIELDS = [
+  ...VEO_LITE_BASE_FIELDS,
+  selectField('aspect_ratio', 'Aspect ratio', '16:9', ['16:9', '9:16']),
+];
+
+const VEO_LITE_IMAGE_FIELDS = [
+  ...VEO_LITE_BASE_FIELDS,
+  selectField('aspect_ratio', 'Aspect ratio', 'auto', ['auto', '16:9', '9:16']),
+];
+
 const seedanceFields = (resolutions: string[]): FalFieldDefinition[] => [
   selectField(
     'duration',
@@ -284,6 +306,7 @@ const wanFields = (includeAspectRatio: boolean): FalFieldDefinition[] => [
 const FAL_FILE_CODES: Record<string, string> = {
   'veo-3-1': 'veo-3_1',
   'veo-3-1-fast': 'veo-3_1-fast',
+  'veo-3-1-lite': 'veo-3_1-lite',
   'seedance-2': 'seedance-2_0',
   'seedance-2-fast': 'seedance-2_0-fast',
   'kling-3-standard': 'kling-3-standard',
@@ -331,6 +354,23 @@ export const FAL_VIDEO_MODELS: FalModelDefinition[] = withFileCodes([
     ),
     {
       endpointId: 'fal-ai/veo3.1/fast/first-last-frame-to-video',
+      firstFrameKey: 'first_frame_url',
+      lastFrameKey: 'last_frame_url',
+    }
+  ),
+  withFrames(
+    videoModel(
+      'veo-3-1-lite',
+      'Veo 3.1 Lite',
+      'Google',
+      'Lower-cost Veo 3.1 at 720p or 1080p, with optional audio. No 4K.',
+      'fal-ai/veo3.1/lite',
+      'fal-ai/veo3.1/lite/image-to-video',
+      VEO_LITE_TEXT_FIELDS,
+      VEO_LITE_IMAGE_FIELDS
+    ),
+    {
+      endpointId: 'fal-ai/veo3.1/lite/first-last-frame-to-video',
       firstFrameKey: 'first_frame_url',
       lastFrameKey: 'last_frame_url',
     }

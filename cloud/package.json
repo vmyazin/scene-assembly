@@ -10,11 +10,15 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260905.1",
+    "@modelcontextprotocol/client": "2.1.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18",
     "wrangler": "^4.113.0"
   },
   "dependencies": {
-    "oauth4webapi": "^3.8.7"
+    "@cloudflare/workers-oauth-provider": "1.2.1",
+    "@modelcontextprotocol/server": "2.1.0",
+    "oauth4webapi": "^3.8.7",
+    "zod": "^4.6.5"
   }
 }

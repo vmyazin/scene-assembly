@@ -1,3 +1,4 @@
+// tests/fal/workspace.test.tsx
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -36,6 +37,7 @@ const SAFE_VIDEO_URL = 'https://v3.fal.media/files/tiger/result.mp4';
 const labels = [
   'Veo 3.1 Standard',
   'Veo 3.1 Fast',
+  'Veo 3.1 Lite',
   'Seedance 2.0 Standard',
   'Seedance 2.0 Fast',
   'Kling 3 Standard',
@@ -175,7 +177,7 @@ describe('FalGenerationWorkspace', () => {
     expect(prompt.style.height).toBe('420px');
   });
 
-  it('lists exactly nine curated models and searches label, provider, and description', () => {
+  it('lists exactly ten curated models and searches label, provider, and description', () => {
     renderWorkspace();
     const model = screen.getByRole('listbox', { name: 'Model' });
     expect(optionNames(model)).toEqual(labels);

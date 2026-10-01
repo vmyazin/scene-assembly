@@ -7,7 +7,7 @@ import { useAccountSpendTotals } from '@/lib/account/use-spend-totals';
 import { formatUsdTotal } from '@/lib/spend/format';
 import { totals } from '@/lib/spend/rollup';
 import { useSpendStore } from '@/store/useSpendStore';
-import { CircleDollarSign, CircleUserRound, Volume2, VolumeX } from 'lucide-react';
+import { CircleDollarSign, CircleUserRound, Plug, Volume2, VolumeX } from 'lucide-react';
 
 import { setUiSoundsEnabled } from '@/lib/notify/chime';
 import { useAccountStore } from '@/store/useAccountStore';
@@ -51,7 +51,7 @@ export function FooterLinks() {
 
   return (
     <ul className="rounded-xl border border-[var(--border)] bg-[var(--background-glass)] px-5 py-4 space-y-2 text-[0.8125rem] font-bold">
-      <li>
+      <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         <Link
           href="/spend"
           className="inline-flex max-w-full items-center gap-2 text-[var(--neon-cyan)] hover:text-[var(--neon-purple)] transition-colors"
@@ -59,6 +59,17 @@ export function FooterLinks() {
           <CircleDollarSign size={15} aria-hidden="true" />
           Spend
           {account ? <AccountSpendValue ownerId={account.id} /> : signedOut ? <BrowserSpendValue /> : <span>—</span>}
+        </Link>
+        {/* An agent handed only the site URL reads the anchor text and href, so
+            both say what this is. The Markdown twin is advertised from <head>,
+            the Link header and llms.txt. */}
+        <Link
+          href="/docs/mcp"
+          title="Connect an AI agent to Scene Assembly over MCP"
+          className="inline-flex items-center gap-1.5 font-normal text-[var(--foreground-muted)] hover:text-[var(--neon-purple)] transition-colors"
+        >
+          <Plug className="shrink-0" size={13} aria-hidden="true" />
+          MCP docs
         </Link>
       </li>
       <li>

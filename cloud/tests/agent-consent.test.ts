@@ -1,0 +1,225 @@
+import { describe, expect, it } from 'vitest';
+import { handleRequest } from '../src/index';
+import { authorize, cleanupAuthorizations } from '../src/mcp/auth';
+import type { Env } from '../src/security';
+import { accountCall, agentEnv, connectProvider, signIn as signedIn } from './agent-fixtures';
+import { fakeOAuth } from './fake-oauth';
+
+function setup(extra: Partial<Env> = {}) {
+  const { db, env } = agentEnv({ CLOUD_GENERATION_PROVIDERS: 'kie,atlas', ...extra });
+  const oauth = fakeOAuth();
+  env.OAUTH_PROVIDER = oauth.helpers;
+  return { db, env, oauth };
+}
+const worker = (env: Env, path: string, init: RequestInit = {}) => handleRequest(new Request(`http://localhost:8797${path}`, init), env);
+/** `redirectTo` is already an absolute URL (it names `MCP_ORIGIN`), so this hits it directly rather than through `worker`'s path-only helper. */
+const visitFinish = (env: Env, url: string, headers: HeadersInit = {}) => handleRequest(new Request(url, { headers }), env);
+const api = (env: Env, id: string, cookie: string, body?: unknown) => worker(env, `/api/account/agent-authorizations/${id}`, {
+  method: body === undefined ? 'GET' : 'POST', headers: { origin: env.APP_ORIGIN, cookie, 'content-type': 'application/json' },
+  ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+});
+async function begin(env: Env) {
+  const response = await worker(env, '/oauth/authorize?client_id=client-1&response_type=code');
+  const id = new URL(response.headers.get('Location')!).searchParams.get('request')!;
+  const consentCookie = response.headers.get('Set-Cookie')!.split(';')[0];
+  return { response, id, consentCookie };
+}
+const approve = { decision: 'approve', budgetUsd: 7.5, allowUnknownCost: true, allowDelete: false };
+
+describe('agent consent', () => {
+  it('refuses a malformed request with a page, not a redirect', async () => {
+    const { env } = setup();
+    const response = await worker(env, '/oauth/authorize');
+    expect(response.status).toBe(400);
+    expect(response.headers.get('Content-Type')).toContain('text/plain');
+  });
+
+  it('parks the request and sends the browser to the consent page with the library\'s binding cookie', async () => {
+    const { db, env } = setup();
+    const { response, id } = await begin(env);
+    expect(response.status).toBe(303);
+    expect(response.headers.get('Location')).toBe(`http://localhost:3097/connect-agent?request=${id}`);
+    expect(response.headers.get('Set-Cookie')).toMatch(/^consent=/);
+    expect(response.headers.get('X-Frame-Options')).toBe('DENY');
+    expect(db.prepare('SELECT client_name, redirect_host, decision FROM account_agent_authorizations').get()).toEqual({ client_name: 'Claude Code', redirect_host: '127.0.0.1', decision: null });
+  });
+
+  it('parks the client\'s name without control or bidi characters', async () => {
+    const { db, env, oauth } = setup();
+    const original = oauth.helpers.describeConsent;
+    env.OAUTH_PROVIDER!.describeConsent = async request => ({ ...await original(request), clientName: '\u202EClaude\u0000  Code' });
+    await begin(env);
+    expect(db.prepare('SELECT client_name FROM account_agent_authorizations').get()).toEqual({ client_name: 'Claude Code' });
+    env.OAUTH_PROVIDER!.describeConsent = async request => ({ ...await original(request), clientName: '\u2066\u202E\u0007' });
+    await begin(env);
+    expect(db.prepare('SELECT client_name FROM account_agent_authorizations ORDER BY rowid DESC').get()).toEqual({ client_name: 'Unnamed agent' });
+  });
+
+  it('shows the request to the signed-in person with the providers a default grant refuses', async () => {
+    const { db, env } = setup();
+    connectProvider(db, 'kie');
+    const { id } = await begin(env);
+    expect((await api(env, id, '')).status).toBe(401);
+    const view = (await (await api(env, id, await signedIn(env))).json()).authorization;
+    expect(view).toMatchObject({ id, clientName: 'Claude Code', clientDomain: null, redirectHost: '127.0.0.1', redirectIsLoopback: true,
+      defaults: { budgetUsd: 5, allowUnknownCost: false, allowDelete: false }, limits: { minUsd: 0.5, maxUsd: 500 } });
+    expect(view.unknownPriceProviders).toEqual([{ label: 'Kie.ai', scope: 'all' }]);
+  });
+
+  it('approves into an agent with the chosen settings and hands the client its code', async () => {
+    const { db, env, oauth } = setup();
+    const { id, consentCookie } = await begin(env);
+    const cookie = await signedIn(env);
+    const decided = await api(env, id, cookie, approve);
+    const { redirectTo } = await decided.json();
+    expect(redirectTo).toMatch(new RegExp(`^http://localhost:8797/oauth/finish\\?request=${id}&t=[A-Za-z0-9_-]{20,}$`));
+    const finished = await visitFinish(env, redirectTo, { cookie: consentCookie });
+    expect(finished.status).toBe(302);
+    expect(finished.headers.get('Location')).toBe('http://127.0.0.1:6274/oauth/callback?code=code-1&state=state-1');
+    const agent = db.prepare('SELECT * FROM account_agents').get() as Record<string, unknown>;
+    expect(agent).toMatchObject({ user_id: 'owner', client_name: 'Claude Code', budget_micros: 7_500_000, allow_unknown_cost: 1, allow_delete: 0 });
+    expect(oauth.completed[0]).toMatchObject({ userId: 'owner', scope: ['scene-assembly'], props: { userId: 'owner', agentId: agent.id }, metadata: { agentId: agent.id } });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM account_agent_authorizations').get()).toEqual({ n: 0 });
+  });
+
+  // Review focus 4: a double-clicked Approve, or a replayed finish link.
+  it('records one decision and creates one agent however often it is replayed', async () => {
+    const { db, env } = setup();
+    const { id, consentCookie } = await begin(env);
+    const cookie = await signedIn(env);
+    const first = await api(env, id, cookie, approve);
+    expect(first.status).toBe(200);
+    const { redirectTo } = await first.json();
+    const again = await api(env, id, cookie, approve);
+    expect(again.status).toBe(409);
+    expect((await again.json()).code).toBe('already_decided');
+    expect((await visitFinish(env, redirectTo, { cookie: consentCookie })).status).toBe(302);
+    expect((await visitFinish(env, redirectTo, { cookie: consentCookie })).status).toBe(400);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 1 });
+  });
+
+  it('does nothing when finished from a browser that did not start it', async () => {
+    const { db, env } = setup();
+    const { id } = await begin(env);
+    const decided = await api(env, id, await signedIn(env), approve);
+    const { redirectTo } = await decided.json();
+    const response = await visitFinish(env, redirectTo, { cookie: 'consent=someone-else' });
+    expect(response.status).toBe(400);
+    expect(await response.text()).toMatch(/browser that opened this page/);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 0 });
+  });
+
+  it('sends a denial back to the client as access_denied', async () => {
+    const { db, env } = setup();
+    const { id, consentCookie } = await begin(env);
+    const decided = await api(env, id, await signedIn(env), { decision: 'deny' });
+    const { redirectTo } = await decided.json();
+    const response = await visitFinish(env, redirectTo, { cookie: consentCookie });
+    expect(response.status).toBe(302);
+    expect(response.headers.get('Location')).toContain('error=access_denied');
+    expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 0 });
+  });
+
+  it('refuses an invalid limit, a cross-site decision, and an expired request', async () => {
+    const { env } = setup();
+    const { id } = await begin(env);
+    const cookie = await signedIn(env);
+    expect((await api(env, id, cookie, { ...approve, budgetUsd: 0.1 })).status).toBe(400);
+    const crossSite = await worker(env, `/api/account/agent-authorizations/${id}`, { method: 'POST', headers: { origin: 'https://evil.example', cookie }, body: JSON.stringify(approve) });
+    expect(crossSite.status).toBe(403);
+    await cleanupAuthorizations(env, Date.now() + 11 * 60_000);
+    expect((await api(env, id, cookie)).status).toBe(404);
+  });
+
+  // Fix round 1, finding 1 (consent phishing): the binding cookie alone proves
+  // which browser *started* a request, not which browser *approved* it — the
+  // finish secret closes that gap. Three ways to fail with only one of the two.
+  describe('the finish secret', () => {
+    it('refuses the starting browser\'s cookie alone, without the secret, and leaves the request live', async () => {
+      const { db, env } = setup();
+      const { id, consentCookie } = await begin(env);
+      await api(env, id, await signedIn(env), approve);
+      const response = await worker(env, `/oauth/finish?request=${id}`, { headers: { cookie: consentCookie } });
+      expect(response.status).toBe(400);
+      expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 0 });
+      expect(db.prepare('SELECT COUNT(*) AS n FROM account_agent_authorizations').get()).toEqual({ n: 1 });
+    });
+
+    it('refuses the correct secret alone, without the browser that started the request', async () => {
+      const { db, env } = setup();
+      const { id } = await begin(env);
+      const decided = await api(env, id, await signedIn(env), approve);
+      const { redirectTo } = await decided.json();
+      const response = await visitFinish(env, redirectTo);
+      expect(response.status).toBe(400);
+      expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 0 });
+    });
+
+    // A wrong secret must not burn the request: if it did, anyone holding the
+    // `?request=` id could cancel someone else's pending approval with a guess.
+    it('refuses a wrong secret and leaves the request for the right one', async () => {
+      const { db, env } = setup();
+      const { id, consentCookie } = await begin(env);
+      const { redirectTo } = await (await api(env, id, await signedIn(env), approve)).json();
+      const response = await worker(env, `/oauth/finish?request=${id}&t=wrong-secret-value`, { headers: { cookie: consentCookie } });
+      expect(response.status).toBe(400);
+      expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 0 });
+      const finished = await visitFinish(env, redirectTo, { cookie: consentCookie });
+      expect(finished.status).toBe(302);
+      expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 1 });
+    });
+
+    it('spends the request when the right secret is opened in a browser that did not start it', async () => {
+      const { db, env } = setup();
+      const { id, consentCookie } = await begin(env);
+      const { redirectTo } = await (await api(env, id, await signedIn(env), approve)).json();
+      expect((await visitFinish(env, redirectTo, { cookie: 'consent=someone-else' })).status).toBe(400);
+      expect(db.prepare('SELECT COUNT(*) AS n FROM account_agent_authorizations').get()).toEqual({ n: 0 });
+      expect((await visitFinish(env, redirectTo, { cookie: consentCookie })).status).toBe(400);
+      expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 0 });
+    });
+  });
+
+  // MCP_ORIGIN is written by hand per environment. A trailing slash or a path in
+  // it must not leak into any URL built on the MCP host, and every one of them
+  // must agree with the resource the OAuth library advertises.
+  describe('the MCP origin', () => {
+    it.each(['https://mcp.example.test/', 'https://mcp.example.test/some/path'])('publishes <origin>/mcp and finishes at <origin>/oauth/finish for %s', async MCP_ORIGIN => {
+      const { env } = setup({ MCP_ORIGIN });
+      const cookie = await signedIn(env);
+      expect((await (await accountCall(env, 'agents', 'GET', cookie)).json()).mcpUrl).toBe('https://mcp.example.test/mcp');
+      const { id } = await begin(env);
+      const { redirectTo } = await (await api(env, id, cookie, approve)).json();
+      expect(redirectTo).toMatch(new RegExp(`^https://mcp\\.example\\.test/oauth/finish\\?request=${id}&t=[A-Za-z0-9_-]{20,}$`));
+    });
+
+    it('connects through the local fallback when a local env has no MCP_ORIGIN', async () => {
+      const { env } = setup({ MCP_ORIGIN: undefined });
+      const { response, id } = await begin(env);
+      expect(response.status).toBe(303);
+      const { redirectTo } = await (await api(env, id, await signedIn(env), approve)).json();
+      expect(redirectTo).toMatch(new RegExp(`^http://localhost:8797/oauth/finish\\?request=${id}&t=`));
+    });
+
+    it('refuses to start a connection when there is no MCP origin at all', async () => {
+      const { env } = setup({ APP_ORIGIN: 'https://sceneassembly.mzork.com', MCP_ORIGIN: undefined });
+      const response = await authorize(new Request('https://account.example.test/oauth/authorize?client_id=client-1&response_type=code'), env);
+      expect(response.status).toBe(503);
+    });
+  });
+
+  // Fix round 1, minor 3: a failure inside finish after consent has already
+  // been spent (approveConsent succeeded) must not leak the gateway's JSON,
+  // and must not leave an orphaned agent behind.
+  it('fails the finish page, not the client, if completing authorization goes wrong after consent is spent', async () => {
+    const { db, env } = setup();
+    const { id, consentCookie } = await begin(env);
+    const decided = await api(env, id, await signedIn(env), approve);
+    const { redirectTo } = await decided.json();
+    env.OAUTH_PROVIDER!.completeAuthorization = async () => { throw new Error('boom'); };
+    const response = await visitFinish(env, redirectTo, { cookie: consentCookie });
+    expect(response.status).toBe(500);
+    expect(response.headers.get('Content-Type')).toContain('text/plain');
+    expect(db.prepare('SELECT COUNT(*) AS n FROM account_agents').get()).toEqual({ n: 0 });
+  });
+});

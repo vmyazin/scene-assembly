@@ -1,3 +1,4 @@
+// tests/fal/catalog.test.ts
 import { describe, expect, it } from 'vitest';
 import {
   FAL_IMAGE_MODEL,
@@ -13,6 +14,7 @@ import {
 const VIDEO_ENDPOINTS = [
   ['veo-3-1', 'fal-ai/veo3.1', 'fal-ai/veo3.1/image-to-video'],
   ['veo-3-1-fast', 'fal-ai/veo3.1/fast', 'fal-ai/veo3.1/fast/image-to-video'],
+  ['veo-3-1-lite', 'fal-ai/veo3.1/lite', 'fal-ai/veo3.1/lite/image-to-video'],
   ['seedance-2', 'bytedance/seedance-2.0/text-to-video', 'bytedance/seedance-2.0/image-to-video'],
   [
     'seedance-2-fast',
@@ -43,11 +45,12 @@ const VIDEO_ENDPOINTS = [
 ] as const;
 
 describe('fal model catalog', () => {
-  it('contains Nano Banana 2 plus exactly nine curated video choices', () => {
+  it('contains Nano Banana 2 plus exactly ten curated video choices', () => {
     expect(FAL_IMAGE_MODEL.id).toBe('nano-banana-2');
     expect(FAL_VIDEO_MODELS.map((model) => model.id)).toEqual([
       'veo-3-1',
       'veo-3-1-fast',
+      'veo-3-1-lite',
       'seedance-2',
       'seedance-2-fast',
       'kling-3-standard',
@@ -59,6 +62,7 @@ describe('fal model catalog', () => {
     expect(FAL_VIDEO_MODELS.map((model) => model.label)).toEqual([
       'Veo 3.1 Standard',
       'Veo 3.1 Fast',
+      'Veo 3.1 Lite',
       'Seedance 2.0 Standard',
       'Seedance 2.0 Fast',
       'Kling 3 Standard',
@@ -81,10 +85,10 @@ describe('fal model catalog', () => {
     });
   });
 
-  it('defines text and image variants for all 18 curated video endpoints', () => {
-    // 18 text/image variants, plus a frames variant on the seven models fal
+  it('defines text and image variants for all 20 curated video endpoints', () => {
+    // 20 text/image variants, plus a frames variant on the eight models fal
     // documents as accepting a closing frame.
-    expect(FAL_VIDEO_MODELS.flatMap((model) => model.variants)).toHaveLength(25);
+    expect(FAL_VIDEO_MODELS.flatMap((model) => model.variants)).toHaveLength(28);
 
     for (const [modelId, textEndpoint, imageEndpoint] of VIDEO_ENDPOINTS) {
       expect(resolveFalVariant(modelId, 'video', 'text').endpointId).toBe(textEndpoint);
@@ -96,6 +100,7 @@ describe('fal model catalog', () => {
     expect(modelsForFalMode('video', 'frames').map((model) => model.id)).toEqual([
       'veo-3-1',
       'veo-3-1-fast',
+      'veo-3-1-lite',
       'seedance-2',
       'seedance-2-fast',
       'kling-3-standard',
@@ -147,7 +152,7 @@ describe('fal model catalog', () => {
     expect(variant.maxInputImages).toBe(2);
   });
 
-  it('exposes all nine video choices for image-to-video', () => {
+  it('exposes all ten video choices for image-to-video', () => {
     expect(modelsForFalMode('video', 'image').map((model) => model.id)).toEqual(
       VIDEO_ENDPOINTS.map(([modelId]) => modelId)
     );
@@ -563,5 +568,53 @@ describe('fal model catalog', () => {
     expect(() => modelsForFalMode('audio' as never, 'text')).toThrow(
       'Invalid fal media type.'
     );
+  });
+});
+
+describe('Veo 3.1 Lite payloads', () => {
+  const frames = ['https://v3.fal.media/open.png', 'https://v3.fal.media/close.png'];
+
+  it('routes text, image, and first-last-frame to the documented endpoints', () => {
+    const text = resolveFalVariant('veo-3-1-lite', 'video', 'text');
+    const image = resolveFalVariant('veo-3-1-lite', 'video', 'image');
+    const flf = resolveFalVariant('veo-3-1-lite', 'video', 'frames');
+
+    expect(text.endpointId).toBe('fal-ai/veo3.1/lite');
+    expect(image.endpointId).toBe('fal-ai/veo3.1/lite/image-to-video');
+    expect(flf.endpointId).toBe('fal-ai/veo3.1/lite/first-last-frame-to-video');
+    expect(buildFalInput(text, { prompt: 'A whale', uploadUrls: [], values: { generate_audio: false, duration: '4s', resolution: '1080p', aspect_ratio: '9:16' } })).toEqual({
+      prompt: 'A whale',
+      duration: '4s',
+      resolution: '1080p',
+      generate_audio: false,
+      aspect_ratio: '9:16',
+    });
+    expect(buildFalInput(image, { prompt: 'She turns', uploadUrls: [frames[0]], values: {} })).toMatchObject({
+      image_url: frames[0],
+      aspect_ratio: 'auto',
+      duration: '8s',
+      resolution: '720p',
+      generate_audio: true,
+    });
+    expect(buildFalInput(flf, { prompt: 'Cross the room', uploadUrls: frames, values: { duration: '6s' } })).toMatchObject({
+      first_frame_url: frames[0],
+      last_frame_url: frames[1],
+      duration: '6s',
+      resolution: '720p',
+    });
+    expect(text.fields.find((field) => field.key === 'resolution')?.options?.map((option) => option.value)).toEqual(['720p', '1080p']);
+    expect(image.fields.find((field) => field.key === 'aspect_ratio')?.options?.map((option) => option.value)).toEqual(['auto', '16:9', '9:16']);
+  });
+
+  it('rejects a duration, aspect, or resolution Lite does not list', () => {
+    const text = resolveFalVariant('veo-3-1-lite', 'video', 'text');
+    const image = resolveFalVariant('veo-3-1-lite', 'video', 'image');
+    const reject = (values: Record<string, string>) =>
+      buildFalInput(text, { prompt: 'A whale', uploadUrls: [], values });
+
+    expect(() => reject({ duration: '5s' })).toThrow(/duration/i);
+    expect(() => reject({ aspect_ratio: '1:1' })).toThrow(/aspect_ratio/i);
+    expect(() => reject({ resolution: '4k' })).toThrow(/resolution/i);
+    expect(() => buildFalInput(image, { prompt: 'She turns', uploadUrls: [frames[0]], values: { aspect_ratio: '1:1' } })).toThrow(/aspect_ratio/i);
   });
 });

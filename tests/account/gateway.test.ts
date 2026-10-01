@@ -70,6 +70,16 @@ describe('account gateway', () => {
     vi.stubEnv('ACCOUNT_WORKER_ORIGIN', 'http://localhost:8797');
     expect((await accountGateway(new Request('https://app.test/api/account/session'))).status).toBe(503);
   });
+  it('forwards the connected-agent routes and nothing past them', async () => {
+    vi.stubEnv('ACCOUNT_WORKER_ORIGIN', 'https://accounts.test');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ ok: true })));
+    for (const path of ['agents', 'agents/agent-1', 'agent-authorizations/request-1']) {
+      expect((await accountGateway(new Request(`https://app.test/api/account/${path}`))).status, path).toBe(200);
+    }
+    for (const path of ['agents/agent-1/extra', 'agent-authorizations', 'agent-authorizations/a/b']) {
+      expect((await accountGateway(new Request(`https://app.test/api/account/${path}`))).status, path).toBe(404);
+    }
+  });
 });
 
 it('forwards bounded import metadata and account spend requests',async()=>{

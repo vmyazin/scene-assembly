@@ -306,6 +306,9 @@ export const isGptImage25 = (model: string) => model.startsWith('openai/gpt-imag
  */
 export const isNanoBanana2 = (model: string) => model.startsWith('google/nano-banana-2');
 
+/** Luma Uni 1 takes a ratio from its own enum and publishes no pixels either. */
+export const isLumaUni = (model: string) => model.startsWith('luma/uni-');
+
 /**
  * Look up a ratio in a table the way an adapter does, including its fallback,
  * so a control promises exactly what the request will send. The fallback is a
@@ -335,7 +338,7 @@ export function imageDimensions(
   if (engine === 'comet') return ratioDimensions(COMET_IMAGE_DIMENSIONS, aspectRatio);
   if (engine === 'pollinations') return ratioDimensions(POLLINATIONS_IMAGE_DIMENSIONS, aspectRatio);
   if (engine === 'atlas') {
-    if (modelId && isNanoBanana2(modelId)) return null;
+    if (modelId && (isNanoBanana2(modelId) || isLumaUni(modelId))) return null;
     const table = modelId && isSeedream(modelId)
       ? ATLAS_SEEDREAM_DIMENSIONS
       : modelId && isGptImage25(modelId)

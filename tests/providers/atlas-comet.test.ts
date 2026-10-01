@@ -306,6 +306,64 @@ describe('atlas cloud', () => {
     });
   });
 
+  it('bookends an LTX-2 clip with the same frame fields, at its preset size', async () => {
+    const fetchMock = mockFetchSequence([{ payload: { data: { id: 'pred-ltx' } } }]);
+
+    await atlasCreateVideo({
+      apiKey: 'at-key',
+      model: 'ltx/ltx-2.5-pro/image-to-video',
+      prompt: 'the door opens',
+      images: ['data:image/png;base64,AAA', 'data:image/png;base64,BBB'],
+      inputMode: 'frames',
+      inputField: 'frameImages',
+      durationSeconds: 8,
+      resolution: '4k',
+      aspectRatio: '9:16',
+    });
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({
+      model: 'ltx/ltx-2.5-pro/image-to-video',
+      prompt: 'the door opens',
+      image: 'data:image/png;base64,AAA',
+      last_image: 'data:image/png;base64,BBB',
+      duration: 8,
+      resolution: '4k',
+      aspect_ratio: '9:16',
+    });
+  });
+
+  describe('Luma Uni 1', () => {
+    async function submitImage(request: Parameters<typeof atlasGenerateImage>[0]) {
+      const fetchMock = mockFetchSequence([
+        { payload: { data: { id: 'pred-uni' } } },
+        { payload: { id: 'pred-uni', status: 'succeeded', output: ['https://cdn.atlas/uni.jpeg'] } },
+      ]);
+      await atlasGenerateImage(request, noSleep);
+      return JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    }
+
+    // Atlas drops `size` in silence, so a Uni run sent the older dialect would
+    // come back at Luma's default 16:9 whatever shape was picked.
+    it('sends a ratio from its enum and no size or count', async () => {
+      const body = await submitImage({ apiKey: 'at-key', model: 'luma/uni-1/text-to-image', prompt: 'a lighthouse', aspectRatio: '9:16' });
+      expect(body).toEqual({ model: 'luma/uni-1/text-to-image', prompt: 'a lighthouse', aspect_ratio: '9:16' });
+    });
+
+    it('snaps the two shapes Luma does not publish, and squares a missing ratio', async () => {
+      expect((await submitImage({ apiKey: 'at-key', model: 'luma/uni-1-max/text-to-image', prompt: 'x', aspectRatio: '3:2' })).aspect_ratio).toBe('4:3');
+      expect((await submitImage({ apiKey: 'at-key', model: 'luma/uni-1-max/text-to-image', prompt: 'x', aspectRatio: '2:3' })).aspect_ratio).toBe('3:4');
+      expect((await submitImage({ apiKey: 'at-key', model: 'luma/uni-1/text-to-image', prompt: 'x' })).aspect_ratio).toBe('1:1');
+    });
+
+    it('sends an edit its one source as a string', async () => {
+      const body = await submitImage({
+        apiKey: 'at-key', model: 'luma/uni-1/edit', prompt: 'make it dusk', aspectRatio: '1:1',
+        images: ['data:image/png;base64,AAA', 'data:image/png;base64,BBB'],
+      });
+      expect(body).toEqual({ model: 'luma/uni-1/edit', prompt: 'make it dusk', aspect_ratio: '1:1', image: 'data:image/png;base64,AAA' });
+    });
+  });
+
   it('sends subject references as the array the reference endpoints take', async () => {
     const fetchMock = mockFetchSequence([{ payload: { data: { id: 'pred-7' } } }]);
 
