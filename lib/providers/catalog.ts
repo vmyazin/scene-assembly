@@ -234,19 +234,18 @@ const RUNWARE_MODELS: ProviderModel[] = [
   },
   {
     // Read 2026-10-01 from https://runware.ai/docs/models/google-veo-3-1-lite.
-    // The page publishes one rate per resolution ($0.05 at 720p, $0.08 at
-    // 1080p) and does not list a silent discount. generateAudio still exists
-    // and defaults to true on the vendor; the two tables match so the estimate
-    // stays the published figure either way. Capacity for this model is limited.
+    // Pricing on that page: 720p without audio $0.03, with audio $0.05;
+    // 1080p without audio $0.05, with audio $0.08. The silent table is what
+    // a run estimates while Generate audio is off. Capacity is limited.
     id: 'google:veo@3.1-lite',
     label: 'Veo 3.1 Lite',
     fileCode: 'veo-3_1-lite',
     kind: 'video',
     modes: ['text', 'image', 'frames'],
-    price: '$0.05 / s @ 720p · $0.08 / s @ 1080p',
+    price: '$0.03 / s silent · $0.05 / s with audio @ 720p · $0.05 / s silent · $0.08 / s with audio @ 1080p',
     rate: {
       per: 'second',
-      usdByResolution: { '720p': 0.05, '1080p': 0.08 },
+      usdByResolution: { '720p': 0.03, '1080p': 0.05 },
       audioUsdByResolution: { '720p': 0.05, '1080p': 0.08 },
     },
     maxInputImages: 2,
@@ -265,7 +264,7 @@ const RUNWARE_MODELS: ProviderModel[] = [
     ],
     supportsAudio: true,
     aspectRatios: ['16:9', '9:16'],
-    note: 'Optional audio. Runware publishes one rate per resolution. Capacity for this model is limited.',
+    note: 'Optional audio. Silent is $0.03/s at 720p and $0.05/s at 1080p; with audio those are $0.05/s and $0.08/s. Capacity for this model is limited.',
   },
 ];
 
