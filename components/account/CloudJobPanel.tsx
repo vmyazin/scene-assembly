@@ -12,6 +12,7 @@ import { useAccountStore } from '@/store/useAccountStore';
 import { downloadAccountAsset } from '@/lib/account/download';
 import { accountRequest } from '@/lib/account/client';
 import { isListedJob , isActiveJob} from '@/lib/account/job-status';
+import { isUploadedAsset } from '@/lib/account/import';
 import type { CloudAsset, CloudJobRequest, CloudJobView } from '@/lib/account/contracts';
 import VideoPlayer from '@/components/video/VideoPlayer';
 import CloudJobCardGrid from './CloudJobCardGrid';
@@ -27,7 +28,10 @@ export default function CloudJobPanel({provider,modelId,mediaType,inputMode,onCo
   // because that panel shows a single clip and it has to be the one just asked for.
   const inScope=(p:string,m:string,mode:string)=>mediaType==='image'||(p===provider&&m===modelId&&mode===inputMode);
   const jobs=allJobs.filter(j=>j.request.mediaType===mediaType&&inScope(j.provider,j.request.modelId,j.request.inputMode));
-  const assets=allAssets.filter(a=>a.kind===mediaType&&inScope(a.metadata.provider,a.metadata.modelId,a.metadata.inputMode)&&(!resultJobId||a.jobId===resultJobId));
+  // Uploads are left out: a pasted reference is kept in the cloud library so it
+  // can be picked again, but it is an input, and the image feed's every-provider
+  // scope would otherwise put it on top of the results as if it were one.
+  const assets=allAssets.filter(a=>a.kind===mediaType&&!isUploadedAsset(a)&&inScope(a.metadata.provider,a.metadata.modelId,a.metadata.inputMode)&&(!resultJobId||a.jobId===resultJobId));
   const pending=useRef(false),[busy,setBusy]=useState(false);
   // `isActiveJob` rather than a fourth copy of the state list: the timer needs
   // the running job itself, and two answers to "is this in flight" on one line

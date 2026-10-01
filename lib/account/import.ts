@@ -1,5 +1,6 @@
-import type { CloudJobRequest, CloudProvider } from './contracts';
+import type { CloudAsset, CloudJobRequest, CloudProvider } from './contracts';
 import type { GalleryRecord } from '@/lib/gallery/storage';
+import { LOCAL_PROVIDER } from '@/lib/timeline/import-local';
 import { useAccountStore } from '@/store/useAccountStore';
 
 export const MAX_ACCOUNT_IMPORT_BYTES = 1_000_000_000;
@@ -151,6 +152,18 @@ function normalizedValues(values: GalleryRecord['controlValues']): CloudJobReque
         (typeof value === 'number' && Number.isFinite(value)))
       .slice(0, 64)
   );
+}
+
+/**
+ * A cloud asset that came off the person's disk rather than out of a generation:
+ * a reference they pasted or dropped (`keepUploadedImages`) or a clip they
+ * imported. `accountImportIntent` is what labels it — the library provider
+ * `local` is not a cloud provider, so it lands as `local-test`, and with no
+ * model of its own the model id falls back to `local`. A real `local-test`
+ * background job names its model `local-test`, so it never matches.
+ */
+export function isUploadedAsset(asset: Pick<CloudAsset, 'metadata'>): boolean {
+  return asset.metadata.provider === 'local-test' && asset.metadata.modelId === LOCAL_PROVIDER;
 }
 
 export function accountImportIntent(record: GalleryRecord & { blob: Blob }, clientImportId = defaultAccountImportId(record.id)): AccountImportIntent {
