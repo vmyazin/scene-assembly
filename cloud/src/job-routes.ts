@@ -4,13 +4,15 @@ import { currentAccount } from './sessions';
 import { json, type Env } from './security';
 import { acceptJob, AccountError, cancelQueuedJob, dismissAttentionJob, dispatchJob, getJob, jobView, removeFinishedJob, type JobRow } from './jobs';
 import { adapterFor, validateRequest } from './providers';
+import { enforceRelaxedConsent, recordRelaxedConsent } from './relaxed-consent';
+import { RELAXED_POLICY_VERSION } from '../../lib/moderation/level';
 import { isRecoverable, MAX_RESUME_ATTEMPTS } from './failure';
 import { assetView, deleteAsset, getAsset, type AssetRow } from './assets';
 import type { CloudJobState, CloudJobView } from '../../lib/account/contracts';
 
 export async function jobRoutes(request:Request,env:Env):Promise<Response|null>{
   const path=new URL(request.url).pathname;
-  if(!/^\/api\/account\/(jobs|assets|storage)(\/|$)/.test(path))return null;
+  if(!/^\/api\/account\/(jobs|assets|storage|relaxed-consent)(\/|$)/.test(path))return null;
   const account=await currentAccount(request,env);
   if(!account)return json({error:'Sign in to access your cloud workspace.'},401);
   try{
@@ -18,11 +20,23 @@ export async function jobRoutes(request:Request,env:Env):Promise<Response|null>{
       const storage=await env.DB.prepare('SELECT limit_bytes AS limitBytes, used_bytes AS usedBytes, reserved_bytes AS reservedBytes, active_jobs AS activeJobs FROM account_storage WHERE user_id = ?').bind(account.id).first();
       return json({storage:storage||{limitBytes:1_000_000_000,usedBytes:0,reservedBytes:0,activeJobs:0}});
     }
+    if(path==='/api/account/relaxed-consent'&&request.method==='POST'){
+      const body=await request.json().catch(()=>null) as {ageConfirmed?: unknown; policyVersion?: unknown} | null;
+      if(!body || body.ageConfirmed !== true || body.policyVersion !== RELAXED_POLICY_VERSION){
+        return json({error:'Confirm that you are 18 or older to turn on Relaxed filter.'},400);
+      }
+      try {
+        await recordRelaxedConsent(env, account.id, RELAXED_POLICY_VERSION);
+      } catch {
+        return json({error:'Relaxed filter confirmation could not be saved.'},500);
+      }
+      return json({ok:true, policyVersion: RELAXED_POLICY_VERSION});
+    }
     if(path==='/api/account/jobs'&&request.method==='POST'){
       const text=await request.text();if(text.length>40000)return json({error:'Request is too large.'},413);
       const body=JSON.parse(text);
       if(!body||typeof body!=='object')return json({error:'Invalid request.'},400);
-      const settings=validateRequest(env,body.request);
+      const settings=await enforceRelaxedConsent(env, account.id, validateRequest(env,body.request));
       const job=await acceptJob(env,account.id,body.token,settings);
       // Acceptance is durable even when dispatch fails. Scheduled reconciliation repairs it.
       if(!job.dispatched)await dispatchJob(env,job).catch(()=>{});

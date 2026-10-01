@@ -67,6 +67,11 @@ import KieGenerationWorkspace from '@/components/KieGenerationWorkspace';
 import SegmentedToggleGroup from '@/components/SegmentedToggleGroup';
 import StoredImagePicker from '@/components/StoredImagePicker';
 import ImageFormatControl from '@/components/ImageFormatControl';
+import RelaxedFilterControl from '@/components/RelaxedFilterControl';
+import { trackGenerationResult } from '@/lib/analytics/generation-result';
+import { classifyFailure, refusalPresentation } from '@/lib/moderation/classify';
+import { inspectPrompt } from '@/lib/moderation/floors';
+import { useRelaxedFilter } from '@/lib/moderation/use-relaxed-filter';
 import { playGenerationChime } from '@/lib/notify/chime';
 import ResultStack, { type ResultStackItem } from '@/components/ResultStack';
 import RetryCountdown from '@/components/RetryCountdown';
@@ -165,6 +170,22 @@ function draftedConfig(): GenerationConfig {
 }
 
 const FAL_GENERATION_ERROR = 'Unable to generate this image with fal. Please try again.';
+
+/**
+ * Policy and floor text survive only while Relaxed is offered. Anything else,
+ * a message that still holds the key, or a build where the toggle is hidden,
+ * stays the generic sentence so a key never reaches the toast and the hidden
+ * control is not advertised.
+ */
+function falDisplayedFailure(caught: unknown, apiKey: string, offered: boolean): string {
+  if (!offered) return FAL_GENERATION_ERROR;
+  const raw = caught instanceof Error ? caught.message : '';
+  const kind = classifyFailure(raw).kind;
+  if (kind !== 'policy' && kind !== 'floor') return FAL_GENERATION_ERROR;
+  if (!raw || raw.length > 512) return FAL_GENERATION_ERROR;
+  if (apiKey && raw.toLowerCase().includes(apiKey.toLowerCase())) return FAL_GENERATION_ERROR;
+  return raw;
+}
 const MAX_FAL_REFERENCE_BYTES = 20 * 1024 * 1024;
 
 class LocalFalCancellation extends Error {
@@ -402,6 +423,13 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
 
   const cloudWorkspace = useCloudWorkspace(activeEngine.id);
   const cloudModelId = activeProviderModel ?? (activeEngine.id === 'fal' ? FAL_IMAGE_MODEL.id : activeEngine.id === 'gemini' ? activeGeminiModel.id : activeEngine.id === 'cloudflare' || activeEngine.id === 'pollinations' ? SINGLE_IMAGE_MODELS[activeEngine.id] : activeEngine.id);
+  const relaxed = useRelaxedFilter({
+    workspaceKey: 'image',
+    provider: activeEngine.id,
+    modelId: String(cloudModelId),
+    prompt,
+    hasReferences: images.length > 0,
+  });
   const cloudInputMode = feature.requiresImage ? 'image' : 'text';
   const [cloudSubmitting, setCloudSubmitting] = useState(false);
   /**
@@ -591,6 +619,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
               aspect_ratio: config.aspectRatio ?? 'auto',
               resolution: config.imageSize ?? '1K',
               enable_web_search: Boolean(config.useGoogleSearch),
+              ...relaxed.attach(),
             },
             signal: controller.signal,
           }, {});
@@ -620,7 +649,11 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
           ) {
             throw new LocalFalCancellation();
           }
-          throw new RouteError(FAL_GENERATION_ERROR, routeStatus(caught) ?? -1);
+          // The generic sentence stays for everything else: fal errors used to
+          // arrive with the key still in them, and this is the last gate before
+          // the toast. A filter decision has to keep its own words, or the
+          // Relaxed offer never appears.
+          throw new RouteError(falDisplayedFailure(caught, falApiKey, relaxed.offered), routeStatus(caught) ?? -1);
         } finally {
           if (
             generationOperationRef.current === operationId &&
@@ -637,6 +670,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
         body: JSON.stringify({
           engine: activeEngine.id,
           prompt: finalPrompt,
+          ...relaxed.attach(),
           images: images.map((image) => image.dataUrl.split(',')[1]), // strip data: prefix
           config,
           featureId: feature.id,
@@ -670,6 +704,14 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
     },
     onSuccess: (result) => {
       autoRetry.reset();
+      trackGenerationResult({
+        engine: activeEngine.id,
+        route: String(cloudModelId),
+        model: String(activeModelId),
+        level: relaxed.levelRef.current,
+        outcome: 'ok',
+        media: 'image',
+      });
       toast.success('Image generated');
       playGenerationChime();
       // Kept whole rather than sliced here: ResultStack owns the display cap,
@@ -677,6 +719,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
       useImageResultsStore.getState().add({
         src: result.dataUrl,
         mimeType: result.mimeType,
+        relaxed: relaxed.levelRef.current === 'relaxed',
         provider: activeEngine.id,
         modelId: activeModelId,
         prompt,
@@ -704,6 +747,14 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
     onError: (e) => {
       if (e instanceof LocalFalCancellation) return;
       const message = e instanceof Error ? e.message : 'Generation failed';
+      trackGenerationResult({
+        engine: activeEngine.id,
+        route: String(cloudModelId),
+        model: String(activeModelId),
+        level: relaxed.levelRef.current,
+        outcome: classifyFailure(message).kind,
+        media: 'image',
+      });
       // Sent again only when the request never reached a decision — a bad key,
       // an empty balance, or a content-policy refusal would fail identically
       // five more times, and the retry would only bury the reason.
@@ -724,6 +775,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
         controlValues: {
           aspect_ratio: config.aspectRatio ?? DEFAULT_ASPECT_RATIO,
           resolution: selectedImageSize,
+          ...relaxed.attach(),
         },
         mimeType: blob.type || 'image/png',
         sourceUrl: result.startsWith('data:') ? undefined : result,
@@ -763,12 +815,22 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
   // Feeds the format control's "Auto → …" hint, so it names the real outcome
   // for these bytes rather than assuming a PNG source.
   const generatedMimeType = newestResult?.mimeType ?? 'image/png';
-  const displayError =
+  const rawDisplayError =
     error ||
     (!cloudWorkspace.cloud && generateMutation.error instanceof Error &&
     !(generateMutation.error instanceof LocalFalCancellation)
       ? generateMutation.error.message
       : null);
+  const refusal = rawDisplayError
+    ? refusalPresentation(rawDisplayError, {
+        providerLabel: activeEngine.label,
+        modelLabel: String(activeModelId),
+        level: relaxed.effective,
+        route: { provider: activeEngine.id, modelId: String(cloudModelId) },
+        hasReferences: images.length > 0,
+      })
+    : null;
+  const displayError = refusal?.message ?? rawDisplayError;
 
   // Cost line, per engine. Gemini's rate is the single table in lib/spend/rates.ts —
   // that file names the vendor page it was read from. Pollinations is free.
@@ -824,6 +886,11 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
     // A deliberate press is a fresh start: it drops any queued attempt and hands
     // back the full retry budget.
     autoRetry.reset();
+    const floor = inspectPrompt(prompt, relaxed.levelRef.current);
+    if (floor.blocked && floor.message) {
+      setError(floor.message);
+      return;
+    }
     const hasFeatureDefaultPrompt =
       feature.id === 'image-editing' || feature.id === 'style-transfer';
     if (!prompt.trim() && !hasFeatureDefaultPrompt) {
@@ -847,9 +914,9 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
       try {
         const cloudPrompt = featureImagePrompt(feature.id, prompt, references.length) || 'Edit this image while preserving its subject and composition.';
         const values: Record<string,string|number|boolean> = activeEngine.id === 'fal'
-          ? {aspect_ratio:config.aspectRatio ?? 'auto',resolution:config.imageSize ?? '1K',enable_web_search:Boolean(config.useGoogleSearch)}
+          ? {aspect_ratio:config.aspectRatio ?? 'auto',resolution:config.imageSize ?? '1K',enable_web_search:Boolean(config.useGoogleSearch), ...relaxed.attach()}
           : activeProvider || activeEngine.id === 'pollinations'
-            ? {aspectRatio:config.aspectRatio ?? DEFAULT_ASPECT_RATIO, ...(activeProvider === 'piapi' || providerImageSizes ? {resolution:selectedImageSize} : {})}
+            ? {aspectRatio:config.aspectRatio ?? DEFAULT_ASPECT_RATIO, ...(activeProvider === 'piapi' || providerImageSizes ? {resolution:selectedImageSize} : {}), ...relaxed.attach()}
             : activeEngine.id === 'cloudflare' ? {}
               : {aspectRatio:config.aspectRatio ?? DEFAULT_ASPECT_RATIO,imageSize:selectedImageSize,useGoogleSearch:Boolean(config.useGoogleSearch) && activeGeminiModel.supportsGoogleSearch};
         await cloudWorkspace.submit({modelId:cloudModelId,mediaType:'image',inputMode:cloudInputMode,prompt:cloudPrompt,values},feature.requiresImage ? references.map(reference => reference.file) : [],prompt);
@@ -1194,6 +1261,8 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                       </div>
                     )}
 
+                    <RelaxedFilterControl filter={relaxed} />
+
                     {activeEngine.supportsAspectRatio && (
                     <div>
                       <label htmlFor="image-aspect-ratio" className="block text-sm font-medium mb-2 text-[var(--foreground)]">
@@ -1378,6 +1447,15 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                   className="glass-card p-4 bg-red-500/10 border-red-500/30 text-red-300 whitespace-pre-wrap"
                 >
                   {displayError}
+                  {refusal?.offerTryRelaxed && relaxed.offered && (
+                    <button
+                      type="button"
+                      className="btn-secondary mt-2 text-xs"
+                      onClick={() => relaxed.requestRelaxed(() => generateRef.current())}
+                    >
+                      Try with Relaxed
+                    </button>
+                  )}
                   <RetryCountdown retry={autoRetry.pending} onCancel={autoRetry.cancel} />
                 </motion.div>
               )}

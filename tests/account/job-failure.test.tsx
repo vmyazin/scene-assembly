@@ -63,9 +63,16 @@ it('falls back to the old copy for a job that predates the recorded reason', () 
 
 it('only quotes a provider message alongside a provider refusal', () => {
   // Defence in depth against a detail leaking onto an unrelated row: the column
-  // is only ever written beside `provider_rejected`.
+  // is only ever written beside a provider refusal.
   expect(describeFailure(stopped({failureReason:'transfer_failed',failureDetail:'leaked'})).detail).toBeNull();
   expect(describeFailure(stopped({failureReason:'provider_rejected',failureDetail:'kept'})).detail).toBe('kept');
+  expect(describeFailure(stopped({failureReason:'provider_policy',failureDetail:'prompt violates content policy'})).detail).toBe('prompt violates content policy');
+});
+
+it('does not offer Resume when the provider content filter stopped the job', () => {
+  render(<CloudJobList jobs={[stopped({failureReason:'provider_policy',failureDetail:'prompt violates content policy'})]} onResume={vi.fn()}/>);
+  expect(screen.getByText(/content filter/)).toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Resume existing job'})).not.toBeInTheDocument();
 });
 
 it('never offers resume on a job that is no longer waiting for a decision', () => {

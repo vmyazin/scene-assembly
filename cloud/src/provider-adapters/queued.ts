@@ -8,6 +8,7 @@ import type { GenerationAdapter } from '../providers';
 import { AccountError, type JobRow } from '../jobs';
 import type { Env } from '../security';
 import { resolveConnection } from '../vault';
+import { moderationValueError } from '../../../lib/moderation/values';
 
 export async function credentials(env: Env, job: JobRow) {
   if (!job.connection_id || job.connection_revision === null) throw new Error('Connection unavailable');
@@ -19,6 +20,11 @@ function request(job: JobRow): CloudJobRequest { return JSON.parse(job.request_j
 
 /** Validate before reserving quota or entering the non-retrying submit step. */
 export function validateQueuedRequest(r: CloudJobRequest) {
+  const endpointId = r.provider === 'fal'
+    ? (() => { try { return resolveFalVariant(r.modelId, r.mediaType, r.inputMode as 'text' | 'image' | 'frames').endpointId; } catch { return undefined; } })()
+    : undefined;
+  const moderationError = moderationValueError({ provider: r.provider, modelId: r.modelId, endpointId }, r.values);
+  if (moderationError) throw new AccountError(moderationError, 400, 'invalid_settings');
   const references=r.referenceIds.map(id=>`https://reference.invalid/${id}`);
   if(r.inputMode==='edit'||r.inputMode==='reference'||r.provider==='kie'&&r.inputMode==='frames')throw new AccountError('This reference mode is not supported by the selected provider.',400,'invalid_settings');
   try {

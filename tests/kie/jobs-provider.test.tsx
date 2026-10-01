@@ -87,4 +87,51 @@ describe('KieJobsProvider', () => {
     expect(useKieJobsStore.getState().jobs[0]).toMatchObject({ state: 'fail' });
     expect(getKieJobStatus).not.toHaveBeenCalled();
   });
+
+  it('emits generation_result when polling reaches a content-filter failure', async () => {
+    const plausible = vi.fn();
+    Object.defineProperty(window, 'plausible', { configurable: true, writable: true, value: plausible });
+    getKieJobStatus
+      .mockResolvedValueOnce({ taskId: 'task_filter', state: 'generating', resultUrls: [] })
+      .mockResolvedValueOnce({
+        taskId: 'task_filter',
+        state: 'fail',
+        resultUrls: [],
+        error: 'IMAGE_SAFETY',
+      });
+    useKieJobsStore.getState().upsertJob({
+      id: 'task_filter',
+      taskId: 'task_filter',
+      protocol: 'market',
+      state: 'queuing',
+      resultUrls: [],
+      modelId: 'flux-2-pro',
+      mediaType: 'image',
+      inputMode: 'text',
+      prompt: 'A studio banana',
+      controlValues: { moderation: 'relaxed' },
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      pollAttempt: 0,
+    });
+    render(<KieJobsProvider><div /></KieJobsProvider>);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_500);
+    });
+    expect(plausible.mock.calls.map((call) => call[0])).not.toContain('generation_result');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(plausible.mock.calls.find((call) => call[0] === 'generation_result')?.[1].props).toMatchObject({
+      engine: 'kie',
+      route: 'flux-2-pro',
+      model: 'FLUX.2 Pro',
+      level: 'relaxed',
+      outcome: 'policy',
+      media: 'image',
+    });
+    delete (window as { plausible?: unknown }).plausible;
+  });
 });

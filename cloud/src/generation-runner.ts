@@ -1,7 +1,7 @@
 import { recordAccountSpend } from './spend';
 import type { Env } from './security';
 import { AccountError, finishJob, getJob, recordFailure, setJobState, type JobRow } from './jobs';
-import { captureFailureReason, providerFailureReason, sanitizeProviderMessage } from './failure';
+import { captureFailureReason, providerFailureReason } from './failure';
 import { captureResult, type ProviderResult } from './assets';
 import { adapterFor, type GenerationAdapter, type ProviderHandle } from './providers';
 
@@ -67,7 +67,13 @@ export async function runGeneration(env:Env,jobId:string,step:DurableStep,overri
         // "unsupported aspect ratio" — is the most actionable thing on the row
         // and was being dropped on the floor here. Every adapter already had
         // it; only the runner refused to carry it.
-        if(status.state==='failed'){await finishJob(env,jobId,'failed','provider_failed',{reason:'provider_rejected',detail:sanitizeProviderMessage(status.reason)});return 'failed';}
+        if(status.state==='failed'){
+          // A content-filter sentence is `provider_policy`, which is not
+          // resumable. Anything else the provider refused stays a rejection.
+          const classified=providerFailureReason(Object.assign(new Error(status.reason??''),{status:400}));
+          await finishJob(env,jobId,'failed','provider_failed',classified);
+          return 'failed';
+        }
         if(status.state==='success'){
           if(!status.result)throw new Error('Missing result');
           await env.DB.prepare("UPDATE account_jobs SET result_json = ?, state = 'saving', updated_at = ? WHERE id = ? AND deleted = 0 AND state NOT IN ('saved','failed','cancelled')").bind(JSON.stringify(status.result),Date.now(),jobId).run();

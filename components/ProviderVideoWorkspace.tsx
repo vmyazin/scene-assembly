@@ -1,3 +1,4 @@
+// components/ProviderVideoWorkspace.tsx
 'use client';
 // components/ProviderVideoWorkspace.tsx
 
@@ -19,6 +20,11 @@ import SavedPromptsButton from '@/components/SavedPromptsButton';
 import ModelControls, { type ModelControlField } from '@/components/ModelControls';
 import ConnectionGate, { isGated } from '@/components/ConnectionGate';
 import SubmissionError from '@/components/SubmissionError';
+import RelaxedFilterControl from '@/components/RelaxedFilterControl';
+import { trackGenerationResult, trackGenerationSubmitted, trackQueuedTerminal } from '@/lib/analytics/generation-result';
+import { classifyFailure, refusalPresentation } from '@/lib/moderation/classify';
+import { inspectPrompt } from '@/lib/moderation/floors';
+import { useRelaxedFilter } from '@/lib/moderation/use-relaxed-filter';
 import {
   AUTO_RETRY_DELAY_SECONDS,
   isRetryableFailure,
@@ -49,7 +55,7 @@ import {
 import { downloadFilenameBase } from '@/lib/download-name';
 import { requestExamplePrompt, requestPromptSlug } from '@/lib/micro-ai/browser';
 import { getProviderVideoStatus, pollDelayMs, submitProviderVideo } from '@/lib/providers/browser';
-import { modelsFor } from '@/lib/providers/catalog';
+import { findModel, modelsFor } from '@/lib/providers/catalog';
 import ModelListbox from '@/components/ModelListbox';
 import { PROVIDER_VIDEO_COLUMNS, providerVideoSpecs } from '@/lib/models/listbox-specs';
 import { frameSlotLabel } from '@/lib/providers/frames';
@@ -282,6 +288,13 @@ export default function ProviderVideoWorkspace({
   >({});
   const values =
     valuesByModel[modelKey] ?? carryOverValues(fields, defaultValuesFor(fields), controlValues);
+  const relaxed = useRelaxedFilter({
+    workspaceKey: 'provider-video',
+    provider,
+    modelId: selectedModel?.id ?? '',
+    prompt,
+    hasReferences: references.length > 0 || Boolean(source),
+  });
 
   const [modelSearch, setModelSearch] = useState('');
 
@@ -498,6 +511,17 @@ export default function ProviderVideoWorkspace({
 
   const pollJob = async (job: ProviderJob) => {
     let attempt = job.pollAttempt;
+    const reportTerminal = (succeeded: boolean, error?: string) => {
+      trackQueuedTerminal({
+        engine: provider,
+        route: job.modelId,
+        model: findModel(provider, job.modelId)?.label ?? job.modelId,
+        media: 'video',
+        controlValues: job.controlValues,
+        succeeded,
+        error,
+      });
+    };
     try {
       while (attempt < MAX_POLL_ATTEMPTS) {
         await new Promise((resolve) => setTimeout(resolve, pollDelayMs(attempt)));
@@ -518,6 +542,7 @@ export default function ProviderVideoWorkspace({
         });
 
         if (task.state === 'success') {
+          reportTerminal(true);
           const current = useProviderJobsStore.getState().jobs.find((entry) => entry.id === job.id);
           recordFinishedJob(
             provider,
@@ -539,18 +564,23 @@ export default function ProviderVideoWorkspace({
           return;
         }
         if (task.state === 'error') {
+          reportTerminal(false, task.error);
           toast.error(task.error || `${label} could not finish this video.`);
           return;
         }
       }
+      const timeoutMessage = `${label} is taking longer than expected. Check your provider dashboard for this task.`;
+      reportTerminal(false, timeoutMessage);
       patchJob(job.id, {
         state: 'error',
-        error: `${label} is taking longer than expected. Check your provider dashboard for this task.`,
+        error: timeoutMessage,
       });
     } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Polling failed.';
+      reportTerminal(false, message);
       patchJob(job.id, {
         state: 'error',
-        error: cause instanceof Error ? cause.message : 'Polling failed.',
+        error: message,
       });
     }
   };
@@ -607,6 +637,11 @@ export default function ProviderVideoWorkspace({
       setError('Describe the clip you want before generating.');
       return;
     }
+    const floor = inspectPrompt(prompt, relaxed.levelRef.current);
+    if (floor.blocked && floor.message) {
+      setError(floor.message);
+      return;
+    }
     if (inputMode === 'image' && references.length === 0) {
       setError('Add the image this clip should start from.');
       return;
@@ -634,6 +669,7 @@ export default function ProviderVideoWorkspace({
           ...(isEdit && selectedModel.videoEdit?.draftRate ? {draft:values.draft === true} : {}),
           ...(!isEdit && selectedModel?.supportsAudio ? {audio:values.audio === true} : {}),
           ...(aspectRatio ? { aspectRatio } : {}),
+          ...relaxed.attach(),
         }}, inputMode === 'text' ? [] : references.map(reference => reference.file), prompt.trim(), isEdit ? source?.file : undefined);
         if (isEdit && source) setSubmittedEditJob({epoch: source.epoch, jobId: job.id});
         autoRetry.reset();
@@ -666,6 +702,7 @@ export default function ProviderVideoWorkspace({
         ...(isEdit && selectedModel.videoEdit?.draftRate ? {draft:values.draft === true} : {}),
         ...(!isEdit && selectedModel?.supportsAudio ? {audio:values.audio === true} : {}),
         ...(aspectRatio ? { aspectRatio } : {}),
+        ...relaxed.attach(),
       });
       usePromptLibraryStore.getState().remember(submittedPrompt);
       const jobId = useProviderJobsStore.getState().startJob({
@@ -675,7 +712,7 @@ export default function ProviderVideoWorkspace({
         ...(sourceVideo ? {sourceVideoId: sourceVideo} : {}),
         prompt: submittedPrompt,
         inputMode,
-        controlValues: values,
+        controlValues: { ...values, ...relaxed.attach() },
         state: 'queued',
         urls: [],
       });
@@ -685,12 +722,14 @@ export default function ProviderVideoWorkspace({
       const started = useProviderJobsStore.getState().jobs.find((job) => job.id === jobId);
       if (started) void pollJob(started);
       autoRetry.reset();
+      trackGenerationSubmitted({ engine: provider, route: selectedModel.id, model: selectedModel.label, level: relaxed.levelRef.current, media: 'video' });
       toast.success('Task queued.');
     } catch (submissionError) {
       const message =
         submissionError instanceof Error
           ? submissionError.message
           : `${label} could not start this task.`;
+      trackGenerationResult({ engine: provider, route: selectedModel?.id ?? provider, model: selectedModel?.label ?? provider, level: relaxed.levelRef.current, outcome: classifyFailure(message).kind, media: 'video' });
       setError(message);
       // Sent again only when the request never reached a decision — a bad key or
       // an empty balance would fail identically five more times, and the retry
@@ -702,6 +741,16 @@ export default function ProviderVideoWorkspace({
       if (mountedRef.current) { setIsSubmitting(false); setUploadProgress(null); }
     }
   };
+
+  const refusal = error
+    ? refusalPresentation(error, {
+        providerLabel: label,
+        modelLabel: selectedModel?.label ?? provider,
+        level: relaxed.effective,
+        route: { provider, modelId: selectedModel?.id ?? '' },
+        hasReferences: references.length > 0 || Boolean(source),
+      })
+    : null;
 
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-3.5 sm:space-y-4">
@@ -888,7 +937,7 @@ export default function ProviderVideoWorkspace({
             </section>
           )}
 
-          {fields.length > 0 && (
+          {(fields.length > 0 || relaxed.offered) && (
             <section className="glass-card space-y-3 p-3.5 md:p-4">
               <div>
                 <h3 className="display text-base font-semibold">Model controls</h3>
@@ -903,6 +952,7 @@ export default function ProviderVideoWorkspace({
                   values={values}
                   onChange={updateValues}
                 />
+                <RelaxedFilterControl filter={relaxed} />
               </div>
             </section>
           )}
@@ -973,7 +1023,13 @@ export default function ProviderVideoWorkspace({
             </button>
             <CloudExecutionNotice workspace={cloudWorkspace} />
             {error && (
-              <SubmissionError message={error} retry={autoRetry.pending} onCancelRetry={autoRetry.cancel} />
+              <SubmissionError
+                message={refusal?.message ?? error}
+                retry={autoRetry.pending}
+                onCancelRetry={autoRetry.cancel}
+                offerTryRelaxed={Boolean(refusal?.offerTryRelaxed && relaxed.offered)}
+                onTryRelaxed={() => relaxed.requestRelaxed(() => void submit())}
+              />
             )}
           </>
         }

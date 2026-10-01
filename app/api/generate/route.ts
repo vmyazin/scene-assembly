@@ -8,6 +8,7 @@ import type { KieInputMode, KieProtocol } from '@/lib/kie/types';
 import { fetchAsBase64, getAdapter, isProviderId } from '@/lib/providers';
 import { findModel, resolveModel } from '@/lib/providers/catalog';
 import { ProviderError, type ProviderId } from '@/lib/providers/types';
+import { floorRejection, honoredModeration } from '@/lib/moderation/guard';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object';
@@ -21,7 +22,7 @@ function isProtocol(value: unknown): value is KieProtocol {
   return value === 'market' || value === 'veo';
 }
 
-async function handleKieRequest(body: Record<string, unknown>) {
+async function handleKieRequest(body: Record<string, unknown>, request: NextRequest) {
   try {
     const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
     if (!apiKey) {
@@ -51,6 +52,16 @@ async function handleKieRequest(body: Record<string, unknown>) {
           )
         )
       : {};
+    const blocked = floorRejection(body.prompt);
+    if (blocked) return blocked;
+    const moderation = await honoredModeration({
+      requested: values.moderation,
+      prompt: body.prompt,
+      hasReferences: uploadUrls.length > 0,
+      request,
+    });
+    if (moderation === 'relaxed') values.moderation = 'relaxed';
+    else delete values.moderation;
     const variant = resolveKieVariant(body.modelId, body.inputMode);
     const validationError = validateKieInput(variant, { prompt: body.prompt, uploadUrls });
     if (validationError) {
@@ -80,7 +91,7 @@ async function handleKieRequest(body: Record<string, unknown>) {
  * (Comet's GPT models with base64), so the bytes are resolved here and the
  * response looks exactly like every other engine's to the client.
  */
-async function handleProviderRequest(provider: ProviderId, body: Record<string, unknown>) {
+async function handleProviderRequest(provider: ProviderId, body: Record<string, unknown>, request: NextRequest) {
   const adapter = getAdapter(provider);
   try {
     const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
@@ -104,8 +115,17 @@ async function handleProviderRequest(provider: ProviderId, body: Record<string, 
           .map((image) => (image.startsWith('data:') || image.startsWith('http') ? image : `data:image/png;base64,${image}`))
       : [];
 
+    const blocked = floorRejection(prompt);
+    if (blocked) return blocked;
     const model = resolveModel(provider, 'image', typeof body.model === 'string' ? body.model : undefined);
     const catalogModel = findModel(provider, model);
+    const imagesForLevel = images;
+    const moderation = await honoredModeration({
+      requested: body.moderation,
+      prompt,
+      hasReferences: imagesForLevel.length > 0,
+      request,
+    });
     if (provider === 'piapi' && images.length > 14) return NextResponse.json({success:false,error:'Nano Banana 2 accepts up to 14 references.'},{status:400});
     const result = await adapter.generateImage({
       apiKey,
@@ -121,6 +141,7 @@ async function handleProviderRequest(provider: ProviderId, body: Record<string, 
         : {}),
       aspectRatio: typeof config.aspectRatio === 'string' ? config.aspectRatio : undefined,
       imageInput: catalogModel?.imageInput,
+      ...(moderation === 'relaxed' ? { moderation } : {}),
     });
 
     const media = result.base64
@@ -144,8 +165,8 @@ async function handleProviderRequest(provider: ProviderId, body: Record<string, 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    if (isRecord(body) && body.engine === 'kie') return handleKieRequest(body);
-    if (isRecord(body) && isProviderId(body.engine)) return handleProviderRequest(body.engine, body);
+    if (isRecord(body) && body.engine === 'kie') return handleKieRequest(body, request);
+    if (isRecord(body) && isProviderId(body.engine)) return handleProviderRequest(body.engine, body, request);
     const { engine = 'gemini', prompt, images, config, apiKey, cfAccountId, cfToken, model } = body;
 
     if (!prompt && !images?.length) {
@@ -153,6 +174,10 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Prompt or image is required' },
         { status: 400 }
       );
+    }
+    if (typeof prompt === 'string') {
+      const blocked = floorRejection(prompt);
+      if (blocked) return blocked;
     }
 
     let result;

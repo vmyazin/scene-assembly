@@ -270,6 +270,7 @@ export default function GalleryGrid({
                 </p>
                 <p className="text-[0.65rem] uppercase tracking-wide text-[var(--foreground-subtle)]">
                   {record.provider} · {record.kind}
+                  {record.controlValues?.moderation === 'relaxed' ? ' · Relaxed' : ''}
                   {stored ? '' : ' · link only'}
                 </p>
               </div>

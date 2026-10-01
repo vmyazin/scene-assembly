@@ -14,6 +14,9 @@ import { credentials } from './queued';
 import { inlineReferences, inlineInputs, recoverStagedImage, stageImage } from './media';
 import { isLocal } from '../security';
 import { jobInputIds } from '../../../lib/account/contracts';
+import { moderationValueError } from '../../../lib/moderation/values';
+import { moderationCapability } from '../../../lib/moderation/capabilities';
+import type { ModerationLevel } from '../../../lib/moderation/level';
 
 /** Each rejection names what was wrong. One shared sentence hid which of a
  *  dozen checks fired, which sent people hunting through the wrong settings —
@@ -24,6 +27,8 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
   const invalid = (message: string) => { throw new AccountError(message, 400, 'invalid_settings'); };
   const providerLabel = r.provider === 'runware' ? 'Runware' : r.provider === 'atlas' ? 'Atlas Cloud' : r.provider === 'piapi' ? 'PiAPI' : 'Comet';
   if (!model) return invalid(`${providerLabel} does not list the model "${r.modelId}". Pick a model from the list.`);
+  const moderationError = moderationValueError({ provider: r.provider, modelId: r.modelId }, r.values);
+  if (moderationError) return invalid(moderationError);
   if (model.kind !== r.mediaType) return invalid(`${model.label} makes ${model.kind}s, not ${r.mediaType}s. Pick a ${r.mediaType} model.`);
   if (!model.modes.includes(r.inputMode)) return invalid(`${model.label} does not offer ${describeMode(r.inputMode)}. Pick another model or input mode.`);
   const count = r.referenceIds.length;
@@ -68,10 +73,12 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
   if (aspectRatio !== undefined && !['1:1','16:9','9:16','4:3','3:4','3:2','2:3','21:9'].includes(String(aspectRatio))) return invalid(`"${String(aspectRatio)}" is not an aspect ratio ${model.label} accepts.`);
   if (size !== undefined && (typeof size !== 'string' || !model.sizes?.some(s => s.label === size))) return invalid(`"${String(size)}" is not an output size ${model.label} publishes. Pick one from the list.`);
   if (durationSeconds !== undefined && (typeof durationSeconds !== 'number' || resolveDuration(r.provider, r.modelId, durationSeconds) !== durationSeconds)) return invalid(`${String(durationSeconds)} seconds is not a length ${model.label} publishes. Pick one from the list.`);
+  const relaxable = moderationCapability({ provider: r.provider, modelId: r.modelId }).relaxable;
   const accepted = r.provider === 'piapi'
     ? ['aspectRatio','size','durationSeconds','resolution','audio']
     : r.provider === 'atlas' ? ['aspectRatio','size','durationSeconds','resolution']
       : ['aspectRatio','size','durationSeconds'];
+  if (relaxable) accepted.push('moderation');
   if (model.supportsAudio && !accepted.includes('audio')) accepted.push('audio');
   const stray = Object.keys(r.values).find(key => !accepted.includes(key));
   if (stray) return invalid(`"${stray}" is not a setting this provider accepts.`);
@@ -92,8 +99,9 @@ export const aggregatorAdapter: GenerationAdapter = {
     validateAggregatorRequest(r);
     const provider = r.provider as ProviderId;
     const model = findModel(provider, r.modelId)!;
+    const moderation: ModerationLevel = r.values.moderation === 'relaxed' ? 'relaxed' : 'standard';
     const common = {
-      apiKey: await credentials(env, job), model: r.modelId, prompt: r.prompt,
+      apiKey: await credentials(env, job), model: r.modelId, prompt: r.prompt, moderation,
       images: provider === 'comet' ? (await inlineReferences(env,job)).map(ref=>`data:${ref.mimeType};base64,${ref.data}`) : await inputUrls(env, job), aspectRatio: r.values.aspectRatio as string | undefined,
     };
     if (r.mediaType === 'image') {

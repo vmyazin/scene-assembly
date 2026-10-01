@@ -1,4 +1,6 @@
 // lib/providers/comet.ts
+import { applyProviderModeration } from '../moderation/capabilities';
+import { effectiveModerationLevel } from '../moderation/floors';
 import {
   ProviderError,
   readableProviderError,
@@ -59,20 +61,31 @@ function errorText(payload: { error?: { message?: string } | string }, status: n
 }
 
 export async function cometGenerateImage(request: ImageRequest): Promise<ImageResult> {
-  const response = await fetch(`${COMET_API}/v1/images/generations`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${request.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
+  const images = request.images ?? [];
+  const hasReferences = images.length > 0;
+  const body = applyProviderModeration(
+    {
       model: request.model,
       prompt: request.prompt,
       // Documented constraint: qwen-image rejects n > 1, and one image per run is
       // what this UI asks for anyway.
       n: 1,
       size: sizeString(COMET_IMAGE_DIMENSIONS, request.aspectRatio),
-    }),
+    },
+    {
+      provider: 'comet',
+      modelId: request.model,
+      level: effectiveModerationLevel({ level: request.moderation, prompt: request.prompt, hasReferences }),
+      hasReferences,
+    }
+  );
+  const response = await fetch(`${COMET_API}/v1/images/generations`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${request.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
   });
 
   const payload = (await response.json().catch(() => ({}))) as CometImageEnvelope;

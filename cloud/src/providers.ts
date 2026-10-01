@@ -6,6 +6,7 @@ import type { CloudJobRequest } from '../../lib/account/contracts';
 import { AccountError, type JobRow } from './jobs';
 import { isLocal, type Env } from './security';
 import { writeOutput, type ProviderResult } from './assets';
+import { inspectPrompt } from '../../lib/moderation/floors';
 
 export interface ProviderHandle { id: string; protocol?: string; notBefore?:number; sourceMedia?:string }
 export interface GenerationAdapter {
@@ -60,9 +61,18 @@ export function validateRequest(env:Env,value:unknown):CloudJobRequest {
   if(typeof r.prompt!=='string'||!r.prompt.trim()||r.prompt.length>20000||typeof r.modelId!=='string'||r.modelId.length>256||!['image','video'].includes(r.mediaType||'')||!['text','image','frames','reference','edit'].includes(r.inputMode||'')||!Array.isArray(r.referenceIds)||r.referenceIds.length>16||r.referenceIds.some(id=>typeof id!=='string'||id.length>128)||!r.values||typeof r.values!=='object'||Array.isArray(r.values)||Object.keys(r.values).length>64||Object.values(r.values).some(v=>!['string','boolean','number'].includes(typeof v)||typeof v==='number'&&!Number.isFinite(v)||typeof v==='string'&&v.length>2048))throw new AccountError('Invalid generation settings.',400,'invalid_request');
   if(isLocal(env)&&env.DEV_FAKE_GENERATION==='1'&&r.mediaType!=='image'&&r.inputMode!=='edit')throw new AccountError('The local fixture currently supports image generation only.',409,'local_fixture_mode');
   if(r.sourceVideoId!==undefined&&(typeof r.sourceVideoId!=='string'||!r.sourceVideoId||r.sourceVideoId.length>128||r.inputMode!=='edit'))throw new AccountError('Invalid source video.',400,'invalid_request');
-  adapterFor(env,r.provider!);
-  if(r.provider==='fal'||r.provider==='kie')validateQueuedRequest(r as CloudJobRequest);
-  if(r.provider==='runware'||r.provider==='atlas'||r.provider==='comet'||r.provider==='piapi')validateAggregatorRequest(r as CloudJobRequest);
-  if(r.provider==='gemini'||r.provider==='cloudflare'||r.provider==='pollinations')validateSynchronousRequest(r as CloudJobRequest);
-  return {provider:r.provider!,modelId:r.modelId,mediaType:r.mediaType as 'image'|'video',inputMode:r.inputMode as CloudJobRequest['inputMode'],prompt:r.prompt.trim(),values:r.values,referenceIds:r.referenceIds,...(r.sourceVideoId?{sourceVideoId:r.sourceVideoId}:{})};
+  const floor = inspectPrompt(r.prompt!, r.values!.moderation);
+  if (floor.blocked) throw new AccountError(floor.message ?? 'This request is not allowed.', 400, 'content_floor');
+  // References and a minor mention keep the provider payload on Standard.
+  // The key stays only when the route accepts it; validators reject it elsewhere.
+  const hasReferences = r.referenceIds!.length > 0 || Boolean(r.sourceVideoId);
+  const values = (floor.forceStandard || hasReferences) && r.values!.moderation === 'relaxed'
+    ? { ...r.values!, moderation: 'standard' as const }
+    : r.values!;
+  const request: CloudJobRequest = {provider:r.provider!,modelId:r.modelId!,mediaType:r.mediaType as 'image'|'video',inputMode:r.inputMode as CloudJobRequest['inputMode'],prompt:r.prompt!.trim(),values,referenceIds:r.referenceIds!,...(r.sourceVideoId?{sourceVideoId:r.sourceVideoId}:{})};
+  adapterFor(env,request.provider);
+  if(request.provider==='fal'||request.provider==='kie')validateQueuedRequest(request);
+  if(request.provider==='runware'||request.provider==='atlas'||request.provider==='comet'||request.provider==='piapi')validateAggregatorRequest(request);
+  if(request.provider==='gemini'||request.provider==='cloudflare'||request.provider==='pollinations')validateSynchronousRequest(request);
+  return request;
 }

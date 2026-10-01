@@ -26,6 +26,8 @@ export interface ResultMetaProps {
   finishedAt?: number;
   /** When the result came into being; falls back to `finishedAt`. */
   createdAt?: number;
+  /** True when the run used Relaxed filter. */
+  relaxed?: boolean;
   className?: string;
 }
 
@@ -51,6 +53,7 @@ export default function ResultMeta({
   startedAt,
   finishedAt,
   createdAt,
+  relaxed,
   className = '',
 }: ResultMetaProps) {
   const at = createdAt ?? finishedAt;
@@ -59,6 +62,12 @@ export default function ResultMeta({
 
   const facts: { key: string; node: ReactNode }[] = [];
 
+  if (relaxed) {
+    facts.push({
+      key: 'relaxed',
+      node: <span className="font-medium text-[var(--neon-cyan)]">Relaxed</span>,
+    });
+  }
   if (provider) facts.push({ key: 'provider', node: <span>{provider}</span> });
   if (modelId) {
     facts.push({

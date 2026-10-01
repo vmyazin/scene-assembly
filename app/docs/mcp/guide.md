@@ -199,6 +199,7 @@ An HTTP 401 from the server is not a refusal. It means the connection was discon
 | --- | --- | --- |
 | `invalid_field` | No | An argument is wrong. `field` names it, and `allowed`, `min` or `max` say what it accepts. Fix it, calling `list_models` for the model's settings. |
 | `invalid_settings` | No | The provider's own check rejected the settings. Compare them with `list_models` for that model and mode. |
+| `content_floor` | No | The request violates a content restriction that applies to every filter level. Explain the refusal; do not retry the same request or try another filter level. |
 | `invalid_request` | No | The request was malformed, for example a `cursor` that did not come from `list_assets`. |
 | `invalid_references` | No | The same reference was passed twice, or a file is in the wrong role: images go in `references`, a video goes in `sourceVideo`. |
 | `invalid_token` | No | Scene Assembly built an invalid submission token. This should not happen; report it. |

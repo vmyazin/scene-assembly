@@ -1,3 +1,4 @@
+// tests/generation-interface.test.tsx
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
@@ -644,6 +645,39 @@ describe('GenerationInterface fal image generation', () => {
     expect(document.body.textContent).not.toContain('fal_id:fal_secret');
     expect(JSON.stringify(consoleError.mock.calls)).not.toContain('fal_id:fal_secret');
     expect(JSON.stringify(consoleLog.mock.calls)).not.toContain('fal_id:fal_secret');
+  });
+
+  it('keeps a fal content-policy refusal and offers Relaxed when the filter is on', async () => {
+    process.env.NEXT_PUBLIC_RELAXED_FILTER = 'all';
+    mockedRunFalImage.mockRejectedValue(new Error('IMAGE_SAFETY'));
+    renderInterface();
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A red kite over a green field' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Image' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Try with Relaxed' })).toBeTruthy()
+    );
+    expect(screen.getByText(/blocked this under its content filter/)).toBeTruthy();
+    expect(document.body.textContent).not.toContain('NSFW');
+    expect(document.body.textContent).not.toContain('uncensored');
+    delete process.env.NEXT_PUBLIC_RELAXED_FILTER;
+  });
+
+  it('still hides a policy message that contains the fal key', async () => {
+    process.env.NEXT_PUBLIC_RELAXED_FILTER = 'all';
+    mockedRunFalImage.mockRejectedValue(new Error('IMAGE_SAFETY fal_id:fal_secret'));
+    renderInterface();
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A quiet harbor' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Image' }));
+
+    await waitFor(() =>
+      expect(screen.getByText('Unable to generate this image with fal. Please try again.')).toBeTruthy()
+    );
+    expect(screen.queryByRole('button', { name: 'Try with Relaxed' })).toBeNull();
+    expect(document.body.textContent).not.toContain('fal_id:fal_secret');
+    delete process.env.NEXT_PUBLIC_RELAXED_FILTER;
   });
 
   it.each(['resolve', 'reject'] as const)(

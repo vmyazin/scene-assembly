@@ -34,6 +34,21 @@ describe('account gateway', () => {
     expect(response.headers.getSetCookie()).toHaveLength(2);
     expect(response.headers.get('cache-control')).toBe('no-store');
   });
+  it('forwards a signed-in Relaxed confirmation to the worker', async () => {
+    vi.stubEnv('ACCOUNT_WORKER_ORIGIN', 'https://accounts.test');
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    vi.stubGlobal('fetch', fetcher);
+    const response = await accountGateway(new Request('https://app.test/api/account/relaxed-consent', {
+      method: 'POST',
+      headers: { origin: 'https://app.test', 'content-type': 'application/json', 'X-Account-Id': 'owner' },
+      body: JSON.stringify({ ageConfirmed: true, policyVersion: 1 }),
+    }));
+    expect(response.status).toBe(200);
+    expect(String(fetcher.mock.calls[0][0])).toBe('https://accounts.test/api/account/relaxed-consent');
+    expect(fetcher.mock.calls[0][1].method).toBe('POST');
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ ageConfirmed: true, policyVersion: 1 });
+    expect(fetcher.mock.calls[0][1].headers.get('X-Account-Id')).toBe('owner');
+  });
   it('rejects unlisted routes and actual oversized bodies', async () => {
     vi.stubEnv('ACCOUNT_WORKER_ORIGIN', 'https://accounts.test');
     expect((await accountGateway(new Request('https://app.test/api/account/admin'))).status).toBe(404);

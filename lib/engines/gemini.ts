@@ -103,7 +103,10 @@ export async function geminiGenerate(opts: GeminiOpts): Promise<EngineResult> {
   }
 
   if (!imageData) {
-    const reason = response.candidates?.[0]?.finishReason;
+    const feedback = response as { promptFeedback?: { blockReason?: string } };
+    const reason = [response.candidates?.[0]?.finishReason, feedback.promptFeedback?.blockReason]
+      .filter((part): part is string => typeof part === 'string' && part.length > 0)
+      .join(', ');
     throw new Error(
       'No image data returned from the API. Please try again.' + (reason ? ` (${reason})` : '')
     );

@@ -8,6 +8,7 @@ import type { ImageFormatPreference } from '@/lib/image/policy';
 import { DEFAULT_MODELS } from '@/lib/providers/catalog';
 import type { ProviderId } from '@/lib/providers/types';
 import type { ImportableProvider } from '@/lib/account/key-import';
+import { consentStorageKey, type ModerationLevel, type RelaxedConsent } from '@/lib/moderation/level';
 
 /** Engines that can produce video: the two original ones plus the aggregators. */
 export type VideoEngineId = 'gemini' | 'kie' | 'fal' | ProviderId;
@@ -102,6 +103,14 @@ interface AppState {
    * undone by the very next close.
    */
   accountKeyOptOuts: ImportableProvider[];
+  /**
+   * Relaxed confirmations keyed by account (`account:<id>`) or `guest`.
+   * One shared record let a guest confirmation satisfy a later sign-in, so
+   * the toggle showed Relaxed while the Worker still ran Standard.
+   */
+  relaxedConsents: Record<string, RelaxedConsent>;
+  /** Last choice per workspace (`image`, `fal-video`, `kie`, `provider-video`). */
+  preferredLevel: Record<string, ModerationLevel>;
   /** True once the persisted state has rehydrated on the client. */
   hasHydrated: boolean;
   setApiKey: (key: string) => void;
@@ -122,6 +131,8 @@ interface AppState {
   setConvertLibraryImages: (convert: boolean) => void;
   setUiSoundsEnabled: (enabled: boolean) => void;
   setAccountKeyOptOut: (provider: ImportableProvider, optedOut: boolean) => void;
+  setRelaxedConsent: (consent: RelaxedConsent) => void;
+  setPreferredLevel: (workspace: string, level: ModerationLevel) => void;
   setHasHydrated: (v: boolean) => void;
 }
 
@@ -189,6 +200,8 @@ export const useAppStore = create<AppState>()(
       cometImageModel: DEFAULT_MODELS.comet.image,
       cometVideoModel: DEFAULT_MODELS.comet.video,
       accountKeyOptOuts: [],
+      relaxedConsents: {},
+      preferredLevel: {},
       imageFormat: 'auto',
       convertLibraryImages: true,
       uiSoundsEnabled: true,
@@ -219,6 +232,15 @@ export const useAppStore = create<AppState>()(
               : [...state.accountKeyOptOuts, provider]
             : state.accountKeyOptOuts.filter((id) => id !== provider),
         })),
+      setRelaxedConsent: (consent) =>
+        set((state) => ({
+          relaxedConsents: {
+            ...state.relaxedConsents,
+            [consentStorageKey(consent.accountId)]: consent,
+          },
+        })),
+      setPreferredLevel: (workspace, level) =>
+        set((state) => ({ preferredLevel: { ...state.preferredLevel, [workspace]: level } })),
       setHasHydrated: (v) => set({ hasHydrated: v }),
     }),
     {
@@ -237,13 +259,36 @@ export const useAppStore = create<AppState>()(
        * stored version is a *number* that differs: a payload with no `version`
        * key is skipped, which zustand never produces but a hand-edited
        * localStorage would.
+       *
+       * Version 2 splits `relaxedFilter` into `relaxedConsents` keyed by
+       * account. A version 1 blob still runs this migrate; the chime rename
+       * stays behind `from < 1` so a later mute is not overwritten.
        */
-      version: 1,
+      version: 2,
       migrate: (persisted, from) => {
-        if (from >= 1 || !persisted || typeof persisted !== 'object') return persisted;
-        const legacy = persisted as { chimeOnComplete?: unknown };
-        if (typeof legacy.chimeOnComplete !== 'boolean') return persisted;
-        return { ...(persisted as object), uiSoundsEnabled: legacy.chimeOnComplete };
+        if (!persisted || typeof persisted !== 'object') return persisted;
+        let next = persisted as Record<string, unknown>;
+        if (from < 1 && typeof next.chimeOnComplete === 'boolean') {
+          next = { ...next, uiSoundsEnabled: next.chimeOnComplete };
+        }
+        // A single `relaxedFilter` blob had no account. Treat it as a guest
+        // confirmation so signing in cannot inherit it.
+        if (from < 2) {
+          const consents =
+            next.relaxedConsents && typeof next.relaxedConsents === 'object'
+              ? { ...(next.relaxedConsents as Record<string, RelaxedConsent>) }
+              : {};
+          const legacy = next.relaxedFilter;
+          if (legacy && typeof legacy === 'object') {
+            const record = legacy as RelaxedConsent;
+            const accountId = record.accountId ?? null;
+            const key = consentStorageKey(accountId);
+            if (!consents[key]) consents[key] = { ...record, accountId };
+          }
+          delete next.relaxedFilter;
+          next = { ...next, relaxedConsents: consents };
+        }
+        return next;
       },
       partialize: (s) => ({
         apiKey: s.apiKey,
@@ -271,6 +316,8 @@ export const useAppStore = create<AppState>()(
         cometImageModel: s.cometImageModel,
         cometVideoModel: s.cometVideoModel,
         accountKeyOptOuts: s.accountKeyOptOuts,
+        relaxedConsents: s.relaxedConsents,
+        preferredLevel: s.preferredLevel,
         imageFormat: s.imageFormat,
         convertLibraryImages: s.convertLibraryImages,
         uiSoundsEnabled: s.uiSoundsEnabled,

@@ -12,6 +12,7 @@ import {
   parseBoundedFalJson,
 } from '@/lib/fal/request-body';
 import type { FalInputMode, FalMediaType, FalValue } from '@/lib/fal/types';
+import { floorRejection, honoredModeration } from '@/lib/moderation/guard';
 
 const GENERIC_FAL_ERROR = 'Something went wrong while contacting fal.';
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
@@ -164,11 +165,24 @@ export async function POST(request: NextRequest) {
         return invalidRequest('The selected fal request is not supported.');
       }
 
+      const prompt = submitArgs.prompt.trim();
+      const blocked = floorRejection(prompt);
+      if (blocked) return blocked;
+      const moderation = await honoredModeration({
+        requested: submitArgs.values.moderation,
+        prompt,
+        hasReferences: submitArgs.uploadUrls.length > 0,
+        request,
+      });
+      const values = { ...submitArgs.values };
+      if (moderation === 'relaxed') values.moderation = 'relaxed';
+      else delete values.moderation;
       const { requestId } = await submitFalTask({
         ...submitArgs,
+        values,
         apiKey: submitArgs.apiKey.trim(),
         modelId: submitArgs.modelId.trim(),
-        prompt: submitArgs.prompt.trim(),
+        prompt,
       });
       return NextResponse.json({ success: true, requestId });
     }

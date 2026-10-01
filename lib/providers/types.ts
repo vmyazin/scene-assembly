@@ -1,4 +1,5 @@
 // lib/providers/types.ts
+import type { ModerationLevel } from '../moderation/level';
 /**
  * Shared shapes for the aggregator providers (Runware, Atlas Cloud, CometAPI).
  *
@@ -152,6 +153,11 @@ export interface ImageRequest {
   aspectRatio?: string;
   /** Which input field this model's references belong in. */
   imageInput?: 'seed' | 'reference';
+  /**
+   * Standard omits provider moderation keys. Relaxed asks the adapter to add
+   * the one documented key for this model. References force Standard.
+   */
+  moderation?: ModerationLevel;
 }
 
 export interface ImageResult {
@@ -184,6 +190,8 @@ export interface VideoRequest {
   inputMode?: ProviderMode;
   /** Trusted field resolved from the provider catalog; never taken from browser JSON. */
   inputField?: VideoInputField;
+  /** See ImageRequest. No video route in v1 is relaxable; the field is ignored there. */
+  moderation?: ModerationLevel;
 }
 
 export type TaskState = 'queued' | 'running' | 'success' | 'error';

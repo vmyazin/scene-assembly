@@ -18,6 +18,7 @@ describe('agent schema', () => {
       db.exec(readFileSync(new URL(file, migrations), 'utf8'));
     }
     expect(columns(db, 'account_jobs')).toContain('agent_id');
+    expect(columns(db, 'account_users')).toEqual(expect.arrayContaining(['relaxed_consent_at', 'relaxed_policy_version']));
     expect(columns(db, 'account_agents')).toEqual(expect.arrayContaining(['client_name', 'budget_micros', 'allow_unknown_cost', 'allow_delete', 'revoked_at']));
     expect(columns(db, 'account_agent_authorizations')).toEqual(expect.arrayContaining(['consent_handle', 'description_json', 'decision', 'settings_json', 'finish_hash', 'expires_at']));
     expect(columns(db, 'account_agent_charges')).toEqual(expect.arrayContaining(['job_id', 'estimate_micros', 'actual_micros', 'released', 'at']));
