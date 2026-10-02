@@ -34,7 +34,7 @@ describe('the workspace result panel', () => {
       job('stopped', 'failed', 'Stopped prompt'),
     ], []);
 
-    render(<CloudJobPanel provider="gemini" modelId="gemini-3-pro-image-preview" mediaType="image" inputMode="text" />);
+    render(<CloudJobPanel provider="gemini" mediaType="image" inputMode="text" />);
 
     expect(screen.queryByText('Already saved prompt')).toBeNull();
     expect(screen.queryByText('Saved')).toBeNull();
@@ -46,7 +46,7 @@ describe('the workspace result panel', () => {
     const { epoch } = useAccountStore.getState();
     useAccountStore.getState().applyJobs('owner-1', epoch, [job('running', 'running', 'Still running prompt')], []);
 
-    const { container } = render(<CloudJobPanel provider="gemini" modelId="gemini-3-pro-image-preview" mediaType="image" inputMode="text" />);
+    const { container } = render(<CloudJobPanel provider="gemini" mediaType="image" inputMode="text" />);
 
     expect(container.querySelectorAll('svg.job-wave-field')).toHaveLength(1);
     expect(screen.getByRole('progressbar')).toBeInTheDocument();
@@ -67,7 +67,7 @@ describe('the workspace result panel', () => {
     };
     useAccountStore.getState().applyJobs('owner-1', epoch, [job('gem', 'running', 'Gemini prompt'), other], []);
 
-    render(<CloudJobPanel provider="gemini" modelId="gemini-3-pro-image-preview" mediaType="image" inputMode="text" />);
+    render(<CloudJobPanel provider="gemini" mediaType="image" inputMode="text" />);
 
     expect(screen.getByText('Gemini prompt')).toBeInTheDocument();
     expect(screen.getByText('Kie prompt')).toBeInTheDocument();
@@ -83,10 +83,30 @@ describe('the workspace result panel', () => {
       asset('pasted', { ...request, provider: 'local-test', modelId: 'local', prompt: 'Pasted' }, null),
     ]);
 
-    const { container } = render(<CloudJobPanel provider="gemini" modelId="gemini-3-pro-image-preview" mediaType="image" inputMode="text" />);
+    const { container } = render(<CloudJobPanel provider="gemini" mediaType="image" inputMode="text" />);
 
     const sources = [...container.querySelectorAll('img')].map(img => img.getAttribute('src'));
     expect(sources).toContain('/api/account/assets/generated/content');
     expect(sources).not.toContain('/api/account/assets/pasted/content');
   });
+});
+
+
+it('shares video jobs across models while preserving provider and input-mode scope', () => {
+  const original = {...request,mediaType:'video' as const,prompt:'First model'};
+  const other = {...original,modelId:'gemini-3.1-flash-image-preview',prompt:'Second model'};
+  const excluded = [
+    {...original,provider:'fal' as const},
+    {...original,inputMode:'image' as const},
+    {...original,mediaType:'image' as const},
+  ];
+  useAccountStore.setState({
+    assets:[original,other,...excluded].map((metadata,i)=>({id:`asset-${i}`,jobId:`job-${i}`,kind:metadata.mediaType,mimeType:'image/png',bytes:1,createdAt:i,metadata})),
+    jobs:[original,other,...excluded].map((request,i)=>({...job(`job-${i}`,'running',request.prompt),provider:request.provider,request:{...request,prompt:`Pending ${i}`}})),
+  });
+  const {container} = render(<CloudJobPanel provider="gemini" mediaType="video" inputMode="text"/>);
+  expect(container.querySelector('video')?.getAttribute('src')).toContain('/api/account/assets/asset-0/content');
+  expect(screen.getByText('Pending 0')).toBeInTheDocument();
+  expect(screen.getByText('Pending 1')).toBeInTheDocument();
+  for (const i of [2,3,4]) expect(screen.queryByText(`Pending ${i}`)).toBeNull();
 });

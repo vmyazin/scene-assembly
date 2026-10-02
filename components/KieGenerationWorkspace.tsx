@@ -162,7 +162,7 @@ export default function KieGenerationWorkspace({
     `${model.label} ${model.provider}`.toLowerCase().includes(modelSearch.toLowerCase())
   );
   const matchingJobs = jobs.filter(
-    (job) => job.modelId === selectedModel.id && job.mediaType === mediaType && job.inputMode === inputMode
+    (job) => job.mediaType === mediaType && job.inputMode === inputMode
   );
   const latestJob = matchingJobs[0];
   const resultUrl = latestJob?.state === 'success' ? latestJob.resultUrls[0] : undefined;
@@ -696,15 +696,14 @@ export default function KieGenerationWorkspace({
             )}
           </>
         }
-        results={cloudWorkspace.cloud ? <CloudJobPanel provider="kie" modelId={selectedModel.id} mediaType={mediaType} inputMode={inputMode} onContinueFromFrame={onContinueFromFrame} /> :
+        results={cloudWorkspace.cloud ? <CloudJobPanel provider="kie" mediaType={mediaType} inputMode={inputMode} onContinueFromFrame={onContinueFromFrame} /> :
           <section className="glass-card flex min-h-[420px] flex-col gap-4 p-3.5 md:p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="display text-base font-semibold">Result</h3>
               <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">Results are temporary — download anything you want to keep.</p>
-              {/* The result on screen belongs to this model — the same name the
-                  download is tagged with. */}
-              {latestJob && <p className="mt-0.5 text-xs text-[var(--foreground-subtle)]">{selectedModel.label}</p>}
+              {/* The producing model stays attached when the next-run selection changes. */}
+              {latestJob && <p className="mt-0.5 text-xs text-[var(--foreground-subtle)]">{models.find(model => model.id === latestJob.modelId)?.label ?? latestJob.modelId}</p>}
             </div>
             {latestJob && (
               <span className={`rounded-full border px-2.5 py-1 text-xs ${latestJob.state === 'fail' ? 'border-red-500/30 bg-red-500/10 text-red-300' : latestJob.state === 'success' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/30 bg-amber-500/10 text-amber-200'}`}>

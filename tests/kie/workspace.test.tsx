@@ -37,6 +37,19 @@ describe('Kie generation workspace', () => {
 
   afterEach(() => vi.restoreAllMocks());
 
+  it('keeps images from different models together when selecting another model', () => {
+    for (const [index, modelId] of ['nano-banana-pro', 'gpt-image-1.5'].entries()) {
+      useKieJobsStore.getState().upsertJob({id:`shared-${index}`,taskId:`shared-${index}`,modelId,mediaType:'image',inputMode:'text',protocol:'market',prompt:'Shared image',state:'success',resultUrls:[`https://example.test/image-${index}.png`],createdAt:index,updatedAt:index,pollAttempt:0});
+    }
+    const {container} = render(<KieGenerationWorkspace mediaType="image" inputMode="text" onBack={()=>{}} onOpenConnections={()=>{}}/>);
+    const images = () => [...container.querySelectorAll('img')].map(image=>image.getAttribute('src')).filter(src=>src?.startsWith('https://example.test/image-'));
+    expect(images()).toHaveLength(2);
+    const before = images();
+    const otherModel = within(screen.getByRole('listbox',{name:'Model'})).getAllByRole('option').find(option=>option.getAttribute('aria-selected')==='false')!;
+    fireEvent.click(otherModel);
+    expect(images()).toEqual(before);
+  });
+
   it('renders the compatible video model and its documented dynamic controls', () => {
     render(
       <KieGenerationWorkspace

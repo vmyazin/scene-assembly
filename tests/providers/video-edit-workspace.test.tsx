@@ -1,5 +1,5 @@
 import { findModel } from '@/lib/providers/catalog';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, afterEach, it, expect, vi } from 'vitest';
 import ProviderVideoWorkspace from '@/components/ProviderVideoWorkspace';
 import VideoSourceInput from '@/components/VideoSourceInput';
@@ -80,4 +80,40 @@ it('revalidates an already selected source when switching editing models', async
   expect(await screen.findByText(/Choose a readable clip up to 15/)).toBeInTheDocument();
   expect(uploadRunwareVideo).not.toHaveBeenCalled();
   expect(submitProviderVideo).not.toHaveBeenCalled();
+});
+
+// Both execution paths must survive the same visible model-switch gesture.
+it.each(['browser', 'account'] as const)('keeps the edit result when switching models in %s execution', async execution => {
+  const modelId = 'prunaai:p-video@edit';
+  const url = execution === 'browser' ? 'https://example.test/edit.mp4' : '/api/account/assets/edit-result/content';
+  if (execution === 'browser') {
+    useProviderJobsStore.getState().startJob({provider:'runware',modelId,inputMode:'edit',prompt:'Synthetic edit',state:'success',urls:[url]});
+  } else {
+    useAccountStore.getState().applySession({account:{id:'edit-owner',name:'Test',email:'test@example.test'},googleEnabled:false,localSignIn:true,providers:['runware'],connections:[{id:'connection',provider:'runware',hint:'test',revision:1}]});
+    const request = {provider:'runware' as const,modelId,mediaType:'video' as const,inputMode:'edit' as const,prompt:'Synthetic edit',values:{},referenceIds:[]};
+    useAccountStore.getState().applyJobs('edit-owner', useAccountStore.getState().epoch, [
+      {id:'saved-edit',provider:'runware',request,state:'saved',errorCode:null,createdAt:1,updatedAt:1},
+      {id:'pending-edit',provider:'runware',request:{...request,modelId:'bytedance:seedance@2.5',prompt:'Another model is running'},state:'running',errorCode:null,createdAt:2,updatedAt:2},
+    ], [{id:'edit-result',jobId:'saved-edit',kind:'video',mimeType:'video/mp4',bytes:100,createdAt:1,metadata:request}]);
+  }
+  useAppStore.setState({runwareVideoModel:modelId});
+  const {container} = render(<ProviderVideoWorkspace provider="runware" label="Runware" inputMode="edit" onBack={()=>{}} onOpenConnections={()=>{}}/>);
+  const result = () => container.querySelector('video');
+  expect(result()?.getAttribute('src')).toContain(url);
+  const originalVideo = result();
+  for (const name of [/Seedance 2.5/, /P-Video-Edit/]) {
+    fireEvent.click(screen.getByRole('option',{name}));
+    expect(result()).toBe(originalVideo);
+    expect(result()?.getAttribute('src')).toContain(url);
+    expect(screen.getByText('Download video')).toBeInTheDocument();
+    if (execution === 'browser') {
+      expect(screen.getByRole('heading',{name:'Result'}).closest('section')).toHaveTextContent('P-Video-Edit');
+    } else {
+      expect(screen.getByText('Another model is running')).toBeInTheDocument();
+    }
+  }
+  if (execution === 'account') {
+    act(()=>useAccountStore.getState().applySession({account:{id:'other-owner',name:'Other',email:'other@example.test'},googleEnabled:false,localSignIn:true,providers:['runware'],connections:[]}));
+    expect(result()).toBeNull();
+  }
 });

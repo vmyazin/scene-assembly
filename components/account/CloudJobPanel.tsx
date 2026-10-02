@@ -19,19 +19,15 @@ import CloudJobCardGrid from './CloudJobCardGrid';
 import CloudJobList from './CloudJobList';
 import { AccountSurface } from './AccountSurface';
 import TemporaryAssetNotice from './TemporaryAssetNotice';
-export default function CloudJobPanel({provider,modelId,mediaType,inputMode,onContinueFromFrame,resultJobId}:Pick<CloudJobRequest,'provider'|'modelId'|'mediaType'|'inputMode'> & {onContinueFromFrame?:()=>void;resultJobId?:string}) {
+export default function CloudJobPanel({provider,mediaType,inputMode,onContinueFromFrame}:Pick<CloudJobRequest,'provider'|'mediaType'|'inputMode'> & {onContinueFromFrame?:()=>void}) {
   const allJobs=useAccountStore(state=>state.jobs),allAssets=useAccountStore(state=>state.assets);
   const [error,setError]=useState<string|null>(null),[downloading,setDownloading]=useState<string|null>(null);
-  // Images are one feed across every provider and model, the same as the local
-  // panels (`useImageResultFeed`): a result is a result wherever it came from,
-  // and each card names its source. Video stays scoped to the selection,
-  // because that panel shows a single clip and it has to be the one just asked for.
-  const inScope=(p:string,m:string,mode:string)=>mediaType==='image'||(p===provider&&m===modelId&&mode===inputMode);
-  const jobs=allJobs.filter(j=>j.request.mediaType===mediaType&&inScope(j.provider,j.request.modelId,j.request.inputMode));
-  // Uploads are left out: a pasted reference is kept in the cloud library so it
-  // can be picked again, but it is an input, and the image feed's every-provider
-  // scope would otherwise put it on top of the results as if it were one.
-  const assets=allAssets.filter(a=>a.kind===mediaType&&!isUploadedAsset(a)&&inScope(a.metadata.provider,a.metadata.modelId,a.metadata.inputMode)&&(!resultJobId||a.jobId===resultJobId));
+  // Keep the shared image feed across providers and modes. Video shares results
+  // across models in this workspace: model selection only configures the next run.
+  const inScope=(p:string,mode:string)=>mediaType==='image'||(p===provider&&mode===inputMode);
+  const jobs=allJobs.filter(j=>j.request.mediaType===mediaType&&inScope(j.provider,j.request.inputMode));
+  // References belong in the library, not in the generated-output feed.
+  const assets=allAssets.filter(a=>a.kind===mediaType&&!isUploadedAsset(a)&&inScope(a.metadata.provider,a.metadata.inputMode));
   const pending=useRef(false),[busy,setBusy]=useState(false);
   // `isActiveJob` rather than a fourth copy of the state list: the timer needs
   // the running job itself, and two answers to "is this in flight" on one line

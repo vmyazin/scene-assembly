@@ -324,6 +324,13 @@
       "request": "launch",
       "command": "ACCOUNT_WORKER_PORT=8867 DEV_FAKE_GENERATION=1 npm run dev -- --port 3167",
       "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Shared model results smoke test",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "ACCOUNT_WORKER_PORT=8867 node scripts/dev-account-services.mjs --port 3167",
+      "cwd": "${workspaceFolder}"
     }
   ]
 }

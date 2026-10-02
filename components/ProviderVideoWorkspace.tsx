@@ -267,7 +267,6 @@ export default function ProviderVideoWorkspace({
   const epoch = useAccountStore(state => state.epoch);
   const [selectedSource, setSelectedSource] = useState<SourceVideo | null>(null);
   const source = selectedSource?.epoch === epoch ? selectedSource : null;
-  const [submittedEditJob, setSubmittedEditJob] = useState<{jobId: string; epoch: number} | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const uploadedSource = useRef<{file: File; key: string; id: string} | null>(null);
   const submitFlight = useRef(false);
@@ -332,7 +331,7 @@ export default function ProviderVideoWorkspace({
   const patchJob = useProviderJobsStore((state) => state.patchJob);
   const latestJob = allJobs.find(
     (job) =>
-      job.provider === provider && job.modelId === selectedModel?.id && job.inputMode === inputMode
+      job.provider === provider && job.inputMode === inputMode
   );
   const resultUrl = latestJob?.state === 'success' ? latestJob.urls[0] : undefined;
 
@@ -663,7 +662,7 @@ export default function ProviderVideoWorkspace({
     try {
       if (isEdit && source && selectedModel.videoEdit) validateEditSource(source, selectedModel.videoEdit);
       if (cloudWorkspace.cloud) {
-        const job = await cloudWorkspace.submit({modelId:selectedModel.id, mediaType:'video', inputMode, prompt:prompt.trim(), values:{
+        await cloudWorkspace.submit({modelId:selectedModel.id, mediaType:'video', inputMode, prompt:prompt.trim(), values:{
           ...(!isEdit && typeof values.duration === 'number' ? {durationSeconds:values.duration} : {}),
           ...((!isEdit || selectedModel.videoEdit?.sizes.length) && typeof values.size === 'string' ? {size:values.size} : {}),
           ...(isEdit && selectedModel.videoEdit?.draftRate ? {draft:values.draft === true} : {}),
@@ -671,7 +670,6 @@ export default function ProviderVideoWorkspace({
           ...(aspectRatio ? { aspectRatio } : {}),
           ...relaxed.attach(),
         }}, inputMode === 'text' ? [] : references.map(reference => reference.file), prompt.trim(), isEdit ? source?.file : undefined);
-        if (isEdit && source) setSubmittedEditJob({epoch: source.epoch, jobId: job.id});
         autoRetry.reset();
         return;
       }
@@ -1034,7 +1032,7 @@ export default function ProviderVideoWorkspace({
           </>
         }
         results={<>
-          {cloudWorkspace.cloud ? <CloudJobPanel provider={provider} modelId={selectedModel?.id ?? ''} mediaType="video" inputMode={inputMode} resultJobId={isEdit && submittedEditJob?.epoch === epoch ? submittedEditJob.jobId : undefined} onContinueFromFrame={onContinueFromFrame} /> :
+          {cloudWorkspace.cloud ? <CloudJobPanel provider={provider} mediaType="video" inputMode={inputMode} onContinueFromFrame={onContinueFromFrame} /> :
           <section className="glass-card flex min-h-[420px] flex-col gap-4 p-3.5 md:p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -1042,10 +1040,9 @@ export default function ProviderVideoWorkspace({
               <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">
                 Results are temporary — download anything you want to keep.
               </p>
-              {/* The result on screen belongs to this model — the same name the
-                  download is tagged with. */}
-              {latestJob && selectedModel && (
-                <p className="mt-0.5 text-xs text-[var(--foreground-subtle)]">{selectedModel.label}</p>
+              {/* Read the producing model from the result, not the next-run selection. */}
+              {latestJob && (
+                <p className="mt-0.5 text-xs text-[var(--foreground-subtle)]">{findModel(latestJob.provider, latestJob.modelId)?.label ?? latestJob.modelId}</p>
               )}
             </div>
             {latestJob && (

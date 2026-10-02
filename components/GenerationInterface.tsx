@@ -1463,7 +1463,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
           </>
         }
         results={
-          cloudWorkspace.cloud ? <CloudJobPanel provider={activeEngine.id} modelId={cloudModelId} mediaType="image" inputMode={cloudInputMode} /> : <motion.div
+          cloudWorkspace.cloud ? <CloudJobPanel provider={activeEngine.id} mediaType="image" inputMode={cloudInputMode} /> : <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             className="glass-card p-4 space-y-3"
