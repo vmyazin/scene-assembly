@@ -331,6 +331,13 @@
       "request": "launch",
       "command": "ACCOUNT_WORKER_PORT=8867 node scripts/dev-account-services.mjs --port 3167",
       "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Compact video directions A",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "ACCOUNT_WORKER_PORT=8895 pnpm dev -- --port 3275",
+      "cwd": "${workspaceFolder}"
     }
   ]
 }

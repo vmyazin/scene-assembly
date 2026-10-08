@@ -1,12 +1,11 @@
 // components/VideoWorkspace.tsx
 'use client';
 
-import { type StaticImageData } from 'next/image';
 import { ImagePlus, MoveRight, ScanFace, Type } from 'lucide-react';
 import FalGenerationWorkspace from '@/components/FalGenerationWorkspace';
 import GeminiVideoWorkspace from '@/components/GeminiVideoWorkspace';
 import KieGenerationWorkspace from '@/components/KieGenerationWorkspace';
-import MediaCard from '@/components/MediaCard';
+import VideoDirectionSelector, { type VideoDirection } from '@/components/VideoDirectionSelector';
 import ProviderSelector, { type VideoProvider } from '@/components/ProviderSelector';
 import ProviderVideoWorkspace from '@/components/ProviderVideoWorkspace';
 import type { EngineId } from '@/lib/engines/registry';
@@ -35,26 +34,9 @@ interface VideoWorkspaceProps {
   onOpenConnections: (provider?: EngineId) => void;
 }
 
-/**
- * First-and-last-frame runs are a fal-only flow, so the third mode is offered
- * only while fal is the selected provider.
- *
- * The thumbnails illustrate what each mode does: one cat drawn a dozen ways for
- * the open field a prompt gives you, one cat mid-leap across consecutive frames
- * for a still put into motion, and one cat bookended by a crouch and a landing
- * with the jump between them left as a ghosted arc.
- */
-const MODES: ReadonlyArray<{
-  id: ProviderMode;
-  label: string;
-  blurb: string;
-  /** What the mode needs before it can run, shown as the card's badge. */
-  requires: string;
-  icon: typeof Type;
-  thumbnail?: StaticImageData | string;
-  /** Provider-only modes stay hidden when the selected engine cannot run them. */
-  needsProviderSupport?: boolean;
-}> = [
+// The selector and its preview share these fixtures; provider capabilities below
+// still decide which directions can be offered before a submission is possible.
+const MODES: readonly VideoDirection[] = [
   {
     id: 'text',
     label: 'Text to video',
@@ -163,49 +145,13 @@ export default function VideoWorkspace({
         </div>
       </div>
 
-      {/* Input mode — the same card the landing page uses for features, at the
-          same widths a 1/2 and 1/3 grid track would give it, so a card is the
-          same size wherever you meet it. Laid out as centered flex rather than
-          a grid so that hiding the fal-only mode leaves the two remaining cards
-          centered instead of parked against the left edge.
+      <VideoDirectionSelector
+        key={videoEngine}
+        modes={modes}
+        value={activeMode}
+        onChange={onInputModeChange}
+      />
 
-          The widths track FeatureSelector's grid: 2-up at sm, with either
-          three or four equal cards at desktop depending on provider support. */}
-      <div
-        className={`flex w-full flex-wrap justify-center gap-3 *:w-full sm:gap-4 sm:*:w-[calc(50%-8px)] ${modes.length === 4 ? 'lg:*:w-[calc(25%-12px)]' : 'md:*:w-[calc(33.333%-11px)]'}`}
-      >
-        {modes.map((mode) => {
-          const Icon = mode.icon;
-          return (
-            <MediaCard
-              key={mode.id}
-              accent="purple"
-              selected={activeMode === mode.id}
-              onClick={() => onInputModeChange(mode.id)}
-              title={mode.label}
-              description={mode.blurb}
-              thumbnail={mode.thumbnail}
-              badges={
-                <>
-                  <span className="whitespace-nowrap inline-flex items-center gap-1.5 rounded-full border border-[var(--neon-purple)]/40 bg-[var(--neon-purple)]/10 px-2.5 py-1 text-[0.7rem] font-medium text-[var(--neon-purple)]">
-                    <Icon size={12} />
-                    {mode.requires}
-                  </span>
-
-                  {mode.needsProviderSupport && (
-                    <span className="whitespace-nowrap inline-flex items-center rounded-full border border-[var(--border)] px-2.5 py-1 text-[0.7rem] font-medium text-[var(--foreground-muted)]">
-                      Not on every provider
-                    </span>
-                  )}
-                </>
-              }
-            />
-          );
-        })}
-      </div>
-
-      {/* Free-standing like the mode grid above, so the two choice rows share
-          one left edge instead of one sitting inset inside a panel. */}
       <ProviderSelector value={videoEngine} onChange={selectEngine} />
 
       {activeProvider ? (

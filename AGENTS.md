@@ -46,6 +46,7 @@
   ledger, because vendor balances and totals include activity outside this app.
 
 - **Results when switching models** → first read `docs/codex/specs/2026-10-01-shared-model-results.md`. Keep the existing shared image feed; scope video results by provider and input mode, never by the selected model or most recent edit submission, because selection configures the next run and must not hide existing outputs. Read result labels and filenames from the producing job.
+- **Video direction selection** → first read `docs/codex/specs/2026-10-02-compact-video-directions.md`. Use `VideoDirectionSelector` for the compact choices and delayed image/details preview; keep capabilities and selection in `VideoWorkspace`, because hover must never change a mode or bypass provider filtering.
 
 - **Generate button placement** → first read `docs/codex/specs/2026-09-11-generate-under-prompt.md`. Use `GenerationWorkspaceLayout`’s `actions` slot for the button, cost, progress, execution notice and submission/retry feedback, because the shared prompt → actions → results order keeps submission next to the text being edited at every screen width. Setup holds only model, media and controls.
 
