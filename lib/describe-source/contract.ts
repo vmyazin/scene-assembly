@@ -2,12 +2,24 @@
 
 import { DESCRIBE_ERRORS } from '@/lib/describe-source/errors';
 
-/** JSON body cap, under the platform request limit once base64 is wrapped in JSON. */
+/** Decoded media cap. The JSON envelope around it is `MAX_DESCRIBE_JSON_BYTES`. */
 export const MAX_DESCRIBE_BYTES = 2_500_000;
-export const MAX_DESCRIBE_PARTS = 4;
+/**
+ * Base64 expands the decoded cap by 4/3, plus the JSON keys. Checked on
+ * `Content-Length` before the body is parsed, so a huge request never becomes
+ * a vision call.
+ */
+export const MAX_DESCRIBE_JSON_BYTES = 4_000_000;
+/**
+ * One part per source, and up to three stills for a clip. Seedance reference
+ * mode sends five images, and edit mode sends a clip plus five images, so the
+ * cap is eight: three stills and five images, with no source dropped on the
+ * floor.
+ */
+export const MAX_DESCRIBE_PARTS = 8;
 
-const IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
-const VIDEO_MIME = new Set(['video/mp4', 'video/webm', 'video/quicktime']);
+export const DESCRIBE_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+export const DESCRIBE_VIDEO_MIME = new Set(['video/mp4', 'video/webm', 'video/quicktime']);
 
 export interface DescribePart {
   mimeType: string;
@@ -60,7 +72,7 @@ export function parseDescribeRequest(body: unknown): ParseResult {
       return { ok: false, status: 400, error: DESCRIBE_ERRORS.invalid };
     }
     const mimeType = raw.mimeType.toLowerCase();
-    if (!IMAGE_MIME.has(mimeType) && !VIDEO_MIME.has(mimeType)) {
+    if (!DESCRIBE_IMAGE_MIME.has(mimeType) && !DESCRIBE_VIDEO_MIME.has(mimeType)) {
       return { ok: false, status: 400, error: DESCRIBE_ERRORS.unsupported };
     }
     const bytes = decodedByteLength(raw.data);

@@ -340,6 +340,9 @@ export default function ProviderVideoWorkspace({
   const mountedRef = useRef(true);
   const isFrames = inputMode === 'frames';
   const describeSources = useMemo(() => {
+    // Text mode submits no media. A reference left in the draft from Image
+    // mode would otherwise be described and then ignored by the run.
+    if (inputMode === 'text') return [];
     const items: { file: File; label: string }[] = [];
     if (source) items.push({ file: source.file, label: 'Source video' });
     references.forEach((reference, index) => {
@@ -349,7 +352,7 @@ export default function ProviderVideoWorkspace({
       });
     });
     return items;
-  }, [source, references, isFrames]);
+  }, [inputMode, source, references, isFrames]);
   const isReference = inputMode === 'reference';
   const imageReferencesOnly = isReference || isEdit;
   const inputCapability = inputMode === 'text' ? undefined : selectedModel?.videoInputs?.[inputMode];
@@ -1011,6 +1014,7 @@ export default function ProviderVideoWorkspace({
                 <DescribeSourceButton
                   sources={describeSources}
                   apiKey={geminiApiKey}
+                  prompt={prompt}
                   disabled={isGeneratingExample}
                   onPrompt={(next) => {
                     setDescribeError(null);
@@ -1019,6 +1023,9 @@ export default function ProviderVideoWorkspace({
                   onError={(message) => {
                     setDescribeError(message);
                     toast.error(message);
+                  }}
+                  onNotice={(message) => {
+                    toast.message(message);
                   }}
                   onBusyChange={(busy) => {
                     setIsDescribing(busy);

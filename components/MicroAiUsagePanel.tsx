@@ -4,7 +4,7 @@
 import { Check, Cpu } from 'lucide-react';
 
 import { formatUsd } from '@/lib/spend/format';
-import { MICRO_AI_MODELS, PRICING_NOTE } from '@/lib/micro-ai/models';
+import { PRICING_NOTE } from '@/lib/micro-ai/models';
 import { useMicroAiUsageStore } from '@/store/useMicroAiUsageStore';
 
 /**
@@ -15,12 +15,10 @@ import { useMicroAiUsageStore } from '@/store/useMicroAiUsageStore';
 export default function MicroAiUsagePanel() {
   const requests = useMicroAiUsageStore((state) => state.requests);
   const costUsd = useMicroAiUsageStore((state) => state.costUsd);
-  const lastModel = useMicroAiUsageStore((state) => state.lastModel);
 
   // Nothing is probed on open: the tier proves itself by serving a request, so
   // the badge appears once one has been billed to it this session.
   const active = requests > 0;
-  const modelLabel = (lastModel || MICRO_AI_MODELS.micro.id).split('/').pop();
 
   return (
     <section className="space-y-2.5">
@@ -34,7 +32,7 @@ export default function MicroAiUsagePanel() {
       </h3>
       <p className="field-hint">
         {active
-          ? `Filenames, example prompts, and source descriptions are running on ${modelLabel} at no cost to you.`
+          ? 'Filenames, example prompts, and source descriptions are running on the shared fast tier at no cost to you.'
           : 'Filenames, example prompts, and source descriptions run on a shared model, or on your Gemini key.'}
       </p>
 

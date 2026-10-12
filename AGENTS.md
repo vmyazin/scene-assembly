@@ -52,12 +52,18 @@
 
 - **Describe a selected source into the prompt** → `lib/describe-source/` and
   `POST /api/describe-source`. The button is `DescribeSourceButton` on the
-  provider video prompt. It sends the selected image, or a short source video,
-  to a vision model and writes the paragraph into the draft prompt, which stays
-  editable before Generate. The shared text tier cannot see pixels, so this
-  uses `VISION_MODEL` when `HF_TOKEN` is set and otherwise the visitor's Gemini
-  key. A clip that will not fit in the request is sampled into ordered stills
-  in `sampleVideoStills`, because a 100MB source cannot be the JSON body.
+  provider video prompt. It sends the selected image or source video to a
+  vision model and writes the paragraph into the draft prompt, which stays
+  editable before Generate. Text mode builds an empty source list, the same
+  way submit does, because a reference left in the draft from another mode is
+  not part of that run. The shared text tier cannot see pixels, so this uses
+  `VISION_MODEL` when `HF_TOKEN` is set and otherwise the visitor's Gemini key.
+  A short clip is sent whole only when a Gemini key will watch it; otherwise,
+  and for any clip that will not fit, `sampleVideoStills` turns it into ordered
+  stills, because the shared vision model only reads images and a 100MB source
+  cannot be the JSON body. The route rate-limits per address and checks
+  `Content-Length` before parsing, because this call can spend `HF_TOKEN` on
+  megabytes of vision input.
 
 - **Seedance 2.5 draft, then finalize** → `lib/providers/seedance-draft.ts`.
   `settings.draft` is a 480p preview that returns `outputs.draftId`; finalize sends

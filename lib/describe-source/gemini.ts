@@ -50,7 +50,12 @@ export async function describeWithGemini(
     config: {
       systemInstruction: task.system,
       temperature: task.temperature,
-      maxOutputTokens: task.maxTokens,
+      // Thinking tokens share this budget. gemini-2.5-flash thinks unless the
+      // budget is 0, and a thought can consume all 400 tokens before a single
+      // word of the paragraph is written. The extra room is for a model that
+      // still spends a few.
+      maxOutputTokens: Math.max(task.maxTokens, 1024),
+      thinkingConfig: { thinkingBudget: 0 },
     },
   });
 

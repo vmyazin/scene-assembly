@@ -12,7 +12,7 @@ import { useMicroAiUsageStore } from '@/store/useMicroAiUsageStore';
 
 export type MicroTaskName = 'slug' | 'example' | 'describe';
 
-function isUsage(value: unknown): value is MicroAiUsage {
+export function isUsage(value: unknown): value is MicroAiUsage {
   const usage = value as MicroAiUsage | undefined;
   return (
     !!usage &&
@@ -55,14 +55,19 @@ function reportMicroTask(task: MicroTaskName, envelope: MicroAiEnvelope) {
   }
 }
 
-function settle(task: MicroTaskName, data: Partial<MicroAiEnvelope>) {
+export function settle(
+  task: MicroTaskName,
+  data: Partial<MicroAiEnvelope> & { usageModel?: string }
+) {
   const envelope: MicroAiEnvelope = {
     source: data.source ?? 'deterministic',
     model: data.model,
     usage: isUsage(data.usage) ? data.usage : undefined,
   };
+  // `usageModel` is the model that was billed when it is not the model that
+  // wrote the prompt — a shared-tier attempt that failed, then Gemini.
   if (envelope.usage) {
-    useMicroAiUsageStore.getState().record(envelope.usage, envelope.model ?? '');
+    useMicroAiUsageStore.getState().record(envelope.usage, data.usageModel || envelope.model || '');
   }
   reportMicroTask(task, envelope);
 }

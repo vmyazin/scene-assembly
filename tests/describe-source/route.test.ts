@@ -13,7 +13,9 @@ vi.mock('@google/genai', () => ({
 }));
 
 import { POST } from '@/app/api/describe-source/route';
+import { MAX_DESCRIBE_JSON_BYTES } from '@/lib/describe-source/contract';
 import { DESCRIBE_ERRORS } from '@/lib/describe-source/errors';
+import { DESCRIBE_RATE_LIMIT, resetDescribeRateLimit } from '@/lib/describe-source/limit';
 import { GEMINI_VISION_MODEL, VISION_MODEL } from '@/lib/micro-ai/models';
 
 import { DESCRIPTION } from './paragraph';
@@ -44,6 +46,7 @@ describe('POST /api/describe-source', () => {
   beforeEach(() => {
     delete process.env.HF_TOKEN;
     generateContent.mockReset();
+    resetDescribeRateLimit();
   });
 
   afterEach(() => {
@@ -94,10 +97,12 @@ describe('POST /api/describe-source', () => {
     const call = generateContent.mock.calls[0][0] as {
       model: string;
       contents: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }>;
-      config: { systemInstruction: string };
+      config: { systemInstruction: string; maxOutputTokens: number; thinkingConfig?: { thinkingBudget?: number } };
     };
     expect(call.model).toBe(GEMINI_VISION_MODEL);
     expect(call.config.systemInstruction).not.toContain('AQIDBA==');
+    expect(call.config.thinkingConfig).toEqual({ thinkingBudget: 0 });
+    expect(call.config.maxOutputTokens).toBeGreaterThanOrEqual(1024);
     expect(call.contents[1].inlineData).toEqual({ mimeType: 'image/png', data: 'AQIDBA==' });
   });
 
@@ -120,6 +125,82 @@ describe('POST /api/describe-source', () => {
       contents: Array<{ inlineData?: { mimeType: string } }>;
     };
     expect(call.contents[1].inlineData?.mimeType).toBe('video/mp4');
+  });
+
+  it('says try again, and reports the tokens, when the shared tier ran and failed', async () => {
+    process.env.HF_TOKEN = 'hf_token';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(microCompletion('Sure, here is a caption.')));
+
+    const response = await POST(request(imageBody()));
+    const body = await response.json();
+
+    expect(response.status).toBe(502);
+    expect(body.error).toBe(DESCRIBE_ERRORS.emptyModel);
+    expect(body.error).not.toBe(DESCRIBE_ERRORS.noKey);
+    expect(body.usage).toEqual({
+      promptTokens: 200,
+      completionTokens: 80,
+      costUsd: (200 / 1_000_000) * 0.2 + (80 / 1_000_000) * 0.2,
+    });
+    expect(body.model).toBe(VISION_MODEL.id);
+    expect(generateContent).not.toHaveBeenCalled();
+  });
+
+  it('tries Gemini after a billed miss and still returns what the shared tier spent', async () => {
+    process.env.HF_TOKEN = 'hf_token';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(microCompletion('Sure, here is a caption.')));
+    generateContent.mockResolvedValue({
+      candidates: [{ content: { parts: [{ text: DESCRIPTION }] } }],
+    });
+
+    const response = await POST(request(imageBody('gemini_key')));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.source).toBe('gemini');
+    expect(body.prompt).toBe(DESCRIPTION);
+    expect(body.usageModel).toBe(VISION_MODEL.id);
+    expect(body.usage.promptTokens).toBe(200);
+    expect(generateContent).toHaveBeenCalled();
+  });
+
+  it('reports a provider failure as a retry, not a missing key', async () => {
+    process.env.HF_TOKEN = 'hf_token';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('nope', { status: 503 })));
+
+    const response = await POST(request(imageBody()));
+
+    expect(response.status).toBe(502);
+    expect((await response.json()).error).toBe(DESCRIBE_ERRORS.failed);
+    expect(generateContent).not.toHaveBeenCalled();
+  });
+
+  it('rejects a declared body over the cap before reading it', async () => {
+    const json = vi.fn();
+    const response = await POST({
+      headers: new Headers({ 'content-length': String(MAX_DESCRIBE_JSON_BYTES + 1) }),
+      json,
+    } as unknown as NextRequest);
+
+    expect(response.status).toBe(413);
+    expect((await response.json()).error).toBe(DESCRIBE_ERRORS.tooLarge);
+    expect(json).not.toHaveBeenCalled();
+  });
+
+  it('stops a burst from one address before reading another body', async () => {
+    const headers = new Headers({ 'x-real-ip': '203.0.113.8' });
+    for (let attempt = 0; attempt < DESCRIBE_RATE_LIMIT; attempt += 1) {
+      const response = await POST({ headers, json: async () => imageBody() } as unknown as NextRequest);
+      expect(response.status).not.toBe(429);
+    }
+
+    const json = vi.fn();
+    const blocked = await POST({ headers, json } as unknown as NextRequest);
+
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get('Retry-After')).toBeTruthy();
+    expect((await blocked.json()).error).toBe(DESCRIBE_ERRORS.busy);
+    expect(json).not.toHaveBeenCalled();
   });
 
   it('asks for a Gemini key when nothing can see the source', async () => {

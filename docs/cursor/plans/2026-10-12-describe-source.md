@@ -1,5 +1,19 @@
 # Describe source
 
+## Follow-up decision (2026-10-12, review)
+
+Overrides the "short clip travels whole" and "four parts, then stop" notes:
+
+- Text mode describes nothing, even if the draft still holds an image.
+- A short clip is video only when a Gemini key will watch it. Otherwise it is stills.
+- Parts are re-encoded to fit `MAX_DESCRIBE_BYTES` before the request is refused.
+- The part cap is 8. Every source gets a slot; spare slots are extra stills.
+- A late description is dropped when the prompt or the source changed, and unmount aborts the fetch.
+- Gemini sets `thinkingBudget: 0` and raises `maxOutputTokens`.
+- The route rate-limits and checks `Content-Length` before `json()`.
+- A shared-tier failure says try again and still carries usage. It is not a missing-key error.
+- The usage panel does not name one model for every helper.
+
 ## File map
 
 - `lib/describe-source/contract.ts` — request limits and parsing

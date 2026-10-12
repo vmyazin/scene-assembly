@@ -126,11 +126,18 @@ function releaseVideo(video: HTMLVideoElement) {
   }
 }
 
-function drawToPng(video: HTMLVideoElement): Promise<Blob> {
-  const width = video.videoWidth;
-  const height = video.videoHeight;
-  if (!width || !height) throw new Error(FRAME_EXTRACTION_ERROR);
+function drawFrame(
+  video: HTMLVideoElement,
+  format: { mimeType: 'image/png' | 'image/jpeg'; quality?: number; maxEdge?: number }
+): Promise<Blob> {
+  const sourceWidth = video.videoWidth;
+  const sourceHeight = video.videoHeight;
+  if (!sourceWidth || !sourceHeight) throw new Error(FRAME_EXTRACTION_ERROR);
 
+  const maxEdge = format.maxEdge ?? Number.POSITIVE_INFINITY;
+  const scale = Math.min(1, maxEdge / Math.max(sourceWidth, sourceHeight));
+  const width = Math.max(1, Math.round(sourceWidth * scale));
+  const height = Math.max(1, Math.round(sourceHeight * scale));
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -142,8 +149,12 @@ function drawToPng(video: HTMLVideoElement): Promise<Blob> {
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
       else reject(new Error(FRAME_EXTRACTION_ERROR));
-    }, 'image/png');
+    }, format.mimeType, format.quality);
   });
+}
+
+function drawToPng(video: HTMLVideoElement): Promise<Blob> {
+  return drawFrame(video, { mimeType: 'image/png' });
 }
 
 /**
@@ -258,26 +269,7 @@ export function frameTimeLabel(seconds: number): string {
 }
 
 function drawToJpeg(video: HTMLVideoElement): Promise<Blob> {
-  const sourceWidth = video.videoWidth;
-  const sourceHeight = video.videoHeight;
-  if (!sourceWidth || !sourceHeight) throw new Error(FRAME_EXTRACTION_ERROR);
-
-  const scale = Math.min(1, DESCRIPTION_STILL_MAX_EDGE / Math.max(sourceWidth, sourceHeight));
-  const width = Math.max(1, Math.round(sourceWidth * scale));
-  const height = Math.max(1, Math.round(sourceHeight * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext('2d');
-  if (!context) throw new Error(FRAME_EXTRACTION_ERROR);
-  context.drawImage(video, 0, 0, width, height);
-
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) resolve(blob);
-      else reject(new Error(FRAME_EXTRACTION_ERROR));
-    }, 'image/jpeg', 0.72);
-  });
+  return drawFrame(video, { mimeType: 'image/jpeg', quality: 0.72, maxEdge: DESCRIPTION_STILL_MAX_EDGE });
 }
 
 /**

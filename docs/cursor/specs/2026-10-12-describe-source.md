@@ -2,6 +2,10 @@
 
 Status: Approved design
 
+## Follow-up decision (2026-10-12)
+
+Text mode is not a selected source. A short clip is inline video only for Gemini; the shared tier always receives stills. The part budget is shared across sources, and bytes over the cap are shrunk before a refusal. A description does not replace a prompt or a source that changed while it was running.
+
 ## Context
 
 A Seedance draft is only as good as the prompt that starts it, and a source

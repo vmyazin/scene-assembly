@@ -11,7 +11,7 @@ import { useProviderJobsStore } from '@/store/useProviderJobsStore';
 
 import { DESCRIPTION } from './paragraph';
 
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() } }));
 vi.mock('@/lib/describe-source/browser', () => ({
   requestSourceDescription: vi.fn(),
 }));
@@ -45,6 +45,17 @@ describe('Describe source', () => {
     expect(screen.getByRole('button', { name: 'Describe source' })).toBeDisabled();
   });
 
+  it('does not describe an image text mode will not send', () => {
+    const file = new File(['still'], 'still.png', { type: 'image/png' });
+    useDraftStore.setState({
+      prompt: '',
+      references: [{ id: 'ref-1', file, previewUrl: 'blob:still' }],
+      controlValues: {},
+    });
+    renderWorkspace('text');
+    expect(screen.getByRole('button', { name: 'Describe source' })).toBeDisabled();
+  });
+
   it('fills the Seedance prompt from the selected image and leaves it editable', async () => {
     const file = new File(['still'], 'still.png', { type: 'image/png' });
     useDraftStore.setState({
@@ -52,7 +63,7 @@ describe('Describe source', () => {
       references: [{ id: 'ref-1', file, previewUrl: 'blob:still' }],
       controlValues: {},
     });
-    let resolveDescription: (prompt: string) => void = () => undefined;
+    let resolveDescription: (result: { prompt: string; omitted: string[] }) => void = () => undefined;
     vi.mocked(requestSourceDescription).mockImplementation(
       () => new Promise((resolve) => { resolveDescription = resolve; })
     );
@@ -63,11 +74,12 @@ describe('Describe source', () => {
     expect(screen.getByRole('button', { name: 'Gen Example' })).toBeDisabled();
     expect(requestSourceDescription).toHaveBeenCalledWith(
       [expect.objectContaining({ label: 'Image 1', file })],
-      'gemini-key'
+      'gemini-key',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
     );
 
     await act(async () => {
-      resolveDescription(DESCRIPTION);
+      resolveDescription({ prompt: DESCRIPTION, omitted: [] });
     });
 
     const prompt = screen.getByRole('textbox', { name: 'Prompt' });
@@ -90,6 +102,32 @@ describe('Describe source', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(DESCRIBE_ERRORS.noKey);
     expect(screen.getByRole('textbox', { name: 'Prompt' })).toHaveValue('Keep this');
+    expect(screen.getByRole('button', { name: 'Describe source' })).toBeEnabled();
+  });
+
+  it('does not replace a prompt edited while the description was in flight', async () => {
+    const file = new File(['still'], 'still.png', { type: 'image/png' });
+    useDraftStore.setState({
+      prompt: '',
+      references: [{ id: 'ref-1', file, previewUrl: 'blob:still' }],
+      controlValues: {},
+    });
+    let resolveDescription: (result: { prompt: string; omitted: string[] }) => void = () => undefined;
+    vi.mocked(requestSourceDescription).mockImplementation(
+      () => new Promise((resolve) => { resolveDescription = resolve; })
+    );
+    renderWorkspace('image');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Describe source' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Prompt' }), {
+      target: { value: 'Typed while waiting.' },
+    });
+
+    await act(async () => {
+      resolveDescription({ prompt: DESCRIPTION, omitted: [] });
+    });
+
+    expect(screen.getByRole('textbox', { name: 'Prompt' })).toHaveValue('Typed while waiting.');
     expect(screen.getByRole('button', { name: 'Describe source' })).toBeEnabled();
   });
 });
