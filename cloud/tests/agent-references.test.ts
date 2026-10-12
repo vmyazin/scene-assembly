@@ -62,7 +62,7 @@ describe('fetching a reference', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const init = fetchMock.mock.calls[0][1];
     expect(init).toMatchObject({ redirect: 'manual' });
-    expect(init.headers).toEqual({ Accept: 'image/*, video/*', 'User-Agent': REFERENCE_USER_AGENT });
+    expect(init.headers).toEqual({ Accept: 'image/*, video/*, audio/*', 'User-Agent': REFERENCE_USER_AGENT });
   });
 
   it('re-checks every redirect and stops after three', async () => {
@@ -119,6 +119,14 @@ describe('fetching a reference', () => {
     expect(sniffMime(new TextEncoder().encode('\0\0\0\u0018ftypisom'))).toBe('video/mp4');
     expect(sniffMime(new TextEncoder().encode('\0\0\0\u0018ftypqt  '))).toBeNull();
     expect(sniffMime(new TextEncoder().encode('\0\0\0\u0018ftypavif'))).toBe('image/avif');
+    const wav = new Uint8Array(12);
+    wav.set([0x52, 0x49, 0x46, 0x46], 0);
+    wav.set([0x57, 0x41, 0x56, 0x45], 8);
+    expect(sniffMime(wav)).toBe('audio/wav');
+    expect(sniffMime(Uint8Array.from([0x49, 0x44, 0x33, 0x04]))).toBe('audio/mpeg');
+    expect(sniffMime(Uint8Array.from([0xff, 0xfb, 0x90, 0x00]))).toBe('audio/mpeg');
+    expect(sniffMime(Uint8Array.from([0xff, 0xf1, 0x50, 0x80]))).toBeNull();
+    expect(sniffMime(Uint8Array.from([0xff, 0xf9, 0x50, 0x80]))).toBeNull();
   });
 });
 
@@ -228,6 +236,6 @@ describe('library assets as references', () => {
 
   it('passes staged upload ids through untouched', async () => {
     const { context } = await ctx();
-    expect(await resolveReferences(context, [{ uploadId: 'u-1' }], { uploadId: 'u-2' })).toEqual({ referenceIds: ['u-1'], sourceVideoId: 'u-2', copiedIds: [] });
+    expect(await resolveReferences(context, [{ uploadId: 'u-1' }], { uploadId: 'u-2' })).toEqual({ referenceIds: ['u-1'], referenceVideoIds: [], referenceAudioIds: [], sourceVideoId: 'u-2', copiedIds: [] });
   });
 });

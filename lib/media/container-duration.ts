@@ -1,6 +1,7 @@
 // lib/media/container-duration.ts
 /**
- * Duration from an MP4/MOV `mvhd` or a WebM Info/Duration element.
+ * Duration from an MP4/MOV `mvhd`, a WebM Info/Duration element, or a WAV
+ * `fmt` byte rate and `data` size.
  *
  * The Worker prices a Seedance edit draft from this, before it reserves, so a
  * claimed length cannot under-charge a longer clip. It reads box headers and
@@ -199,6 +200,35 @@ function isEbml(bytes: Uint8Array): boolean {
   return bytes.length >= 4 && EBML_MAGIC.every((byte, index) => bytes[index] === byte);
 }
 
+function isRiffWave(bytes: Uint8Array): boolean {
+  return bytes.length >= 12
+    && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
+    && bytes[8] === 0x57 && bytes[9] === 0x41 && bytes[10] === 0x56 && bytes[11] === 0x45;
+}
+
+/** `fmt ` then `data`. The data payload itself is never read; its size is enough. */
+async function wavDuration(source: ByteRangeSource): Promise<number | null> {
+  let offset = 12;
+  let byteRate = 0;
+  while (offset + 8 <= source.size && offset < 64 * 1024) {
+    const header = await source.read(offset, 8);
+    if (header.length < 8) return null;
+    const size = viewOf(header).getUint32(4, true);
+    if (!Number.isFinite(size) || size < 0) return null;
+    const id = fourcc(header, 0);
+    if (id === 'fmt ') {
+      const fmt = await source.read(offset + 8, Math.min(size, 16));
+      if (fmt.length >= 16) byteRate = viewOf(fmt).getUint32(8, true);
+    } else if (id === 'data') {
+      if (!byteRate) return null;
+      const seconds = size / byteRate;
+      return seconds > 0 ? seconds : null;
+    }
+    offset += 8 + size + (size % 2);
+  }
+  return null;
+}
+
 /** Seconds, or null when the container has no duration we can trust. */
 export async function readContainerDuration(source: ByteRangeSource): Promise<number | null> {
   if (!Number.isFinite(source.size) || source.size < 8) return null;
@@ -207,5 +237,6 @@ export async function readContainerDuration(source: ByteRangeSource): Promise<nu
     const window = await source.read(0, Math.min(source.size, 1024 * 1024));
     return webmDuration(window);
   }
+  if (isRiffWave(head)) return wavDuration(source);
   return mp4Duration(source);
 }

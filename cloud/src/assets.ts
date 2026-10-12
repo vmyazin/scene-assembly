@@ -6,6 +6,7 @@ import { AVAILABLE_CAPACITY, OVERFLOW_TTL_MS, promoteTemporaryAsset } from './re
 import { deleteQueuedObject } from './cleanup';
 import { peekMediaType } from './media-type';
 import { acceptedResultUrl } from '../../lib/account/result-location';
+import { isStageableInputMime } from '../../lib/providers/input-mimes';
 
 export const MAX_OUTPUT_BYTES = 1_000_000_000;
 export const MAX_JOB_OUTPUTS = 8;
@@ -14,6 +15,8 @@ export interface AssetRow { id: string; user_id: string; job_id: string | null; 
 export interface ResultSource { url?: string; objectKey?: string; mimeType?: string }
 export interface ProviderResult { sources: ResultSource[]; cost?: number; usage?: { promptTokens: number; outputTokens: number }; draftId?: string }
 export const isSupportedOutputMime = (mimeType:string) => /^(image\/(png|jpeg|webp|avif)|video\/(mp4|webm))$/.test(mimeType);
+/** Uploads use the shared stageable list. Results stay on `isSupportedOutputMime`, which rejects audio and QuickTime. */
+export const isSupportedInputMime = isStageableInputMime;
 /** `draftId` is stored beside the request and lifted off so metadata stays a CloudJobRequest. */
 export function assetView(row: AssetRow): CloudAsset {
   const stored = JSON.parse(row.metadata_json) as CloudJobRequest & { draftId?: unknown };
@@ -46,9 +49,11 @@ async function fetchOutput(url:string):Promise<Response> {
   }
   throw new AccountError('Provider returned too many redirects.',502,'result_location');
 }
-export async function writeOutput(env:Env,key:string,body:ReadableStream<Uint8Array>|Uint8Array,mimeType:string,maxBytes=MAX_OUTPUT_BYTES) {
+export async function writeOutput(env:Env,key:string,body:ReadableStream<Uint8Array>|Uint8Array,mimeType:string,maxBytes=MAX_OUTPUT_BYTES,role:'output'|'input'='output') {
   if(!env.ASSETS)throw new Error('Asset storage is unavailable');
-  if(!isSupportedOutputMime(mimeType))throw new AccountError('Unsupported generated file type.',502,'result_type');
+  // Results stay on the output allowlist. Widening that list would let a
+  // reference WAV through result capture, which has no audio asset kind.
+  if(role==='input'? !isSupportedInputMime(mimeType) : !isSupportedOutputMime(mimeType))throw new AccountError('Unsupported generated file type.',502,'result_type');
   let length=0;
   const input=body instanceof Uint8Array ? new ReadableStream<Uint8Array>({start(controller){controller.enqueue(body);controller.close();}}) : body;
   const bounded=input.pipeThrough(new TransformStream<Uint8Array,Uint8Array>({transform(chunk,controller){length+=chunk.byteLength;if(length>maxBytes)throw new AccountError('Generated file exceeds the supported transfer limit.',502,'result_size');controller.enqueue(chunk);}}));

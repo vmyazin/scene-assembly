@@ -30,6 +30,40 @@ export interface ProviderVideoInputCapability {
 }
 
 /**
+ * One reference video or audio clip a model will accept. Counts and durations
+ * are the vendor's; `maxBytes` may be tighter when the upload path cannot
+ * carry the vendor's full file size.
+ */
+export interface ReferenceClipLimit {
+  max: number;
+  minSeconds: number;
+  maxSeconds: number;
+  maxTotalSeconds: number;
+  maxBytes: number;
+  accept: readonly string[];
+  formatsLabel: string;
+  token: 'Video' | 'Audio';
+  minEdge?: number;
+  maxEdge?: number;
+  minRatio?: number;
+  maxRatio?: number;
+  minPixels?: number;
+  maxPixels?: number;
+  minFps?: number;
+  maxFps?: number;
+}
+
+/** Reference video and/or audio. Absent means the model has no such input. */
+export interface ReferenceClipsCapability {
+  /** Modes that may send these clips. Frame and edit modes stay off: those inputs mean something else. */
+  modes: ProviderMode[];
+  /** Seedance 2.0 refuses audio unless an image or a reference video is also attached. */
+  audioRequiresVisual: boolean;
+  video?: ReferenceClipLimit;
+  audio?: ReferenceClipLimit;
+}
+
+/**
  * One output size a video model actually accepts. Vendors express this two
  * ways: explicit pixels (Runware publishes a table of exact width/height pairs
  * per model architecture) or a named preset (Atlas `resolution`, Comet `size`).
@@ -119,6 +153,11 @@ export interface ProviderModel {
   /** Per-mode video input contracts, when a model has more than the legacy frame input. */
   videoInputs?: Partial<Record<Exclude<ProviderMode, 'text'>, ProviderVideoInputCapability>>;
   /**
+   * Reference video and reference audio. Separate from `videoInputs`, which is
+   * images, and from `videoEdit`, which is a source clip to change in place.
+   */
+  referenceClips?: ReferenceClipsCapability;
+  /**
    * How this model takes an input image. Runware splits the two: older
    * checkpoints start from `inputs.seedImage` (with `strength`), while the
    * newer editing models require `inputs.referenceImages` and have no seedImage
@@ -188,6 +227,10 @@ export interface VideoRequest {
   prompt: string;
   /** Frame/reference images as data URLs, in order. */
   images?: string[];
+  /** Reference videos already stored with the provider (Runware UUID or a hosted URL). */
+  referenceVideos?: string[];
+  /** Reference audio clips, same transport as reference videos. */
+  referenceAudios?: string[];
   durationSeconds?: number;
   /** Explicit pixels, when the model publishes a table of exact sizes. */
   width?: number;

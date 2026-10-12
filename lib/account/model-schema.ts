@@ -36,7 +36,14 @@ export interface ModelField {
   default?: FieldValue;
   required?: boolean;
 }
-export interface ModeDescriptor { mode: InputMode; fields: ModelField[]; references: { min: number; max: number }; sourceVideo: boolean }
+export interface ModeDescriptor {
+  mode: InputMode;
+  fields: ModelField[];
+  references: { min: number; max: number };
+  sourceVideo: boolean;
+  /** Reference video and audio. Absent means this mode refuses both. */
+  clips?: { video?: { max: number }; audio?: { max: number }; audioRequiresVisual: boolean };
+}
 export interface ModelDescriptor {
   provider: AgentProvider; modelId: string; label: string; mediaType: 'image' | 'video';
   price?: string; note?: string; modes: ModeDescriptor[];
@@ -147,6 +154,16 @@ function aggregatorReferences(provider: ProviderId, model: ProviderModel, mode: 
   return max >= 1 ? { min: 1, max } : null;
 }
 
+function clipDescriptor(model: ProviderModel, mode: InputMode): ModeDescriptor['clips'] {
+  const clips = model.referenceClips;
+  if (!clips?.modes.includes(mode)) return undefined;
+  return {
+    ...(clips.video ? { video: { max: clips.video.max } } : {}),
+    ...(clips.audio ? { audio: { max: clips.audio.max } } : {}),
+    audioRequiresVisual: clips.audioRequiresVisual,
+  };
+}
+
 function aggregatorModes(provider: ProviderId, model: ProviderModel): ModeDescriptor[] {
   const modes: ModeDescriptor[] = [];
   for (const mode of model.modes) {
@@ -178,7 +195,12 @@ function aggregatorModes(provider: ProviderId, model: ProviderModel): ModeDescri
     }
     const references = aggregatorReferences(provider, model, mode);
     if (!references) continue;
-    modes.push({ mode, sourceVideo: false, references, fields: model.kind === 'image' ? aggregatorImageFields(provider, model) : aggregatorVideoFields(provider, model) });
+    const clips = clipDescriptor(model, mode);
+    modes.push({
+      mode, sourceVideo: false, references,
+      fields: model.kind === 'image' ? aggregatorImageFields(provider, model) : aggregatorVideoFields(provider, model),
+      ...(clips ? { clips } : {}),
+    });
   }
   return modes;
 }
@@ -300,11 +322,21 @@ function constrainDraftSize(mode: ModeDescriptor, input: Record<string, FieldVal
   return null;
 }
 
-export function checkReferences(mode: ModeDescriptor, count: number, hasSourceVideo: boolean): string | null {
+export function checkReferences(mode: ModeDescriptor, count: number, hasSourceVideo: boolean, clips: { videos?: number; audios?: number } = {}): string | null {
   if (mode.sourceVideo && !hasSourceVideo) return 'This mode edits a video: pass sourceVideo.';
   if (!mode.sourceVideo && hasSourceVideo) return 'sourceVideo is only accepted in edit mode.';
+  const videos = clips.videos ?? 0;
+  const audios = clips.audios ?? 0;
+  if ((videos > 0 || audios > 0) && !mode.clips) return 'This mode does not take reference video or audio.';
+  if (videos > 0 && !mode.clips?.video) return 'This mode does not take reference video.';
+  if (audios > 0 && !mode.clips?.audio) return 'This mode does not take reference audio.';
+  if (mode.clips?.video && videos > mode.clips.video.max) return `Add up to ${mode.clips.video.max} reference videos.`;
+  if (mode.clips?.audio && audios > mode.clips.audio.max) return `Add up to ${mode.clips.audio.max} reference audio clips.`;
+  if (audios > 0 && mode.clips?.audioRequiresVisual && count === 0 && videos === 0) return 'Add a reference image or reference video. This model cannot use audio on its own.';
   const { min, max } = mode.references;
+  const clipsStandIn = videos > 0 || (audios > 0 && Boolean(mode.clips && !mode.clips.audioRequiresVisual));
   if (count >= min && count <= max) return null;
+  if (clipsStandIn && count >= 0 && count <= max) return null;
   if (min === max) return min === 0 ? 'This mode takes no reference images.' : `This mode takes exactly ${min} reference image${min === 1 ? '' : 's'}.`;
   return `This mode takes ${min} to ${max} reference images.`;
 }

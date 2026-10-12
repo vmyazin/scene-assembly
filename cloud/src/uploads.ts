@@ -1,4 +1,7 @@
+// cloud/src/uploads.ts
 import { jobInputIds } from '../../lib/account/contracts';
+import { isImageInputMime } from '../../lib/providers/input-mimes';
+import { isReferenceAudioMime, REFERENCE_AUDIO_MAX_BYTES } from '../../lib/providers/reference-clips';
 import { MAX_EDIT_VIDEO_BYTES, isEditVideoMime } from '../../lib/providers/video-edit';
 import { AccountError, type JobRow } from './jobs';
 import { getAsset, writeOutput } from './assets';
@@ -10,9 +13,16 @@ export const MAX_TEMP_BYTES=256_000_000;
 export const MAX_GLOBAL_TEMP_BYTES=10_000_000_000;
 export const INPUT_TTL=86_400_000;
 interface Upload {id:string;user_id:string;object_key:string;mime_type:string;expected_bytes:number;state:string;expires_at:number}
+function uploadByteCap(mime:string): number | null {
+  if(isEditVideoMime(mime))return MAX_EDIT_VIDEO_BYTES;
+  if(isReferenceAudioMime(mime))return REFERENCE_AUDIO_MAX_BYTES;
+  if(isImageInputMime(mime))return MAX_INPUT_BYTES;
+  return null;
+}
 export async function reserveUpload(env:Env,owner:string,bytes:number,mime:string,purpose:'upload'|'agent-upload'|null='upload'):Promise<{id:string;objectKey:string;expiresAt:number;url?:string;urlExpiresAt?:number}> {
   mediaOrigin(env);
-  if(!Number.isSafeInteger(bytes)||bytes<=0||bytes>(isEditVideoMime(mime)?MAX_EDIT_VIDEO_BYTES:MAX_INPUT_BYTES)||(!isEditVideoMime(mime)&&!/^image\/(png|jpeg|webp|avif)$/.test(mime)))throw new AccountError('Use an image up to 20 MB or an MP4, MOV or WebM video up to 100 MB.',400,'invalid_upload');
+  const cap=uploadByteCap(mime);
+  if(!Number.isSafeInteger(bytes)||bytes<=0||cap===null||bytes>cap)throw new AccountError('Use an image up to 20 MB, an MP3 or WAV up to 15 MB, or an MP4, MOV or WebM video up to 100 MB.',400,'invalid_upload');
   const id=crypto.randomUUID(),key=`accounts/${owner}/inputs/${id}`,now=Date.now();
   const inserted=await env.DB.prepare(`INSERT INTO account_uploads (id,user_id,object_key,mime_type,expected_bytes,created_at,expires_at)
     SELECT ?,?,?,?,?,?,? WHERE (SELECT COALESCE(SUM(expected_bytes),0) FROM account_uploads WHERE user_id=? AND state!='deleted')+?<=?
@@ -43,7 +53,7 @@ export async function inputUrls(env:Env,job:JobRow):Promise<string[]> {
 export async function storeUpload(env:Env,owner:string,body:ReadableStream<Uint8Array>|Uint8Array,bytes:number,mime:string):Promise<{id:string;expiresAt:number}> {
   const reserved=await reserveUpload(env,owner,bytes,mime,null);
   try{
-    const object=await writeOutput(env,reserved.objectKey,body,mime,bytes);
+    const object=await writeOutput(env,reserved.objectKey,body,mime,bytes,'input');
     if(object.size!==bytes)throw new AccountError('The stored reference did not match its size.',502,'upload_size');
     await env.DB.prepare("UPDATE account_uploads SET state='ready' WHERE id=? AND state='pending'").bind(reserved.id).run();
     return {id:reserved.id,expiresAt:reserved.expiresAt};
@@ -60,7 +70,7 @@ export async function storeUpload(env:Env,owner:string,body:ReadableStream<Uint8
 export async function storeStreamedUpload(env:Env,owner:string,body:ReadableStream<Uint8Array>,mime:string,maxBytes:number):Promise<{id:string;bytes:number;expiresAt:number}> {
   const reserved=await reserveUpload(env,owner,maxBytes,mime,null);
   try{
-    const object=await writeOutput(env,reserved.objectKey,body,mime,maxBytes);
+    const object=await writeOutput(env,reserved.objectKey,body,mime,maxBytes,'input');
     await env.DB.prepare("UPDATE account_uploads SET expected_bytes=?, state='ready' WHERE id=? AND state='pending'").bind(object.size,reserved.id).run();
     return {id:reserved.id,bytes:object.size,expiresAt:reserved.expiresAt};
   }catch(error){
@@ -68,7 +78,7 @@ export async function storeStreamedUpload(env:Env,owner:string,body:ReadableStre
     await env.DB.prepare("UPDATE account_uploads SET state='deleted' WHERE id=?").bind(reserved.id).run();
     // writeOutput's own wording talks about "generated files"; an agent needs the
     // sentence it already read in add_reference's tool description.
-    if(error instanceof AccountError&&error.code==='result_size')throw new AccountError(mime.startsWith('image/')?'Reference images can be up to 20 MB.':'References can be up to 100 MB.',400,'reference_fetch_failed');
+    if(error instanceof AccountError&&error.code==='result_size')throw new AccountError(mime.startsWith('image/')?'Reference images can be up to 20 MB.':mime.startsWith('audio/')?'Reference audio can be up to 15 MB.':'References can be up to 100 MB.',400,'reference_fetch_failed');
     throw error;
   }
 }
@@ -80,8 +90,8 @@ export async function copyAssetToUpload(env:Env,owner:string,assetId:string):Pro
   const asset=await getAsset(env,assetId,owner);
   const unavailable=()=>new AccountError('That library file is not available to use as a reference.',404,'reference_unavailable');
   if(!asset)throw unavailable();
-  const overLimit=isEditVideoMime(asset.mime_type)?asset.bytes>MAX_EDIT_VIDEO_BYTES:!/^image\/(png|jpeg|webp|avif)$/.test(asset.mime_type)||asset.bytes>MAX_INPUT_BYTES;
-  if(overLimit)throw new AccountError('That library file is too large or an unsupported type to use as a reference. Use an image up to 20 MB or a video up to 100 MB.',404,'reference_unavailable');
+  const cap=uploadByteCap(asset.mime_type);
+  if(cap===null||asset.bytes>cap)throw new AccountError('That library file is too large or an unsupported type to use as a reference. Use an image up to 20 MB, audio up to 15 MB, or a video up to 100 MB.',404,'reference_unavailable');
   const object=await env.ASSETS?.get(asset.object_key);
   if(!object)throw unavailable();
   try{
@@ -123,7 +133,7 @@ export async function publicMedia(request:Request,env:Env):Promise<Response|null
   const existing=await env.ASSETS?.head(upload.object_key);
   if(!claim.meta.changes&&!existing)return respond(json({error:'Upload is still in progress. Check its status before retrying.'},409));
   try{
-    const object=existing||await writeOutput(env,upload.object_key,request.body,upload.mime_type,upload.expected_bytes);
+    const object=existing||await writeOutput(env,upload.object_key,request.body,upload.mime_type,upload.expected_bytes,'input');
     if(object.size!==upload.expected_bytes)throw new AccountError('Uploaded size does not match.',400,'upload_size');
     const updated=await env.DB.prepare("UPDATE account_uploads SET state='ready' WHERE id=? AND state IN ('pending','uploading','ready')").bind(upload.id).run();
     if(!updated.meta.changes){await env.ASSETS?.delete(upload.object_key);return respond(json({error:'Upload was removed.'},409));}

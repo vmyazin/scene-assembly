@@ -10,6 +10,10 @@ export interface CloudJobRequest {
   values: Record<string, string | number | boolean>;
   referenceIds: string[];
   sourceVideoId?: string;
+  /** Reference videos, uploaded separately from images. Omitted when the model has none. */
+  referenceVideoIds?: string[];
+  /** Reference audio clips. Omitted when the model has none. */
+  referenceAudioIds?: string[];
 }
 export type CloudJobState = 'queued' | 'submitting' | 'running' | 'saving' | 'saved' | 'needs_attention' | 'failed' | 'cancelled';
 /** The agent that started a job, kept after it disconnects so old work stays attributed. */
@@ -62,8 +66,8 @@ export interface CloudAsset {
 }
 
 /** Every temporary input must share the same ownership and retention lifecycle. */
-export function jobInputIds(request: Pick<CloudJobRequest, 'referenceIds' | 'sourceVideoId'>): string[] {
-  return [...request.referenceIds, ...(request.sourceVideoId ? [request.sourceVideoId] : [])];
+export function jobInputIds(request: Pick<CloudJobRequest, 'referenceIds' | 'sourceVideoId' | 'referenceVideoIds' | 'referenceAudioIds'>): string[] {
+  return [...request.referenceIds, ...(request.referenceVideoIds ?? []), ...(request.referenceAudioIds ?? []), ...(request.sourceVideoId ? [request.sourceVideoId] : [])];
 }
 
 /** One connected MCP client, as the account page's panel shows it. */

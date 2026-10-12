@@ -1,3 +1,4 @@
+// cloud/src/mcp/tools/request.ts
 import * as z from 'zod';
 import type { CloudJobRequest } from '../../../../lib/account/contracts';
 import { checkReferences, checkValues, findModelDescriptor, providerLabel, type AgentProvider, type ModeDescriptor, type ModelDescriptor } from '../../../../lib/account/model-schema';
@@ -24,6 +25,8 @@ export const requestShape = {
   prompt: z.string().min(1).max(20_000),
   values: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional().describe('Settings by field key. Omitted keys take the model\'s defaults.'),
   references: z.array(referenceSchema).max(16).optional().describe('Reference images, in order.'),
+  referenceVideos: z.array(referenceSchema).max(10).optional().describe('Reference videos, in order, for a model whose mode lists them. Address them in the prompt the way list_models describes.'),
+  referenceAudios: z.array(referenceSchema).max(10).optional().describe('Reference audio clips, in order, for a model whose mode lists them.'),
   sourceVideo: referenceSchema.optional().describe('The clip to edit, in edit mode only.'),
 };
 const requestObject = z.object(requestShape);
@@ -56,11 +59,15 @@ export async function prepareRequest(ctx: ToolContext, input: RequestInput): Pro
   const values = checkValues(mode, input.values ?? {});
   if (!values.ok) throw new ToolError('invalid_field', values.message, { field: values.field, ...(values.allowed !== undefined ? { allowed: values.allowed } : {}) });
   const count = input.references?.length ?? 0;
-  const referenceProblem = checkReferences(mode, count, Boolean(input.sourceVideo));
-  if (referenceProblem) throw new ToolError('invalid_field', referenceProblem, { field: mode.sourceVideo && !input.sourceVideo ? 'sourceVideo' : 'references', min: mode.references.min, max: mode.references.max });
+  const videoCount = input.referenceVideos?.length ?? 0;
+  const audioCount = input.referenceAudios?.length ?? 0;
+  const referenceProblem = checkReferences(mode, count, Boolean(input.sourceVideo), { videos: videoCount, audios: audioCount });
+  if (referenceProblem) throw new ToolError('invalid_field', referenceProblem, { field: mode.sourceVideo && !input.sourceVideo ? 'sourceVideo' : videoCount > 0 && !mode.clips?.video ? 'referenceVideos' : audioCount > 0 && !mode.clips?.audio ? 'referenceAudios' : 'references', min: mode.references.min, max: mode.references.max });
   const request: CloudJobRequest = {
     provider, modelId: model.modelId, mediaType: model.mediaType, inputMode: mode.mode, prompt: input.prompt.trim(), values: values.values,
     referenceIds: Array.from({ length: count }, (_, index) => `pending-reference-${index}`),
+    ...(videoCount ? { referenceVideoIds: Array.from({ length: videoCount }, (_, index) => `pending-reference-video-${index}`) } : {}),
+    ...(audioCount ? { referenceAudioIds: Array.from({ length: audioCount }, (_, index) => `pending-reference-audio-${index}`) } : {}),
     ...(input.sourceVideo ? { sourceVideoId: 'pending-source-video' } : {}),
   };
   validateRequest(env, request); // the Worker's authority, unchanged; throws AccountError

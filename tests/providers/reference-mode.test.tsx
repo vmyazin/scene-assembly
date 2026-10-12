@@ -44,6 +44,28 @@ afterEach(() => {
   useProviderJobsStore.getState().clearJobs();
 });
 
+describe('reference video and audio controls', () => {
+  it('shows the clip tray on Seedance and hides it on Wan', () => {
+    useAppStore.setState({ runwareVideoModel: 'alibaba:wan@3.0' });
+    const view = renderVideo('reference');
+    expect(screen.queryByRole('heading', { name: 'Reference video and audio' })).not.toBeInTheDocument();
+
+    useAppStore.setState({ runwareVideoModel: 'bytedance:seedance@2.5' });
+    view.rerender(
+      <VideoWorkspace
+        inputMode="text"
+        onInputModeChange={vi.fn()}
+        onExit={() => undefined}
+        onOpenConnections={() => undefined}
+      />
+    );
+    expect(screen.getByRole('heading', { name: 'Reference video and audio' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Upload reference video')).toBeInTheDocument();
+    expect(screen.getByLabelText('Upload reference audio')).toBeInTheDocument();
+    expect(screen.getAllByText(/@Video1/).length).toBeGreaterThan(1);
+  });
+});
+
 describe('reference video mode routing', () => {
   it('offers Character references only when the selected provider supports it', () => {
     const onInputModeChange = vi.fn();

@@ -1,3 +1,5 @@
+// cloud/src/mcp/fetch-reference.ts
+import { REFERENCE_AUDIO_MAX_BYTES } from '../../../lib/providers/reference-clips';
 import { MAX_EDIT_VIDEO_BYTES } from '../../../lib/providers/video-edit';
 import { AccountError } from '../jobs';
 import type { Env } from '../security';
@@ -69,7 +71,7 @@ export async function fetchReference(env: Env, value: string): Promise<{ body: R
     try {
       response = await fetch(url, {
         redirect: 'manual',
-        headers: { Accept: 'image/*, video/*', 'User-Agent': REFERENCE_USER_AGENT },
+        headers: { Accept: 'image/*, video/*, audio/*', 'User-Agent': REFERENCE_USER_AGENT },
         signal: AbortSignal.timeout(REFERENCE_FETCH_TIMEOUT_MS),
       });
     } catch { throw refused('The reference URL could not be reached.'); }
@@ -84,8 +86,8 @@ export async function fetchReference(env: Env, value: string): Promise<{ body: R
     }
     if (!response.ok || !response.body) { await response.body?.cancel().catch(() => {}); throw refused(`The reference URL answered ${response.status}.`); }
     const { mimeType, body } = await peekMediaType(response.body.getReader(), () => refused('The reference URL could not be read.'));
-    if (!mimeType) { await body.cancel().catch(() => {}); throw refused('The reference is not a PNG, JPEG, WebP, AVIF, MP4 or WebM file.'); }
-    const maxBytes = mimeType.startsWith('image/') ? MAX_INPUT_BYTES : MAX_EDIT_VIDEO_BYTES;
+    if (!mimeType) { await body.cancel().catch(() => {}); throw refused('The reference is not a PNG, JPEG, WebP, AVIF, MP4, WebM, MP3 or WAV file.'); }
+    const maxBytes = mimeType.startsWith('image/') ? MAX_INPUT_BYTES : mimeType.startsWith('audio/') ? REFERENCE_AUDIO_MAX_BYTES : MAX_EDIT_VIDEO_BYTES;
     return { body, mimeType, maxBytes };
   }
   throw refused('The reference URL redirected too many times.');
