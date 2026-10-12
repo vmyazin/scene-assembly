@@ -1,3 +1,4 @@
+// lib/gallery/record-job.ts
 import type { GalleryKind } from '@/lib/gallery/storage';
 import { useGalleryStore } from '@/store/useGalleryStore';
 
@@ -10,6 +11,7 @@ interface FinishedJob {
   inputMode: string;
   controlValues?: Record<string, string | number | boolean>;
   mimeType?: string;
+  draftId?: string;
 }
 
 /**
@@ -38,6 +40,7 @@ export function recordFinishedJob(
     inputMode: job.inputMode,
     controlValues: job.controlValues ?? {},
     mimeType: job.mimeType ?? (job.mediaType === 'video' ? 'video/mp4' : 'image/png'),
+    ...(job.draftId ? { draftId: job.draftId } : {}),
     sourceUrl: resultUrl,
   });
 }

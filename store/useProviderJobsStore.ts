@@ -17,6 +17,8 @@ export interface ProviderJob {
   progress?: number;
   urls: string[];
   cost?: number;
+  /** Seedance preview id, present once the draft render succeeds. */
+  draftId?: string;
   error?: string;
   /** LLM-derived filename slug for downloads; absent until the model answers. */
   slug?: string;

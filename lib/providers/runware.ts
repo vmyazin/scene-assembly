@@ -9,6 +9,11 @@ import {
   type VideoRequest,
 } from './types';
 import { RUNWARE_IMAGE_DIMENSIONS, ratioDimensions, type Dimensions } from './output-size';
+import {
+  SEEDANCE_25_MODEL,
+  seedanceDraftDimensionError,
+  seedanceDraftFailure,
+} from './seedance-draft';
 
 /**
  * Runware — one endpoint, one shape: every request is an array of task objects
@@ -124,6 +129,8 @@ async function runwareFetch(apiKey: string, tasks: Array<Record<string, unknown>
   if (!response.ok || firstError) {
     const detail = firstError?.additionalDetails?.responseContent;
     const raw = [firstError?.message, typeof detail === 'string' ? detail : undefined].filter(Boolean).join(' ') || `Runware returned ${response.status}.`;
+    const draftFailure = seedanceDraftFailure({ ...firstError, message: raw });
+    if (draftFailure) throw new ProviderError(draftFailure, response.ok ? 400 : response.status, 'runware');
     const model = tasks.find((task) => typeof task.model === 'string')?.model;
     // 422 is not a retryable status. A 503 here would be sent again on its own
     // and the countdown would hide the sentence that says why it stopped.
@@ -190,7 +197,33 @@ export async function runwareGenerateImage(request: ImageRequest): Promise<Image
   return { url, cost: typeof first.cost === 'number' ? first.cost : undefined };
 }
 
+function assertFinalize(request: VideoRequest): void {
+  if (request.model !== SEEDANCE_25_MODEL) throw new ProviderError('Only Seedance 2.5 can finalize a draft.', 400, 'runware');
+  if (!request.draftId?.trim()) throw new ProviderError('A draft ID is required to finalize.', 400, 'runware');
+  const resends = request.prompt.trim()
+    || (request.images?.length ?? 0) > 0
+    || request.sourceVideo
+    || request.durationSeconds !== undefined
+    || request.width !== undefined
+    || request.height !== undefined
+    || request.aspectRatio
+    || request.audio !== undefined
+    || request.draft !== undefined
+    || (request.resolution !== undefined && request.resolution !== '1080p')
+    || request.inputField;
+  if (resends) throw new ProviderError('Finalizing a Seedance draft cannot resend the prompt, duration, audio, or media. Send only the draft ID.', 400, 'runware');
+}
+
 export async function runwareCreateVideo(request: VideoRequest, uuid = taskUUID()): Promise<{ taskId: string }> {
+  if (request.draftId !== undefined) {
+    assertFinalize(request);
+    await runwareFetch(request.apiKey, [{
+      taskType: 'videoInference', taskUUID: uuid, model: request.model,
+      resolution: '1080p', inputs: { draftId: request.draftId.trim() },
+      deliveryMethod: 'async', includeCost: true, outputFormat: 'MP4',
+    }]);
+    return { taskId: uuid };
+  }
   if (request.inputMode === 'edit' && request.model === 'prunaai:p-video@edit') {
     if (!request.sourceVideo || request.resolution !== undefined || request.durationSeconds !== undefined || request.width !== undefined || request.height !== undefined || request.aspectRatio !== undefined || request.audio !== undefined || (request.draft !== undefined && typeof request.draft !== 'boolean') || (request.images?.length ?? 0) > 4) throw new ProviderError('Invalid P-Video-Edit settings.', 400, 'runware');
     await runwareFetch(request.apiKey, [{
@@ -203,11 +236,13 @@ export async function runwareCreateVideo(request: VideoRequest, uuid = taskUUID(
     return {taskId: uuid};
   }
   if (request.inputMode === 'edit') {
-    if (request.draft !== undefined || request.model !== 'bytedance:seedance@2.5' || !request.sourceVideo || !['480p', '720p'].includes(request.resolution ?? '')) throw new ProviderError('Invalid video edit settings.', 400, 'runware');
+    const draft = request.draft === true;
+    if ((request.draft !== undefined && typeof request.draft !== 'boolean') || request.model !== SEEDANCE_25_MODEL || !request.sourceVideo || !['480p', '720p', '1080p'].includes(request.resolution ?? '')) throw new ProviderError('Invalid video edit settings.', 400, 'runware');
+    if (draft && request.resolution !== '480p') throw new ProviderError('A Seedance draft edit is 480p only.', 400, 'runware');
     await runwareFetch(request.apiKey, [{
       taskType: 'videoInference', taskUUID: uuid, model: request.model,
       positivePrompt: request.prompt, inputs: {video: request.sourceVideo, ...(request.images?.length ? {referenceImages: request.images} : {})},
-      settings: {operation: 'edit'}, duration: 'auto', resolution: request.resolution,
+      settings: {operation: 'edit', ...(draft ? {draft: true} : {})}, duration: 'auto', resolution: request.resolution,
       deliveryMethod: 'async', includeCost: true, outputFormat: 'MP4',
     }]);
     return {taskId: uuid};
@@ -243,6 +278,16 @@ export async function runwareCreateVideo(request: VideoRequest, uuid = taskUUID(
     task.inputs = { [request.inputField ?? 'frameImages']: frames };
   }
   if (request.model === RUNWARE_VEO_LITE_MODEL) applyVeoLiteTask(task, request, width, height);
+  if (request.draft === true) {
+    if (request.model !== SEEDANCE_25_MODEL) throw new ProviderError('Draft preview is only available for Seedance 2.5.', 400, 'runware');
+    const draftError = seedanceDraftDimensionError(
+      typeof task.width === 'number' ? task.width : undefined,
+      typeof task.height === 'number' ? task.height : undefined,
+      typeof task.resolution === 'string' ? task.resolution : undefined,
+    );
+    if (draftError) throw new ProviderError(draftError, 400, 'runware');
+    task.settings = { draft: true };
+  }
 
   await runwareFetch(request.apiKey, [task]);
   // The submit acknowledgment carries no separate job id: the taskUUID we
@@ -257,6 +302,10 @@ async function runwarePoll(args: { apiKey: string; taskId: string }, output: 'im
   const first = payload.data?.[0] ?? {};
   const status = typeof first.status === 'string' ? first.status : undefined;
   const url = typeof first[output] === 'string' ? first[output] as string : undefined;
+  const outputs = first.outputs;
+  const draftId = outputs && typeof outputs === 'object' && typeof (outputs as { draftId?: unknown }).draftId === 'string'
+    ? (outputs as { draftId: string }).draftId
+    : undefined;
 
   // A finished task drops `status` and just carries the media, so a URL is the
   // real terminal signal.
@@ -267,14 +316,16 @@ async function runwarePoll(args: { apiKey: string; taskId: string }, output: 'im
       progress: 1,
       urls: [url],
       cost: typeof first.cost === 'number' ? first.cost : undefined,
+      ...(draftId ? { draftId } : {}),
     };
   }
   if (status === 'error') {
+    const message = typeof first.message === 'string' ? first.message : 'Runware could not finish this video.';
     return {
       taskId: args.taskId,
       state: 'error',
       urls: [],
-      error: typeof first.message === 'string' ? first.message : 'Runware could not finish this video.',
+      error: seedanceDraftFailure({ message, parameter: typeof first.parameter === 'string' ? first.parameter : undefined }) ?? message,
     };
   }
 

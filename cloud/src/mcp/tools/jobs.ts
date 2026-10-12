@@ -2,7 +2,9 @@ import * as z from 'zod';
 import { jobInputIds, type CloudJobRequest, type CloudJobState } from '../../../../lib/account/contracts';
 import { estimateCloudJob } from '../../../../lib/spend/estimate';
 import { jobAssets } from '../../assets';
-import { acceptJob, AccountError, cancelQueuedJob, dismissAttentionJob, dispatchJob, getJob, jobView, type JobRow } from '../../jobs';
+import { acceptJob, AccountError, cancelQueuedJob, dismissAttentionJob, dispatchJob, getJob, jobView, resultDraftId, type JobRow } from '../../jobs';
+import { enabledProviders, validateRequest } from '../../providers';
+import { isSeedance25, seedanceFinalizeValuesError } from '../../../../lib/providers/seedance-draft';
 import { listJobs, resumeJob } from '../../job-routes';
 import { mediaAccess } from '../../media';
 import { hash, randomToken } from '../../security';
@@ -11,7 +13,7 @@ import { attachCharge, budgetStatus, dropCharge, reserveCharge } from '../budget
 import { ToolError } from '../errors';
 import { defineTool, type ToolContext } from '../tool';
 import { resolveReferences } from './references';
-import { budgetRefusal, prepareRequest, requestShape } from './request';
+import { budgetRefusal, connectedProviders, prepareRequest, requestShape } from './request';
 
 const TERMINAL: CloudJobState[] = ['saved', 'failed', 'cancelled'];
 const POLL_MS = 2000;
@@ -167,6 +169,85 @@ export const generate = defineTool({
   },
 });
 
+export const finalizeDraft = defineTool({
+  name: 'finalize_draft',
+  title: 'Finalize a Seedance draft',
+  description: 'Render one Seedance 2.5 480p draft at 1080p. This starts a new job and a separate charge against the 24-hour limit. The estimate uses the documented 1080p rate, because Runware does not publish a finalize price. Pass the draft job\'s jobId, or its draftId plus inputMode. Do not resend the prompt or any media. Pass an idempotencyKey you reuse when retrying the same finalize.',
+  kind: 'submit',
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  input: z.object({
+    jobId: z.string().min(1).max(64).optional(),
+    draftId: z.string().min(1).max(256).optional(),
+    durationSeconds: z.number().min(4).max(30),
+    inputMode: z.enum(['text', 'image', 'frames', 'reference', 'edit']).optional(),
+    idempotencyKey: z.string().min(1).max(200).optional(),
+  }).strict(),
+  async run(ctx, args) {
+    const { env, agent } = ctx;
+    if (!enabledProviders(env).includes('runware')) throw new ToolError('provider_unavailable', 'Runware is not available for background generation.');
+    if (!(await connectedProviders(env, agent.user_id)).includes('runware')) {
+      throw new ToolError('connection_required', 'Ask the person to connect a Runware key on their Scene Assembly account page. Agents cannot add keys.');
+    }
+    let prompt = 'Finalize Seedance draft';
+    let inputMode = args.inputMode;
+    let draftId = args.draftId?.trim();
+    let modelId = 'bytedance:seedance@2.5';
+    if (args.jobId) {
+      const savedJob = await getJob(env, args.jobId, agent.user_id);
+      if (!savedJob) throw new ToolError('not_found', 'No job with that id on this account.');
+      const saved = JSON.parse(savedJob.request_json) as CloudJobRequest;
+      const fromResult = resultDraftId(savedJob.result_json);
+      if (!isSeedance25(saved.modelId) || saved.provider !== 'runware' || saved.mediaType !== 'video') {
+        throw new ToolError('draft_unavailable', 'Only a Seedance 2.5 draft on Runware can be finalized.');
+      }
+      if (!fromResult && !draftId) throw new ToolError('draft_unavailable', 'That job has no Seedance draft to finalize. Generate a 480p draft first.');
+      if (draftId && fromResult && draftId !== fromResult) throw new ToolError('invalid_field', 'That draft ID does not belong to this job.', { field: 'draftId' });
+      if (args.inputMode && args.inputMode !== saved.inputMode) throw new ToolError('invalid_field', 'inputMode is taken from the draft job.', { field: 'inputMode' });
+      draftId = fromResult ?? draftId;
+      inputMode = saved.inputMode;
+      modelId = saved.modelId;
+      if (saved.prompt.trim()) prompt = saved.prompt.trim();
+    }
+    if (!draftId) throw new ToolError('invalid_field', 'Pass the draft jobId, or the draftId from that job.', { field: 'draftId' });
+    if (!inputMode) throw new ToolError('invalid_field', 'Pass inputMode when you pass a draftId without a jobId, so the price uses the right 1080p rate.', { field: 'inputMode' });
+    const valuesError = seedanceFinalizeValuesError({ finalize: true, draftId, durationSeconds: args.durationSeconds });
+    if (valuesError) throw new ToolError('invalid_field', valuesError, { field: 'durationSeconds' });
+    const request: CloudJobRequest = {
+      provider: 'runware', modelId, mediaType: 'video', inputMode, prompt,
+      values: { finalize: true, draftId, durationSeconds: args.durationSeconds },
+      referenceIds: [],
+    };
+    validateRequest(env, request);
+    const estimate = estimateCloudJob(request);
+    const token = await agentJobToken(agent.id, args.idempotencyKey);
+    const existing = await env.DB.prepare('SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?').bind(agent.user_id, token).first<JobRow>();
+    if (existing) return resumeExistingJob(ctx, existing, request, estimate);
+    const outcome = await reserveCharge(env, agent, token, estimate, ctx.now());
+    if (!outcome.ok) throw budgetRefusal(outcome, estimate);
+    if (!outcome.created) {
+      const raced = await env.DB.prepare('SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?').bind(agent.user_id, token).first<JobRow>();
+      if (raced) return resumeExistingJob(ctx, raced, request, estimate);
+      throw new AccountError('A request with this idempotencyKey is still starting. Retry in a few seconds, or call list_jobs.', 425, 'request_in_progress');
+    }
+    let job: JobRow;
+    try {
+      job = await acceptJob(env, agent.user_id, token, request, agent.id);
+    } catch (error) {
+      const reread = await env.DB.prepare('SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?').bind(agent.user_id, token).first<JobRow>();
+      if (reread && sameRun(JSON.parse(reread.request_json), request)) {
+        await attachCharge(env, token, reread.id);
+        if (!reread.dispatched) await dispatchJob(env, reread).catch(() => {});
+        return started(ctx, (await getJob(env, reread.id, agent.user_id)) ?? reread, estimate);
+      }
+      if (outcome.created) await dropCharge(env, token).catch(() => {});
+      throw error;
+    }
+    await attachCharge(env, token, job.id);
+    if (!job.dispatched) await dispatchJob(env, job).catch(() => {});
+    return started(ctx, (await getJob(env, job.id, agent.user_id)) ?? job, estimate);
+  },
+});
+
 export const getJobTool = defineTool({
   name: 'get_job',
   title: 'Get a job',
@@ -197,7 +278,7 @@ export const getJobTool = defineTool({
       : [];
     return {
       structured: { job: jobView(job), outputs },
-      text: job.state === 'saved' ? `Job ${job.id} is saved with ${outputs.length} output${outputs.length === 1 ? '' : 's'}. Call view_asset to look at one.` : `Job ${job.id} is ${job.state}.`,
+      text: `${job.state === 'saved' ? `Job ${job.id} is saved with ${outputs.length} output${outputs.length === 1 ? '' : 's'}. Call view_asset to look at one.` : `Job ${job.id} is ${job.state}.`}${jobView(job).draftId ? ` draftId is ${jobView(job).draftId}. Call finalize_draft to render it at 1080p; that is a separate charge.` : ''}`,
       content: outputs.map(output => ({ type: 'resource_link' as const, uri: output.downloadUrl, name: output.assetId, mimeType: output.mimeType })),
     };
   },

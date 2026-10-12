@@ -7,6 +7,9 @@ import { toast } from 'sonner';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import ImageLightbox from '@/components/ImageLightbox';
 import LastFrameActions from '@/components/LastFrameActions';
+import FinalizeDraftButton from '@/components/FinalizeDraftButton';
+import { submitSeedanceFinalize } from '@/lib/account/finalize-draft';
+import { seedanceDraftSeconds } from '@/lib/providers/seedance-draft';
 import { videoFileFromAccount } from '@/lib/account/video-source';
 import { accountRequest } from '@/lib/account/client';
 import type { CloudAsset } from '@/lib/account/contracts';
@@ -124,6 +127,12 @@ export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLi
             <button type="button" onClick={()=>restore(asset)} aria-label={dense?`Restore settings from ${asset.metadata.prompt||'cloud asset'}`:undefined} title={dense?'Restore settings':undefined} className={`btn-secondary py-1 text-xs ${dense?'gap-0 px-1.5':'gap-1.5 px-2'}`}><Wand2 size={13} aria-hidden="true"/>{!dense&&'Restore settings'}</button>
             <button type="button" disabled={busy!==null} onClick={()=>void run(asset,()=>downloadAccountAsset(asset))} aria-label={`Download ${asset.metadata.prompt||'cloud asset'}`} title="Download" className={`btn-secondary py-1 text-xs ${dense?'px-1.5':'px-2'}`}><Download size={13} aria-hidden="true"/></button>
             <button type="button" disabled={busy!==null} onClick={()=>setRemoving(asset)} aria-label={`Delete ${asset.metadata.prompt||'cloud asset'}`} title="Delete" className={`btn-secondary py-1 text-xs hover:text-red-300 ${dense?'px-1.5':'px-2'}`}><Trash2 size={13} aria-hidden="true"/></button>
+            {asset.draftId && asset.kind==='video' && <FinalizeDraftButton inputMode={asset.metadata.inputMode} durationSeconds={seedanceDraftSeconds(asset.metadata.values)} busy={busy!==null} onApprove={async()=>{
+              const seconds=seedanceDraftSeconds(asset.metadata.values);
+              if(!asset.draftId||seconds===undefined)throw new Error('This draft has no saved length, so it cannot be priced.');
+              await submitSeedanceFinalize({prompt:asset.metadata.prompt,inputMode:asset.metadata.inputMode,modelId:asset.metadata.modelId,draftId:asset.draftId,durationSeconds:seconds});
+              toast.success('Finalize started. It saves to your account.');
+            }}/>}
           </>}
         </div>
         {mode==='browse'&&asset.kind==='video'&&<LastFrameActions videoUrl={`/api/account/assets/${asset.id}/content`} filenameBase={knownAccountAssetFilenameBase(asset)} onContinue={onUsedReference}/>}

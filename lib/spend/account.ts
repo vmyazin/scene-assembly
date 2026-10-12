@@ -1,3 +1,4 @@
+// lib/spend/account.ts
 /**
  * Pure account-ledger entry construction. The Worker passes only the durable
  * job request/result snapshot; this module never reads credentials, calls a
@@ -8,6 +9,7 @@ import type { EngineId } from '../engines/registry';
 import { resolveFalVariant } from '../fal/catalog';
 import { falDurationSeconds } from '../fal/pricing';
 import { findModel } from '../providers/catalog';
+import { seedanceCatalogFigure } from '../providers/seedance-draft';
 import { excerpt, type SpendEntry } from './ledger';
 import {
   resolveCatalogRate,
@@ -62,6 +64,13 @@ export function buildAccountSpendEntry(args: BuildAccountSpendEntryArgs): Accoun
 
   if (request.provider === 'runware') {
     const resolved = resolveRunware(result.cost);
+    // A reported cost stays exact. Only a Seedance draft or finalize, which
+    // has a published per-second rate, is estimated when the cost is missing.
+    // Every other Runware job stays unknown until the provider reports one.
+    if (resolved.costUsd === null) {
+      const catalog = seedanceCatalogFigure(request);
+      if (catalog && catalog.costUsd !== null) return { ...base, ...catalog };
+    }
     const figure = resolved.costUsd === null
       ? withNote(resolved, 'Runware did not include billing cost in the persisted response.')
       : outputs > 1

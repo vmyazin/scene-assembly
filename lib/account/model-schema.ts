@@ -125,6 +125,13 @@ function aggregatorVideoFields(provider: ProviderId, model: ProviderModel): Mode
   else if (duration?.type === 'range') fields.push({ key: 'durationSeconds', label: 'Duration (seconds)', type: 'number', min: duration.min, max: duration.max, step: 1, default: duration.default });
   else if (model.durations?.length) fields.push(select('durationSeconds', 'Duration (seconds)', model.durations, { default: model.durations[0] }));
   if (model.supportsAudio) fields.push({ key: 'audio', label: 'Audio', type: 'boolean' });
+  // Off by default. On would make the one-option schema test send draft:true
+  // with a 720p or 1080p default, which Runware rejects. Agents turn it on,
+  // then call finalize_draft for the 1080p render.
+  if (model.draftPreview) fields.push({
+    key: 'draft', label: 'Draft', type: 'boolean', default: false,
+    description: '480p preview only. Off by default. Turn it on, then call finalize_draft to render that preview at 1080p. That is a separate charge.',
+  });
   return fields;
 }
 
@@ -147,10 +154,23 @@ function aggregatorModes(provider: ProviderId, model: ProviderModel): ModeDescri
       if (!edit) continue;
       modes.push({
         mode, sourceVideo: true, references: { min: 0, max: edit.maxImages },
-        // editSettingsError accepts exactly these two keys; duration and ratio follow the source.
+        // editSettingsError accepts these keys; duration and ratio follow the source.
         fields: [
-          ...(edit.sizes.length ? [select('size', 'Resolution', edit.sizes.map(size => size.label), { default: edit.sizes[0].label, required: true })] : []),
-          ...(edit.draftRate ? [{ key: 'draft', label: 'Draft', type: 'boolean' as const, default: false }] : []),
+          ...(edit.sizes.length ? [select('size', 'Resolution', edit.sizes.map(size => size.label), {
+            // The studio keeps the catalog's first size (720p for Seedance).
+            // Agents default to 480p so draft:true is valid against the other
+            // defaults: the schema test changes one field at a time.
+            default: edit.draftPreview ? '480p' : edit.sizes[0].label, required: true,
+          })] : []),
+          ...(edit.draftRate || edit.draftPreview ? [{
+            key: 'draft', label: 'Draft', type: 'boolean' as const, default: false,
+            ...(edit.draftPreview ? { description: '480p preview only. Off by default. Turn it on, then call finalize_draft to render that preview at 1080p. That is a separate charge.' } : {}),
+          }] : []),
+          ...(edit.draftPreview ? [{
+            key: 'sourceDurationSeconds', label: 'Source length (seconds)', type: 'number' as const,
+            min: edit.minSeconds ?? 1, max: edit.maxSeconds, step: 1,
+            description: 'Clip length used to price a draft. Not sent to Runware; the edit duration stays auto.',
+          }] : []),
         ],
       });
       continue;

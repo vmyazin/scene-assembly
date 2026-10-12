@@ -1,5 +1,6 @@
 // app/api/providers/video/route.ts
 import { editSettingsError } from '@/lib/providers/video-edit';
+import { SEEDANCE_25_MODEL, isSeedanceDraftSize } from '@/lib/providers/seedance-draft';
 import { runwareDeleteMedia } from '@/lib/providers/runware';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -68,6 +69,27 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  if (body.operation === 'finalize') {
+    const model = typeof body.model === 'string' ? body.model : '';
+    const draftId = typeof body.draftId === 'string' ? body.draftId.trim() : '';
+    const forbidden = ['prompt', 'images', 'sourceVideo', 'size', 'durationSeconds', 'width', 'height', 'aspectRatio', 'audio', 'draft', 'inputField']
+      .filter((key) => body[key] !== undefined);
+    if (model !== SEEDANCE_25_MODEL || !draftId || forbidden.length > 0) {
+      return NextResponse.json({
+        success: false,
+        error: forbidden.length > 0
+          ? 'Finalizing a Seedance draft cannot resend the prompt, duration, audio, or media. Send only the draft ID.'
+          : 'A Seedance 2.5 draft ID is required to finalize.',
+      }, { status: 400 });
+    }
+    try {
+      const { taskId } = await adapter.createVideo({ apiKey, model, prompt: '', draftId, resolution: '1080p' });
+      return NextResponse.json({ success: true, taskId });
+    } catch (error) {
+      return failure(error, 'Could not finalize this draft.');
+    }
+  }
+
   const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
   if (!prompt) {
     return NextResponse.json({ success: false, error: 'Prompt is required' }, { status: 400 });
@@ -125,7 +147,10 @@ export async function POST(request: NextRequest) {
     const settingsError = editSettingsError(capability, {size: body.size, draft: body.draft, audio: body.audio, resolution: body.resolution});
     if (settingsError || images.length > capability.maxImages) return NextResponse.json({success: false, error: settingsError ?? `Add up to ${capability.maxImages} replacement images.`}, {status: 400});
     try {
-      const {taskId} = await adapter.createVideo({apiKey, model, prompt, inputMode, sourceVideo: body.sourceVideo, images, resolution: size?.preset, ...(capability.draftRate ? {draft: body.draft === true} : {}), ...(moderation === 'relaxed' ? {moderation} : {})});
+      if (model === SEEDANCE_25_MODEL && body.draft === true && size?.preset !== '480p') {
+        return NextResponse.json({ success: false, error: 'A Seedance draft edit is 480p only.' }, { status: 400 });
+      }
+      const {taskId} = await adapter.createVideo({apiKey, model, prompt, inputMode, sourceVideo: body.sourceVideo, images, resolution: size?.preset, ...(capability.draftRate || (model === SEEDANCE_25_MODEL && body.draft === true) ? {draft: body.draft === true} : {}), ...(moderation === 'relaxed' ? {moderation} : {})});
       return NextResponse.json({success: true, taskId});
     } catch (error) { return failure(error, 'Could not start this video edit.'); }
   }
@@ -185,6 +210,10 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  if (model === SEEDANCE_25_MODEL && body.draft === true && !isSeedanceDraftSize(size?.label)) {
+    return NextResponse.json({ success: false, error: 'A Seedance draft is 480p only. Pick a 480p size, or turn Draft off.' }, { status: 400 });
+  }
+
   try {
     const { taskId } = await adapter.createVideo({
       apiKey,
@@ -204,6 +233,7 @@ export async function POST(request: NextRequest) {
       height: size?.height,
       resolution: size?.preset,
       ...(body.provider === 'piapi' || modelRecord?.supportsAudio ? {audio: body.audio === true} : {}),
+      ...(model === SEEDANCE_25_MODEL && body.draft === true ? {draft: true} : {}),
       aspectRatio: typeof body.aspectRatio === 'string' ? body.aspectRatio : undefined,
       ...(moderation === 'relaxed' ? {moderation} : {}),
     });

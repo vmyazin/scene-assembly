@@ -98,9 +98,16 @@ export interface ProviderModel {
    * cover only verified tiers; unsupported settings record as unknown.
    */
   rate?: ProviderRate;
+  /**
+   * Seedance 2.5 draft preview: 480p now, finalize later by draft ID at 1080p.
+   * Not `videoEdit.draftRate`, which is a cheaper render with no second step.
+   */
+  draftPreview?: boolean;
   videoEdit?: {
     sizes: ProviderSize[]; rate: ProviderRate; maxImages: number;
     draftRate?: ProviderRate;
+    /** Same draft preview as `draftPreview`, for edit mode. */
+    draftPreview?: boolean;
     maxSeconds: number; minSeconds?: number;
     sourceBounds?: { minEdge: number; maxEdge: number; minPixels: number; minRatio: number; maxRatio: number };
     outputLabel?: string;
@@ -172,6 +179,8 @@ export interface ImageResult {
 
 export interface VideoRequest {
   draft?: boolean;
+  /** Finalize a Seedance draft. Prompt and media must not be sent with it. */
+  draftId?: string;
   sourceVideo?: string;
   audio?: boolean;
   apiKey: string;
@@ -203,6 +212,8 @@ export interface ProviderTask {
   progress?: number;
   urls: string[];
   cost?: number;
+  /** Present when a Seedance draft finished. Used to finalize at 1080p. */
+  draftId?: string;
   error?: string;
 }
 

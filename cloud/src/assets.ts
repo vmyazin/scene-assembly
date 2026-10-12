@@ -1,3 +1,4 @@
+// cloud/src/assets.ts
 import type { CloudAsset, CloudJobRequest } from '../../lib/account/contracts';
 import { AccountError, type JobRow } from './jobs';
 import type { Env } from './security';
@@ -11,9 +12,15 @@ export const MAX_JOB_OUTPUTS = 8;
 export const MAX_JOB_OUTPUT_BYTES = 1_000_000_000;
 export interface AssetRow { id: string; user_id: string; job_id: string | null; object_key: string; kind: 'image'|'video'; mime_type: string; bytes: number; metadata_json: string; created_at: number; deleted: number; expires_at?:number|null; agent_id?: string | null; agent_name?: string | null }
 export interface ResultSource { url?: string; objectKey?: string; mimeType?: string }
-export interface ProviderResult { sources: ResultSource[]; cost?: number; usage?: { promptTokens: number; outputTokens: number } }
+export interface ProviderResult { sources: ResultSource[]; cost?: number; usage?: { promptTokens: number; outputTokens: number }; draftId?: string }
 export const isSupportedOutputMime = (mimeType:string) => /^(image\/(png|jpeg|webp|avif)|video\/(mp4|webm))$/.test(mimeType);
-export function assetView(row: AssetRow): CloudAsset { return { id:row.id, jobId:row.job_id, kind:row.kind, mimeType:row.mime_type, bytes:row.bytes, createdAt:row.created_at, metadata:JSON.parse(row.metadata_json),...(row.expires_at?{expiresAt:row.expires_at}:{}),...(row.agent_id?{startedBy:{agentId:row.agent_id,name:row.agent_name??null}}:{}) }; }
+/** `draftId` is stored beside the request and lifted off so metadata stays a CloudJobRequest. */
+export function assetView(row: AssetRow): CloudAsset {
+  const stored = JSON.parse(row.metadata_json) as CloudJobRequest & { draftId?: unknown };
+  const draftId = typeof stored.draftId === 'string' && stored.draftId ? stored.draftId : undefined;
+  if (draftId) delete stored.draftId;
+  return { id:row.id, jobId:row.job_id, kind:row.kind, mimeType:row.mime_type, bytes:row.bytes, createdAt:row.created_at, metadata:stored, ...(draftId ? { draftId } : {}), ...(row.expires_at?{expiresAt:row.expires_at}:{}), ...(row.agent_id?{startedBy:{agentId:row.agent_id,name:row.agent_name??null}}:{}) };
+}
 export async function getAsset(env:Env,id:string,owner:string) { return env.DB.prepare('SELECT a.*,r.expires_at FROM account_assets a LEFT JOIN account_asset_retention r ON r.asset_id=a.id WHERE a.id = ? AND a.user_id = ? AND a.deleted = 0 AND (r.expires_at IS NULL OR r.expires_at>?)').bind(id,owner,Date.now()).first<AssetRow>(); }
 /** What a saved job produced, in the order it was written. */
 export async function jobAssets(env:Env,owner:string,jobId:string) {
@@ -67,6 +74,7 @@ export async function captureResult(env:Env,job:JobRow,result:ProviderResult) {
   if(!env.ASSETS)throw new Error('Asset storage is unavailable');
   if(result.sources.length===0||result.sources.length>MAX_JOB_OUTPUTS)throw new AccountError('Unsupported number of results.',502,'result_count');
   const request=JSON.parse(job.request_json) as CloudJobRequest;
+  const metadataJson = result.draftId ? JSON.stringify({ ...request, draftId: result.draftId }) : job.request_json;
   let totalBytes=0;
   for(let i=0;i<result.sources.length;i++){
     const id=`${job.id}-${i}`, source=result.sources[i], key=`accounts/${job.user_id}/jobs/${job.id}/${i}`;
@@ -111,7 +119,7 @@ export async function captureResult(env:Env,job:JobRow,result:ProviderResult) {
       env.DB.prepare(`UPDATE account_storage SET used_bytes = used_bytes + ? WHERE user_id = ? AND NOT EXISTS (SELECT 1 FROM account_assets WHERE id = ?) AND NOT EXISTS (SELECT 1 FROM account_asset_retention WHERE asset_id=?) AND EXISTS (SELECT 1 FROM account_jobs WHERE id = ? AND deleted = 0 AND state NOT IN ('failed','cancelled'))`).bind(object.size,job.user_id,id,id,job.id),
       env.DB.prepare(`INSERT OR IGNORE INTO account_assets (id,user_id,job_id,object_key,kind,mime_type,bytes,metadata_json,created_at)
         SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM account_jobs WHERE id = ? AND deleted = 0 AND state NOT IN ('failed','cancelled'))`)
-        .bind(id,job.user_id,job.id,key,request.mediaType,storedMime||object.httpMetadata?.contentType||'application/octet-stream',object.size,job.request_json,Date.now(),job.id),
+        .bind(id,job.user_id,job.id,key,request.mediaType,storedMime||object.httpMetadata?.contentType||'application/octet-stream',object.size,metadataJson,Date.now(),job.id),
     ]);
     // A concurrent deletion can win after this transfer started. Queue the
     // newly finished object too, even if an earlier delete already drained.
