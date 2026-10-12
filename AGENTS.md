@@ -50,6 +50,21 @@
 
 - **Generate button placement** → first read `docs/codex/specs/2026-09-11-generate-under-prompt.md`. Use `GenerationWorkspaceLayout`’s `actions` slot for the button, cost, progress, execution notice and submission/retry feedback, because the shared prompt → actions → results order keeps submission next to the text being edited at every screen width. Setup holds only model, media and controls.
 
+- **Describe a selected source into the prompt** → `lib/describe-source/` and
+  `POST /api/describe-source`. The button is `DescribeSourceButton` on the
+  provider video prompt. It sends the selected image or source video to a
+  vision model and writes the paragraph into the draft prompt, which stays
+  editable before Generate. Text mode builds an empty source list, the same
+  way submit does, because a reference left in the draft from another mode is
+  not part of that run. The shared text tier cannot see pixels, so this uses
+  `VISION_MODEL` when `HF_TOKEN` is set and otherwise the visitor's Gemini key.
+  A short clip is sent whole only when a Gemini key will watch it; otherwise,
+  and for any clip that will not fit, `sampleVideoStills` turns it into ordered
+  stills, because the shared vision model only reads images and a 100MB source
+  cannot be the JSON body. The route rate-limits per address and checks
+  `Content-Length` before parsing, because this call can spend `HF_TOKEN` on
+  megabytes of vision input.
+
 - **Seedance 2.5 draft, then finalize** → `lib/providers/seedance-draft.ts`.
   `settings.draft` is a 480p preview that returns `outputs.draftId`; finalize sends
   `inputs.draftId` and `resolution: "1080p"` and cannot resend prompt or media.

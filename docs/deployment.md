@@ -19,7 +19,7 @@ Set on the Vercel project (Production + Preview), not in the repo:
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `HF_TOKEN` | no | Server-side, app-owned. Enables the shared micro-AI tier for download filenames and example prompts. Unset and those fall back to the user's Gemini key, then to a regex slugifier. |
+| `HF_TOKEN` | no | Server-side, app-owned. Enables the shared micro-AI tier for download filenames, example prompts, and describing a selected source into the prompt. Unset, filenames and examples fall back to the user's Gemini key (then a regex slugifier); source description falls back to the user's Gemini key and, with neither configured, asks for one. |
 | `HF_BASE_URL` | no | Overrides the OpenAI-compatible endpoint the micro-AI tier calls. |
 | `AUTH_ADMIN_EMAIL` | **must stay unset** | See [The auth gate](#the-auth-gate-off-on-vercel) — the account store cannot survive on serverless as written. |
 | `TIMELINE_FFMPEG_PATH` | **must stay unset** | See [Server-side export](#server-side-export-off-on-vercel). |
