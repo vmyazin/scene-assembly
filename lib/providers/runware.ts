@@ -215,6 +215,8 @@ function assertFinalize(request: VideoRequest): void {
     || request.aspectRatio
     || request.audio !== undefined
     || request.draft !== undefined
+    || (request.referenceVideos?.length ?? 0) > 0
+    || (request.referenceAudios?.length ?? 0) > 0
     || (request.resolution !== undefined && request.resolution !== '1080p')
     || request.inputField;
   if (resends) throw new ProviderError('Finalizing a Seedance draft cannot resend the prompt, duration, audio, or media. Send only the draft ID.', 400, 'runware');
@@ -260,6 +262,11 @@ export async function runwareCreateVideo(request: VideoRequest, uuid = taskUUID(
       ? [request.width, request.height]
       : dimensionsFor(request.aspectRatio ?? '16:9');
   const frames = request.images ?? [];
+  const referenceVideos = request.referenceVideos ?? [];
+  const referenceAudios = request.referenceAudios ?? [];
+  if ((referenceVideos.length > 0 || referenceAudios.length > 0) && frames.length > 0 && request.inputField !== 'referenceImages') {
+    throw new ProviderError('Frame images cannot be combined with reference video or audio.', 400, 'runware');
+  }
   const task: Record<string, unknown> = {
     taskType: 'videoInference',
     taskUUID: uuid,
@@ -278,11 +285,17 @@ export async function runwareCreateVideo(request: VideoRequest, uuid = taskUUID(
   // Only when the caller resolved one: models list the lengths they accept, and
   // a model that counts frames instead has no duration parameter to reject.
   if (request.durationSeconds !== undefined) task.duration = request.durationSeconds;
+  const inputs: Record<string, unknown> = {};
   if (frames.length > 0) {
     // The route resolves this field from the catalog. Legacy callers omit it
     // and retain the historical frameImages behavior.
-    task.inputs = { [request.inputField ?? 'frameImages']: frames };
+    inputs[request.inputField ?? 'frameImages'] = frames;
   }
+  // UUID or URL only. Data URIs are rejected by Seedance for these two fields,
+  // so the caller uploads them before this task is built.
+  if (referenceVideos.length > 0) inputs.referenceVideos = referenceVideos;
+  if (referenceAudios.length > 0) inputs.referenceAudios = referenceAudios;
+  if (Object.keys(inputs).length > 0) task.inputs = inputs;
   if (request.model === RUNWARE_VEO_LITE_MODEL) applyVeoLiteTask(task, request, width, height);
   if (request.draft === true) {
     if (request.model !== SEEDANCE_25_MODEL) throw new ProviderError('Draft preview is only available for Seedance 2.5.', 400, 'runware');
@@ -369,6 +382,6 @@ export async function runwareDeleteMedia(apiKey: string, media: string): Promise
 export async function runwareStoreMedia(apiKey: string, media: string): Promise<string> {
   const payload = await runwareFetch(apiKey, [{taskType: 'mediaStorage', taskUUID: taskUUID(), operation: 'upload', media}]);
   const id = payload.data?.[0]?.mediaUUID;
-  if (typeof id !== 'string' || !/^[a-f\d-]{36}$/i.test(id)) throw new ProviderError('Runware did not return a source video ID.', 502, 'runware');
+  if (typeof id !== 'string' || !/^[a-f\d-]{36}$/i.test(id)) throw new ProviderError('Runware did not return a media ID.', 502, 'runware');
   return id;
 }

@@ -1,6 +1,7 @@
 // cloud/src/jobs.ts
 import { canRetryResultLocation } from './result-recovery';
 import { jobInputIds } from '../../lib/account/contracts';
+import { isReferenceAudioMime, isReferenceVideoMime } from '../../lib/providers/reference-clips';
 import { isEditVideoMime } from '../../lib/providers/video-edit';
 import type { CloudJobRequest, CloudJobState, CloudJobView } from '../../lib/account/contracts';
 import { hash, isLocal, type Env } from './security';
@@ -105,14 +106,23 @@ export async function acceptJob(env: Env, owner: string, token: string, request:
   const existing = await env.DB.prepare('SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?').bind(owner, token).first<JobRow>();
   if (existing) { if (existing.request_digest !== digest || existing.deleted) throw new AccountError('Submission token already used.', 409, 'token_conflict'); return existing; }
   const uploads=await env.DB.prepare('SELECT id,mime_type FROM account_uploads WHERE user_id=? AND id IN (SELECT value FROM json_each(?))').bind(owner,references).all<{id:string;mime_type:string}>();
+  const referenceVideos=new Set(request.referenceVideoIds??[]);
+  const referenceAudios=new Set(request.referenceAudioIds??[]);
   for(const upload of uploads.results){
     const source=upload.id===request.sourceVideoId;
-    if(source ? request.inputMode!=='edit'||!isEditVideoMime(upload.mime_type) : !upload.mime_type.startsWith('image/'))throw new AccountError('Source video and reference images must match their input roles.',400,'invalid_references');
+    const video=referenceVideos.has(upload.id);
+    const audio=referenceAudios.has(upload.id);
+    const roleOk=source ? request.inputMode==='edit'&&isEditVideoMime(upload.mime_type)
+      : video ? isReferenceVideoMime(upload.mime_type)
+      : audio ? isReferenceAudioMime(upload.mime_type)
+      : upload.mime_type.startsWith('image/');
+    if(!roleOk)throw new AccountError('Source video, reference images, reference video and reference audio must match their input roles.',400,'invalid_references');
   }
   const localEdit = isLocal(env) && env.DEV_FAKE_GENERATION !== '1' && request.provider === 'runware' && request.inputMode === 'edit';
-  if (request.provider === 'gemini' || request.provider === 'comet' || localEdit) {
+  const localClips = isLocal(env) && env.DEV_FAKE_GENERATION !== '1' && request.provider === 'runware' && (referenceVideos.size>0 || referenceAudios.size>0);
+  if (request.provider === 'gemini' || request.provider === 'comet' || localEdit || localClips) {
     const inputs = await env.DB.prepare('SELECT COALESCE(SUM(expected_bytes),0) AS bytes FROM account_uploads WHERE user_id=? AND id IN (SELECT value FROM json_each(?))').bind(owner,references).first<{bytes:number}>();
-    if ((inputs?.bytes ?? 0) > MAX_INLINE_INPUT_BYTES) throw new AccountError(localEdit ? 'Local background edits accept up to 12 MB of source video and images. Use a smaller clip or switch to in-browser.' : 'This provider accepts up to 12 MB of reference images per background job. Use smaller images.',400,'inline_input_size');
+    if ((inputs?.bytes ?? 0) > MAX_INLINE_INPUT_BYTES) throw new AccountError(localEdit ? 'Local background edits accept up to 12 MB of source video and images. Use a smaller clip or switch to in-browser.' : localClips ? 'Local background jobs accept up to 12 MB of reference video and audio. Use a smaller clip or switch to in-browser.' : 'This provider accepts up to 12 MB of reference images per background job. Use smaller images.',400,'inline_input_size');
   }
   const connection = request.provider === 'local-test' ? null : await env.DB.prepare('SELECT id, revision FROM account_connections WHERE user_id = ? AND provider = ?').bind(owner, request.provider as Provider).first<{ id: string; revision: number }>();
   if (!connection && request.provider !== 'local-test') throw new AccountError('Save this provider connection in your account first.', 409, 'connection_required');

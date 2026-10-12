@@ -1,5 +1,6 @@
 // app/api/providers/video/route.ts
 import { editSettingsError } from '@/lib/providers/video-edit';
+import { referenceClipCountError, referenceClipSetError, referenceClipsFor } from '@/lib/providers/reference-clips';
 import { SEEDANCE_25_MODEL, isSeedanceDraftSize } from '@/lib/providers/seedance-draft';
 import { runwareDeleteMedia } from '@/lib/providers/runware';
 import { NextRequest, NextResponse } from 'next/server';
@@ -30,6 +31,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isProviderMode(value: unknown): value is ProviderMode {
   return value === 'text' || value === 'image' || value === 'frames' || value === 'reference' || value === 'edit';
+}
+
+const MEDIA_ID = /^[a-f\d-]{36}$/i;
+
+/** Reference clips are uploaded before this route runs. The body carries ids, never bytes. */
+function mediaIds(value: unknown): string[] | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || !MEDIA_ID.test(item))) return null;
+  return value;
 }
 
 function failure(error: unknown, fallback: string) {
@@ -72,7 +82,7 @@ export async function POST(request: NextRequest) {
   if (body.operation === 'finalize') {
     const model = typeof body.model === 'string' ? body.model : '';
     const draftId = typeof body.draftId === 'string' ? body.draftId.trim() : '';
-    const forbidden = ['prompt', 'images', 'sourceVideo', 'size', 'durationSeconds', 'width', 'height', 'aspectRatio', 'audio', 'draft', 'inputField']
+    const forbidden = ['prompt', 'images', 'sourceVideo', 'referenceVideos', 'referenceAudios', 'size', 'durationSeconds', 'width', 'height', 'aspectRatio', 'audio', 'draft', 'inputField']
       .filter((key) => body[key] !== undefined);
     if (model !== SEEDANCE_25_MODEL || !draftId || forbidden.length > 0) {
       return NextResponse.json({
@@ -100,10 +110,15 @@ export async function POST(request: NextRequest) {
   const images = Array.isArray(body.images)
     ? body.images.filter((image): image is string => typeof image === 'string' && image.startsWith('data:'))
     : [];
+  const referenceVideos = mediaIds(body.referenceVideos);
+  const referenceAudios = mediaIds(body.referenceAudios);
+  if (!referenceVideos || !referenceAudios) {
+    return NextResponse.json({ success: false, error: 'Reference video and audio must already be uploaded.' }, { status: 400 });
+  }
   const moderation = await honoredModeration({
     requested: body.moderation,
     prompt,
-    hasReferences: images.length > 0 || typeof body.sourceVideo === 'string',
+    hasReferences: images.length > 0 || referenceVideos.length > 0 || referenceAudios.length > 0 || typeof body.sourceVideo === 'string',
     request,
   });
 
@@ -140,6 +155,9 @@ export async function POST(request: NextRequest) {
     );
   }
   if (inputMode === 'edit') {
+    if (referenceVideos.length > 0 || referenceAudios.length > 0) {
+      return NextResponse.json({ success: false, error: 'Edit mode takes a source video, not reference video or audio.' }, { status: 400 });
+    }
     const capability = modelRecord?.videoEdit;
     if (!capability || body.provider !== 'runware' || typeof body.sourceVideo !== 'string' || !/^[a-f\d-]{36}$/i.test(body.sourceVideo)) return NextResponse.json({success: false, error: 'Upload a source video for this editing model.'}, {status: 400});
     if (body.durationSeconds !== undefined || body.aspectRatio !== undefined || body.width !== undefined || body.height !== undefined) return NextResponse.json({success: false, error: 'Edits inherit source duration and aspect ratio.'}, {status: 400});
@@ -152,6 +170,32 @@ export async function POST(request: NextRequest) {
     } catch (error) { return failure(error, 'Could not start this video edit.'); }
   }
   if (body.sourceVideo !== undefined) return NextResponse.json({success: false, error: 'Source video requires Edit video mode.'}, {status: 400});
+  const clipCapability = referenceClipsFor(modelRecord, inputMode);
+  if ((referenceVideos.length > 0 || referenceAudios.length > 0) && !clipCapability) {
+    return NextResponse.json({ success: false, error: 'This model does not take reference video or audio in this mode.' }, { status: 400 });
+  }
+  if (clipCapability?.video && referenceVideos.length > 0) {
+    const countError = referenceClipCountError(clipCapability.video, referenceVideos.length);
+    if (countError) return NextResponse.json({ success: false, error: countError }, { status: 400 });
+  }
+  if (clipCapability?.audio && referenceAudios.length > 0) {
+    const countError = referenceClipCountError(clipCapability.audio, referenceAudios.length);
+    if (countError) return NextResponse.json({ success: false, error: countError }, { status: 400 });
+  }
+  if (!clipCapability?.video && referenceVideos.length > 0) {
+    return NextResponse.json({ success: false, error: 'This model does not take reference video.' }, { status: 400 });
+  }
+  if (!clipCapability?.audio && referenceAudios.length > 0) {
+    return NextResponse.json({ success: false, error: 'This model does not take reference audio.' }, { status: 400 });
+  }
+  const clipSetError = clipCapability
+    ? referenceClipSetError(clipCapability, { images: images.length, videos: referenceVideos.length, audios: referenceAudios.length })
+    : null;
+  if (clipSetError) return NextResponse.json({ success: false, error: clipSetError }, { status: 400 });
+  if ((referenceVideos.length > 0 || referenceAudios.length > 0) && body.provider !== 'runware') {
+    return NextResponse.json({ success: false, error: 'Reference video and audio on this provider need a background job, so the files have a hosted address.' }, { status: 400 });
+  }
+  const clipsStandIn = referenceVideos.length > 0 || (referenceAudios.length > 0 && clipCapability && !clipCapability.audioRequiresVisual);
   const videoInput = resolveVideoInput(body.provider, model, inputMode);
   if (hasExplicitInputMode && inputMode !== 'text') {
     if (!videoInput) {
@@ -161,7 +205,7 @@ export async function POST(request: NextRequest) {
       );
     }
     const required = inputMode === 'frames' ? 2 : 1;
-    if (images.length < required) {
+    if (images.length < required && !(inputMode === 'reference' && clipsStandIn)) {
       return NextResponse.json(
         {
           success: false,
@@ -228,6 +272,8 @@ export async function POST(request: NextRequest) {
       ),
       width: size?.width,
       height: size?.height,
+      ...(referenceVideos.length > 0 ? { referenceVideos } : {}),
+      ...(referenceAudios.length > 0 ? { referenceAudios } : {}),
       resolution: size?.preset,
       ...(body.provider === 'piapi' || modelRecord?.supportsAudio ? {audio: body.audio === true} : {}),
       ...(model === SEEDANCE_25_MODEL && body.draft === true ? {draft: true} : {}),

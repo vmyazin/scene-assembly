@@ -12,7 +12,9 @@ import CloudJobPanel from '@/components/account/CloudJobPanel';
 import VideoSourceInput, { type SourceVideo } from '@/components/VideoSourceInput';
 import { useAccountStore } from '@/store/useAccountStore';
 import { EDIT_PROMPTS, validateEditSource } from '@/lib/providers/video-edit';
-import { uploadRunwareVideo } from '@/lib/providers/upload-video';
+import { uploadRunwareMedia, uploadRunwareVideo } from '@/lib/providers/upload-video';
+import ReferenceClipTray, { type AttachedReferenceClip } from '@/components/ReferenceClipTray';
+import { clipToken, referenceClipSetError, referenceClipsFor } from '@/lib/providers/reference-clips';
 import LastFrameActions from '@/components/LastFrameActions';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import PromptPanel from '@/components/PromptPanel';
@@ -275,8 +277,19 @@ export default function ProviderVideoWorkspace({
   const [selectedSource, setSelectedSource] = useState<SourceVideo | null>(null);
   const source = selectedSource?.epoch === epoch ? selectedSource : null;
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadKind, setUploadKind] = useState<'source' | 'video' | 'audio' | null>(null);
+  const [clipVideos, setClipVideos] = useState<AttachedReferenceClip[]>([]);
+  const [clipAudios, setClipAudios] = useState<AttachedReferenceClip[]>([]);
   const uploadedSource = useRef<{file: File; key: string; id: string} | null>(null);
+  const uploadedClips = useRef<Map<File, { key: string; id: string }>>(new Map());
   const submitFlight = useRef(false);
+  const clipScopeKey = `${modelKey}:${epoch}`;
+  const [clipScope, setClipScope] = useState(clipScopeKey);
+  if (clipScope !== clipScopeKey) {
+    setClipScope(clipScopeKey);
+    setClipVideos([]);
+    setClipAudios([]);
+  }
 
   const prompt = useDraftStore((state) => state.prompt);
   const setPrompt = useDraftStore((state) => state.setPrompt);
@@ -320,7 +333,7 @@ export default function ProviderVideoWorkspace({
     provider,
     modelId: selectedModel?.id ?? '',
     prompt,
-    hasReferences: references.length > 0 || Boolean(source),
+    hasReferences: references.length > 0 || Boolean(source) || clipVideos.length > 0 || clipAudios.length > 0,
   });
 
   const [modelSearch, setModelSearch] = useState('');
@@ -337,6 +350,8 @@ export default function ProviderVideoWorkspace({
   const mountedRef = useRef(true);
   const isFrames = inputMode === 'frames';
   const isReference = inputMode === 'reference';
+  const clipCapability = referenceClipsFor(selectedModel, inputMode);
+  const clipSyntax = selectedModel?.videoInputs?.reference?.promptSyntax;
   const imageReferencesOnly = isReference || isEdit;
   const inputCapability = inputMode === 'text' ? undefined : selectedModel?.videoInputs?.[inputMode];
   // Reference arrays can be larger at the provider, but data-URI requests stay
@@ -668,7 +683,25 @@ export default function ProviderVideoWorkspace({
     }
     if (isEdit && !source) { setError('Choose a source video to edit.'); return; }
     if (isReference && references.length === 0) {
-      setError('Add at least one character view.');
+      const clipsStandIn = clipVideos.length > 0 || (clipAudios.length > 0 && Boolean(clipCapability && !clipCapability.audioRequiresVisual));
+      if (!clipsStandIn) {
+        setError(clipCapability ? 'Add a character view, a reference video, or reference audio.' : 'Add at least one character view.');
+        return;
+      }
+    }
+    if (clipCapability) {
+      const clipSet = referenceClipSetError(clipCapability, {
+        images: inputMode === 'text' ? 0 : references.length,
+        videos: clipVideos.length,
+        audios: clipAudios.length,
+      });
+      if (clipSet) {
+        setError(clipSet);
+        return;
+      }
+    }
+    if ((clipVideos.length > 0 || clipAudios.length > 0) && provider === 'atlas' && !cloudWorkspace.cloud) {
+      setError('Atlas reference video and audio need a background job, so the files have a hosted address.');
       return;
     }
     if (isFrames && references.length < 2) {
@@ -693,13 +726,14 @@ export default function ProviderVideoWorkspace({
           ...(!isEdit && selectedModel?.supportsAudio ? {audio:values.audio === true} : {}),
           ...(aspectRatio ? { aspectRatio } : {}),
           ...relaxed.attach(),
-        }}, inputMode === 'text' ? [] : references.map(reference => reference.file), prompt.trim(), isEdit ? source?.file : undefined);
+        }}, inputMode === 'text' ? [] : references.map(reference => reference.file), prompt.trim(), isEdit ? source?.file : undefined, clipCapability ? { videos: clipVideos.map((clip) => clip.file), audios: clipAudios.map((clip) => clip.file) } : undefined);
         autoRetry.reset();
         return;
       }
       let sourceVideo: string | undefined;
       if (isEdit && source) {
         if (uploadedSource.current?.file !== source.file || uploadedSource.current.key !== apiKey) {
+          setUploadKind('source');
           setUploadProgress(0);
           const id = await uploadRunwareVideo(source.file, apiKey, setUploadProgress);
           uploadedSource.current = {file: source.file, key: apiKey, id};
@@ -707,6 +741,23 @@ export default function ProviderVideoWorkspace({
         sourceVideo = uploadedSource.current.id;
         setUploadProgress(null);
         if (!mountedRef.current || useAccountStore.getState().epoch !== epoch) throw new Error('Your session changed. Review the edit before submitting.');
+      }
+      const uploadClip = async (file: File, kind: 'video' | 'audio') => {
+        const cached = uploadedClips.current.get(file);
+        if (cached?.key === apiKey) return cached.id;
+        setUploadKind(kind);
+        setUploadProgress(0);
+        const id = await uploadRunwareMedia(file, apiKey, setUploadProgress);
+        uploadedClips.current.set(file, { key: apiKey, id });
+        return id;
+      };
+      const referenceVideos = [];
+      for (const clip of clipVideos) referenceVideos.push(await uploadClip(clip.file, 'video'));
+      const referenceAudios = [];
+      for (const clip of clipAudios) referenceAudios.push(await uploadClip(clip.file, 'audio'));
+      if (referenceVideos.length > 0 || referenceAudios.length > 0) {
+        setUploadProgress(null);
+        if (!mountedRef.current || useAccountStore.getState().epoch !== epoch || useAppStore.getState().runwareApiKey !== apiKey) throw new Error('Your session changed. Review the generation before submitting.');
       }
       const images = provider === 'piapi' && inputMode === 'text' ? [] : await Promise.all(references.map((reference) => fileAsDataUrl(reference.file)));
       if (isEdit && (!mountedRef.current || useAccountStore.getState().epoch !== epoch || useAppStore.getState().runwareApiKey !== apiKey)) throw new Error('Your session changed. Review the edit before submitting.');
@@ -719,6 +770,8 @@ export default function ProviderVideoWorkspace({
         inputMode,
         images,
         sourceVideo,
+        ...(referenceVideos.length > 0 ? { referenceVideos } : {}),
+        ...(referenceAudios.length > 0 ? { referenceAudios } : {}),
         durationSeconds: isEdit ? undefined : typeof values.duration === 'number' ? values.duration : undefined,
         size: ((!isEdit || selectedModel.videoEdit?.sizes.length) && typeof values.size === 'string' ? values.size : undefined) || undefined,
         ...(isEdit && selectedModel.videoEdit?.draftRate ? {draft:values.draft === true} : {}),
@@ -776,7 +829,7 @@ export default function ProviderVideoWorkspace({
         modelLabel: selectedModel?.label ?? provider,
         level: relaxed.effective,
         route: { provider, modelId: selectedModel?.id ?? '' },
-        hasReferences: references.length > 0 || Boolean(source),
+        hasReferences: references.length > 0 || Boolean(source) || clipVideos.length > 0 || clipAudios.length > 0,
       })
     : null;
 
@@ -965,6 +1018,19 @@ export default function ProviderVideoWorkspace({
             </section>
           )}
 
+          {clipCapability && (
+            <ReferenceClipTray
+              capability={clipCapability}
+              syntax={clipSyntax}
+              videos={clipVideos}
+              audios={clipAudios}
+              onVideos={setClipVideos}
+              onAudios={setClipAudios}
+              disabled={isSubmitting}
+              hostedOnly={provider === 'atlas' && !cloudWorkspace.cloud}
+            />
+          )}
+
           {(fields.length > 0 || relaxed.offered) && (
             <section className="glass-card space-y-3 p-3.5 md:p-4">
               <div>
@@ -1015,7 +1081,7 @@ export default function ProviderVideoWorkspace({
               id="provider-video-prompt"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              placeholder={isEdit ? "Describe what to change in @Video1 and what to keep…" : "Describe the motion, camera, mood, and scene…"}
+              placeholder={isEdit ? "Describe what to change in @Video1 and what to keep…" : clipCapability ? `Describe the motion. Address clips as ${clipToken(clipSyntax, 'Video', 0)} and ${clipToken(clipSyntax, 'Audio', 0)}.` : "Describe the motion, camera, mood, and scene…"}
             />
           </PromptPanel>
         }
@@ -1038,7 +1104,7 @@ export default function ProviderVideoWorkspace({
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="animate-spin" size={21} /> {uploadProgress !== null ? `Uploading source… ${uploadProgress}%` : 'Starting…'}
+                  <Loader2 className="animate-spin" size={21} /> {uploadProgress !== null ? `Uploading ${uploadKind === 'audio' ? 'reference audio' : uploadKind === 'video' ? 'reference video' : 'source'}… ${uploadProgress}%` : 'Starting…'}
                 </>
               ) : (
                 <>

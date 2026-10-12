@@ -38,6 +38,8 @@ export async function submitProviderVideo(args: {
   inputMode: ProviderMode;
   images?: string[];
   sourceVideo?: string;
+  referenceVideos?: string[];
+  referenceAudios?: string[];
   durationSeconds?: number;
   /** Label of the model's documented size, resolved to pixels on the server. */
   size?: string;

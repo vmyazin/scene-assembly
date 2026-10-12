@@ -123,6 +123,69 @@ describe('reference mode route and Runware transport', () => {
     expect(sentTask(fetchMock).inputs).toEqual({ frameImages: ['data:image/png;base64,A'] });
   });
 
+  it('sends Seedance reference video and audio as uploaded ids, including on a draft', async () => {
+    const fetchMock = mockFetch({ data: [{}] });
+    await runwareCreateVideo({
+      apiKey: 'rw-key',
+      model: 'bytedance:seedance@2.5',
+      prompt: 'Follow @Video1 and @Audio1',
+      inputMode: 'text',
+      referenceVideos: ['11111111-1111-1111-1111-111111111111'],
+      referenceAudios: ['22222222-2222-2222-2222-222222222222'],
+      durationSeconds: 5,
+      width: 854,
+      height: 480,
+      draft: true,
+    });
+    expect(sentTask(fetchMock).inputs).toEqual({
+      referenceVideos: ['11111111-1111-1111-1111-111111111111'],
+      referenceAudios: ['22222222-2222-2222-2222-222222222222'],
+    });
+    expect(sentTask(fetchMock).settings).toEqual({ draft: true });
+  });
+
+  it('refuses to resend reference clips when finalizing a draft', async () => {
+    const fetchMock = mockFetch({ data: [{}] });
+    await expect(runwareCreateVideo({
+      apiKey: 'rw-key',
+      model: 'bytedance:seedance@2.5',
+      prompt: '',
+      draftId: 'draft-1',
+      resolution: '1080p',
+      referenceVideos: ['11111111-1111-1111-1111-111111111111'],
+    })).rejects.toThrow(/cannot resend/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('accepts Seedance text with uploaded clips and rejects them on Wan', async () => {
+    const fetchMock = mockFetch({ data: [{}] });
+    const clip = '11111111-1111-1111-1111-111111111111';
+    const accepted = await post({
+      provider: 'runware',
+      apiKey: 'rw-key',
+      model: 'bytedance:seedance@2.5',
+      prompt: 'Follow @Video1',
+      inputMode: 'text',
+      referenceVideos: [clip],
+      durationSeconds: 5,
+      size: '480p · 16:9',
+    });
+    expect(accepted.status).toBe(200);
+    expect(sentTask(fetchMock).inputs).toEqual({ referenceVideos: [clip] });
+
+    const wan = await post({
+      provider: 'runware',
+      apiKey: 'rw-key',
+      model: 'alibaba:wan@3.0',
+      prompt: 'A walk',
+      inputMode: 'reference',
+      images: ['data:image/png;base64,A'],
+      referenceVideos: [clip],
+    });
+    expect(wan.status).toBe(400);
+    expect(await wan.json()).toMatchObject({ error: expect.stringMatching(/does not take reference video or audio/) });
+  });
+
   it('resolves a WAN reference request end to end through the route', async () => {
     const fetchMock = mockFetch({ data: [{}] });
     const response = await post({

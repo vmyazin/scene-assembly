@@ -1,3 +1,4 @@
+// cloud/src/media-type.ts
 /**
  * Reading a file's type from its first bytes. A Content-Type header is whatever
  * the other server says: an agent's reference URL can lie, and a provider's
@@ -12,6 +13,9 @@ export function sniffMime(bytes: Uint8Array): string | null {
   if (at(0, 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return 'image/png';
   if (at(0, 0xff, 0xd8, 0xff)) return 'image/jpeg';
   if (at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50)) return 'image/webp';
+  if (at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x41, 0x56, 0x45)) return 'audio/wav';
+  if (at(0, 0x49, 0x44, 0x33)) return 'audio/mpeg';
+  if (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0) return 'audio/mpeg';
   if (at(0, 0x1a, 0x45, 0xdf, 0xa3)) return 'video/webm';
   if (at(4, 0x66, 0x74, 0x79, 0x70)) {
     const brand = String.fromCharCode(...bytes.subarray(8, 12));

@@ -1,15 +1,16 @@
+// lib/providers/upload-video.ts
 import { validateEditVideo } from './video-edit';
 const API = 'https://api.runware.ai/v1';
 
-/** Direct upload: a video data URI must never pass through Vercel's body limit.
+/** Direct upload: a media data URI must never pass through Vercel's body limit.
  * Only called after Generate, with the explicitly chosen browser Runware key.
+ * Reference video and audio use the same media-storage task as an edit source.
  */
-export async function uploadRunwareVideo(file: File, apiKey: string, onProgress: (percent: number) => void): Promise<string> {
-  validateEditVideo(file);
+export async function uploadRunwareMedia(file: File, apiKey: string, onProgress: (percent: number) => void): Promise<string> {
   const media = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error('Could not read the source video.'));
+    reader.onerror = () => reject(new Error('Could not read that file.'));
     reader.readAsDataURL(file);
   });
   return new Promise((resolve, reject) => {
@@ -24,12 +25,17 @@ export async function uploadRunwareVideo(file: File, apiKey: string, onProgress:
     xhr.onload = () => {
       try {
         const payload = JSON.parse(xhr.responseText);
-        if (xhr.status < 200 || xhr.status >= 300 || payload.errors?.length) throw new Error(payload.errors?.[0]?.message || 'Runware could not store the source video.');
+        if (xhr.status < 200 || xhr.status >= 300 || payload.errors?.length) throw new Error(payload.errors?.[0]?.message || 'Runware could not store that file.');
         const id = payload.data?.[0]?.mediaUUID;
-        if (typeof id !== 'string' || !/^[a-f\d-]{36}$/i.test(id)) throw new Error('Runware did not return a source video ID.');
+        if (typeof id !== 'string' || !/^[a-f\d-]{36}$/i.test(id)) throw new Error('Runware did not return a media ID.');
         resolve(id);
       } catch (error) { reject(error); }
     };
     xhr.send(JSON.stringify([{taskType: 'mediaStorage', taskUUID: crypto.randomUUID(), operation: 'upload', media}]));
   });
+}
+
+export async function uploadRunwareVideo(file: File, apiKey: string, onProgress: (percent: number) => void): Promise<string> {
+  validateEditVideo(file);
+  return uploadRunwareMedia(file, apiKey, onProgress);
 }

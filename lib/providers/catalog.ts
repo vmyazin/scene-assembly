@@ -1,4 +1,9 @@
 // lib/providers/catalog.ts
+import {
+  ATLAS_SEEDANCE_25_REFERENCE_CLIPS,
+  SEEDANCE_20_REFERENCE_CLIPS,
+  SEEDANCE_25_REFERENCE_CLIPS,
+} from './reference-clips';
 import type {
   MediaKind,
   ProviderId,
@@ -131,9 +136,8 @@ const RUNWARE_MODELS: ProviderModel[] = [
     videoInputs: {
       image: { field: 'frameImages', maxImages: 1 },
       frames: { field: 'frameImages', maxImages: 2 },
-      // The vendor takes 30 references (plus reference videos and audio this
-      // studio has no input for). The client cap stays at 5 like Wan 3.0's:
-      // every reference is inlined as a data URL into one request body.
+      // The vendor takes 30 reference images. Videos and audio are referenceClips,
+      // uploaded separately, so they do not ride along inside this data-URI cap.
       reference: {
         field: 'referenceImages',
         maxImages: 30,
@@ -141,6 +145,7 @@ const RUNWARE_MODELS: ProviderModel[] = [
         promptSyntax: 'at-image-index',
       },
     },
+    referenceClips: SEEDANCE_25_REFERENCE_CLIPS,
     // Any whole 4-30. The native 30-second clip in a single pass is the reason
     // to reach for this model, so the control is a range and not 2.0's stops.
     duration: { type: 'range', min: 4, max: 30, default: 5 },
@@ -168,7 +173,7 @@ const RUNWARE_MODELS: ProviderModel[] = [
       { label: '1080p \u00b7 3:4', width: 1248, height: 1664 },
       { label: '1080p \u00b7 21:9', width: 2206, height: 946 },
     ],
-    note: 'Up to 30 seconds in one pass, with native audio. Address references as @Image1, @Image2. Frame images cannot be combined with references. Draft is a 480p preview you can finalize at 1080p.',
+    note: 'Up to 30 seconds in one pass, with native audio. Address images as @Image1, videos as @Video1, and audio as @Audio1. Frame images cannot be combined with reference video. Draft is a 480p preview you can finalize at 1080p; finalize does not send the clips again.',
   },
   {
     id: 'bytedance:seedance@2.0-mini',
@@ -340,7 +345,8 @@ function seedance20Tier(tier: 'mini' | 'fast'): ProviderModel[] {
           promptSyntax: 'image-index',
         },
       },
-      note: 'Carries characters, products, and styles between shots, with native audio.',
+      referenceClips: SEEDANCE_20_REFERENCE_CLIPS,
+      note: 'Up to 9 images, 3 videos and 3 audio clips. Address them as Image 1, Video 1 and Audio 1. Audio needs an image or a video with it. Videos and audio together stay within 15 seconds each.',
     },
   ];
 }
@@ -421,7 +427,8 @@ function seedance25(): ProviderModel[] {
           promptSyntax: 'at-image-index',
         },
       },
-      note: 'Up to 30 references, cited in the prompt as @Image1, @Image2. Native audio.',
+      referenceClips: ATLAS_SEEDANCE_25_REFERENCE_CLIPS,
+      note: 'Up to 30 images, 10 videos and 10 audio clips, cited as @Image1, @Video1 and @Audio1. Audio can be used on its own. Native audio.',
     },
   ];
 }

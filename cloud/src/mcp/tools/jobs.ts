@@ -1,3 +1,4 @@
+// cloud/src/mcp/tools/jobs.ts
 import * as z from 'zod';
 import { jobInputIds, type CloudJobRequest, type CloudJobState } from '../../../../lib/account/contracts';
 import { estimateCloudJob } from '../../../../lib/spend/estimate';
@@ -27,7 +28,7 @@ export async function agentJobToken(agentId: string, idempotencyKey?: string) {
 /** A retry with the same key is the same run if everything but the freshly copied reference ids matches. */
 function sameRun(saved: CloudJobRequest, next: CloudJobRequest) {
   const shape = (request: CloudJobRequest) => JSON.stringify([request.provider, request.modelId, request.mediaType, request.inputMode, request.prompt,
-    Object.entries(request.values).sort(([a], [b]) => a.localeCompare(b)), request.referenceIds.length, Boolean(request.sourceVideoId)]);
+    Object.entries(request.values).sort(([a], [b]) => a.localeCompare(b)), request.referenceIds.length, request.referenceVideoIds?.length ?? 0, request.referenceAudioIds?.length ?? 0, Boolean(request.sourceVideoId)]);
   return shape(saved) === shape(next);
 }
 
@@ -151,12 +152,14 @@ export const generate = defineTool({
       throw new ToolError('invalid_field', 'This Seedance draft could not be priced from the source clip, so it was not reserved.', { field: 'sourceVideo' });
     }
     return submitPrepared(ctx, request, estimate, args.idempotencyKey, async () => {
-      const references = await resolveReferences(ctx, args.references, args.sourceVideo);
+      const references = await resolveReferences(ctx, args.references, args.sourceVideo, args.referenceVideos, args.referenceAudios);
       return {
         request: {
           ...request,
           referenceIds: references.referenceIds,
           ...(references.sourceVideoId ? { sourceVideoId: references.sourceVideoId } : {}),
+          ...(references.referenceVideoIds.length ? { referenceVideoIds: references.referenceVideoIds } : {}),
+          ...(references.referenceAudioIds.length ? { referenceAudioIds: references.referenceAudioIds } : {}),
         },
         copiedIds: references.copiedIds,
       };
