@@ -1,3 +1,4 @@
+// lib/video-frame.ts
 import {
   isDownloadableMediaUrl,
   isSameOriginMediaUrl,
@@ -229,4 +230,83 @@ export function lastFrameFileName(videoName: string) {
 export async function lastFrameAsImageFile(video: File): Promise<File> {
   const frame = await extractLastFrameFromBlob(video);
   return new File([frame], lastFrameFileName(video.name), { type: 'image/png' });
+}
+
+/** Longest edge of a still sent to a vision model. Full-resolution frames blow the request body. */
+const DESCRIPTION_STILL_MAX_EDGE = 768;
+
+/**
+ * Where to sample a clip so a vision model can see how it changes.
+ * A single instant when the clip is too short to have a middle, otherwise
+ * the open, the middle, and just before the end.
+ */
+export function descriptionSampleTimes(duration: number, epsilonSeconds = DEFAULT_EPSILON_SECONDS): number[] {
+  if (!Number.isFinite(duration) || duration <= 0) return [0];
+  const last = Math.max(0, duration - epsilonSeconds);
+  if (last < 0.05) return [0];
+  const times = [0, duration / 2, last];
+  const unique: number[] = [];
+  for (const time of times) {
+    if (unique.every((kept) => Math.abs(kept - time) >= 0.05)) unique.push(time);
+  }
+  return unique;
+}
+
+/** `1.5` → `1.5s`, the label the describe route accepts. */
+export function frameTimeLabel(seconds: number): string {
+  return `${seconds.toFixed(1)}s`;
+}
+
+function drawToJpeg(video: HTMLVideoElement): Promise<Blob> {
+  const sourceWidth = video.videoWidth;
+  const sourceHeight = video.videoHeight;
+  if (!sourceWidth || !sourceHeight) throw new Error(FRAME_EXTRACTION_ERROR);
+
+  const scale = Math.min(1, DESCRIPTION_STILL_MAX_EDGE / Math.max(sourceWidth, sourceHeight));
+  const width = Math.max(1, Math.round(sourceWidth * scale));
+  const height = Math.max(1, Math.round(sourceHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error(FRAME_EXTRACTION_ERROR);
+  context.drawImage(video, 0, 0, width, height);
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error(FRAME_EXTRACTION_ERROR));
+    }, 'image/jpeg', 0.72);
+  });
+}
+
+/**
+ * Ordered stills from a local clip: open, middle, and end.
+ *
+ * A source video is often larger than the JSON body a vision route can accept,
+ * and the shared vision model only reads images. Three small JPEGs keep the
+ * change across the clip without uploading the file.
+ */
+export async function sampleVideoStills(blob: Blob): Promise<Array<{ blob: Blob; label: string }>> {
+  if (blob.size === 0 || blob.size > MAX_REMOTE_VIDEO_BYTES) {
+    throw new Error(FRAME_EXTRACTION_ERROR);
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const video = await loadVideo(objectUrl);
+    try {
+      if (!Number.isFinite(video.duration)) await seekTo(video, UNBOUNDED_SEEK_SECONDS);
+      const frames: Array<{ blob: Blob; label: string }> = [];
+      for (const time of descriptionSampleTimes(video.duration)) {
+        await seekTo(video, time);
+        frames.push({ blob: await drawToJpeg(video), label: frameTimeLabel(time) });
+      }
+      return frames;
+    } finally {
+      releaseVideo(video);
+    }
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 }

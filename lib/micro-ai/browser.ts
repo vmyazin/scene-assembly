@@ -1,3 +1,4 @@
+// lib/micro-ai/browser.ts
 import { SEED_TONES } from '@/lib/example-prompts';
 import type { MicroAiUsage } from '@/lib/micro-ai/models';
 import type { MicroAiEnvelope } from '@/lib/micro-ai/types';
@@ -9,7 +10,7 @@ import { useMicroAiUsageStore } from '@/store/useMicroAiUsageStore';
  * cost, and both announce which model answered when running `next dev`.
  */
 
-export type MicroTaskName = 'slug' | 'example';
+export type MicroTaskName = 'slug' | 'example' | 'describe';
 
 function isUsage(value: unknown): value is MicroAiUsage {
   const usage = value as MicroAiUsage | undefined;

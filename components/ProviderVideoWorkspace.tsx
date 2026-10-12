@@ -17,6 +17,7 @@ import LastFrameActions from '@/components/LastFrameActions';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import PromptPanel from '@/components/PromptPanel';
 import SavedPromptsButton from '@/components/SavedPromptsButton';
+import DescribeSourceButton from '@/components/DescribeSourceButton';
 import ModelControls, { type ModelControlField } from '@/components/ModelControls';
 import ConnectionGate, { isGated } from '@/components/ConnectionGate';
 import SubmissionError from '@/components/SubmissionError';
@@ -327,6 +328,8 @@ export default function ProviderVideoWorkspace({
 
   const [error, setError] = useState<string | null>(null);
   const [isGeneratingExample, setIsGeneratingExample] = useState(false);
+  const [isDescribing, setIsDescribing] = useState(false);
+  const [describeError, setDescribeError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const autoRetry = useAutoRetry();
   const [isDownloading, setIsDownloading] = useState(false);
@@ -336,6 +339,17 @@ export default function ProviderVideoWorkspace({
   const addReferencesRef = useRef<(files: File[]) => Promise<void>>(async () => {});
   const mountedRef = useRef(true);
   const isFrames = inputMode === 'frames';
+  const describeSources = useMemo(() => {
+    const items: { file: File; label: string }[] = [];
+    if (source) items.push({ file: source.file, label: 'Source video' });
+    references.forEach((reference, index) => {
+      items.push({
+        file: reference.file,
+        label: isFrames ? frameSlotLabel(index) : `Image ${index + 1}`,
+      });
+    });
+    return items;
+  }, [source, references, isFrames]);
   const isReference = inputMode === 'reference';
   const imageReferencesOnly = isReference || isEdit;
   const inputCapability = inputMode === 'text' ? undefined : selectedModel?.videoInputs?.[inputMode];
@@ -988,16 +1002,33 @@ export default function ProviderVideoWorkspace({
         }
         prompt={
           <PromptPanel paused={gated} hasPrompt={prompt.trim().length > 0}>
-            <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
               <label htmlFor="provider-video-prompt" className="display block text-base font-semibold">
                 Prompt
               </label>
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center justify-end gap-1.5">
                 <SavedPromptsButton />
+                <DescribeSourceButton
+                  sources={describeSources}
+                  apiKey={geminiApiKey}
+                  disabled={isGeneratingExample}
+                  onPrompt={(next) => {
+                    setDescribeError(null);
+                    setPrompt(next);
+                  }}
+                  onError={(message) => {
+                    setDescribeError(message);
+                    toast.error(message);
+                  }}
+                  onBusyChange={(busy) => {
+                    setIsDescribing(busy);
+                    if (busy) setDescribeError(null);
+                  }}
+                />
                 {!isEdit && <button
                   type="button"
                   onClick={() => void generateExample()}
-                  disabled={isGeneratingExample}
+                  disabled={isGeneratingExample || isDescribing}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--brand-accent)]/30 bg-[var(--brand-accent)]/10 px-2.5 py-1.5 text-xs font-medium text-[var(--brand-accent)] transition-colors hover:text-[var(--neon-cyan)] disabled:cursor-not-allowed disabled:opacity-60"
                   title="Generate an example prompt with the shared fast model, or your own Gemini key"
                 >
@@ -1010,6 +1041,9 @@ export default function ProviderVideoWorkspace({
                 </button>}
               </div>
             </div>
+            {describeError && (
+              <p role="alert" className="text-xs text-red-300">{describeError}</p>
+            )}
             {isEdit && <div className="flex flex-wrap gap-2">{Object.entries(EDIT_PROMPTS).map(([label, text]) => <button key={label} type="button" className="btn-secondary px-2.5 py-1.5 text-xs" onClick={() => setPrompt(selectedModel?.videoEdit?.promptSyntax === 'image-index' ? text.replace('@Video1', 'the source video').replace(/@Image(\d+)/g, 'image $1') : text)}>{label}</button>)}</div>}
             <AutoExpandingPrompt
               id="provider-video-prompt"

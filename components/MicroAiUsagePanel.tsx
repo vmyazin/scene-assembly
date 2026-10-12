@@ -1,3 +1,4 @@
+// components/MicroAiUsagePanel.tsx
 'use client';
 
 import { Check, Cpu } from 'lucide-react';
@@ -7,9 +8,9 @@ import { MICRO_AI_MODELS, PRICING_NOTE } from '@/lib/micro-ai/models';
 import { useMicroAiUsageStore } from '@/store/useMicroAiUsageStore';
 
 /**
- * Read-only telemetry for the shared micro-AI tier that names downloads and
- * writes example prompts. Deliberately not a quota: these numbers inform, they
- * do not gate.
+ * Read-only telemetry for the shared micro-AI tier that names downloads,
+ * writes example prompts, and describes a source. Deliberately not a quota:
+ * these numbers inform, they do not gate.
  */
 export default function MicroAiUsagePanel() {
   const requests = useMicroAiUsageStore((state) => state.requests);
@@ -33,8 +34,8 @@ export default function MicroAiUsagePanel() {
       </h3>
       <p className="field-hint">
         {active
-          ? `Filenames and example prompts are running on ${modelLabel} at no cost to you.`
-          : 'Filenames and example prompts run on a shared model, or on your Gemini key.'}
+          ? `Filenames, example prompts, and source descriptions are running on ${modelLabel} at no cost to you.`
+          : 'Filenames, example prompts, and source descriptions run on a shared model, or on your Gemini key.'}
       </p>
 
       {/* Two figures, not three: what ran and what it would have cost. The raw
