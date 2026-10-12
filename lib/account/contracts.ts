@@ -1,3 +1,4 @@
+// lib/account/contracts.ts
 /** Serializable contract shared by browser and Worker; never contains provider keys. */
 export type CloudProvider = 'gemini' | 'fal' | 'kie' | 'runware' | 'atlas' | 'comet' | 'piapi' | 'cloudflare' | 'pollinations' | 'local-test';
 export interface CloudJobRequest {
@@ -41,6 +42,8 @@ export interface CloudJobView {
   /** Absent for jobs started in the browser, and from Workers that predate agents. */
   startedBy?: StartedBy;
   request: CloudJobRequest; createdAt: number; updatedAt: number;
+  /** Set when the provider returned a Seedance draft id. Finalize sends it back. */
+  draftId?: string;
 }
 export interface CloudAssetCounts {
   /** Account-wide, never page-scoped: the pills must keep saying how much sits
@@ -50,6 +53,8 @@ export interface CloudAssetCounts {
 export interface CloudAsset {
   id: string; kind: 'image' | 'video'; mimeType: string; bytes: number; createdAt: number;
   metadata: CloudJobRequest; jobId: string | null;
+  /** Lifted out of stored metadata so `metadata` stays a job request. */
+  draftId?: string;
   /** Present only for overflow awaiting space in the permanent library. */
   expiresAt?: number;
   /** Absent for jobs started in the browser, and from Workers that predate agents. */

@@ -60,13 +60,13 @@ describe('library tools', () => {
 describe('the whole tool list', () => {
   it('describes every tool and marks what it can do', () => {
     const names = TOOLS.map(tool => tool.name);
-    expect(names).toEqual(['list_models', 'estimate_cost', 'add_reference', 'generate', 'get_job', 'list_jobs', 'cancel_job', 'resume_job', 'dismiss_job', 'list_assets', 'view_asset', 'delete_asset', 'get_spend']);
+    expect(names).toEqual(['list_models', 'estimate_cost', 'add_reference', 'generate', 'finalize_draft', 'get_job', 'list_jobs', 'cancel_job', 'resume_job', 'dismiss_job', 'list_assets', 'view_asset', 'delete_asset', 'get_spend']);
     for (const tool of TOOLS) {
       expect(tool.description.length, tool.name).toBeGreaterThan(60);
       expect(tool.annotations.readOnlyHint, tool.name).toBe(tool.kind === 'read');
     }
     for (const name of ['delete_asset', 'cancel_job', 'dismiss_job']) expect(TOOLS.find(tool => tool.name === name)!.annotations.destructiveHint, name).toBe(true);
-    for (const name of ['generate', 'resume_job', 'add_reference']) expect(TOOLS.find(tool => tool.name === name)!.annotations.openWorldHint, name).toBe(true);
-    expect(TOOLS.find(tool => tool.name === 'generate')!.kind).toBe('submit');
+    for (const name of ['generate', 'finalize_draft', 'resume_job', 'add_reference']) expect(TOOLS.find(tool => tool.name === name)!.annotations.openWorldHint, name).toBe(true);
+    for (const name of ['generate', 'finalize_draft']) expect(TOOLS.find(tool => tool.name === name)!.kind).toBe('submit');
   });
 });

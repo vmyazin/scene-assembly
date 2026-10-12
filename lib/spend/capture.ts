@@ -13,6 +13,7 @@ import { fetchKieCredits } from '@/lib/kie/browser';
 import type { KieJob } from '@/lib/kie/types';
 import type { MicroAiUsage } from '@/lib/micro-ai/models';
 import { findModel } from '@/lib/providers/catalog';
+import { seedanceCatalogFigure } from '@/lib/providers/seedance-draft';
 import type { ProviderId, ProviderTask } from '@/lib/providers/types';
 import type { ProviderJob } from '@/store/useProviderJobsStore';
 import { useSpendStore } from '@/store/useSpendStore';
@@ -224,7 +225,11 @@ export function captureProviderJob(provider: ProviderId, job: ProviderJob, task:
       galleryRecordId: `${provider}-${job.id}`,
     };
     if (provider === 'runware') {
-      file(withFigure(base, resolveRunware(task.cost)));
+      const exact = resolveRunware(task.cost);
+      const catalog = exact.costUsd === null
+        ? seedanceCatalogFigure({ modelId: job.modelId, inputMode: job.inputMode, values: job.controlValues ?? {} })
+        : null;
+      file(withFigure(base, catalog && catalog.costUsd !== null ? catalog : exact));
       return;
     }
     const duration = job.controlValues?.duration;

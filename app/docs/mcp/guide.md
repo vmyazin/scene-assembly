@@ -167,15 +167,16 @@ References go in order. `list_models` gives each mode's minimum and maximum coun
 
 ## Tools
 
-The server offers 13 tools. `delete_asset` is offered only when you allowed the agent to delete files.
+The server offers 14 tools. `delete_asset` is offered only when you allowed the agent to delete files.
 
 | Tool | What it does | Key inputs |
 | --- | --- | --- |
 | `list_models` | Models your connected providers can run. Filter by provider or model to get each mode's settings. | `provider`, `modelId`, `mediaType`, `inputMode` (all optional) |
 | `estimate_cost` | Prices a request and checks it against the agent's limit, without running it. | The same fields as `generate` |
 | `add_reference` | Stages a reference image, or a source video for edit mode, and returns an `uploadId`. | `url`, or `upload` with `mimeType` and `bytes` |
-| `generate` | Starts an image or video job and charges its estimate to the agent's limit. Returns at once. | `provider`, `modelId`, `mediaType`, `inputMode`, `prompt`, `values`, `references`, `sourceVideo`, `idempotencyKey` |
-| `get_job` | A job's state and, once saved, its outputs with download links. Can wait for a change. | `jobId`, `waitSeconds` (0 to 25) |
+| `generate` | Starts an image or video job and charges its estimate to the agent's limit. Returns at once. Seedance 2.5 draft is `values.draft: true` and is off unless you set it. | `provider`, `modelId`, `mediaType`, `inputMode`, `prompt`, `values`, `references`, `sourceVideo`, `idempotencyKey` |
+| `finalize_draft` | Renders one Seedance 2.5 draft at 1080p. A new job and a separate charge. Do not resend the prompt or media. With `jobId`, the length is the one saved on that draft; a different `durationSeconds` is refused. | `jobId`, or `draftId` plus `durationSeconds` and `inputMode`, `idempotencyKey` |
+| `get_job` | A job's state and, once saved, its outputs with download links. A Seedance draft includes `draftId`. Can wait for a change. | `jobId`, `waitSeconds` (0 to 25) |
 | `list_jobs` | The account's recent jobs, newest first, including ones started in the browser. | `state` (`active`, `needs_attention`, `finished` or `all`), `limit` (up to 100) |
 | `cancel_job` | Cancels a job that is still queued and releases its charge. | `jobId` |
 | `resume_job` | Tries again on a job that needs attention, when its `failureReason` can be fixed by trying again. At most three times. | `jobId` |
@@ -185,7 +186,15 @@ The server offers 13 tools. `delete_asset` is offered only when you allowed the 
 | `delete_asset` | Permanently deletes a file from the library. Hidden unless you allowed it. | `assetId` |
 | `get_spend` | Account spend totals, this agent's limit and what is left, and optionally ledger entries and provider balances. | `entries` (up to 50), `balances` |
 
-Each agent can make 300 read calls, 60 write calls (`add_reference`, `cancel_job`, `dismiss_job`, `delete_asset`) and 10 submissions (`generate`, `resume_job`) per minute. An account runs at most 10 jobs at a time, shared with the browser.
+Each agent can make 300 read calls, 60 write calls (`add_reference`, `cancel_job`, `dismiss_job`, `delete_asset`) and 10 submissions (`generate`, `finalize_draft`, `resume_job`) per minute. An account runs at most 10 jobs at a time, shared with the browser.
+
+### Seedance drafts
+
+Seedance 2.5 on Runware can render a 480p draft (`values.draft` set to `true` on `generate`; the default is off) and later render that same preview at 1080p with `finalize_draft`. `get_job` and `view_asset` return `draftId` when the preview has one. Finalize does not take a prompt, references, or a source video — those stay on the draft — and it is budget-checked on its own, using the documented 1080p rate. Runware does not publish a separate finalize price, so that figure is an estimate until the provider reports a cost.
+
+Pass `jobId` and the length is taken from that draft (`durationSeconds`, or `sourceDurationSeconds` on an edit). You can omit `durationSeconds`. Passing a length more than a second off the saved one is refused, and nothing is reserved. A bare `draftId` still needs `durationSeconds` and `inputMode`, because there is no saved job to read.
+
+An edit draft is priced from the source clip. The Worker reads the duration out of the file before it reserves. `sourceDurationSeconds` is optional and, when you pass it, must be within a second of that length. If the length cannot be read, the draft is refused instead of priced as unknown.
 
 ## Errors
 
@@ -204,6 +213,7 @@ An HTTP 401 from the server is not a refusal. It means the connection was discon
 | `invalid_references` | No | The same reference was passed twice, or a file is in the wrong role: images go in `references`, a video goes in `sourceVideo`. |
 | `invalid_token` | No | Scene Assembly built an invalid submission token. This should not happen; report it. |
 | `not_found` | No | No job or file with that id on this account. |
+| `draft_unavailable` | No | That job is not a Seedance 2.5 draft, or it has no `draftId` yet. Generate a 480p draft and wait until `get_job` returns one. |
 | `local_fixture_mode` | No | Only on a local development server with fake generation switched on, which runs image jobs and edits only. |
 
 ### Providers

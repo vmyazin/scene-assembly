@@ -121,7 +121,10 @@ const RUNWARE_MODELS: ProviderModel[] = [
     fileCode: 'seedance-2_5',
     kind: 'video',
     modes: ['text', 'image', 'frames', 'reference', 'edit'],
-    videoEdit: { minSeconds: 4, maxSeconds: 30, sourceBounds: {minEdge: 300, maxEdge: 6000, minPixels: 407696, minRatio: 0.4, maxRatio: 2.5}, sizes: [{label: '720p', preset: '720p'}, {label: '480p', preset: '480p'}], rate: {per: 'second', usdByResolution: {'480p': 0.131, '720p': 0.295}}, maxImages: 5 },
+    // 1080p and the video-to-video rates were read 2026-10-12 from the same page.
+    // Draft is a 480p preview (settings.draft), not a separate cheaper rate.
+    draftPreview: true,
+    videoEdit: { minSeconds: 4, maxSeconds: 30, sourceBounds: {minEdge: 300, maxEdge: 6000, minPixels: 407696, minRatio: 0.4, maxRatio: 2.5}, draftPreview: true, sizes: [{label: '720p', preset: '720p'}, {label: '480p', preset: '480p'}, {label: '1080p', preset: '1080p'}], rate: {per: 'second', usdByResolution: {'480p': 0.131, '720p': 0.295, '1080p': 0.734}}, maxImages: 5 },
     price: '$0.102 / s @ 480p \u00b7 $0.23 @ 720p \u00b7 $0.614 @ 1080p',
     rate: { usdByResolution: { '480p': 0.102, '720p': 0.23, '1080p': 0.614 }, per: 'second' },
     maxInputImages: 30,
@@ -165,7 +168,7 @@ const RUNWARE_MODELS: ProviderModel[] = [
       { label: '1080p \u00b7 3:4', width: 1248, height: 1664 },
       { label: '1080p \u00b7 21:9', width: 2206, height: 946 },
     ],
-    note: 'Up to 30 seconds in one pass, with native audio. Address references as @Image1, @Image2. Frame images cannot be combined with references.',
+    note: 'Up to 30 seconds in one pass, with native audio. Address references as @Image1, @Image2. Frame images cannot be combined with references. Draft is a 480p preview you can finalize at 1080p.',
   },
   {
     id: 'bytedance:seedance@2.0-mini',

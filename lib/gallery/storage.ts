@@ -1,3 +1,4 @@
+// lib/gallery/storage.ts
 import type { DraftValue } from '@/lib/draft/carry-over';
 
 export type GalleryKind = 'image' | 'video';
@@ -40,6 +41,8 @@ export interface GalleryRecord {
   durationSeconds?: number;
   /** Best-effort — only a demuxer can report it. */
   fps?: number;
+  /** Seedance preview id. Optional, so an existing library needs no migration. */
+  draftId?: string;
 }
 
 /**

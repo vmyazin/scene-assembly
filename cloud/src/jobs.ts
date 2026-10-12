@@ -1,3 +1,4 @@
+// cloud/src/jobs.ts
 import { canRetryResultLocation } from './result-recovery';
 import { jobInputIds } from '../../lib/account/contracts';
 import { isEditVideoMime } from '../../lib/providers/video-edit';
@@ -67,10 +68,22 @@ function canonical(value: unknown): string {
   if (value && typeof value === 'object') return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(',')}}`;
   return JSON.stringify(value);
 }
+/** The draft id a finished Seedance preview left on the result, when it has one. */
+export function resultDraftId(resultJson: string | null): string | undefined {
+  if (!resultJson) return undefined;
+  try {
+    const parsed = JSON.parse(resultJson) as { draftId?: unknown };
+    return typeof parsed.draftId === 'string' && parsed.draftId ? parsed.draftId : undefined;
+  } catch {
+    return undefined;
+  }
+}
 export function jobView(row: JobRow): CloudJobView {
+  const draftId = resultDraftId(row.result_json);
   return {
     id: row.id, provider: row.provider, state: row.state, errorCode: row.error_code,
     canRetrySave: canRetryResultLocation(row),
+    ...(draftId ? { draftId } : {}),
     // `attempts` is the resume count, not a retry count: the row uses it to say
     // "attempt 2" and to stop offering a button the Worker would now refuse.
     failureReason: row.failure_reason ?? null, failureDetail: row.failure_detail ?? null, attempts: row.workflow_attempt,

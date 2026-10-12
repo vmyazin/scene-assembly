@@ -22,12 +22,14 @@ describe('video editing contract', () => {
     const send = (body: unknown) => POST(new NextRequest('http://localhost/api/providers/video', {method:'POST', body:JSON.stringify(body)}));
     expect((await send(request)).status).toBe(200);
     fetch.mockClear();
-    for (const change of [{sourceVideo: undefined}, {sourceVideo: 'https://private.test/a.mp4'}, {provider: 'atlas'}, {model: 'alibaba:wan@3.0'}, {durationSeconds: 6}, {aspectRatio: '16:9'}, {size: '1080p'}, {images:Array(6).fill('data:image/png;base64,eA==')}]) expect((await send({...request,...change})).status).toBe(400);
+    for (const change of [{sourceVideo: undefined}, {sourceVideo: 'https://private.test/a.mp4'}, {provider: 'atlas'}, {model: 'alibaba:wan@3.0'}, {durationSeconds: 6}, {aspectRatio: '16:9'}, {size: '4k'}, {images:Array(6).fill('data:image/png;base64,eA==')}]) expect((await send({...request,...change})).status).toBe(400);
     expect(fetch).not.toHaveBeenCalled();
+    expect((await send({...request, size: '1080p'})).status).toBe(200);
   });
   it('estimates edits at the video-to-video rate instead of the generation rate', () => {
     const model=findModel('runware',request.model);
     expect(resolveCatalogRate(model, 4, 1, {inputMode:'edit',size:'720p'})).toMatchObject({costUsd:1.18,confidence:'estimated'});
+    expect(resolveCatalogRate(model, 1, 1, {inputMode:'edit',size:'1080p'}).costUsd).toBeCloseTo(0.734, 6);
     expect(resolveCatalogRate(model, undefined, 1, {inputMode:'edit',size:'720p'}).costUsd).toBeNull();
   });
   it('rejects unsupported or oversized source files', () => {

@@ -56,6 +56,23 @@ it.each([{width:320,height:180},{width:640,height:360}])('rejects an undersized 
   expect(onChange).not.toHaveBeenCalled();
 });
 
+it('does not carry Seedance Draft onto P-Video-Edit', () => {
+  render(<ProviderVideoWorkspace provider="runware" label="Runware" inputMode="edit" onBack={()=>{}} onOpenConnections={()=>{}}/>);
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Draft' }));
+  expect(screen.getByRole('checkbox', { name: 'Draft' })).toBeChecked();
+  fireEvent.click(screen.getByRole('option', { name: /P-Video-Edit/ }));
+  expect(screen.getByRole('checkbox', { name: 'Draft mode' })).not.toBeChecked();
+});
+
+it('does not carry P-Video-Edit Draft mode onto Seedance', () => {
+  useAppStore.setState({ runwareVideoModel: 'prunaai:p-video@edit' });
+  useDraftStore.setState({ prompt: '', references: [], controlValues: {} });
+  render(<ProviderVideoWorkspace provider="runware" label="Runware" inputMode="edit" onBack={()=>{}} onOpenConnections={()=>{}}/>);
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Draft mode' }));
+  fireEvent.click(screen.getByRole('option', { name: /Seedance 2\.5/ }));
+  expect(screen.getByRole('checkbox', { name: 'Draft' })).not.toBeChecked();
+});
+
 it('submits P-Video-Edit draft without stale Seedance controls', async () => {
   useAppStore.setState({runwareVideoModel:'prunaai:p-video@edit'});
   render(<ProviderVideoWorkspace provider="runware" label="Runware" inputMode="edit" onBack={()=>{}} onOpenConnections={()=>{}}/>);

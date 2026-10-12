@@ -61,6 +61,11 @@ export function validateRequest(env:Env,value:unknown):CloudJobRequest {
   if(typeof r.prompt!=='string'||!r.prompt.trim()||r.prompt.length>20000||typeof r.modelId!=='string'||r.modelId.length>256||!['image','video'].includes(r.mediaType||'')||!['text','image','frames','reference','edit'].includes(r.inputMode||'')||!Array.isArray(r.referenceIds)||r.referenceIds.length>16||r.referenceIds.some(id=>typeof id!=='string'||id.length>128)||!r.values||typeof r.values!=='object'||Array.isArray(r.values)||Object.keys(r.values).length>64||Object.values(r.values).some(v=>!['string','boolean','number'].includes(typeof v)||typeof v==='number'&&!Number.isFinite(v)||typeof v==='string'&&v.length>2048))throw new AccountError('Invalid generation settings.',400,'invalid_request');
   if(isLocal(env)&&env.DEV_FAKE_GENERATION==='1'&&r.mediaType!=='image'&&r.inputMode!=='edit')throw new AccountError('The local fixture currently supports image generation only.',409,'local_fixture_mode');
   if(r.sourceVideoId!==undefined&&(typeof r.sourceVideoId!=='string'||!r.sourceVideoId||r.sourceVideoId.length>128||r.inputMode!=='edit'))throw new AccountError('Invalid source video.',400,'invalid_request');
+  // Finalize keeps the draft prompt as a library label and does not send it.
+  // The block does not depend on moderation level (a minor mention alone is
+  // allowed; a minor plus a suggestive term is blocked at every level), so a
+  // draft that was accepted can still be finalized, and a disallowed label
+  // is still refused.
   const floor = inspectPrompt(r.prompt!, r.values!.moderation);
   if (floor.blocked) throw new AccountError(floor.message ?? 'This request is not allowed.', 400, 'content_floor');
   // References and a minor mention keep the provider payload on Standard.

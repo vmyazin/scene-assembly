@@ -45,6 +45,9 @@ import { resolveCatalogRate } from '@/lib/spend/resolve';
 import { carryOverValues } from '@/lib/draft/carry-over';
 import { useFileDrop } from '@/lib/drop/use-file-drop';
 import { recordFinishedJob } from '@/lib/gallery/record-job';
+import FinalizeDraftButton from '@/components/FinalizeDraftButton';
+import { runGuestFinalize } from '@/lib/providers/guest-finalize';
+import { isSeedanceDraftSize, seedanceDraftSeconds, seedanceDraftSizeLabel } from '@/lib/providers/seedance-draft';
 import { playGenerationChime } from '@/lib/notify/chime';
 import { captureProviderJob } from '@/lib/spend/capture';
 import {
@@ -55,6 +58,7 @@ import {
 import { downloadFilenameBase } from '@/lib/download-name';
 import { requestExamplePrompt, requestPromptSlug } from '@/lib/micro-ai/browser';
 import { getProviderVideoStatus, pollDelayMs, submitProviderVideo } from '@/lib/providers/browser';
+import { followProviderVideo } from '@/lib/providers/follow-video';
 import { findModel, modelsFor } from '@/lib/providers/catalog';
 import ModelListbox from '@/components/ModelListbox';
 import { PROVIDER_VIDEO_COLUMNS, providerVideoSpecs } from '@/lib/models/listbox-specs';
@@ -94,9 +98,6 @@ interface ProviderVideoWorkspaceProps {
   /** Switch this workspace to image-to-video, for continuing from a last frame. */
   onContinueFromFrame?: () => void;
 }
-
-/** A job stops polling after this many attempts (~7 minutes at the top delay). */
-const MAX_POLL_ATTEMPTS = 60;
 
 const isTerminal = (state: ProviderJob['state']) => state === 'success' || state === 'error';
 
@@ -259,9 +260,15 @@ export default function ProviderVideoWorkspace({
   const modelKey = `${provider}:${inputMode}:${selectedModel?.id ?? 'none'}`;
   const isEdit = inputMode === 'edit';
   const fields = useMemo(() => {
-    if (!isEdit || !selectedModel?.videoEdit) return controlFieldsFor(selectedModel);
+    const draftField = {key: 'draftPreview', label: 'Draft', type: 'boolean' as const, defaultValue: false, description: '480p preview. Finalize the one you like at 1080p.'};
+    if (!isEdit || !selectedModel?.videoEdit) {
+      const next = controlFieldsFor(selectedModel);
+      if (selectedModel?.draftPreview) next.push(draftField);
+      return next;
+    }
     const fields = controlFieldsFor({...selectedModel, duration: undefined, durations: undefined, sizes: selectedModel.videoEdit.sizes, aspectRatios: undefined, supportsAudio: false});
     if (selectedModel.videoEdit.draftRate) fields.push({key: 'draft', label: 'Draft mode', type: 'boolean', defaultValue: false, description: 'Faster, lower-quality preview at a lower price. Turn off for Standard quality.'});
+    else if (selectedModel.videoEdit.draftPreview) fields.push(draftField);
     return fields;
   }, [selectedModel, isEdit]);
   const epoch = useAccountStore(state => state.epoch);
@@ -285,8 +292,29 @@ export default function ProviderVideoWorkspace({
   const [valuesByModel, setValuesByModel] = useState<
     Record<string, Record<string, string | number | boolean>>
   >({});
-  const values =
+  const storedValues =
     valuesByModel[modelKey] ?? carryOverValues(fields, defaultValuesFor(fields), controlValues);
+  const seedancePreview = Boolean(isEdit ? selectedModel?.videoEdit?.draftPreview : selectedModel?.draftPreview);
+  const draftSizeLabel = seedanceDraftSizeLabel(
+    isEdit ? selectedModel?.videoEdit?.sizes : selectedModel?.sizes,
+    typeof storedValues.size === 'string' ? storedValues.size : undefined,
+  );
+  // Read the 480p size while Draft is on. Writing it from an effect fought the
+  // control's own render, and a stale 720p would be what the request sent.
+  // Seedance remembers `draftPreview`. P-Video-Edit remembers `draft`. One key
+  // turned the other model's cheaper mode on when the selection changed.
+  const seedanceDraftOn = storedValues.draftPreview === true && seedancePreview;
+  const values = seedanceDraftOn && draftSizeLabel
+    ? { ...storedValues, size: draftSizeLabel }
+    : storedValues;
+  const shownFields = useMemo(() => {
+    if (!seedanceDraftOn) return fields;
+    return fields.map((field) => {
+      if (field.key !== 'size' || !field.options) return field;
+      const options = field.options.filter((option) => isSeedanceDraftSize(String(option.value)));
+      return options.length ? { ...field, options } : field;
+    });
+  }, [fields, seedanceDraftOn]);
   const relaxed = useRelaxedFilter({
     workspaceKey: 'provider-video',
     provider,
@@ -380,17 +408,23 @@ export default function ProviderVideoWorkspace({
   }, [inputMode]);
 
   const updateValues = (key: string, value: string | number | boolean) => {
-    setValuesByModel((current) => ({ ...current, [modelKey]: { ...values, [key]: value } }));
+    const next = { ...values, [key]: value };
+    if (key === 'draftPreview' && value === true) {
+      const label = seedanceDraftSizeLabel(isEdit ? selectedModel?.videoEdit?.sizes : selectedModel?.sizes, typeof next.size === 'string' ? next.size : undefined);
+      if (label) next.size = label;
+    }
+    setValuesByModel((current) => ({ ...current, [modelKey]: next }));
     // Remembered globally so the next model inherits whatever it can express.
-    useDraftStore.getState().rememberControlValues({ [key]: value });
+    useDraftStore.getState().rememberControlValues(key === 'draftPreview' && next.size !== values.size ? { draftPreview: value, size: next.size } : { [key]: value });
   };
 
   // Adding a reference (or the first frame) snaps "Output size" to the entry
   // in this model's whitelist closest to that image's shape.
-  const sizeCandidates = useMemo(
-    () => candidatesFromSizes(selectedModel?.sizes ?? []),
-    [selectedModel]
-  );
+  const sizeCandidates = useMemo(() => {
+    const sizes = selectedModel?.sizes ?? [];
+    const usable = seedanceDraftOn ? sizes.filter((size) => isSeedanceDraftSize(size.label)) : sizes;
+    return candidatesFromSizes(usable.length ? usable : sizes);
+  }, [selectedModel, seedanceDraftOn]);
   /**
    * What this press will cost, at the settings on screen.
    *
@@ -401,11 +435,12 @@ export default function ProviderVideoWorkspace({
    * whenever the vendor never published a rate for this size, which is a
    * silence rather than a guess.
    */
+  const pricedSize = typeof values.size === 'string' ? values.size : undefined;
   const estimate = resolveCatalogRate(
     selectedModel,
     isEdit ? source?.durationSeconds : typeof values.duration === 'number' ? values.duration : undefined,
     1,
-    { inputMode, draft: values.draft === true, size: typeof values.size === 'string' ? values.size : undefined, audio: values.audio === true }
+    { inputMode, draft: values.draft === true || values.draftPreview === true, size: pricedSize, audio: values.audio === true }
   );
 
   useAutoAspect(isEdit ? undefined : references[0], sizeCandidates, (value) => {
@@ -509,7 +544,6 @@ export default function ProviderVideoWorkspace({
   };
 
   const pollJob = async (job: ProviderJob) => {
-    let attempt = job.pollAttempt;
     const reportTerminal = (succeeded: boolean, error?: string) => {
       trackQueuedTerminal({
         engine: provider,
@@ -522,25 +556,18 @@ export default function ProviderVideoWorkspace({
       });
     };
     try {
-      while (attempt < MAX_POLL_ATTEMPTS) {
-        await new Promise((resolve) => setTimeout(resolve, pollDelayMs(attempt)));
-        attempt += 1;
-        const task = await getProviderVideoStatus({
+      const result = await followProviderVideo({
+        startedAttempt: job.pollAttempt,
+        delayMs: pollDelayMs,
+        timeoutMessage: `${label} is taking longer than expected. Check your provider dashboard for this task.`,
+        poll: () => getProviderVideoStatus({
           provider,
           apiKey,
           taskId: job.taskId as string,
           sourceVideo: job.sourceVideoId,
-        });
-        patchJob(job.id, {
-          state: task.state,
-          progress: task.progress,
-          urls: task.urls,
-          cost: task.cost,
-          error: task.error,
-          pollAttempt: attempt,
-        });
-
-        if (task.state === 'success') {
+        }),
+        onUpdate: (patch) => patchJob(job.id, patch),
+        onSuccess: (task) => {
           reportTerminal(true);
           const current = useProviderJobsStore.getState().jobs.find((entry) => entry.id === job.id);
           recordFinishedJob(
@@ -554,33 +581,27 @@ export default function ProviderVideoWorkspace({
               inputMode: job.inputMode,
               controlValues: job.controlValues,
               mimeType: 'video/mp4',
+              ...(task.draftId ? { draftId: task.draftId } : {}),
             },
             task.urls[0]
           );
           captureProviderJob(provider, job, task);
           toast.success('Video ready');
           playGenerationChime();
-          return;
-        }
-        if (task.state === 'error') {
-          reportTerminal(false, task.error);
-          toast.error(task.error || `${label} could not finish this video.`);
-          return;
-        }
-      }
-      const timeoutMessage = `${label} is taking longer than expected. Check your provider dashboard for this task.`;
-      reportTerminal(false, timeoutMessage);
-      patchJob(job.id, {
-        state: 'error',
-        error: timeoutMessage,
+        },
       });
+      if (result.outcome === 'error') {
+        reportTerminal(false, result.error);
+        toast.error(result.error || `${label} could not finish this video.`);
+      } else if (result.outcome === 'timeout') {
+        reportTerminal(false, result.error);
+      }
     } catch (cause) {
+      const current = useProviderJobsStore.getState().jobs.find((entry) => entry.id === job.id);
+      if (current?.state === 'success' && current.urls.length > 0) return;
       const message = cause instanceof Error ? cause.message : 'Polling failed.';
       reportTerminal(false, message);
-      patchJob(job.id, {
-        state: 'error',
-        error: message,
-      });
+      patchJob(job.id, { state: 'error', error: message });
     }
   };
 
@@ -662,10 +683,13 @@ export default function ProviderVideoWorkspace({
     try {
       if (isEdit && source && selectedModel.videoEdit) validateEditSource(source, selectedModel.videoEdit);
       if (cloudWorkspace.cloud) {
+        const submittedSize = typeof values.size === 'string' ? values.size : undefined;
         await cloudWorkspace.submit({modelId:selectedModel.id, mediaType:'video', inputMode, prompt:prompt.trim(), values:{
           ...(!isEdit && typeof values.duration === 'number' ? {durationSeconds:values.duration} : {}),
-          ...((!isEdit || selectedModel.videoEdit?.sizes.length) && typeof values.size === 'string' ? {size:values.size} : {}),
+          ...((!isEdit || selectedModel.videoEdit?.sizes.length) && submittedSize ? {size:submittedSize} : {}),
           ...(isEdit && selectedModel.videoEdit?.draftRate ? {draft:values.draft === true} : {}),
+          ...(seedanceDraftOn ? {draft: true} : {}),
+          ...(isEdit && selectedModel.videoEdit?.draftPreview && source?.durationSeconds ? {sourceDurationSeconds: source.durationSeconds} : {}),
           ...(!isEdit && selectedModel?.supportsAudio ? {audio:values.audio === true} : {}),
           ...(aspectRatio ? { aspectRatio } : {}),
           ...relaxed.attach(),
@@ -696,8 +720,9 @@ export default function ProviderVideoWorkspace({
         images,
         sourceVideo,
         durationSeconds: isEdit ? undefined : typeof values.duration === 'number' ? values.duration : undefined,
-        size: (!isEdit || selectedModel.videoEdit?.sizes.length) && typeof values.size === 'string' ? values.size : undefined,
+        size: ((!isEdit || selectedModel.videoEdit?.sizes.length) && typeof values.size === 'string' ? values.size : undefined) || undefined,
         ...(isEdit && selectedModel.videoEdit?.draftRate ? {draft:values.draft === true} : {}),
+        ...(seedanceDraftOn ? {draft: true} : {}),
         ...(!isEdit && selectedModel?.supportsAudio ? {audio:values.audio === true} : {}),
         ...(aspectRatio ? { aspectRatio } : {}),
         ...relaxed.attach(),
@@ -710,7 +735,12 @@ export default function ProviderVideoWorkspace({
         ...(sourceVideo ? {sourceVideoId: sourceVideo} : {}),
         prompt: submittedPrompt,
         inputMode,
-        controlValues: { ...values, ...relaxed.attach() },
+        controlValues: {
+          ...values,
+          ...relaxed.attach(),
+          ...(seedanceDraftOn ? { draft: true } : {}),
+          ...(isEdit && source?.durationSeconds ? { sourceDurationSeconds: source.durationSeconds } : {}),
+        },
         state: 'queued',
         urls: [],
       });
@@ -946,7 +976,7 @@ export default function ProviderVideoWorkspace({
               <div className="grid gap-4 sm:grid-cols-2">
                 <ModelControls
                   namespace={`provider-${modelKey}`}
-                  fields={fields}
+                  fields={shownFields}
                   values={values}
                   onChange={updateValues}
                 />
@@ -1115,6 +1145,27 @@ export default function ProviderVideoWorkspace({
               {isDownloading ? <Loader2 className="animate-spin" size={18} /> : <Download size={18} />}
               {isDownloading ? 'Preparing download…' : 'Download video'}
             </a>
+          )}
+          {resultUrl && latestJob?.draftId && (
+            <FinalizeDraftButton
+              inputMode={latestJob.inputMode}
+              durationSeconds={seedanceDraftSeconds(latestJob.controlValues)}
+              busy={isSubmitting}
+              onApprove={async () => {
+                const seconds = seedanceDraftSeconds(latestJob.controlValues);
+                if (!latestJob.draftId || seconds === undefined) throw new Error('This draft has no saved length, so it cannot be priced.');
+                setIsSubmitting(true);
+                try {
+                  await runGuestFinalize({
+                    apiKey, modelId: latestJob.modelId, prompt: latestJob.prompt, inputMode: latestJob.inputMode,
+                    draftId: latestJob.draftId, durationSeconds: seconds,
+                  });
+                  toast.success('1080p video ready.');
+                } finally {
+                  if (mountedRef.current) setIsSubmitting(false);
+                }
+              }}
+            />
           )}
           {resultUrl && latestJob && (
             <LastFrameActions

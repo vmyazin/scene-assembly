@@ -61,7 +61,8 @@ it('rejects another owner, an image in the source slot, and a video in an image 
 });
 it('validates mode, source and settings before reserving or submitting',()=>{
  const r=request('source');expect(validateRequest(env,r)).toEqual(r);
- for(const change of [{sourceVideoId:undefined},{provider:'atlas'},{values:{size:'720p',durationSeconds:5}},{values:{size:'1080p'}},{referenceIds:Array(6).fill('image')}])expect(()=>validateRequest(env,{...r,...change})).toThrow();
+ for(const change of [{sourceVideoId:undefined},{provider:'atlas'},{values:{size:'720p',durationSeconds:5}},{values:{size:'4k'}},{referenceIds:Array(6).fill('image')}])expect(()=>validateRequest(env,{...r,...change})).toThrow();
+ expect(validateRequest(env,{...r,values:{size:'1080p'}}).values).toEqual({size:'1080p'});
 });
 
 it.each([false,true])('submits P-Video-Edit cloud draft=%s with a scoped source URL',async draft=>{

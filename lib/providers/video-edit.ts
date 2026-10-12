@@ -1,3 +1,4 @@
+// lib/providers/video-edit.ts
 import type { ProviderModel } from './types';
 /** Application bounds for the first editing release, not vendor storage quotas. */
 export const MAX_EDIT_VIDEO_BYTES = 100_000_000;
@@ -18,10 +19,17 @@ export const EDIT_PROMPTS = {
 
 /** Validate only model-owned settings; fixed-output models must not receive stale resolution. */
 export function editSettingsError(capability: NonNullable<ProviderModel['videoEdit']>, values: Record<string, unknown>): string | undefined {
-  const allowed = [...(capability.sizes.length ? ['size'] : []), ...(capability.draftRate ? ['draft'] : [])];
+  const allowed = [
+    ...(capability.sizes.length ? ['size'] : []),
+    ...(capability.draftRate || capability.draftPreview ? ['draft'] : []),
+    // Stored for the price of a later finalize. The adapter still sends duration auto.
+    ...(capability.draftPreview ? ['sourceDurationSeconds'] : []),
+  ];
   if (Object.keys(values).some(key => values[key] !== undefined && !allowed.includes(key))) return 'Unsupported edit setting. Duration and aspect ratio follow the source.';
-  if (capability.sizes.length && !capability.sizes.some(size => size.label === values.size)) return 'Choose a supported edit resolution.';
   if (values.draft !== undefined && typeof values.draft !== 'boolean') return 'Draft must be on or off.';
+  if (capability.draftPreview && values.draft === true && values.size !== '480p') return 'A Seedance draft edit is 480p only.';
+  if (capability.sizes.length && !capability.sizes.some(size => size.label === values.size)) return 'Choose a supported edit resolution.';
+  if (values.sourceDurationSeconds !== undefined && (typeof values.sourceDurationSeconds !== 'number' || !Number.isFinite(values.sourceDurationSeconds) || values.sourceDurationSeconds <= 0 || values.sourceDurationSeconds > capability.maxSeconds)) return 'Source duration must be a positive number of seconds within this model\'s limit.';
 }
 
 export function validateEditSource(source: {durationSeconds: number; width: number; height: number}, capability: NonNullable<ProviderModel['videoEdit']>): void {

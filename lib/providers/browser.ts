@@ -50,6 +50,18 @@ export async function submitProviderVideo(args: {
   return data.taskId;
 }
 
+/** Finalize sends the draft id only. Prompt and media stay on the draft. */
+export async function finalizeProviderDraft(args: {
+  provider: ProviderId;
+  apiKey: string;
+  model: string;
+  draftId: string;
+}): Promise<string> {
+  const data = await post({ operation: 'finalize', provider: args.provider, apiKey: args.apiKey, model: args.model, draftId: args.draftId });
+  if (!data.taskId) throw new Error('The provider did not return a task ID.');
+  return data.taskId;
+}
+
 export async function getProviderVideoStatus(args: {
   provider: ProviderId;
   apiKey: string;

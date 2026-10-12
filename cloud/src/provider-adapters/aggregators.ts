@@ -1,5 +1,6 @@
 // cloud/src/provider-adapters/aggregators.ts
 import { editSettingsError } from '../../../lib/providers/video-edit';
+import { isSeedance25, isSeedanceDraftSize, isSeedanceFinalizeValues, seedanceFinalizeValuesError } from '../../../lib/providers/seedance-draft';
 import { piapiCreateImage, piapiCreateVideo, piapiPollTask } from '../../../lib/providers/piapi';
 import { findModel, resolveDuration, resolveSize, resolveVideoInput } from '../../../lib/providers/catalog';
 import { atlasCreateImage, atlasCreateVideo, atlasPollVideo } from '../../../lib/providers/atlas';
@@ -27,6 +28,13 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
   const invalid = (message: string) => { throw new AccountError(message, 400, 'invalid_settings'); };
   const providerLabel = r.provider === 'runware' ? 'Runware' : r.provider === 'atlas' ? 'Atlas Cloud' : r.provider === 'piapi' ? 'PiAPI' : 'Comet';
   if (!model) return invalid(`${providerLabel} does not list the model "${r.modelId}". Pick a model from the list.`);
+  if (isSeedanceFinalizeValues(r.values)) {
+    if (!isSeedance25(r.modelId) || r.mediaType !== 'video') return invalid('Only a Seedance 2.5 video can be finalized.');
+    if (r.referenceIds.length > 0 || r.sourceVideoId) return invalid('Finalizing a draft cannot include prompt media. Send only the draft ID.');
+    const finalizeError = seedanceFinalizeValuesError(r.values);
+    if (finalizeError) return invalid(finalizeError);
+    return;
+  }
   const moderationError = moderationValueError({ provider: r.provider, modelId: r.modelId }, r.values);
   if (moderationError) return invalid(moderationError);
   if (model.kind !== r.mediaType) return invalid(`${model.label} makes ${model.kind}s, not ${r.mediaType}s. Pick a ${r.mediaType} model.`);
@@ -72,12 +80,14 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
   if (r.provider === 'atlas' && resolution !== undefined && (r.mediaType !== 'image' || !model.sizes?.some(s => s.label === String(resolution)))) return invalid(`"${String(resolution)}" is not a resolution ${model.label} publishes. Pick one from the list.`);
   if (aspectRatio !== undefined && !['1:1','16:9','9:16','4:3','3:4','3:2','2:3','21:9'].includes(String(aspectRatio))) return invalid(`"${String(aspectRatio)}" is not an aspect ratio ${model.label} accepts.`);
   if (size !== undefined && (typeof size !== 'string' || !model.sizes?.some(s => s.label === size))) return invalid(`"${String(size)}" is not an output size ${model.label} publishes. Pick one from the list.`);
+  if (r.values.draft === true && (!model.draftPreview || typeof size !== 'string' || !isSeedanceDraftSize(size))) return invalid('A Seedance draft is 480p only. Pick a 480p size, or turn Draft off.');
   if (durationSeconds !== undefined && (typeof durationSeconds !== 'number' || resolveDuration(r.provider, r.modelId, durationSeconds) !== durationSeconds)) return invalid(`${String(durationSeconds)} seconds is not a length ${model.label} publishes. Pick one from the list.`);
   const relaxable = moderationCapability({ provider: r.provider, modelId: r.modelId }).relaxable;
   const accepted = r.provider === 'piapi'
     ? ['aspectRatio','size','durationSeconds','resolution','audio']
     : r.provider === 'atlas' ? ['aspectRatio','size','durationSeconds','resolution']
       : ['aspectRatio','size','durationSeconds'];
+  if (model.draftPreview) accepted.push('draft');
   if (relaxable) accepted.push('moderation');
   if (model.supportsAudio && !accepted.includes('audio')) accepted.push('audio');
   const stray = Object.keys(r.values).find(key => !accepted.includes(key));
@@ -115,6 +125,13 @@ export const aggregatorAdapter: GenerationAdapter = {
       const result = await create({...common, imageInput: model.imageInput, ...(provider === 'piapi' || provider === 'atlas' ? {resolution: r.values.resolution as string | undefined} : {})});
       return {handle: {id: result.taskId}};
     }
+    if (isSeedanceFinalizeValues(r.values)) {
+      const result = await runwareCreateVideo({
+        apiKey: common.apiKey, model: r.modelId, prompt: '', inputMode: r.inputMode,
+        draftId: String(r.values.draftId), resolution: '1080p',
+      }, job.id);
+      return {handle: {id: result.taskId}};
+    }
     if (r.inputMode === 'edit') {
       // inputUrls keeps the source last, matching jobInputIds; it is never an image.
       let sourceVideo = common.images.pop();
@@ -130,7 +147,7 @@ export const aggregatorAdapter: GenerationAdapter = {
       }
       // The durable job ID remains available even when submission throws, so
       // getTaskDetails can diagnose the attempt without another paid request.
-      const result = await runwareCreateVideo({...common, sourceVideo, inputMode: 'edit', resolution: typeof r.values.size === 'string' ? r.values.size : undefined, ...(model.videoEdit?.draftRate ? {draft: r.values.draft === true} : {})}, job.id);
+      const result = await runwareCreateVideo({...common, sourceVideo, inputMode: 'edit', resolution: typeof r.values.size === 'string' ? r.values.size : undefined, ...(model.videoEdit?.draftRate || model.videoEdit?.draftPreview ? {draft: r.values.draft === true} : {})}, job.id);
       return {handle: {id: result.taskId, ...(sourceMedia ? {sourceMedia} : {})}};
     }
     const size = resolveSize(provider, r.modelId, r.values.size as string | undefined);
@@ -140,6 +157,7 @@ export const aggregatorAdapter: GenerationAdapter = {
       inputField: resolveVideoInput(provider, r.modelId, r.inputMode)?.field,
       durationSeconds: resolveDuration(provider, r.modelId, r.values.durationSeconds as number | undefined),
       width: size?.width, height: size?.height, resolution: size?.preset,
+      ...(r.values.draft === true ? {draft: true} : {}),
     });
     return {handle: {id: result.taskId}};
   },
@@ -153,6 +171,6 @@ export const aggregatorAdapter: GenerationAdapter = {
     if (result.state === 'error') return {state: 'failed', ...(result.error ? {reason: result.error} : {})};
     if (result.state !== 'success') return {state: 'running'};
     if (!result.urls.length) throw new Error('Missing output');
-    return {state: 'success', result: {sources: result.urls.map(url => ({url})), ...(result.cost !== undefined ? {cost: result.cost} : {})}};
+    return {state: 'success', result: {sources: result.urls.map(url => ({url})), ...(result.cost !== undefined ? {cost: result.cost} : {}), ...(result.draftId ? {draftId: result.draftId} : {})}};
   },
 };

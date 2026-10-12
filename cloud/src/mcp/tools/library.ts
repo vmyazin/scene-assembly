@@ -56,12 +56,14 @@ export const viewAsset = defineTool({
     const asset = await getAsset(ctx.env, assetId, owner);
     if (!asset) throw new ToolError('not_found', 'No file with that id in this library.');
     const access = await mediaAccess(ctx.env, owner, asset.id, 'download');
-    const metadata = JSON.parse(asset.metadata_json) as { prompt?: string; provider?: string; modelId?: string };
-    const structured = { assetId: asset.id, kind: asset.kind, mimeType: asset.mime_type, bytes: asset.bytes, prompt: metadata.prompt, provider: metadata.provider, modelId: metadata.modelId, downloadUrl: access.url, expiresAt: access.expiresAt };
+    const metadata = JSON.parse(asset.metadata_json) as { prompt?: string; provider?: string; modelId?: string; draftId?: unknown };
+    const draftId = typeof metadata.draftId === 'string' && metadata.draftId ? metadata.draftId : undefined;
+    const structured = { assetId: asset.id, kind: asset.kind, mimeType: asset.mime_type, bytes: asset.bytes, prompt: metadata.prompt, provider: metadata.provider, modelId: metadata.modelId, ...(draftId ? { draftId } : {}), downloadUrl: access.url, expiresAt: access.expiresAt };
     const link = { type: 'resource_link' as const, uri: access.url, name: asset.id, mimeType: asset.mime_type };
     const preview = asset.kind === 'image' ? await imagePreview(ctx.env, asset.object_key) : null;
-    if (preview) return { structured, text: `Preview of ${asset.id}.`, content: [{ type: 'image' as const, data: preview, mimeType: 'image/webp' }, link] };
-    return { structured, text: asset.kind === 'video' ? 'Videos are not shown inline; use the download link.' : 'No preview is available; use the download link.', content: [link] };
+    const draftNote = draftId ? ` draftId is ${draftId}. Call finalize_draft to render it at 1080p; that is a separate charge.` : '';
+    if (preview) return { structured, text: `Preview of ${asset.id}.${draftNote}`, content: [{ type: 'image' as const, data: preview, mimeType: 'image/webp' }, link] };
+    return { structured, text: `${asset.kind === 'video' ? 'Videos are not shown inline; use the download link.' : 'No preview is available; use the download link.'}${draftNote}`, content: [link] };
   },
 });
 

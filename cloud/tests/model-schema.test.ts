@@ -56,6 +56,17 @@ describe('checkValues', () => {
     expect(checkValues(text, { duration: wrongType })).toMatchObject({ ok: false, field: 'duration', allowed });
   });
 
+  it('keeps the Seedance edit default at 720p and forces 480p only when draft is on', () => {
+    const seedance = findModelDescriptor('runware', 'bytedance:seedance@2.5', 'video')!;
+    const edit = seedance.modes.find(mode => mode.mode === 'edit')!;
+    expect(edit.fields.find(field => field.key === 'size')?.default).toBe('720p');
+    const drafted = checkValues(edit, { draft: true });
+    expect(drafted.ok).toBe(true);
+    if (drafted.ok) expect(drafted.values.size).toBe('480p');
+    expect(checkValues(edit, { draft: true, size: '720p' })).toMatchObject({ ok: false, field: 'size' });
+    expect(() => validateRequest(env, sampleRequest(seedance, edit, { draft: true }))).not.toThrow();
+  });
+
   it('holds numbers to their bounds and step', () => {
     const range = models.flatMap(model => model.modes).flatMap(mode => mode.fields.map(field => ({ mode, field })))
       .find(({ field }) => field.type === 'number' && field.min !== undefined && field.max !== undefined)!;
