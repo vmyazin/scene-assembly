@@ -45,7 +45,6 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
     if (count > model.videoEdit.maxImages) return invalid(`Add up to ${model.videoEdit.maxImages} replacement images.`);
     const settingsError = editSettingsError(model.videoEdit, r.values);
     if (settingsError) return invalid(settingsError);
-    if (model.videoEdit.draftPreview && r.values.draft === true && r.values.size !== '480p') return invalid('A Seedance draft edit is 480p only.');
     return;
   }
   if (r.sourceVideoId) return invalid('Source video is only accepted in Edit video mode.');
@@ -81,7 +80,7 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
   if (r.provider === 'atlas' && resolution !== undefined && (r.mediaType !== 'image' || !model.sizes?.some(s => s.label === String(resolution)))) return invalid(`"${String(resolution)}" is not a resolution ${model.label} publishes. Pick one from the list.`);
   if (aspectRatio !== undefined && !['1:1','16:9','9:16','4:3','3:4','3:2','2:3','21:9'].includes(String(aspectRatio))) return invalid(`"${String(aspectRatio)}" is not an aspect ratio ${model.label} accepts.`);
   if (size !== undefined && (typeof size !== 'string' || !model.sizes?.some(s => s.label === size))) return invalid(`"${String(size)}" is not an output size ${model.label} publishes. Pick one from the list.`);
-  if (r.values.draft === true && (!model.draftPreview || (typeof size === 'string' && !isSeedanceDraftSize(size)))) return invalid('A Seedance draft is 480p only. Pick a 480p size, or turn Draft off.');
+  if (r.values.draft === true && (!model.draftPreview || typeof size !== 'string' || !isSeedanceDraftSize(size))) return invalid('A Seedance draft is 480p only. Pick a 480p size, or turn Draft off.');
   if (durationSeconds !== undefined && (typeof durationSeconds !== 'number' || resolveDuration(r.provider, r.modelId, durationSeconds) !== durationSeconds)) return invalid(`${String(durationSeconds)} seconds is not a length ${model.label} publishes. Pick one from the list.`);
   const relaxable = moderationCapability({ provider: r.provider, modelId: r.modelId }).relaxable;
   const accepted = r.provider === 'piapi'

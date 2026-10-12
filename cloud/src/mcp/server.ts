@@ -17,7 +17,7 @@ export function serverInstructions(env: Env): string {
   return [
     'Scene Assembly generates images and video with the provider keys connected to this person\'s account and saves every result to their library.',
     'Work in this order: list_models (pass provider and modelId to see a model\'s settings), estimate_cost, generate with an idempotencyKey you reuse when retrying the same request, get_job with waitSeconds until the job is saved, then view_asset to look at an image.',
-    'Seedance 2.5 drafts are off unless you set values.draft to true, which renders a 480p preview. When get_job returns a draftId, call finalize_draft to render that same preview at 1080p. Finalize is its own charge.',
+    'Seedance 2.5 drafts are off unless you set values.draft to true, which renders a 480p preview. An edit draft is priced from the source clip\'s length, read from the file. When get_job returns a draftId, call finalize_draft with that jobId: the length is taken from the draft. Finalize is its own charge.',
     'Every job is charged against a spend limit the person set for this agent. A budget_exceeded refusal includes roomAt, when enough room frees up: tell the person rather than retrying sooner.',
     'Download links expire after a few minutes and work for anyone holding them. Do not share them.',
     ...(guide ? [`Setup, every tool and every refusal code: ${guide}`] : []),

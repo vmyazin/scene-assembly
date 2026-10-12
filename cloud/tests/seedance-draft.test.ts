@@ -37,6 +37,8 @@ it('submits a text draft with settings.draft and does not send that flag when it
   const [task] = JSON.parse(fetch.mock.calls[0][1].body);
   expect(task).toMatchObject({ positivePrompt: 'A lighthouse at dusk', width: 854, height: 480, settings: { draft: true } });
   expect(() => validateRequest(env, base({ draft: true, size: '720p · 16:9', durationSeconds: 5 }))).toThrow(/480p/);
+  expect(() => validateRequest(env, base({ draft: true, durationSeconds: 5 }))).toThrow(/480p/);
+  expect(() => validateRequest(env, { ...base({ draft: true }, 'edit'), sourceVideoId: 'clip-1' })).toThrow(/480p/);
 });
 
 it('finalizes from the stored draft id and does not send the library prompt', async () => {
@@ -53,4 +55,12 @@ it('finalizes from the stored draft id and does not send the library prompt', as
   expect(task.inputs).not.toHaveProperty('video');
   expect(() => validateRequest(env, { ...request, referenceIds: ['image'] })).toThrow(/media/);
   expect(() => validateRequest(env, { ...request, values: { finalize: true, draftId: 'draft-1', durationSeconds: 5, size: '1080p' } })).toThrow(/size/);
+});
+
+it('keeps the content floor on a finalize label', () => {
+  const finalize = (prompt: string) => validateRequest(env, {
+    ...base({ finalize: true, draftId: 'draft-1', durationSeconds: 5 }), prompt,
+  });
+  expect(finalize('a child playing in a park').prompt).toBe('a child playing in a park');
+  expect(() => finalize('a child in swimwear')).toThrow(/doesn't generate this/);
 });

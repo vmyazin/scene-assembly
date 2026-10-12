@@ -15,6 +15,7 @@ import { SINGLE_IMAGE_MODELS, SINGLE_IMAGE_MODEL_LABELS } from './models';
 import { FAL_IMAGE_MODEL, FAL_VIDEO_MODELS } from '../fal/catalog';
 import { KIE_MODELS } from '../kie/catalog';
 import { PROVIDER_MODELS, resolveVideoInput } from '../providers/catalog';
+import { isSeedanceDraftSize } from '../providers/seedance-draft';
 import type { ProviderId, ProviderModel } from '../providers/types';
 import { GEMINI_IMAGE_MODELS } from '../engines/gemini-catalog';
 import { ENGINES } from '../engines/registry';
@@ -125,9 +126,9 @@ function aggregatorVideoFields(provider: ProviderId, model: ProviderModel): Mode
   else if (duration?.type === 'range') fields.push({ key: 'durationSeconds', label: 'Duration (seconds)', type: 'number', min: duration.min, max: duration.max, step: 1, default: duration.default });
   else if (model.durations?.length) fields.push(select('durationSeconds', 'Duration (seconds)', model.durations, { default: model.durations[0] }));
   if (model.supportsAudio) fields.push({ key: 'audio', label: 'Audio', type: 'boolean' });
-  // Off by default. On would make the one-option schema test send draft:true
-  // with a 720p or 1080p default, which Runware rejects. Agents turn it on,
-  // then call finalize_draft for the 1080p render.
+  // Off by default so a normal request is not a 480p preview. checkValues
+  // forces a 480p size when an agent turns it on, which is what lets the
+  // one-option schema test pass against a 720p or 1080p catalog default.
   if (model.draftPreview) fields.push({
     key: 'draft', label: 'Draft', type: 'boolean', default: false,
     description: '480p preview only. Off by default. Turn it on, then call finalize_draft to render that preview at 1080p. That is a separate charge.',
@@ -157,10 +158,10 @@ function aggregatorModes(provider: ProviderId, model: ProviderModel): ModeDescri
         // editSettingsError accepts these keys; duration and ratio follow the source.
         fields: [
           ...(edit.sizes.length ? [select('size', 'Resolution', edit.sizes.map(size => size.label), {
-            // The studio keeps the catalog's first size (720p for Seedance).
-            // Agents default to 480p so draft:true is valid against the other
-            // defaults: the schema test changes one field at a time.
-            default: edit.draftPreview ? '480p' : edit.sizes[0].label, required: true,
+            // The catalog's first size (720p for Seedance). checkValues moves
+            // it to 480p when draft is on, so the schema test can turn that
+            // one field on without the default size failing validation.
+            default: edit.sizes[0].label, required: true,
           })] : []),
           ...(edit.draftRate || edit.draftPreview ? [{
             key: 'draft', label: 'Draft', type: 'boolean' as const, default: false,
@@ -169,7 +170,7 @@ function aggregatorModes(provider: ProviderId, model: ProviderModel): ModeDescri
           ...(edit.draftPreview ? [{
             key: 'sourceDurationSeconds', label: 'Source length (seconds)', type: 'number' as const,
             min: edit.minSeconds ?? 1, max: edit.maxSeconds, step: 1,
-            description: 'Clip length used to price a draft. Not sent to Runware; the edit duration stays auto.',
+            description: 'Optional check. The clip length is read from the file before a draft is priced. If you pass this, it must be within a second of that length. It is not sent to Runware.',
           }] : []),
         ],
       });
@@ -268,7 +269,35 @@ export function checkValues(mode: ModeDescriptor, values: Record<string, FieldVa
     if (problem) return { ok: false, field: field.key, ...problem };
     out[field.key] = value;
   }
+  const draftSize = constrainDraftSize(mode, values, out);
+  if (draftSize) return draftSize;
   return { ok: true, values: out };
+}
+
+/**
+ * A Seedance draft is 480p only. When the caller turned draft on and left
+ * size at the catalog default, rewrite that default. An explicit other size
+ * is a refusal, so a 720p default can stay in the descriptor.
+ */
+function constrainDraftSize(mode: ModeDescriptor, input: Record<string, FieldValue>, out: Record<string, FieldValue>): ValuesCheck | null {
+  if (out.draft !== true) return null;
+  const sizeField = mode.fields.find(field => field.key === 'size' && field.type === 'select');
+  const draftOptions = sizeField?.options?.filter(option => typeof option.value === 'string' && isSeedanceDraftSize(option.value)) ?? [];
+  if (!draftOptions.length) return null;
+  const explicit = input.size;
+  if (explicit !== undefined) {
+    if (typeof explicit !== 'string' || !isSeedanceDraftSize(explicit)) {
+      return {
+        ok: false, field: 'size',
+        message: 'A Seedance draft is 480p only. Pick a 480p size, or turn Draft off.',
+        allowed: draftOptions.map(option => option.value),
+      };
+    }
+    return null;
+  }
+  if (typeof out.size === 'string' && isSeedanceDraftSize(out.size)) return null;
+  out.size = draftOptions[0].value;
+  return null;
 }
 
 export function checkReferences(mode: ModeDescriptor, count: number, hasSourceVideo: boolean): string | null {

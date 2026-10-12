@@ -4,13 +4,14 @@ import { recordFinishedJob } from '@/lib/gallery/record-job';
 import { playGenerationChime } from '@/lib/notify/chime';
 import { useProviderJobsStore } from '@/store/useProviderJobsStore';
 import { finalizeProviderDraft, getProviderVideoStatus, pollDelayMs } from './browser';
+import { followProviderVideo } from './follow-video';
 import type { ProviderMode } from './types';
-
-const MAX_POLL_ATTEMPTS = 60;
 
 /**
  * Starts a 1080p finalize in the browser and follows it the same way the
  * workspace follows a generation: the job store, then the gallery and ledger.
+ * A timeout or a thrown status call marks the job failed before the error
+ * reaches the button, so a slow finalize cannot stay on screen as running.
  */
 export async function runGuestFinalize(args: {
   apiKey: string;
@@ -33,15 +34,12 @@ export async function runGuestFinalize(args: {
     state: 'queued',
     urls: [],
   });
-  let attempt = 0;
-  while (attempt < MAX_POLL_ATTEMPTS) {
-    await new Promise((resolve) => setTimeout(resolve, pollDelayMs(attempt)));
-    attempt += 1;
-    const task = await getProviderVideoStatus({ provider: 'runware', apiKey: args.apiKey, taskId });
-    useProviderJobsStore.getState().patchJob(jobId, {
-      state: task.state, progress: task.progress, urls: task.urls, cost: task.cost, error: task.error, pollAttempt: attempt,
-    });
-    if (task.state === 'success') {
+  const result = await followProviderVideo({
+    delayMs: pollDelayMs,
+    timeoutMessage: 'Runware is still working on this finalize. It was not submitted again.',
+    poll: () => getProviderVideoStatus({ provider: 'runware', apiKey: args.apiKey, taskId }),
+    onUpdate: (patch) => useProviderJobsStore.getState().patchJob(jobId, patch),
+    onSuccess: (task) => {
       const job = useProviderJobsStore.getState().jobs.find((entry) => entry.id === jobId);
       recordFinishedJob('runware', {
         id: jobId, mediaType: 'video', prompt: args.prompt, modelId: args.modelId, inputMode: args.inputMode,
@@ -49,9 +47,8 @@ export async function runGuestFinalize(args: {
       }, task.urls[0]);
       if (job) captureProviderJob('runware', job, task);
       playGenerationChime();
-      return;
-    }
-    if (task.state === 'error') throw new Error(task.error || 'Runware could not finalize this draft.');
-  }
-  throw new Error('Runware is still working on this finalize. It was not submitted again.');
+    },
+  });
+  if (result.outcome === 'error') throw new Error(result.error || 'Runware could not finalize this draft.');
+  if (result.outcome === 'timeout') throw new Error(result.error || 'Runware is still working on this finalize. It was not submitted again.');
 }

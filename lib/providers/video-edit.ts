@@ -26,9 +26,9 @@ export function editSettingsError(capability: NonNullable<ProviderModel['videoEd
     ...(capability.draftPreview ? ['sourceDurationSeconds'] : []),
   ];
   if (Object.keys(values).some(key => values[key] !== undefined && !allowed.includes(key))) return 'Unsupported edit setting. Duration and aspect ratio follow the source.';
-  if (capability.sizes.length && !capability.sizes.some(size => size.label === values.size)) return 'Choose a supported edit resolution.';
   if (values.draft !== undefined && typeof values.draft !== 'boolean') return 'Draft must be on or off.';
-  if (capability.draftPreview && values.draft === true && typeof values.size === 'string' && values.size !== '480p') return 'A Seedance draft edit is 480p only.';
+  if (capability.draftPreview && values.draft === true && values.size !== '480p') return 'A Seedance draft edit is 480p only.';
+  if (capability.sizes.length && !capability.sizes.some(size => size.label === values.size)) return 'Choose a supported edit resolution.';
   if (values.sourceDurationSeconds !== undefined && (typeof values.sourceDurationSeconds !== 'number' || !Number.isFinite(values.sourceDurationSeconds) || values.sourceDurationSeconds <= 0 || values.sourceDurationSeconds > capability.maxSeconds)) return 'Source duration must be a positive number of seconds within this model\'s limit.';
 }
 

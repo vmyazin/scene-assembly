@@ -175,7 +175,7 @@ The server offers 14 tools. `delete_asset` is offered only when you allowed the 
 | `estimate_cost` | Prices a request and checks it against the agent's limit, without running it. | The same fields as `generate` |
 | `add_reference` | Stages a reference image, or a source video for edit mode, and returns an `uploadId`. | `url`, or `upload` with `mimeType` and `bytes` |
 | `generate` | Starts an image or video job and charges its estimate to the agent's limit. Returns at once. Seedance 2.5 draft is `values.draft: true` and is off unless you set it. | `provider`, `modelId`, `mediaType`, `inputMode`, `prompt`, `values`, `references`, `sourceVideo`, `idempotencyKey` |
-| `finalize_draft` | Renders one Seedance 2.5 draft at 1080p. A new job and a separate charge. Do not resend the prompt or media. | `jobId` or `draftId`, `durationSeconds`, `inputMode` (with a bare draft id), `idempotencyKey` |
+| `finalize_draft` | Renders one Seedance 2.5 draft at 1080p. A new job and a separate charge. Do not resend the prompt or media. With `jobId`, the length is the one saved on that draft; a different `durationSeconds` is refused. | `jobId`, or `draftId` plus `durationSeconds` and `inputMode`, `idempotencyKey` |
 | `get_job` | A job's state and, once saved, its outputs with download links. A Seedance draft includes `draftId`. Can wait for a change. | `jobId`, `waitSeconds` (0 to 25) |
 | `list_jobs` | The account's recent jobs, newest first, including ones started in the browser. | `state` (`active`, `needs_attention`, `finished` or `all`), `limit` (up to 100) |
 | `cancel_job` | Cancels a job that is still queued and releases its charge. | `jobId` |
@@ -191,6 +191,10 @@ Each agent can make 300 read calls, 60 write calls (`add_reference`, `cancel_job
 ### Seedance drafts
 
 Seedance 2.5 on Runware can render a 480p draft (`values.draft` set to `true` on `generate`; the default is off) and later render that same preview at 1080p with `finalize_draft`. `get_job` and `view_asset` return `draftId` when the preview has one. Finalize does not take a prompt, references, or a source video — those stay on the draft — and it is budget-checked on its own, using the documented 1080p rate. Runware does not publish a separate finalize price, so that figure is an estimate until the provider reports a cost.
+
+Pass `jobId` and the length is taken from that draft (`durationSeconds`, or `sourceDurationSeconds` on an edit). You can omit `durationSeconds`. Passing a length more than a second off the saved one is refused, and nothing is reserved. A bare `draftId` still needs `durationSeconds` and `inputMode`, because there is no saved job to read.
+
+An edit draft is priced from the source clip. The Worker reads the duration out of the file before it reserves. `sourceDurationSeconds` is optional and, when you pass it, must be within a second of that length. If the length cannot be read, the draft is refused instead of priced as unknown.
 
 ## Errors
 

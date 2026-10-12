@@ -129,7 +129,13 @@ async function runwareFetch(apiKey: string, tasks: Array<Record<string, unknown>
   if (!response.ok || firstError) {
     const detail = firstError?.additionalDetails?.responseContent;
     const raw = [firstError?.message, typeof detail === 'string' ? detail : undefined].filter(Boolean).join(' ') || `Runware returned ${response.status}.`;
-    const draftFailure = seedanceDraftFailure({ ...firstError, message: raw });
+    // Only a finalize sends inputs.draftId. A draft-sized generation, a
+    // P-Video-Edit settings.draft error, and a poll all keep the vendor text.
+    const finalizing = tasks.some((task) => {
+      const inputs = task.inputs;
+      return Boolean(inputs && typeof inputs === 'object' && typeof (inputs as { draftId?: unknown }).draftId === 'string');
+    });
+    const draftFailure = finalizing ? seedanceDraftFailure({ ...firstError, message: raw }) : undefined;
     if (draftFailure) throw new ProviderError(draftFailure, response.ok ? 400 : response.status, 'runware');
     const model = tasks.find((task) => typeof task.model === 'string')?.model;
     // 422 is not a retryable status. A 503 here would be sent again on its own
@@ -325,7 +331,7 @@ async function runwarePoll(args: { apiKey: string; taskId: string }, output: 'im
       taskId: args.taskId,
       state: 'error',
       urls: [],
-      error: seedanceDraftFailure({ message, parameter: typeof first.parameter === 'string' ? first.parameter : undefined }) ?? message,
+      error: message,
     };
   }
 

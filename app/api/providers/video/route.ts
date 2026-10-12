@@ -147,9 +147,6 @@ export async function POST(request: NextRequest) {
     const settingsError = editSettingsError(capability, {size: body.size, draft: body.draft, audio: body.audio, resolution: body.resolution});
     if (settingsError || images.length > capability.maxImages) return NextResponse.json({success: false, error: settingsError ?? `Add up to ${capability.maxImages} replacement images.`}, {status: 400});
     try {
-      if (model === SEEDANCE_25_MODEL && body.draft === true && size?.preset !== '480p') {
-        return NextResponse.json({ success: false, error: 'A Seedance draft edit is 480p only.' }, { status: 400 });
-      }
       const {taskId} = await adapter.createVideo({apiKey, model, prompt, inputMode, sourceVideo: body.sourceVideo, images, resolution: size?.preset, ...(capability.draftRate || (model === SEEDANCE_25_MODEL && body.draft === true) ? {draft: body.draft === true} : {}), ...(moderation === 'relaxed' ? {moderation} : {})});
       return NextResponse.json({success: true, taskId});
     } catch (error) { return failure(error, 'Could not start this video edit.'); }

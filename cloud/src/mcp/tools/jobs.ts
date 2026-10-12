@@ -4,7 +4,7 @@ import { estimateCloudJob } from '../../../../lib/spend/estimate';
 import { jobAssets } from '../../assets';
 import { acceptJob, AccountError, cancelQueuedJob, dismissAttentionJob, dispatchJob, getJob, jobView, resultDraftId, type JobRow } from '../../jobs';
 import { enabledProviders, validateRequest } from '../../providers';
-import { isSeedance25, seedanceFinalizeValuesError } from '../../../../lib/providers/seedance-draft';
+import { isSeedance25, seedanceDraftSeconds, seedanceFinalizeValuesError } from '../../../../lib/providers/seedance-draft';
 import { listJobs, resumeJob } from '../../job-routes';
 import { mediaAccess } from '../../media';
 import { hash, randomToken } from '../../security';
@@ -14,6 +14,7 @@ import { ToolError } from '../errors';
 import { defineTool, type ToolContext } from '../tool';
 import { resolveReferences } from './references';
 import { budgetRefusal, connectedProviders, prepareRequest, requestShape } from './request';
+import { priceEditDraftSource } from './source-duration';
 
 const TERMINAL: CloudJobState[] = ['saved', 'failed', 'cancelled'];
 const POLL_MS = 2000;
@@ -58,6 +59,80 @@ function jobUsesAnyOf(job: JobRow, copiedIds: string[]): boolean {
   return copiedIds.some(id => used.has(id));
 }
 
+interface StagedRequest { request: CloudJobRequest; copiedIds: string[]; ownJob?: (job: JobRow) => boolean }
+
+/**
+ * The reservation, accept, and failure protocol shared by generate and
+ * finalize_draft.
+ *
+ * dropCharge (never releaseCharge) deletes a reservation whose job was never
+ * made, so the same idempotency key can book a fresh charge. A staged upload
+ * id is never in copiedIds. Once acceptJob has returned a job, the charge and
+ * any copies belong to it.
+ *
+ * acceptJob can throw after its write committed. The re-read that recognizes
+ * that job is guarded: if the read itself throws, the original error is
+ * rethrown and nothing is dropped. finalize_draft used to skip that guard, so
+ * a thrown re-read left the reservation in place.
+ */
+async function submitPrepared(
+  ctx: ToolContext,
+  request: CloudJobRequest,
+  estimate: ReturnType<typeof estimateCloudJob>,
+  idempotencyKey: string | undefined,
+  materialize: () => Promise<StagedRequest>,
+) {
+  const { env, agent } = ctx;
+  const token = await agentJobToken(agent.id, idempotencyKey);
+  const existing = await env.DB.prepare('SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?').bind(agent.user_id, token).first<JobRow>();
+  if (existing) return resumeExistingJob(ctx, existing, request, estimate);
+  const outcome = await reserveCharge(env, agent, token, estimate, ctx.now());
+  if (!outcome.ok) throw budgetRefusal(outcome, estimate);
+  if (!outcome.created) {
+    const job = await env.DB.prepare('SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?').bind(agent.user_id, token).first<JobRow>();
+    if (job) return resumeExistingJob(ctx, job, request, estimate);
+    throw new AccountError('A request with this idempotencyKey is still starting. Retry in a few seconds, or call list_jobs.', 425, 'request_in_progress');
+  }
+
+  let staged: StagedRequest;
+  try {
+    staged = await materialize();
+  } catch (error) {
+    if (outcome.created) await dropCharge(env, token).catch(() => {});
+    throw error;
+  }
+  const owns = staged.ownJob ?? ((job: JobRow) => jobUsesAnyOf(job, staged.copiedIds));
+
+  let job: JobRow;
+  try {
+    job = await acceptJob(env, agent.user_id, token, staged.request, agent.id);
+  } catch (error) {
+    let reread: JobRow | null;
+    try {
+      reread = await env.DB.prepare('SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?').bind(agent.user_id, token).first<JobRow>() ?? null;
+    } catch {
+      throw error;
+    }
+    if (reread && owns(reread)) {
+      await attachCharge(env, token, reread.id);
+      if (!reread.dispatched) await dispatchJob(env, reread).catch(() => {});
+      return started(ctx, (await getJob(env, reread.id, agent.user_id)) ?? reread, estimate);
+    }
+    if (reread) {
+      if (staged.copiedIds.length) await discardUploads(env, agent.user_id, staged.copiedIds).catch(() => {});
+      if (sameRun(JSON.parse(reread.request_json), request)) return started(ctx, reread, estimate);
+      throw error;
+    }
+    if (outcome.created) await dropCharge(env, token).catch(() => {});
+    if (staged.copiedIds.length) await discardUploads(env, agent.user_id, staged.copiedIds).catch(() => {});
+    throw error;
+  }
+
+  await attachCharge(env, token, job.id);
+  if (!job.dispatched) await dispatchJob(env, job).catch(() => {});
+  return started(ctx, (await getJob(env, job.id, agent.user_id)) ?? job, estimate);
+}
+
 export const generate = defineTool({
   name: 'generate',
   title: 'Generate an image or video',
@@ -68,117 +143,37 @@ export const generate = defineTool({
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   input: z.object({ ...requestShape, idempotencyKey: z.string().min(1).max(200).optional() }),
   async run(ctx, args) {
-    const { env, agent } = ctx;
     const prepared = await prepareRequest(ctx, args);
-    const estimate = estimateCloudJob(prepared.request);
-    const token = await agentJobToken(agent.id, args.idempotencyKey);
-    // Deliberately not filtered on deleted = 0: a removed job's row still owns
-    // this token, and a retry must be told to pick a new idempotencyKey rather
-    // than fall through to reserveCharge, which would book a second charge for
-    // a token that already named a (now gone) job.
-    const existing = await env.DB.prepare('SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?').bind(agent.user_id, token).first<JobRow>();
-    if (existing) return resumeExistingJob(ctx, existing, prepared.request, estimate);
-    const outcome = await reserveCharge(env, agent, token, estimate, ctx.now());
-    if (!outcome.ok) throw budgetRefusal(outcome, estimate);
-    if (!outcome.created) {
-      // A sibling call already holds this exact reservation. Only the call
-      // that created it may resolve references and accept a job — otherwise
-      // this call would go on to accept ITS OWN (possibly bigger, possibly
-      // over-limit) request under a reservation someone else's budget check
-      // already passed for a different one, or, if the sibling then drops it
-      // on its own refusal, accept a job for free. Re-read instead: the
-      // sibling's job may already exist (resume it), or the token may simply
-      // still be starting.
-      const job = await env.DB.prepare('SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?').bind(agent.user_id, token).first<JobRow>();
-      if (job) return resumeExistingJob(ctx, job, prepared.request, estimate);
-      throw new AccountError('A request with this idempotencyKey is still starting. Retry in a few seconds, or call list_jobs.', 425, 'request_in_progress');
+    // Measured before the reserve. An agent-supplied length is only a check.
+    const request = await priceEditDraftSource(ctx, prepared.request, args.sourceVideo);
+    const estimate = estimateCloudJob(request);
+    if (request.inputMode === 'edit' && request.values.draft === true && isSeedance25(request.modelId) && estimate.costUsd === null) {
+      throw new ToolError('invalid_field', 'This Seedance draft could not be priced from the source clip, so it was not reserved.', { field: 'sourceVideo' });
     }
-
-    // Everything from here down to acceptJob returning a job is undone on
-    // failure: a reservation whose job never got made paid for nothing, and a
-    // library copy resolveReferences made for it is unused. dropCharge (never
-    // releaseCharge — that only marks a row released, and a retried
-    // idempotencyKey looks itself up by this exact id) deletes the row outright
-    // so the same key can book a fresh, budget-checked charge next time. A
-    // staged { uploadId } is never in copiedIds, so it is never touched here.
-    //
-    // Once acceptJob has returned a job, none of this applies any more: the
-    // charge and any copies it used now belong to that job, and a transient
-    // failure attaching the charge, dispatching, or reading the job back must
-    // leave both alone — cleanupOrphanCharges reattaches an orphaned charge by
-    // token on its own schedule, and undoing a live job's inputs here would
-    // fail it at the provider instead.
-    let references: Awaited<ReturnType<typeof resolveReferences>>;
-    try {
-      references = await resolveReferences(ctx, args.references, args.sourceVideo);
-    } catch (error) {
-      if (outcome.created) await dropCharge(env, token).catch(() => {});
-      throw error;
-    }
-
-    const request: CloudJobRequest = {
-      provider: prepared.request.provider, modelId: prepared.request.modelId, mediaType: prepared.request.mediaType,
-      inputMode: prepared.request.inputMode, prompt: prepared.request.prompt, values: prepared.request.values,
-      referenceIds: references.referenceIds, ...(references.sourceVideoId ? { sourceVideoId: references.sourceVideoId } : {}),
-    };
-    let job: JobRow;
-    try {
-      job = await acceptJob(env, agent.user_id, token, request, agent.id);
-    } catch (error) {
-      // acceptJob can throw after its own write already committed — its
-      // internal read-back can itself fail transiently — in which case the
-      // job that now exists under this token is THIS call's own, not a
-      // sibling's: only this call was ever allowed to reach acceptJob for it
-      // (the created:false path above never does), so the only other job
-      // that could legitimately be sitting here is this one. Recognize it by
-      // referencing one of the uploads this call itself just copied — no
-      // other job ever could, since each copy is a fresh id — and finish
-      // exactly as the normal path would, never discarding or dropping.
-      //
-      // Guard the re-read itself: if IT throws, that is a fresh problem with
-      // the read path, not evidence about the write that already committed —
-      // surface the original acceptJob error and touch nothing.
-      let reread: JobRow | null;
-      try {
-        reread = await env.DB.prepare('SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?').bind(agent.user_id, token).first<JobRow>() ?? null;
-      } catch {
-        throw error;
-      }
-      if (reread && jobUsesAnyOf(reread, references.copiedIds)) {
-        await attachCharge(env, token, reread.id);
-        if (!reread.dispatched) await dispatchJob(env, reread).catch(() => {});
-        return started(ctx, (await getJob(env, reread.id, agent.user_id)) ?? reread, estimate);
-      }
-      if (reread) {
-        // A job under this token that does not use any of our own copies is
-        // someone else's — it owns the shared charge via its own
-        // attachCharge, so only the copies this call made are ours to discard.
-        if (references.copiedIds.length) await discardUploads(env, agent.user_id, references.copiedIds).catch(() => {});
-        if (sameRun(JSON.parse(reread.request_json), prepared.request)) return started(ctx, reread, estimate);
-        throw error;
-      }
-      if (outcome.created) await dropCharge(env, token).catch(() => {});
-      if (references.copiedIds.length) await discardUploads(env, agent.user_id, references.copiedIds).catch(() => {});
-      throw error;
-    }
-
-    await attachCharge(env, token, job.id);
-    // Acceptance is durable even when dispatch fails; scheduled reconciliation repairs it.
-    if (!job.dispatched) await dispatchJob(env, job).catch(() => {});
-    return started(ctx, (await getJob(env, job.id, agent.user_id)) ?? job, estimate);
+    return submitPrepared(ctx, request, estimate, args.idempotencyKey, async () => {
+      const references = await resolveReferences(ctx, args.references, args.sourceVideo);
+      return {
+        request: {
+          ...request,
+          referenceIds: references.referenceIds,
+          ...(references.sourceVideoId ? { sourceVideoId: references.sourceVideoId } : {}),
+        },
+        copiedIds: references.copiedIds,
+      };
+    });
   },
 });
 
 export const finalizeDraft = defineTool({
   name: 'finalize_draft',
   title: 'Finalize a Seedance draft',
-  description: 'Render one Seedance 2.5 480p draft at 1080p. This starts a new job and a separate charge against the 24-hour limit. The estimate uses the documented 1080p rate, because Runware does not publish a finalize price. Pass the draft job\'s jobId, or its draftId plus inputMode. Do not resend the prompt or any media. Pass an idempotencyKey you reuse when retrying the same finalize.',
+  description: 'Render one Seedance 2.5 480p draft at 1080p. This starts a new job and a separate charge against the 24-hour limit. The estimate uses the documented 1080p rate, because Runware does not publish a finalize price. Pass the draft job\'s jobId (the length is taken from that job; a different durationSeconds is refused) or its draftId, inputMode, and durationSeconds. Do not resend the prompt or any media. Pass an idempotencyKey you reuse when retrying the same finalize.',
   kind: 'submit',
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   input: z.object({
     jobId: z.string().min(1).max(64).optional(),
     draftId: z.string().min(1).max(256).optional(),
-    durationSeconds: z.number().min(4).max(30),
+    durationSeconds: z.number().min(4).max(30).optional(),
     inputMode: z.enum(['text', 'image', 'frames', 'reference', 'edit']).optional(),
     idempotencyKey: z.string().min(1).max(200).optional(),
   }).strict(),
@@ -192,6 +187,7 @@ export const finalizeDraft = defineTool({
     let inputMode = args.inputMode;
     let draftId = args.draftId?.trim();
     let modelId = 'bytedance:seedance@2.5';
+    let durationSeconds = args.durationSeconds;
     if (args.jobId) {
       const savedJob = await getJob(env, args.jobId, agent.user_id);
       if (!savedJob) throw new ToolError('not_found', 'No job with that id on this account.');
@@ -203,6 +199,14 @@ export const finalizeDraft = defineTool({
       if (!fromResult && !draftId) throw new ToolError('draft_unavailable', 'That job has no Seedance draft to finalize. Generate a 480p draft first.');
       if (draftId && fromResult && draftId !== fromResult) throw new ToolError('invalid_field', 'That draft ID does not belong to this job.', { field: 'draftId' });
       if (args.inputMode && args.inputMode !== saved.inputMode) throw new ToolError('invalid_field', 'inputMode is taken from the draft job.', { field: 'inputMode' });
+      const savedSeconds = seedanceDraftSeconds(saved.values);
+      if (savedSeconds === undefined) {
+        throw new ToolError('draft_unavailable', 'That draft has no saved length, so it cannot be priced. Generate a new 480p draft.');
+      }
+      if (args.durationSeconds !== undefined && Math.abs(args.durationSeconds - savedSeconds) > 1) {
+        throw new ToolError('invalid_field', `That draft is ${savedSeconds} seconds. Finalize is priced from the saved length, not ${args.durationSeconds}.`, { field: 'durationSeconds' });
+      }
+      durationSeconds = savedSeconds;
       draftId = fromResult ?? draftId;
       inputMode = saved.inputMode;
       modelId = saved.modelId;
@@ -210,41 +214,21 @@ export const finalizeDraft = defineTool({
     }
     if (!draftId) throw new ToolError('invalid_field', 'Pass the draft jobId, or the draftId from that job.', { field: 'draftId' });
     if (!inputMode) throw new ToolError('invalid_field', 'Pass inputMode when you pass a draftId without a jobId, so the price uses the right 1080p rate.', { field: 'inputMode' });
-    const valuesError = seedanceFinalizeValuesError({ finalize: true, draftId, durationSeconds: args.durationSeconds });
+    if (durationSeconds === undefined) {
+      throw new ToolError('invalid_field', 'Pass durationSeconds when you pass a draftId without a jobId, from 4 to 30 seconds.', { field: 'durationSeconds' });
+    }
+    const valuesError = seedanceFinalizeValuesError({ finalize: true, draftId, durationSeconds });
     if (valuesError) throw new ToolError('invalid_field', valuesError, { field: 'durationSeconds' });
     const request: CloudJobRequest = {
       provider: 'runware', modelId, mediaType: 'video', inputMode, prompt,
-      values: { finalize: true, draftId, durationSeconds: args.durationSeconds },
+      values: { finalize: true, draftId, durationSeconds },
       referenceIds: [],
     };
     validateRequest(env, request);
     const estimate = estimateCloudJob(request);
-    const token = await agentJobToken(agent.id, args.idempotencyKey);
-    const existing = await env.DB.prepare('SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?').bind(agent.user_id, token).first<JobRow>();
-    if (existing) return resumeExistingJob(ctx, existing, request, estimate);
-    const outcome = await reserveCharge(env, agent, token, estimate, ctx.now());
-    if (!outcome.ok) throw budgetRefusal(outcome, estimate);
-    if (!outcome.created) {
-      const raced = await env.DB.prepare('SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?').bind(agent.user_id, token).first<JobRow>();
-      if (raced) return resumeExistingJob(ctx, raced, request, estimate);
-      throw new AccountError('A request with this idempotencyKey is still starting. Retry in a few seconds, or call list_jobs.', 425, 'request_in_progress');
-    }
-    let job: JobRow;
-    try {
-      job = await acceptJob(env, agent.user_id, token, request, agent.id);
-    } catch (error) {
-      const reread = await env.DB.prepare('SELECT * FROM account_jobs WHERE user_id = ? AND request_token = ?').bind(agent.user_id, token).first<JobRow>();
-      if (reread && sameRun(JSON.parse(reread.request_json), request)) {
-        await attachCharge(env, token, reread.id);
-        if (!reread.dispatched) await dispatchJob(env, reread).catch(() => {});
-        return started(ctx, (await getJob(env, reread.id, agent.user_id)) ?? reread, estimate);
-      }
-      if (outcome.created) await dropCharge(env, token).catch(() => {});
-      throw error;
-    }
-    await attachCharge(env, token, job.id);
-    if (!job.dispatched) await dispatchJob(env, job).catch(() => {});
-    return started(ctx, (await getJob(env, job.id, agent.user_id)) ?? job, estimate);
+    return submitPrepared(ctx, request, estimate, args.idempotencyKey, async () => ({
+      request, copiedIds: [], ownJob: (job) => sameRun(JSON.parse(job.request_json), request),
+    }));
   },
 });
 

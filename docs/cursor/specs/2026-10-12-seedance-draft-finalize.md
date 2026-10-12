@@ -2,6 +2,20 @@
 
 Status: Approved design
 
+## Follow-up decision (2026-10-12, review on PR #10)
+
+Overrides the agent edit-size default and the shared `draft` control key.
+
+- Agent edit resolution stays the catalog default (720p). `checkValues` forces a 480p size when `draft` is true and the caller did not pass a size, and refuses an explicit non-480p size. The schema test still passes.
+- The studio's Seedance toggle is stored as `draftPreview`. P-Video-Edit keeps `draft`. The request sent to Runware is still `draft: true`.
+- `finalize_draft` with a `jobId` prices from the saved draft's `durationSeconds` or `sourceDurationSeconds` and refuses a difference of more than one second. A bare `draftId` still requires `durationSeconds`.
+- An edit draft's `sourceDurationSeconds` is not the price. The Worker reads the clip (MP4/MOV `mvhd`, WebM Duration) before reserving. A claim more than a second off is refused. If the length cannot be read, the draft is refused instead of reserved as an unknown cost.
+- The expired-draft sentence is only for a request that sends `inputs.draftId`. Poll errors stay as the provider wrote them.
+- `generate` and `finalize_draft` share `submitPrepared`, including the guarded re-read of a token whose `acceptJob` threw.
+- Guest and workspace polling share `followProviderVideo`. A timeout or a thrown status call marks the job failed. A successful task is still recorded to the gallery and ledger if a later step throws; the job is not put back to error once it has a URL.
+- A Seedance draft with no size is rejected in `validateAggregatorRequest` before a reservation. Edit drafts rely on `editSettingsError` for the same 480p rule.
+- Finalize still runs the content floor. The block is a minor mention together with a suggestive term, at every moderation level, so a prompt that only passes under Relaxed is not blocked here, and a blocked prompt could not have been accepted as a draft either. The prompt is a library label and is not sent to Runware. Skipping the floor would store a disallowed label.
+
 ## Context
 
 Runware's Seedance 2.5 page (read 2026-10-12, https://runware.ai/docs/models/bytedance-seedance-2-5) lets a request set `settings.draft: true`. That preview is 480p only and returns `outputs.draftId`. A later request sends `inputs.draftId` and `resolution: "1080p"` and must not resend the prompt, duration, audio, operation, or media. The page lists video-to-video at $0.131/s (480p), $0.295/s (720p) and $0.734/s (1080p), and text/image at $0.102 / $0.23 / $0.614. It does not publish a separate finalize price. The notes paragraph still says resolution is 480p/720p; the resolution enum, the dimension table, the 1080p video-to-video price, and the video-extend example all include 1080p.

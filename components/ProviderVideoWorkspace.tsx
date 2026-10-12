@@ -58,6 +58,7 @@ import {
 import { downloadFilenameBase } from '@/lib/download-name';
 import { requestExamplePrompt, requestPromptSlug } from '@/lib/micro-ai/browser';
 import { getProviderVideoStatus, pollDelayMs, submitProviderVideo } from '@/lib/providers/browser';
+import { followProviderVideo } from '@/lib/providers/follow-video';
 import { findModel, modelsFor } from '@/lib/providers/catalog';
 import ModelListbox from '@/components/ModelListbox';
 import { PROVIDER_VIDEO_COLUMNS, providerVideoSpecs } from '@/lib/models/listbox-specs';
@@ -97,9 +98,6 @@ interface ProviderVideoWorkspaceProps {
   /** Switch this workspace to image-to-video, for continuing from a last frame. */
   onContinueFromFrame?: () => void;
 }
-
-/** A job stops polling after this many attempts (~7 minutes at the top delay). */
-const MAX_POLL_ATTEMPTS = 60;
 
 const isTerminal = (state: ProviderJob['state']) => state === 'success' || state === 'error';
 
@@ -262,7 +260,7 @@ export default function ProviderVideoWorkspace({
   const modelKey = `${provider}:${inputMode}:${selectedModel?.id ?? 'none'}`;
   const isEdit = inputMode === 'edit';
   const fields = useMemo(() => {
-    const draftField = {key: 'draft', label: 'Draft', type: 'boolean' as const, defaultValue: false, description: '480p preview. Finalize the one you like at 1080p.'};
+    const draftField = {key: 'draftPreview', label: 'Draft', type: 'boolean' as const, defaultValue: false, description: '480p preview. Finalize the one you like at 1080p.'};
     if (!isEdit || !selectedModel?.videoEdit) {
       const next = controlFieldsFor(selectedModel);
       if (selectedModel?.draftPreview) next.push(draftField);
@@ -303,10 +301,12 @@ export default function ProviderVideoWorkspace({
   );
   // Read the 480p size while Draft is on. Writing it from an effect fought the
   // control's own render, and a stale 720p would be what the request sent.
-  const values = storedValues.draft === true && seedancePreview && draftSizeLabel
+  // Seedance remembers `draftPreview`. P-Video-Edit remembers `draft`. One key
+  // turned the other model's cheaper mode on when the selection changed.
+  const seedanceDraftOn = storedValues.draftPreview === true && seedancePreview;
+  const values = seedanceDraftOn && draftSizeLabel
     ? { ...storedValues, size: draftSizeLabel }
     : storedValues;
-  const seedanceDraftOn = values.draft === true && seedancePreview;
   const shownFields = useMemo(() => {
     if (!seedanceDraftOn) return fields;
     return fields.map((field) => {
@@ -409,13 +409,13 @@ export default function ProviderVideoWorkspace({
 
   const updateValues = (key: string, value: string | number | boolean) => {
     const next = { ...values, [key]: value };
-    if (key === 'draft' && value === true) {
+    if (key === 'draftPreview' && value === true) {
       const label = seedanceDraftSizeLabel(isEdit ? selectedModel?.videoEdit?.sizes : selectedModel?.sizes, typeof next.size === 'string' ? next.size : undefined);
       if (label) next.size = label;
     }
     setValuesByModel((current) => ({ ...current, [modelKey]: next }));
     // Remembered globally so the next model inherits whatever it can express.
-    useDraftStore.getState().rememberControlValues(key === 'draft' && next.size !== values.size ? { draft: value, size: next.size } : { [key]: value });
+    useDraftStore.getState().rememberControlValues(key === 'draftPreview' && next.size !== values.size ? { draftPreview: value, size: next.size } : { [key]: value });
   };
 
   // Adding a reference (or the first frame) snaps "Output size" to the entry
@@ -440,7 +440,7 @@ export default function ProviderVideoWorkspace({
     selectedModel,
     isEdit ? source?.durationSeconds : typeof values.duration === 'number' ? values.duration : undefined,
     1,
-    { inputMode, draft: values.draft === true, size: pricedSize, audio: values.audio === true }
+    { inputMode, draft: values.draft === true || values.draftPreview === true, size: pricedSize, audio: values.audio === true }
   );
 
   useAutoAspect(isEdit ? undefined : references[0], sizeCandidates, (value) => {
@@ -544,7 +544,6 @@ export default function ProviderVideoWorkspace({
   };
 
   const pollJob = async (job: ProviderJob) => {
-    let attempt = job.pollAttempt;
     const reportTerminal = (succeeded: boolean, error?: string) => {
       trackQueuedTerminal({
         engine: provider,
@@ -557,26 +556,18 @@ export default function ProviderVideoWorkspace({
       });
     };
     try {
-      while (attempt < MAX_POLL_ATTEMPTS) {
-        await new Promise((resolve) => setTimeout(resolve, pollDelayMs(attempt)));
-        attempt += 1;
-        const task = await getProviderVideoStatus({
+      const result = await followProviderVideo({
+        startedAttempt: job.pollAttempt,
+        delayMs: pollDelayMs,
+        timeoutMessage: `${label} is taking longer than expected. Check your provider dashboard for this task.`,
+        poll: () => getProviderVideoStatus({
           provider,
           apiKey,
           taskId: job.taskId as string,
           sourceVideo: job.sourceVideoId,
-        });
-        patchJob(job.id, {
-          state: task.state,
-          progress: task.progress,
-          urls: task.urls,
-          cost: task.cost,
-          error: task.error,
-          ...(task.draftId ? { draftId: task.draftId } : {}),
-          pollAttempt: attempt,
-        });
-
-        if (task.state === 'success') {
+        }),
+        onUpdate: (patch) => patchJob(job.id, patch),
+        onSuccess: (task) => {
           reportTerminal(true);
           const current = useProviderJobsStore.getState().jobs.find((entry) => entry.id === job.id);
           recordFinishedJob(
@@ -597,27 +588,20 @@ export default function ProviderVideoWorkspace({
           captureProviderJob(provider, job, task);
           toast.success('Video ready');
           playGenerationChime();
-          return;
-        }
-        if (task.state === 'error') {
-          reportTerminal(false, task.error);
-          toast.error(task.error || `${label} could not finish this video.`);
-          return;
-        }
-      }
-      const timeoutMessage = `${label} is taking longer than expected. Check your provider dashboard for this task.`;
-      reportTerminal(false, timeoutMessage);
-      patchJob(job.id, {
-        state: 'error',
-        error: timeoutMessage,
+        },
       });
+      if (result.outcome === 'error') {
+        reportTerminal(false, result.error);
+        toast.error(result.error || `${label} could not finish this video.`);
+      } else if (result.outcome === 'timeout') {
+        reportTerminal(false, result.error);
+      }
     } catch (cause) {
+      const current = useProviderJobsStore.getState().jobs.find((entry) => entry.id === job.id);
+      if (current?.state === 'success' && current.urls.length > 0) return;
       const message = cause instanceof Error ? cause.message : 'Polling failed.';
       reportTerminal(false, message);
-      patchJob(job.id, {
-        state: 'error',
-        error: message,
-      });
+      patchJob(job.id, { state: 'error', error: message });
     }
   };
 
@@ -699,7 +683,7 @@ export default function ProviderVideoWorkspace({
     try {
       if (isEdit && source && selectedModel.videoEdit) validateEditSource(source, selectedModel.videoEdit);
       if (cloudWorkspace.cloud) {
-        const submittedSize = seedanceDraftOn ? draftSizeLabel : typeof values.size === 'string' ? values.size : undefined;
+        const submittedSize = typeof values.size === 'string' ? values.size : undefined;
         await cloudWorkspace.submit({modelId:selectedModel.id, mediaType:'video', inputMode, prompt:prompt.trim(), values:{
           ...(!isEdit && typeof values.duration === 'number' ? {durationSeconds:values.duration} : {}),
           ...((!isEdit || selectedModel.videoEdit?.sizes.length) && submittedSize ? {size:submittedSize} : {}),
@@ -736,7 +720,7 @@ export default function ProviderVideoWorkspace({
         images,
         sourceVideo,
         durationSeconds: isEdit ? undefined : typeof values.duration === 'number' ? values.duration : undefined,
-        size: (!isEdit || selectedModel.videoEdit?.sizes.length) && (seedanceDraftOn ? draftSizeLabel : typeof values.size === 'string' ? values.size : undefined) || undefined,
+        size: ((!isEdit || selectedModel.videoEdit?.sizes.length) && typeof values.size === 'string' ? values.size : undefined) || undefined,
         ...(isEdit && selectedModel.videoEdit?.draftRate ? {draft:values.draft === true} : {}),
         ...(seedanceDraftOn ? {draft: true} : {}),
         ...(!isEdit && selectedModel?.supportsAudio ? {audio:values.audio === true} : {}),
@@ -754,7 +738,7 @@ export default function ProviderVideoWorkspace({
         controlValues: {
           ...values,
           ...relaxed.attach(),
-          ...(seedanceDraftOn && draftSizeLabel ? { size: draftSizeLabel, draft: true } : {}),
+          ...(seedanceDraftOn ? { draft: true } : {}),
           ...(isEdit && source?.durationSeconds ? { sourceDurationSeconds: source.durationSeconds } : {}),
         },
         state: 'queued',

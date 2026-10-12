@@ -54,11 +54,16 @@
   `settings.draft` is a 480p preview that returns `outputs.draftId`; finalize sends
   `inputs.draftId` and `resolution: "1080p"` and cannot resend prompt or media.
   That is not P-Video-Edit `draftRate`, which is a cheaper render with nothing
-  to finalize. Draft defaults off for people and for agents, because a default
-  of on would make the one-option schema test send `draft: true` with a 720p
-  or 1080p size. The button and the agent budget use the documented 1080p rate
-  and label it estimated: Runware does not publish a separate finalize price.
-  A cost on the task still wins.
+  to finalize. Draft defaults off for people and for agents. The studio
+  remembers Seedance's toggle as `draftPreview` and P-Video-Edit's as `draft`,
+  because one shared `draft` key turned the other model's cheaper mode on.
+  Agents still send `values.draft`. `checkValues` forces 480p when that flag
+  is on, so the catalog's 720p edit default can stay. An edit draft is priced
+  from the clip's length, read from the file before the reservation;
+  `finalize_draft` with a jobId uses the length saved on that draft. The
+  button and the agent budget use the documented 1080p rate and label it
+  estimated: Runware does not publish a separate finalize price. A cost on
+  the task still wins.
 
 - **Edit an existing video** → first read `docs/codex/specs/2026-09-11-edit-video.md`. For P-Video-Edit, also read `docs/codex/specs/2026-09-11-p-video-edit.md`; edit limits and Draft pricing belong to `videoEdit` capabilities, because P-Video-Edit has fixed output dimensions and must not inherit Seedance resolution controls. Source clips use `sourceVideoId` in account requests and `inputs.video` at Runware, never the image reference array, because their validation, duration and retention differ. Edit rates live on the catalog capability; normal generation rates undercharge edits. The existing clip library picker accepts `onPickVideo` so selection cannot accidentally place a clip on the timeline.
 

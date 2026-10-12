@@ -69,6 +69,34 @@ describe('Seedance draft and finalize requests', () => {
     await expect(runwareCreateVideo({ apiKey: 'rw', model, prompt: '', draftId: 'gone' })).rejects.toThrow(SEEDANCE_DRAFT_EXPIRED);
   });
 
+  it('keeps a non-finalize draft error as the provider wrote it', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 400, json: async () => ({ errors: [{ message: 'Invalid draft dimensions' }] }),
+    }));
+    await expect(runwareCreateVideo({
+      apiKey: 'rw', model, prompt: 'a lighthouse', draft: true, width: 854, height: 480, durationSeconds: 5,
+    })).rejects.toThrow(/Invalid draft dimensions/);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 400, json: async () => ({ errors: [{ message: 'draft is invalid' }] }),
+    }));
+    await expect(runwareCreateVideo({
+      apiKey: 'rw', model: 'prunaai:p-video@edit', prompt: 'restyle', inputMode: 'edit', sourceVideo: 'clip-1', draft: true,
+    })).rejects.toThrow(/draft is invalid/);
+  });
+
+  it('does not rewrite a poll error that mentions a draft', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ data: [{}] }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ data: [{ status: 'error', message: 'draft id missing' }] }) });
+    vi.stubGlobal('fetch', fetchMock);
+    const { taskId } = await runwareCreateVideo({
+      apiKey: 'rw', model, prompt: 'a lighthouse', draft: true, width: 854, height: 480, durationSeconds: 5,
+    });
+    const polled = await runwarePollVideo({ apiKey: 'rw', taskId });
+    expect(polled).toMatchObject({ state: 'error', error: 'draft id missing' });
+    expect(polled.error).not.toBe(SEEDANCE_DRAFT_EXPIRED);
+  });
+
   it('rejects prompt and media on the browser finalize route', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ data: [{}] }));
     vi.stubGlobal('fetch', fetchMock);
