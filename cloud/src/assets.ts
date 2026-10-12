@@ -6,6 +6,7 @@ import { AVAILABLE_CAPACITY, OVERFLOW_TTL_MS, promoteTemporaryAsset } from './re
 import { deleteQueuedObject } from './cleanup';
 import { peekMediaType } from './media-type';
 import { acceptedResultUrl } from '../../lib/account/result-location';
+import { isStageableInputMime } from '../../lib/providers/input-mimes';
 
 export const MAX_OUTPUT_BYTES = 1_000_000_000;
 export const MAX_JOB_OUTPUTS = 8;
@@ -14,8 +15,8 @@ export interface AssetRow { id: string; user_id: string; job_id: string | null; 
 export interface ResultSource { url?: string; objectKey?: string; mimeType?: string }
 export interface ProviderResult { sources: ResultSource[]; cost?: number; usage?: { promptTokens: number; outputTokens: number }; draftId?: string }
 export const isSupportedOutputMime = (mimeType:string) => /^(image\/(png|jpeg|webp|avif)|video\/(mp4|webm))$/.test(mimeType);
-/** Uploads may also be reference audio or a QuickTime reference video. Results stay on `isSupportedOutputMime`. */
-export const isSupportedInputMime = (mimeType:string) => isSupportedOutputMime(mimeType) || mimeType === 'video/quicktime' || /^(audio\/(mpeg|mp3|wav|wave|x-wav))$/.test(mimeType);
+/** Uploads use the shared stageable list. Results stay on `isSupportedOutputMime`, which rejects audio and QuickTime. */
+export const isSupportedInputMime = isStageableInputMime;
 /** `draftId` is stored beside the request and lifted off so metadata stays a CloudJobRequest. */
 export function assetView(row: AssetRow): CloudAsset {
   const stored = JSON.parse(row.metadata_json) as CloudJobRequest & { draftId?: unknown };

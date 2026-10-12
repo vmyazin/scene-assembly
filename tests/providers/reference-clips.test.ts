@@ -8,6 +8,7 @@ import {
   referenceClipCountError,
   referenceClipFileError,
   referenceClipProbeError,
+  fileWithReferenceClipType,
   referenceClipSetError,
   referenceClipsFor,
 } from '@/lib/providers/reference-clips';
@@ -22,6 +23,9 @@ describe('reference clip limits', () => {
     expect(referenceClipFileError(video, { name: 'move.mov', type: '', size: 1_000 })).toBeNull();
     expect(referenceClipFileError(video, { name: 'move.webm', type: 'video/webm', size: 1_000 })).toMatch(/MP4 or MOV/);
     expect(referenceClipFileError(audio, { name: 'voice.wav', type: '', size: 1_000 })).toBeNull();
+    const untyped = fileWithReferenceClipType(new File([new Uint8Array([1, 2, 3])], 'voice.wav', { type: '' }), 'audio');
+    expect(untyped.type).toBe('audio/wav');
+    expect(fileWithReferenceClipType(new File([new Uint8Array([1])], 'voice.mp3', { type: 'audio/mp3' }), 'audio').type).toBe('audio/mpeg');
     expect(referenceClipFileError(audio, { name: 'voice.mp3', type: 'audio/mpeg', size: 16_000_000 })).toMatch(/15 MB/);
   });
 

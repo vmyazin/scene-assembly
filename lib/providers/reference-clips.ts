@@ -41,6 +41,16 @@ export function referenceClipMime(file: { type: string; name: string }, kind: 'v
   return table[ext] ?? type;
 }
 
+/**
+ * The File the upload will declare. An empty type or `audio/mp3` becomes the
+ * MIME the Worker accepts; the original is kept when it already matches.
+ */
+export function fileWithReferenceClipType(file: File, kind: 'video' | 'audio'): File {
+  const type = referenceClipMime(file, kind);
+  if (!type || type === file.type) return file;
+  return new File([file], file.name, { type, lastModified: file.lastModified });
+}
+
 const SEEDANCE_25_VIDEO: ReferenceClipLimit = {
   max: 10, minSeconds: 2, maxSeconds: 30, maxTotalSeconds: 30, maxBytes: REFERENCE_VIDEO_MAX_BYTES,
   accept: REFERENCE_VIDEO_MIMES, formatsLabel: 'MP4 or MOV', token: 'Video',

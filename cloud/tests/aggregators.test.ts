@@ -160,6 +160,9 @@ describe('durable aggregator adapters', () => {
     };
     expect(() => validateRequest(env, seedance)).not.toThrow();
     expect(() => validateRequest(env, { ...seedance, modelId: 'alibaba:wan@3.0', inputMode: 'reference', referenceIds: ['still'], referenceAudioIds: undefined, values: {} })).toThrow(/does not take reference video or audio/);
+    for (const provider of ['fal', 'kie', 'gemini'] as const) {
+      expect(() => validateRequest(env, { ...seedance, provider, modelId: 'veo-3-1', inputMode: 'image', referenceIds: ['still'], values: {} })).toThrow(/does not take reference video or audio/);
+    }
     expect(() => validateRequest(env, { ...seedance, values: { finalize: true, draftId: 'draft-1', durationSeconds: 5 } })).toThrow(/cannot include prompt media/);
     expect(() => validateRequest(env, {
       ...request, provider: 'atlas', modelId: 'bytedance/seedance-2.0-fast/reference-to-video', mediaType: 'video', inputMode: 'reference',

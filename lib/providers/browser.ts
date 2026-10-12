@@ -69,10 +69,21 @@ export async function getProviderVideoStatus(args: {
   apiKey: string;
   taskId: string;
   sourceVideo?: string;
+  referenceVideos?: string[];
+  referenceAudios?: string[];
 }): Promise<ProviderTask> {
   const data = await post({ operation: 'status', ...args });
   if (!data.task) throw new Error('The provider did not return the task status.');
   return data.task;
+}
+
+/** Deletes media-storage ids when a browser submit never received a task. */
+export async function releaseRunwareMedia(args: {
+  apiKey: string;
+  referenceVideos?: string[];
+  referenceAudios?: string[];
+}): Promise<void> {
+  await post({ operation: 'discard', provider: 'runware', ...args });
 }
 
 /**

@@ -13,6 +13,9 @@ export interface ProviderJob {
   /** Which shape of input produced it: prompt, one image, or first-and-last. */
   inputMode: ProviderMode;
   sourceVideoId?: string;
+  /** Runware media-storage ids for reference clips. The status poll deletes them. */
+  referenceVideoIds?: string[];
+  referenceAudioIds?: string[];
   state: TaskState;
   progress?: number;
   urls: string[];

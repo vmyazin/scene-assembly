@@ -77,6 +77,7 @@ export default function ReferenceClipTray({
   onAudios,
   disabled,
   hostedOnly,
+  epoch,
 }: {
   capability: ReferenceClipsCapability;
   syntax: VideoPromptSyntax | undefined;
@@ -87,6 +88,12 @@ export default function ReferenceClipTray({
   disabled: boolean;
   /** Atlas has no browser file host. The controls stay visible and do not accept files. */
   hostedOnly: boolean;
+  /**
+   * Owned by the workspace. A layout effect bumps it when the model or account
+   * changes. The commit callback is the parent's, so unmounting this tray does
+   * not stop it: the probe checks this ref before writing clips back.
+   */
+  epoch: RefObject<number>;
 }) {
   const videoInput = useRef<HTMLInputElement>(null);
   const audioInput = useRef<HTMLInputElement>(null);
@@ -95,15 +102,20 @@ export default function ReferenceClipTray({
   const [error, setError] = useState<string | null>(null);
   const locked = disabled || reading || hostedOnly;
 
+  useEffect(() => () => { sequence.current += 1; }, []);
+
   async function add(kind: 'video' | 'audio', incoming: File[]) {
     const spec = kind === 'video' ? capability.video : capability.audio;
     if (!spec || incoming.length === 0) return;
     const turn = ++sequence.current;
+    const scope = epoch.current;
+    const current = () => turn === sequence.current && epoch.current === scope;
     setReading(true);
     setError(null);
     const next = kind === 'video' ? [...videos] : [...audios];
     try {
       for (const file of incoming) {
+        if (!current()) return;
         if (next.length >= spec.max) {
           setError(referenceClipCountError(spec, next.length + 1));
           break;
@@ -113,23 +125,26 @@ export default function ReferenceClipTray({
           setError(fileError);
           continue;
         }
-        const probed = kind === 'video' ? await probeVideo(file, spec) : { durationSeconds: await probeAudioDuration(file) };
-        if (turn !== sequence.current) return;
-        const existing = next.reduce((sum, clip) => sum + clip.durationSeconds, 0);
-        const probeError = referenceClipProbeError(spec, probed, existing);
-        if (probeError) {
-          setError(probeError);
-          continue;
+        try {
+          const probed = kind === 'video' ? await probeVideo(file, spec) : { durationSeconds: await probeAudioDuration(file) };
+          if (!current()) return;
+          const existing = next.reduce((sum, clip) => sum + clip.durationSeconds, 0);
+          const probeError = referenceClipProbeError(spec, probed, existing);
+          if (probeError) {
+            setError(probeError);
+            continue;
+          }
+          next.push({ id: crypto.randomUUID(), file, kind, ...probed });
+        } catch (cause) {
+          if (!current()) return;
+          setError(cause instanceof Error ? cause.message : 'Could not read that file.');
         }
-        next.push({ id: crypto.randomUUID(), file, kind, ...probed });
       }
-      if (turn !== sequence.current) return;
+      if (!current()) return;
       if (kind === 'video') onVideos(next);
       else onAudios(next);
-    } catch (cause) {
-      if (turn === sequence.current) setError(cause instanceof Error ? cause.message : 'Could not read that file.');
     } finally {
-      if (turn === sequence.current) setReading(false);
+      if (current()) setReading(false);
     }
   }
 

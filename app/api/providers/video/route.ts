@@ -66,13 +66,30 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (body.operation === 'discard') {
+    const videos = mediaIds(body.referenceVideos);
+    const audios = mediaIds(body.referenceAudios);
+    if (!videos || !audios) return NextResponse.json({ success: false, error: 'Reference media ids are invalid.' }, { status: 400 });
+    if (body.provider === 'runware') {
+      for (const id of [...videos, ...audios]) await runwareDeleteMedia(apiKey, id).catch(() => {});
+    }
+    return NextResponse.json({ success: true });
+  }
+
   if (body.operation === 'status') {
     if (typeof body.taskId !== 'string' || !body.taskId) {
       return NextResponse.json({ success: false, error: 'A task ID is required' }, { status: 400 });
     }
     try {
       const task = await adapter.pollVideo({ apiKey, taskId: body.taskId });
-      if(body.provider==='runware' && (task.state==='success'||task.state==='error') && typeof body.sourceVideo==='string' && /^[a-f\d-]{36}$/i.test(body.sourceVideo)) await runwareDeleteMedia(apiKey,body.sourceVideo).catch(()=>{});
+      if (body.provider === 'runware' && (task.state === 'success' || task.state === 'error')) {
+        const stored = [
+          ...(typeof body.sourceVideo === 'string' && MEDIA_ID.test(body.sourceVideo) ? [body.sourceVideo] : []),
+          ...(Array.isArray(body.referenceVideos) ? body.referenceVideos.filter((id): id is string => typeof id === 'string' && MEDIA_ID.test(id)) : []),
+          ...(Array.isArray(body.referenceAudios) ? body.referenceAudios.filter((id): id is string => typeof id === 'string' && MEDIA_ID.test(id)) : []),
+        ];
+        for (const id of stored) await runwareDeleteMedia(apiKey, id).catch(() => {});
+      }
       return NextResponse.json({ success: true, task });
     } catch (error) {
       return failure(error, `${adapter.label} could not report this task.`);

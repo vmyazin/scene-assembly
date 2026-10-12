@@ -59,6 +59,33 @@ function webm(seconds: number): Uint8Array {
   return concat(header, segment);
 }
 
+function wav(seconds: number): Uint8Array {
+  const rate = 8000;
+  const byteRate = rate * 2;
+  const fmt = new Uint8Array(16);
+  const fmtView = new DataView(fmt.buffer);
+  fmtView.setUint16(0, 1, true);
+  fmtView.setUint16(2, 1, true);
+  fmtView.setUint32(4, rate, true);
+  fmtView.setUint32(8, byteRate, true);
+  fmtView.setUint16(12, 2, true);
+  fmtView.setUint16(14, 16, true);
+  const chunk = (id: string, payload: Uint8Array) => {
+    const out = new Uint8Array(8 + payload.length);
+    out.set([id.charCodeAt(0), id.charCodeAt(1), id.charCodeAt(2), id.charCodeAt(3)]);
+    new DataView(out.buffer).setUint32(4, payload.length, true);
+    out.set(payload, 8);
+    return out;
+  };
+  const body = concat(chunk('fmt ', fmt), chunk('data', new Uint8Array(byteRate * seconds)));
+  const out = new Uint8Array(12 + body.length);
+  out.set([0x52, 0x49, 0x46, 0x46]);
+  new DataView(out.buffer).setUint32(4, body.length + 4, true);
+  out.set([0x57, 0x41, 0x56, 0x45], 8);
+  out.set(body, 12);
+  return out;
+}
+
 function sourceOf(bytes: Uint8Array): ByteRangeSource {
   return {
     size: bytes.length,
@@ -67,9 +94,10 @@ function sourceOf(bytes: Uint8Array): ByteRangeSource {
 }
 
 describe('container duration', () => {
-  it('reads an MP4 mvhd and a WebM Duration', async () => {
+  it('reads an MP4 mvhd, a WebM Duration and a WAV data chunk', async () => {
     expect(await readContainerDuration(sourceOf(mp4(30)))).toBe(30);
     expect(await readContainerDuration(sourceOf(webm(12.5)))).toBeCloseTo(12.5, 5);
+    expect(await readContainerDuration(sourceOf(wav(2)))).toBe(2);
   });
 
   it('skips a large mdat and still reads moov at the end', async () => {

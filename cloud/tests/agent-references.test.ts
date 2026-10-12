@@ -125,6 +125,8 @@ describe('fetching a reference', () => {
     expect(sniffMime(wav)).toBe('audio/wav');
     expect(sniffMime(Uint8Array.from([0x49, 0x44, 0x33, 0x04]))).toBe('audio/mpeg');
     expect(sniffMime(Uint8Array.from([0xff, 0xfb, 0x90, 0x00]))).toBe('audio/mpeg');
+    expect(sniffMime(Uint8Array.from([0xff, 0xf1, 0x50, 0x80]))).toBeNull();
+    expect(sniffMime(Uint8Array.from([0xff, 0xf9, 0x50, 0x80]))).toBeNull();
   });
 });
 

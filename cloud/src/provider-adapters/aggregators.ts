@@ -110,6 +110,11 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
   if (stray) return invalid(`"${stray}" is not a setting this provider accepts.`);
 }
 
+/** Ids already in Runware's media store. A later failure must delete them; the poll never sees a handle that was not returned. */
+async function releaseStored(apiKey: string, ids: Array<string | undefined>) {
+  for (const id of ids) if (id) await runwareDeleteMedia(apiKey, id).catch(() => {});
+}
+
 function describeMode(mode: CloudJobRequest['inputMode'], capitalized = false): string {
   const label = mode === 'frames' ? 'first and last frame' : mode === 'reference' ? 'reference images' : mode === 'image' ? 'image input' : 'text input';
   return capitalized ? label[0].toUpperCase() + label.slice(1) : label;
@@ -152,19 +157,24 @@ export const aggregatorAdapter: GenerationAdapter = {
       // inputUrls keeps the source last, matching jobInputIds; it is never an image.
       let sourceVideo = common.images.pop();
       let sourceMedia: string | undefined;
-      if (isLocal(env)) {
-        // The provider cannot fetch localhost capabilities. Transfer owned bytes
-        // to its media store first; production retains scoped HTTPS R2 URLs.
-        const inputs = await inlineInputs(env, job, jobInputIds(r));
-        const source = inputs.pop()!;
-        sourceMedia = await runwareStoreMedia(common.apiKey, `data:${source.mimeType};base64,${source.data}`);
-        sourceVideo = sourceMedia;
-        common.images = inputs.map(input => `data:${input.mimeType};base64,${input.data}`);
+      try {
+        if (isLocal(env)) {
+          // The provider cannot fetch localhost capabilities. Transfer owned bytes
+          // to its media store first; production retains scoped HTTPS R2 URLs.
+          const inputs = await inlineInputs(env, job, jobInputIds(r));
+          const source = inputs.pop()!;
+          sourceMedia = await runwareStoreMedia(common.apiKey, `data:${source.mimeType};base64,${source.data}`);
+          sourceVideo = sourceMedia;
+          common.images = inputs.map(input => `data:${input.mimeType};base64,${input.data}`);
+        }
+        // The durable job ID remains available even when submission throws, so
+        // getTaskDetails can diagnose the attempt without another paid request.
+        const result = await runwareCreateVideo({...common, sourceVideo, inputMode: 'edit', resolution: typeof r.values.size === 'string' ? r.values.size : undefined, ...(model.videoEdit?.draftRate || model.videoEdit?.draftPreview ? {draft: r.values.draft === true} : {})}, job.id);
+        return {handle: {id: result.taskId, ...(sourceMedia ? {sourceMedia} : {})}};
+      } catch (error) {
+        await releaseStored(common.apiKey, [sourceMedia]);
+        throw error;
       }
-      // The durable job ID remains available even when submission throws, so
-      // getTaskDetails can diagnose the attempt without another paid request.
-      const result = await runwareCreateVideo({...common, sourceVideo, inputMode: 'edit', resolution: typeof r.values.size === 'string' ? r.values.size : undefined, ...(model.videoEdit?.draftRate || model.videoEdit?.draftPreview ? {draft: r.values.draft === true} : {})}, job.id);
-      return {handle: {id: result.taskId, ...(sourceMedia ? {sourceMedia} : {})}};
     }
     const videoIds = r.referenceVideoIds ?? [];
     const audioIds = r.referenceAudioIds ?? [];
@@ -173,29 +183,34 @@ export const aggregatorAdapter: GenerationAdapter = {
     let referenceVideos = provider === 'comet' ? [] : common.images.slice(r.referenceIds.length, r.referenceIds.length + videoIds.length);
     let referenceAudios = provider === 'comet' ? [] : common.images.slice(r.referenceIds.length + videoIds.length, r.referenceIds.length + videoIds.length + audioIds.length);
     common.images = common.images.slice(0, r.referenceIds.length);
-    let storedMedia: string[] | undefined;
-    if (provider === 'runware' && isLocal(env) && (videoIds.length > 0 || audioIds.length > 0)) {
-      // Seedance rejects data URIs on referenceVideos and referenceAudios, and
-      // it cannot fetch a localhost media URL. Store the owned bytes, then
-      // delete those UUIDs when the task ends.
-      const inputs = await inlineInputs(env, job, [...videoIds, ...audioIds]);
-      storedMedia = [];
-      for (const input of inputs) storedMedia.push(await runwareStoreMedia(common.apiKey, `data:${input.mimeType};base64,${input.data}`));
-      referenceVideos = storedMedia.slice(0, videoIds.length);
-      referenceAudios = storedMedia.slice(videoIds.length);
+    const storedMedia: string[] = [];
+    try {
+      if (provider === 'runware' && isLocal(env) && (videoIds.length > 0 || audioIds.length > 0)) {
+        // Seedance rejects data URIs on referenceVideos and referenceAudios, and
+        // it cannot fetch a localhost media URL. Store the owned bytes, then
+        // delete those UUIDs when the task ends. A store or create that throws
+        // before the handle is returned has to delete them here: poll never runs.
+        const inputs = await inlineInputs(env, job, [...videoIds, ...audioIds]);
+        for (const input of inputs) storedMedia.push(await runwareStoreMedia(common.apiKey, `data:${input.mimeType};base64,${input.data}`));
+        referenceVideos = storedMedia.slice(0, videoIds.length);
+        referenceAudios = storedMedia.slice(videoIds.length);
+      }
+      const size = resolveSize(provider, r.modelId, r.values.size as string | undefined);
+      const create = provider === 'piapi' ? piapiCreateVideo : provider === 'runware' ? runwareCreateVideo : provider === 'comet' ? cometCreateVideo : atlasCreateVideo;
+      const result = await create({
+        ...common, inputMode: r.inputMode, ...(provider === 'piapi' || model.supportsAudio ? {audio: r.values.audio === true} : {}),
+        inputField: resolveVideoInput(provider, r.modelId, r.inputMode)?.field,
+        durationSeconds: resolveDuration(provider, r.modelId, r.values.durationSeconds as number | undefined),
+        width: size?.width, height: size?.height, resolution: size?.preset,
+        ...(referenceVideos.length > 0 ? {referenceVideos} : {}),
+        ...(referenceAudios.length > 0 ? {referenceAudios} : {}),
+        ...(r.values.draft === true ? {draft: true} : {}),
+      });
+      return {handle: {id: result.taskId, ...(storedMedia.length ? {storedMedia} : {})}};
+    } catch (error) {
+      await releaseStored(common.apiKey, storedMedia);
+      throw error;
     }
-    const size = resolveSize(provider, r.modelId, r.values.size as string | undefined);
-    const create = provider === 'piapi' ? piapiCreateVideo : provider === 'runware' ? runwareCreateVideo : provider === 'comet' ? cometCreateVideo : atlasCreateVideo;
-    const result = await create({
-      ...common, inputMode: r.inputMode, ...(provider === 'piapi' || model.supportsAudio ? {audio: r.values.audio === true} : {}),
-      inputField: resolveVideoInput(provider, r.modelId, r.inputMode)?.field,
-      durationSeconds: resolveDuration(provider, r.modelId, r.values.durationSeconds as number | undefined),
-      width: size?.width, height: size?.height, resolution: size?.preset,
-      ...(referenceVideos.length > 0 ? {referenceVideos} : {}),
-      ...(referenceAudios.length > 0 ? {referenceAudios} : {}),
-      ...(r.values.draft === true ? {draft: true} : {}),
-    });
-    return {handle: {id: result.taskId, ...(storedMedia?.length ? {storedMedia} : {})}};
   },
   async poll(env, job, handle) {
     const r: CloudJobRequest = JSON.parse(job.request_json);

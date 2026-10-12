@@ -2,6 +2,7 @@
 import { canRetryResultLocation } from './result-recovery';
 import { jobInputIds } from '../../lib/account/contracts';
 import { isReferenceAudioMime, isReferenceVideoMime } from '../../lib/providers/reference-clips';
+import { assertReferenceClipLimits } from './reference-clip-limits';
 import { isEditVideoMime } from '../../lib/providers/video-edit';
 import type { CloudJobRequest, CloudJobState, CloudJobView } from '../../lib/account/contracts';
 import { hash, isLocal, type Env } from './security';
@@ -112,12 +113,14 @@ export async function acceptJob(env: Env, owner: string, token: string, request:
     const source=upload.id===request.sourceVideoId;
     const video=referenceVideos.has(upload.id);
     const audio=referenceAudios.has(upload.id);
+    if(video && upload.mime_type==='video/webm')throw new AccountError('WebM is an edit source, not a reference video. Use MP4 or MOV.',400,'invalid_references');
     const roleOk=source ? request.inputMode==='edit'&&isEditVideoMime(upload.mime_type)
       : video ? isReferenceVideoMime(upload.mime_type)
       : audio ? isReferenceAudioMime(upload.mime_type)
       : upload.mime_type.startsWith('image/');
     if(!roleOk)throw new AccountError('Source video, reference images, reference video and reference audio must match their input roles.',400,'invalid_references');
   }
+  await assertReferenceClipLimits(env, owner, request);
   const localEdit = isLocal(env) && env.DEV_FAKE_GENERATION !== '1' && request.provider === 'runware' && request.inputMode === 'edit';
   const localClips = isLocal(env) && env.DEV_FAKE_GENERATION !== '1' && request.provider === 'runware' && (referenceVideos.size>0 || referenceAudios.size>0);
   if (request.provider === 'gemini' || request.provider === 'comet' || localEdit || localClips) {

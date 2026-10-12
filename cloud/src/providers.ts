@@ -6,6 +6,9 @@ import type { CloudJobRequest } from '../../lib/account/contracts';
 import { AccountError, type JobRow } from './jobs';
 import { isLocal, type Env } from './security';
 import { writeOutput, type ProviderResult } from './assets';
+import { findModel } from '../../lib/providers/catalog';
+import { referenceClipsFor } from '../../lib/providers/reference-clips';
+import type { ProviderId } from '../../lib/providers/types';
 import { inspectPrompt } from '../../lib/moderation/floors';
 
 export interface ProviderHandle { id: string; protocol?: string; notBefore?:number; sourceMedia?:string; storedMedia?:string[] }
@@ -85,6 +88,16 @@ export function validateRequest(env:Env,value:unknown):CloudJobRequest {
     ? { ...r.values!, moderation: 'standard' as const }
     : r.values!;
   const request: CloudJobRequest = {provider:r.provider!,modelId:r.modelId!,mediaType:r.mediaType as 'image'|'video',inputMode:r.inputMode as CloudJobRequest['inputMode'],prompt:r.prompt!.trim(),values,referenceIds:r.referenceIds!,...(r.sourceVideoId?{sourceVideoId:r.sourceVideoId}:{}),...(referenceVideoIds.length?{referenceVideoIds}:{}),...(referenceAudioIds.length?{referenceAudioIds}:{})};
+  // fal, Kie and the synchronous adapters never look at these ids. inputUrls
+  // would then hand a clip to them as another image on a paid run. Only a
+  // catalog model that declares referenceClips for this mode may carry them.
+  if (referenceVideoIds.length > 0 || referenceAudioIds.length > 0) {
+    const catalogProvider = (['runware', 'atlas', 'comet', 'piapi'] as const satisfies readonly ProviderId[]).find((id) => id === request.provider);
+    const model = catalogProvider ? findModel(catalogProvider, request.modelId) : undefined;
+    if (!referenceClipsFor(model, request.inputMode)) {
+      throw new AccountError(model ? `${model.label} does not take reference video or audio.` : 'This model does not take reference video or audio.', 400, 'invalid_settings');
+    }
+  }
   adapterFor(env,request.provider);
   if(request.provider==='fal'||request.provider==='kie')validateQueuedRequest(request);
   if(request.provider==='runware'||request.provider==='atlas'||request.provider==='comet'||request.provider==='piapi')validateAggregatorRequest(request);

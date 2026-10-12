@@ -4,14 +4,15 @@ import { copyAssetToUpload, discardUploads, reserveUpload, storeStreamedUpload }
 import { ToolError } from '../errors';
 import { fetchReference } from '../fetch-reference';
 import { defineTool, type ToolContext } from '../tool';
+import { STAGEABLE_INPUT_MIMES } from '../../../../lib/providers/input-mimes';
 import type { ReferenceInput } from './request';
 
-const STAGEABLE = ['image/png', 'image/jpeg', 'image/webp', 'image/avif', 'video/mp4', 'video/webm', 'video/quicktime', 'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav'] as const;
+const STAGEABLE = STAGEABLE_INPUT_MIMES;
 
 export const addReference = defineTool({
   name: 'add_reference',
   title: 'Add a reference',
-  description: 'Stage a reference image, a reference video, reference audio, or a source video for edit mode, for generate. Either pass url (an https link Scene Assembly downloads now), or pass upload with the file\'s mimeType and exact byte size to get a putUrl, then PUT the file there with that Content-Type within 15 minutes, for example: curl -T cat.png -H "Content-Type: image/png" "<putUrl>". Both return an uploadId for references, referenceVideos, referenceAudios or sourceVideo that lasts 24 hours. A file already in the library does not need this: pass { assetId } to generate. Images are PNG, JPEG, WebP or AVIF up to 20 MB. Video is MP4, WebM or QuickTime up to 100 MB. Audio is MP3 or WAV up to 15 MB. A URL is typed from its bytes, so QuickTime from a link is refused; pass upload with video/quicktime for a MOV.',
+  description: 'Stage a reference image, a reference video, reference audio, or a source video for edit mode, for generate. Either pass url (an https link Scene Assembly downloads now), or pass upload with the file\'s mimeType and exact byte size to get a putUrl, then PUT the file there with that Content-Type within 15 minutes, for example: curl -T cat.png -H "Content-Type: image/png" "<putUrl>". Both return an uploadId for references, referenceVideos, referenceAudios or sourceVideo that lasts 24 hours. A file already in the library does not need this: pass { assetId } to generate. Images are PNG, JPEG, WebP or AVIF up to 20 MB. A reference video is MP4 or QuickTime up to 100 MB. WebM is an edit source only, also up to 100 MB, and is refused if passed in referenceVideos. Audio is MP3 or WAV up to 15 MB. A URL is typed from its bytes, so QuickTime from a link is refused and a WebM from a link can only be an edit source; pass upload with video/quicktime for a MOV.',
   kind: 'write',
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   input: z.object({

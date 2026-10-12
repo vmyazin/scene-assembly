@@ -6,6 +6,7 @@ import { runLocationKey, useRunLocationStore } from '@/store/useRunLocationStore
 import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
 import { warmAccountSlug } from './asset-name';
 import { refreshAccount } from './session';
+import { fileWithReferenceClipType } from '@/lib/providers/reference-clips';
 import { submitAccountJob, uploadAccountReferences } from './client';
 import type { CloudJobRequest, CloudJobView, CloudProvider } from './contracts';
 
@@ -51,7 +52,9 @@ export function useCloudWorkspace(provider:CloudProvider) {
     if(!attempt||attempt.owner!==owner||attempt.signature!==signature||attempt.sourceVideo!==sourceVideo||!sameFiles(attempt.files,files)||!sameFiles(attempt.clipVideos,clipVideos)||!sameFiles(attempt.clipAudios,clipAudios)){
       // Images, then reference videos, then reference audio, then the edit source.
       // acceptJob reads that order back out of jobInputIds.
-      const ids=await uploadAccountReferences([...files,...clipVideos,...clipAudios,...(sourceVideo?[sourceVideo]:[])],undefined,owner);
+      const typedVideos=clipVideos.map((file)=>fileWithReferenceClipType(file,'video'));
+      const typedAudios=clipAudios.map((file)=>fileWithReferenceClipType(file,'audio'));
+      const ids=await uploadAccountReferences([...files,...typedVideos,...typedAudios,...(sourceVideo?[sourceVideo]:[])],undefined,owner);
       assertOwner();
       const sourceVideoId=sourceVideo?ids.pop():undefined;
       const referenceAudioIds=clipAudios.length?ids.splice(ids.length-clipAudios.length,clipAudios.length):undefined;

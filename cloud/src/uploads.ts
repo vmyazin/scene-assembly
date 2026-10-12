@@ -1,5 +1,6 @@
 // cloud/src/uploads.ts
 import { jobInputIds } from '../../lib/account/contracts';
+import { isImageInputMime } from '../../lib/providers/input-mimes';
 import { isReferenceAudioMime, REFERENCE_AUDIO_MAX_BYTES } from '../../lib/providers/reference-clips';
 import { MAX_EDIT_VIDEO_BYTES, isEditVideoMime } from '../../lib/providers/video-edit';
 import { AccountError, type JobRow } from './jobs';
@@ -15,7 +16,7 @@ interface Upload {id:string;user_id:string;object_key:string;mime_type:string;ex
 function uploadByteCap(mime:string): number | null {
   if(isEditVideoMime(mime))return MAX_EDIT_VIDEO_BYTES;
   if(isReferenceAudioMime(mime))return REFERENCE_AUDIO_MAX_BYTES;
-  if(/^image\/(png|jpeg|webp|avif)$/.test(mime))return MAX_INPUT_BYTES;
+  if(isImageInputMime(mime))return MAX_INPUT_BYTES;
   return null;
 }
 export async function reserveUpload(env:Env,owner:string,bytes:number,mime:string,purpose:'upload'|'agent-upload'|null='upload'):Promise<{id:string;objectKey:string;expiresAt:number;url?:string;urlExpiresAt?:number}> {

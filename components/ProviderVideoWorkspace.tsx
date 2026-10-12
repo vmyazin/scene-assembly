@@ -2,7 +2,7 @@
 'use client';
 // components/ProviderVideoWorkspace.tsx
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpDown, Download, ImagePlus, Loader2, Search, Sparkles, Video } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCloudWorkspace } from '@/lib/account/useCloudWorkspace';
@@ -14,7 +14,7 @@ import { useAccountStore } from '@/store/useAccountStore';
 import { EDIT_PROMPTS, validateEditSource } from '@/lib/providers/video-edit';
 import { uploadRunwareMedia, uploadRunwareVideo } from '@/lib/providers/upload-video';
 import ReferenceClipTray, { type AttachedReferenceClip } from '@/components/ReferenceClipTray';
-import { clipToken, referenceClipSetError, referenceClipsFor } from '@/lib/providers/reference-clips';
+import { clipToken, fileWithReferenceClipType, referenceClipSetError, referenceClipsFor } from '@/lib/providers/reference-clips';
 import LastFrameActions from '@/components/LastFrameActions';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import PromptPanel from '@/components/PromptPanel';
@@ -59,7 +59,7 @@ import {
 } from '@/lib/media-download';
 import { downloadFilenameBase } from '@/lib/download-name';
 import { requestExamplePrompt, requestPromptSlug } from '@/lib/micro-ai/browser';
-import { getProviderVideoStatus, pollDelayMs, submitProviderVideo } from '@/lib/providers/browser';
+import { getProviderVideoStatus, pollDelayMs, releaseRunwareMedia, submitProviderVideo } from '@/lib/providers/browser';
 import { followProviderVideo } from '@/lib/providers/follow-video';
 import { findModel, modelsFor } from '@/lib/providers/catalog';
 import ModelListbox from '@/components/ModelListbox';
@@ -283,6 +283,7 @@ export default function ProviderVideoWorkspace({
   const uploadedSource = useRef<{file: File; key: string; id: string} | null>(null);
   const uploadedClips = useRef<Map<File, { key: string; id: string }>>(new Map());
   const submitFlight = useRef(false);
+  const clipEpoch = useRef(0);
   const clipScopeKey = `${modelKey}:${epoch}`;
   const [clipScope, setClipScope] = useState(clipScopeKey);
   if (clipScope !== clipScopeKey) {
@@ -290,6 +291,15 @@ export default function ProviderVideoWorkspace({
     setClipVideos([]);
     setClipAudios([]);
   }
+  // A ref write during render is rejected, and a passive effect can lose to the
+  // probe's microtask. Layout runs before the browser delivers the next media
+  // event, so an in-flight add sees the new epoch and does not write the old
+  // clips back. The upload cache goes with them: those ids belonged to the
+  // previous model.
+  useLayoutEffect(() => {
+    clipEpoch.current += 1;
+    uploadedClips.current.clear();
+  }, [clipScopeKey]);
 
   const prompt = useDraftStore((state) => state.prompt);
   const setPrompt = useDraftStore((state) => state.setPrompt);
@@ -580,6 +590,8 @@ export default function ProviderVideoWorkspace({
           apiKey,
           taskId: job.taskId as string,
           sourceVideo: job.sourceVideoId,
+          ...(job.referenceVideoIds?.length ? { referenceVideos: job.referenceVideoIds } : {}),
+          ...(job.referenceAudioIds?.length ? { referenceAudios: job.referenceAudioIds } : {}),
         }),
         onUpdate: (patch) => patchJob(job.id, patch),
         onSuccess: (task) => {
@@ -712,6 +724,9 @@ export default function ProviderVideoWorkspace({
     setError(null);
     setIsSubmitting(true);
     submitFlight.current = true;
+    const referenceVideos: string[] = [];
+    const referenceAudios: string[] = [];
+    let taskStarted = false;
     const aspectRatio = !isEdit ? submittedAspectRatio(selectedModel, values) : undefined;
     try {
       if (isEdit && source && selectedModel.videoEdit) validateEditSource(source, selectedModel.videoEdit);
@@ -747,13 +762,11 @@ export default function ProviderVideoWorkspace({
         if (cached?.key === apiKey) return cached.id;
         setUploadKind(kind);
         setUploadProgress(0);
-        const id = await uploadRunwareMedia(file, apiKey, setUploadProgress);
+        const id = await uploadRunwareMedia(fileWithReferenceClipType(file, kind), apiKey, setUploadProgress);
         uploadedClips.current.set(file, { key: apiKey, id });
         return id;
       };
-      const referenceVideos = [];
       for (const clip of clipVideos) referenceVideos.push(await uploadClip(clip.file, 'video'));
-      const referenceAudios = [];
       for (const clip of clipAudios) referenceAudios.push(await uploadClip(clip.file, 'audio'));
       if (referenceVideos.length > 0 || referenceAudios.length > 0) {
         setUploadProgress(null);
@@ -781,11 +794,15 @@ export default function ProviderVideoWorkspace({
         ...relaxed.attach(),
       });
       usePromptLibraryStore.getState().remember(submittedPrompt);
+      taskStarted = true;
+      uploadedClips.current.clear();
       const jobId = useProviderJobsStore.getState().startJob({
         provider,
         taskId,
         modelId: selectedModel.id,
         ...(sourceVideo ? {sourceVideoId: sourceVideo} : {}),
+        ...(referenceVideos.length > 0 ? { referenceVideoIds: referenceVideos } : {}),
+        ...(referenceAudios.length > 0 ? { referenceAudioIds: referenceAudios } : {}),
         prompt: submittedPrompt,
         inputMode,
         controlValues: {
@@ -806,6 +823,12 @@ export default function ProviderVideoWorkspace({
       trackGenerationSubmitted({ engine: provider, route: selectedModel.id, model: selectedModel.label, level: relaxed.levelRef.current, media: 'video' });
       toast.success('Task queued.');
     } catch (submissionError) {
+      if (!taskStarted && provider === 'runware' && (referenceVideos.length > 0 || referenceAudios.length > 0)) {
+        const videos = referenceVideos;
+        const audios = referenceAudios;
+        uploadedClips.current.clear();
+        void releaseRunwareMedia({ apiKey, referenceVideos: videos, referenceAudios: audios }).catch(() => {});
+      }
       const message =
         submissionError instanceof Error
           ? submissionError.message
@@ -1020,6 +1043,8 @@ export default function ProviderVideoWorkspace({
 
           {clipCapability && (
             <ReferenceClipTray
+              key={clipScopeKey}
+              epoch={clipEpoch}
               capability={clipCapability}
               syntax={clipSyntax}
               videos={clipVideos}

@@ -130,7 +130,7 @@ Some input modes take reference images, and edit mode takes a source video. Mode
 - The URL must be public `https`, with a hostname rather than an IP address and no user name or password in it.
 - It cannot point at Scene Assembly itself. Pass `{ "assetId": … }` for a file already in the library.
 - Up to 3 redirects are followed, each checked by the same rules. The download times out after 20 seconds.
-- The type is read from the file's bytes, not its headers: PNG, JPEG, WebP or AVIF images up to 20 MB, MP4 or WebM video up to 100 MB, and MP3 or WAV audio up to 15 MB. QuickTime and HEIC files are refused from a link, because those brands are not stored from a sniff. Pass `upload` with `video/quicktime` for a MOV.
+- The type is read from the file's bytes, not its headers: PNG, JPEG, WebP or AVIF images up to 20 MB, MP4 or WebM video up to 100 MB, and MP3 or WAV audio up to 15 MB. WebM staged from a link is an edit source only. A reference video is MP4, or a MOV uploaded with `video/quicktime`. QuickTime and HEIC files are refused from a link, because those brands are not stored from a sniff.
 
 **From a file you have.** Ask for an upload link with the file's type and its exact size in bytes:
 
@@ -146,7 +146,7 @@ curl -T cat.png -H "Content-Type: image/png" "<putUrl>"
 
 A different type or byte count is refused by the upload link itself with an HTTP 400, not by a tool; ask for a new link with the right figures.
 
-`mimeType` is one of `image/png`, `image/jpeg`, `image/webp`, `image/avif`, `video/mp4`, `video/webm`, `video/quicktime`, `audio/mpeg`, `audio/mp3`, `audio/wav`, `audio/wave` or `audio/x-wav`. Images stop at 20 MB, audio at 15 MB, and video at 100 MB.
+`mimeType` is one of `image/png`, `image/jpeg`, `image/webp`, `image/avif`, `video/mp4`, `video/webm`, `video/quicktime`, `audio/mpeg`, `audio/mp3`, `audio/wav`, `audio/wave` or `audio/x-wav`. Images stop at 20 MB, audio at 15 MB, and video at 100 MB. `video/webm` is an edit source. A reference video is `video/mp4` or `video/quicktime`.
 
 **Using it.** An `uploadId` lasts 24 hours. It is cleaned up soon after the jobs that used it finish, so stage the file again for a later job. A file already in your library needs no staging: pass its `assetId`. The refusals these steps can return are listed under [Errors](#references-2).
 
@@ -154,7 +154,7 @@ A different type or byte count is refused by the upload link itself with an HTTP
 { "provider": "gemini", "modelId": "gemini-3-pro-image-preview", "mediaType": "image", "inputMode": "image", "prompt": "The same kite, in watercolour", "references": [{ "uploadId": "<from add_reference>" }, { "assetId": "<from list_assets>" }], "idempotencyKey": "harbour-kite-watercolour" }
 ```
 
-References go in order. `list_models` gives each mode's minimum and maximum count, and whether that mode accepts reference video or audio. In edit mode, pass the clip as `sourceVideo` instead of in `references`. Reference video and audio are separate arrays, not extra images. A Seedance draft may include them; `finalize_draft` does not resend them. An account can hold up to 32 staged references, 256 MB in all, across the browser and every agent.
+References go in order. `list_models` gives each mode's minimum and maximum count, and whether that mode accepts reference video or audio. In edit mode, pass the clip as `sourceVideo` instead of in `references`. Reference video and audio are separate arrays, not extra images. A reference video is MP4 or MOV. WebM is an edit source only. A Seedance draft may include them; `finalize_draft` does not resend them. An account can hold up to 32 staged references, 256 MB in all, across the browser and every agent.
 
 ## Budget
 
@@ -210,7 +210,7 @@ An HTTP 401 from the server is not a refusal. It means the connection was discon
 | `invalid_settings` | No | The provider's own check rejected the settings. Compare them with `list_models` for that model and mode. |
 | `content_floor` | No | The request violates a content restriction that applies to every filter level. Explain the refusal; do not retry the same request or try another filter level. |
 | `invalid_request` | No | The request was malformed, for example a `cursor` that did not come from `list_assets`. |
-| `invalid_references` | No | The same reference was passed twice, or a file is in the wrong role: images go in `references`, reference videos in `referenceVideos`, reference audio in `referenceAudios`, and an edit source in `sourceVideo`. |
+| `invalid_references` | No | The same reference was passed twice, or a file is in the wrong role: images go in `references`, reference videos in `referenceVideos`, reference audio in `referenceAudios`, and an edit source in `sourceVideo`. WebM passed as a reference video is refused: it is an edit source. A clip over that model's own size or length is refused before the job is reserved. |
 | `invalid_token` | No | Scene Assembly built an invalid submission token. This should not happen; report it. |
 | `not_found` | No | No job or file with that id on this account. |
 | `draft_unavailable` | No | That job is not a Seedance 2.5 draft, or it has no `draftId` yet. Generate a 480p draft and wait until `get_job` returns one. |
