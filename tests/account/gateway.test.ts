@@ -80,6 +80,43 @@ describe('account gateway', () => {
       expect((await accountGateway(new Request(`https://app.test/api/account/${path}`))).status, path).toBe(404);
     }
   });
+  it('forwards a YouTube import with a long ceiling and the browser abort', async () => {
+    vi.stubEnv('ACCOUNT_WORKER_ORIGIN', 'https://accounts.test');
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ uploadId: 'u' }, { status: 201 }));
+    vi.stubGlobal('fetch', fetcher);
+    const browser = new AbortController();
+    const response = await accountGateway(new Request('https://app.test/api/account/youtube-clips', {
+      method: 'POST', signal: browser.signal,
+      headers: { origin: 'https://app.test', 'content-type': 'application/json' },
+      body: JSON.stringify({ url: 'https://youtu.be/aqz-KE-bpKQ', startSeconds: 1, endSeconds: 9 }),
+    }));
+    expect(response.status).toBe(201);
+    expect(String(fetcher.mock.calls[0][0])).toBe('https://accounts.test/api/account/youtube-clips');
+    const forwarded: AbortSignal = fetcher.mock.calls[0][1].signal;
+    expect(forwarded.aborted).toBe(false);
+    browser.abort();
+    expect(forwarded.aborted).toBe(true);
+  });
+  it('answers a cancelled YouTube import as cancelled, not as an outage', async () => {
+    vi.stubEnv('ACCOUNT_WORKER_ORIGIN', 'https://accounts.test');
+    const browser = new AbortController();
+    // Like a real fetch, reject at once when the signal is already aborted.
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((_url, init: RequestInit) => new Promise((_, reject) => {
+      const fail = () => reject(new DOMException('aborted', 'AbortError'));
+      if (init.signal!.aborted) fail();
+      else init.signal!.addEventListener('abort', fail);
+    })));
+    const pending = accountGateway(new Request('https://app.test/api/account/youtube-clips', { method: 'POST', signal: browser.signal, headers: { origin: 'https://app.test' }, body: '{}' }));
+    browser.abort();
+    const response = await pending;
+    expect(response.status).toBe(504);
+    expect(await response.json()).toEqual({ error: 'Import cancelled.' });
+  });
+  it('still rejects neighbouring paths', async () => {
+    vi.stubEnv('ACCOUNT_WORKER_ORIGIN', 'https://accounts.test');
+    vi.stubGlobal('fetch', vi.fn());
+    expect((await accountGateway(new Request('https://app.test/api/account/youtube-clips/x', { method: 'POST', headers: { origin: 'https://app.test' }, body: '{}' }))).status).toBe(404);
+  });
 });
 
 it('forwards bounded import metadata and account spend requests',async()=>{
