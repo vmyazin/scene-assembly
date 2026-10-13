@@ -22,7 +22,12 @@ export type ClipRequest = ClipSource;
 export type ClipFailureCode = 'invalid' | 'range' | 'unavailable' | 'no_720p' | 'refused' | 'failed' | 'busy' | 'rate_limited' | 'timeout' | 'cancelled';
 export type UnavailableReason = 'private' | 'members' | 'age' | 'live' | 'removed';
 export interface ClipFailure { ok: false; code: ClipFailureCode; detail: string; reason?: UnavailableReason; retryAfterSeconds?: number }
-export interface ClipSuccess { ok: true; body: ReadableStream<Uint8Array>; bytes: number; width: number; height: number; durationSeconds: number }
+export interface ClipSuccess {
+  ok: true; body: ReadableStream<Uint8Array>; bytes: number; width: number; height: number; durationSeconds: number;
+  /** Importer-internal (toResponse ignores it): settles once the clip has been read out
+   *  and the work dir removed, which is when the account's slot frees up. */
+  settled?: Promise<void>;
+}
 export type ClipResult = ClipSuccess | ClipFailure;
 export interface ImporterDeps {
   container: ClipContainer | undefined;
@@ -59,8 +64,10 @@ export async function admit(storage: GateStorage, now: number): Promise<{ ok: tr
   return { ok: true };
 }
 
-/** start() returns before the instance accepts work, so probe until it does. */
-async function ready(container: ClipContainer, sleep: (ms: number) => Promise<void>) {
+/** start() returns before the instance accepts work, so probe until it does. Returns
+ *  early, without throwing, once the signal aborts; the caller reports that. */
+async function ready(container: ClipContainer, sleep: (ms: number) => Promise<void>, signal: AbortSignal) {
+  if (signal.aborted) return;
   if (!container.running) container.start({ enableInternet: true });
   let last: unknown;
   for (let attempt = 0; attempt < 30; attempt++) {
@@ -68,6 +75,7 @@ async function ready(container: ClipContainer, sleep: (ms: number) => Promise<vo
       if (await (await container.exec(['true'], { stdout: 'ignore', stderr: 'ignore' })).exitCode === 0) return;
     } catch (error) { last = error; }
     await sleep(1000);
+    if (signal.aborted) return;
   }
   throw last instanceof Error ? last : new Error('The importer did not start.');
 }
@@ -75,21 +83,34 @@ async function ready(container: ClipContainer, sleep: (ms: number) => Promise<vo
 const aborted = (signal: AbortSignal): ClipFailure =>
   ({ ok: false, code: (signal.reason as { name?: string } | undefined)?.name === 'TimeoutError' ? 'timeout' : 'cancelled', detail: '' });
 
+/** How long a process gets to honour SIGTERM before it is SIGKILLed. */
+const KILL_GRACE_MS = 10_000;
+
 /** Deliberately not exec()'s own `signal` option: that sends SIGKILL to the exec'd
  *  process only, which would orphan yt-dlp and ffmpeg and skip clip.py's SIGTERM
  *  handler (it kills the whole process group), and aborting an exec that already
- *  exited throws inside the Durable Object. kill() defaults to SIGTERM, and the
- *  listener goes away once the process has exited. */
+ *  exited throws inside the Durable Object. kill() defaults to SIGTERM; if the process
+ *  is still there after KILL_GRACE_MS it gets SIGKILL, so output() cannot hang forever
+ *  holding the account's slot. Everything is dropped once the process has exited. */
 function killOnAbort(proc: ClipProcess, signal: AbortSignal) {
-  if (signal.aborted) { proc.kill(); return; }
-  const kill = () => proc.kill();
-  signal.addEventListener('abort', kill, { once: true });
-  const remove = () => signal.removeEventListener('abort', kill);
-  proc.exitCode.then(remove, remove);
+  let exited = false;
+  let escalate: ReturnType<typeof setTimeout> | undefined;
+  const send = (number?: number) => {
+    try { if (number === undefined) proc.kill(); else proc.kill(number); } catch { /* raced with exit */ }
+  };
+  const kill = () => {
+    if (exited) return;
+    send();
+    escalate = setTimeout(() => { if (!exited) send(9); }, KILL_GRACE_MS);
+  };
+  const done = () => { exited = true; clearTimeout(escalate); signal.removeEventListener('abort', kill); };
+  proc.exitCode.then(done, done);
+  if (signal.aborted) kill(); else signal.addEventListener('abort', kill, { once: true });
 }
 
 export async function runClip(container: ClipContainer, request: ClipRequest, options: { proxyUrl?: string; signal: AbortSignal; workId: string; sleep(ms: number): Promise<void> }): Promise<ClipResult> {
-  await ready(container, options.sleep);
+  await ready(container, options.sleep, options.signal);
+  if (options.signal.aborted) return aborted(options.signal);
   const work = `/tmp/clips/${options.workId}`;
   const cleanup = () => container.exec(['rm', '-rf', work], { stdout: 'ignore', stderr: 'ignore' }).then(() => {}, () => {});
   let line = '';
@@ -119,9 +140,11 @@ export async function runClip(container: ClipContainer, request: ClipRequest, op
   }
   const file = await container.exec(['cat', path], { stdout: 'pipe', stderr: 'ignore' });
   killOnAbort(file, options.signal);
-  if (!file.stdout) { void cleanup(); return { ok: false, code: 'failed', detail: 'The clip could not be read back.' }; }
-  void file.exitCode.then(cleanup, cleanup);
-  return { ok: true, body: file.stdout, bytes: bytes as number, width: width as number, height: height as number, durationSeconds: duration as number };
+  const settled = file.exitCode.then(cleanup, cleanup);
+  // Aborted while cat was starting: the stream would be truncated, so do not hand it out.
+  if (options.signal.aborted) return aborted(options.signal);
+  if (!file.stdout) return { ok: false, code: 'failed', detail: 'The clip could not be read back.' };
+  return { ok: true, settled, body: file.stdout, bytes: bytes as number, width: width as number, height: height as number, durationSeconds: duration as number };
 }
 
 export async function handleImport(deps: ImporterDeps, body: unknown, signal: AbortSignal): Promise<ClipResult> {
@@ -130,16 +153,27 @@ export async function handleImport(deps: ImporterDeps, body: unknown, signal: Ab
   if (!deps.container) return { ok: false, code: 'refused', detail: 'No container is configured.', retryAfterSeconds: 300 };
   if (deps.state.busy) return { ok: false, code: 'busy', detail: '', retryAfterSeconds: 30 };
   deps.state.busy = true;
+  const release = async () => {
+    deps.state.busy = false;
+    await deps.container?.setInactivityTimeout(60_000).catch(() => {});
+  };
+  let handedOff = false;
   try {
     const admitted = await admit(deps.storage, deps.now());
     if (!admitted.ok) return { ok: false, code: 'rate_limited', detail: '', retryAfterSeconds: admitted.retryAfterSeconds };
-    return await runClip(deps.container, request, { proxyUrl: deps.proxyUrl, signal, workId: deps.workId(), sleep: deps.sleep });
+    const result = await runClip(deps.container, request, { proxyUrl: deps.proxyUrl, signal, workId: deps.workId(), sleep: deps.sleep });
+    if (result.ok && result.settled) {
+      // The slot stays taken until the clip has been streamed out and removed; a second
+      // import must not start mid-transfer, and the container must not idle out under it.
+      handedOff = true;
+      void result.settled.then(release, release);
+    }
+    return result;
   } catch (error) {
     // start() past max_instances, an instance that never came up, or a lost exec.
     return { ok: false, code: 'refused', detail: error instanceof Error ? error.message : 'Importer unavailable.', retryAfterSeconds: 60 };
   } finally {
-    deps.state.busy = false;
-    await deps.container.setInactivityTimeout(60_000).catch(() => {});
+    if (!handedOff) await release();
   }
 }
 
