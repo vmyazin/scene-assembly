@@ -338,6 +338,13 @@
       "request": "launch",
       "command": "ACCOUNT_WORKER_PORT=8895 pnpm dev -- --port 3275",
       "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Actionable failed-job details",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "ACCOUNT_WORKER_PORT=8981 DEV_FAKE_GENERATION=1 npm run dev -- --port 3281",
+      "cwd": "${workspaceFolder}"
     }
   ]
 }

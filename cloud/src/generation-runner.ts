@@ -1,7 +1,7 @@
 import { recordAccountSpend } from './spend';
 import type { Env } from './security';
 import { AccountError, finishJob, getJob, recordFailure, setJobState, type JobRow } from './jobs';
-import { captureFailureReason, providerFailureReason } from './failure';
+import { captureFailureDetail, captureFailureReason, providerFailureReason } from './failure';
 import { captureResult, type ProviderResult } from './assets';
 import { adapterFor, type GenerationAdapter, type ProviderHandle } from './providers';
 
@@ -100,7 +100,7 @@ export async function runGeneration(env:Env,jobId:string,step:DurableStep,overri
         // survives, which is how six distinct causes used to arrive at the
         // account page as one sentence about needing another attempt.
         const reason=captureFailureReason(error);
-        await recordFailure(env,jobId,reason);
+        await recordFailure(env,jobId,reason,captureFailureDetail(error));
         // A full library needs a user decision, not transfer retries. Return a
         // serializable outcome instead of relying on a custom Error surviving
         // the Workflow boundary with its prototype and code intact.

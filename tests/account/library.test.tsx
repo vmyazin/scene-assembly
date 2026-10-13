@@ -66,7 +66,7 @@ describe('AccountLibrary',()=>{
     expect(running).toHaveTextContent('Generating');
     expect(running?.querySelector('svg.job-wave-field')).not.toBeNull();
     // The one that stopped is still the list's kind of row: no card, no wave.
-    expect(screen.getByText('Stopped painting').closest('li')?.querySelector('svg.job-wave-field')).toBeNull();
+    expect(screen.getByText('Stopped painting', {selector:'p.truncate'}).closest('li')?.querySelector('svg.job-wave-field')).toBeNull();
     expect(container.querySelectorAll('svg.job-wave-field')).toHaveLength(1);
   });
 

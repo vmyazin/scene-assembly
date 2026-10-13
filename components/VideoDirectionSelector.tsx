@@ -109,7 +109,7 @@ export default function VideoDirectionSelector({
   return (
     <div>
       <p className="mb-2.5 text-[0.625rem] uppercase tracking-[0.12em] text-[var(--foreground-muted)]">Direction</p>
-      <div ref={groupRef} role="group" aria-label="Video direction" className="flex flex-wrap gap-[3px]">
+      <div ref={groupRef} role="group" aria-label="Video direction" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {modes.map(mode => {
           const Icon = mode.icon;
           return (
@@ -132,10 +132,10 @@ export default function VideoDirectionSelector({
                 if (touchPress.current) show(mode.id, event.currentTarget);
                 touchPress.current = false;
               }}
-              className={`inline-flex items-center gap-1.5 rounded-md border px-[9px] py-2.5 text-xs leading-[1.45] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--neon-cyan)] ${value === mode.id ? 'border-[var(--neon-purple)] bg-[var(--neon-purple)]/10 text-[var(--foreground)]' : 'border-transparent text-[var(--foreground)] hover:border-[var(--border-hover)] hover:bg-[var(--surface-hover)]'}`}
+              className={`inline-flex min-h-[76px] min-w-0 items-center gap-2.5 rounded-xl border px-4 py-3.5 text-left text-sm font-semibold sm:text-base transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--neon-cyan)] ${value === mode.id ? 'border-[var(--neon-purple)] bg-[var(--neon-purple)]/10 text-[var(--foreground)]' : 'border-[var(--border)] bg-[var(--background-elevated)]/60 text-[var(--foreground)] hover:border-[var(--foreground-subtle)]'}`}
             >
-              <Icon aria-hidden="true" size={16} className={value === mode.id ? 'text-[#d483ff]' : 'text-[var(--foreground-muted)]'} />
-              {mode.label}
+              <Icon aria-hidden="true" size={22} className={`shrink-0 ${value === mode.id ? 'text-[#d483ff]' : 'text-[var(--foreground-muted)]'}`} />
+              <span className="min-w-0 whitespace-normal leading-tight">{mode.label}</span>
             </button>
           );
         })}

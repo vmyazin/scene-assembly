@@ -26,6 +26,8 @@ try {
   const fixtures=[
     [`seed-recovery-approved${fresh}`,'Demo: retry saving an existing result','https://atlas-media.oss-us-west-1.aliyuncs.com/local-fixture.png'],
     ['seed-recovery-manual','Demo: retrieve a provider download link','https://downloads.example.com/local-demo-result.png'],
+    ['seed-recovery-http','Demo: download interrupted by provider outage','https://fal.media/local-demo-result.png'],
+    ['seed-recovery-legacy','Demo: older failure without recorded error','https://downloads.example.com/older-demo-result.png'],
   ];
   for(const [id,prompt,url] of fixtures){
     const request={provider:'atlas',modelId:'gpt-image-1',mediaType:'image',inputMode:'text',prompt,values:{},referenceIds:[]};
@@ -37,6 +39,8 @@ try {
       DELETE FROM account_assets WHERE job_id=${q(id)};
       INSERT OR REPLACE INTO account_jobs (id,user_id,request_token,request_digest,provider,request_json,state,error_code,failure_reason,provider_task,result_json,reservation_bytes,dispatched,workflow_attempt,created_at,updated_at)
       VALUES (${q(id)},${q(owner)},${q(id)},'seed','atlas',${q(JSON.stringify(request))},'needs_attention','save_failed','result_location',${q(JSON.stringify({id:`demo-provider-${id}`}))},${q(JSON.stringify({sources:[{url}]}))},0,1,COALESCE((SELECT workflow_attempt FROM account_jobs WHERE id=${q(id)}),0),${Date.now()-149000},${Date.now()});`);
+    if(id==='seed-recovery-manual')sql(`UPDATE account_jobs SET failure_detail='Automatic saving does not support the download host downloads.example.com.' WHERE id=${q(id)}`);
+    if(id==='seed-recovery-http')sql(`UPDATE account_jobs SET failure_reason='transfer_failed',failure_detail='Provider download returned HTTP 503.',workflow_attempt=3 WHERE id=${q(id)}`);
   }
 } finally {rmSync(dir,{recursive:true,force:true});}
 console.log(`Recovery fixtures ready at ${origin}/account#jobs. The manual link is illustrative; the retry fixture saves local bytes without contacting a provider.`);

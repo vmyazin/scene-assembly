@@ -31,10 +31,10 @@ export default function ProviderResultRecovery({ jobId, busy }: { jobId: string;
     } finally { pending.current = false; setLoading(false); }
   }
 
-  return <div className="mt-2 text-xs leading-relaxed">
+  return <div className="text-xs leading-relaxed">
     {!data && <button type="button" disabled={busy || loading} onClick={() => void load()} className="text-sky-200 underline underline-offset-4 disabled:opacity-50">{loading ? 'Getting provider download…' : 'Get provider download'}</button>}
     {data && <>
-      <p className="text-[var(--foreground-muted)]">{data.links.length ? 'Open the provider’s file and save it to your device. These links may expire. No new generation is started.' : 'The provider did not supply a usable download link. Ask the provider to recover the completed result using the reference below.'}</p>
+      <p className="text-[var(--foreground-muted)]">{data.links.length ? 'Save this existing file to your device before the link expires.' : 'The provider did not supply a usable download link. Ask the provider to recover the completed result using the reference below.'}</p>
       <div className="mt-2 flex flex-col items-start gap-2">{data.links.map((link, index) => {
         const url = providerBrowserUrl(link.url);
         return url && <a key={`${index}-${url.href}`} href={url.href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" className="max-w-full break-all text-sky-200 underline underline-offset-4">Open result{data.links.length > 1 ? ` ${index + 1}` : ''} on {url.hostname} ↗</a>;

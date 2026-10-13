@@ -65,7 +65,7 @@ describe('the account page as the queue card sees it', () => {
       expect(screen.getByRole('button', { name: /Needs attention/ })).toHaveAttribute('aria-pressed', 'true')
     );
     // And the jobs themselves, with the way out of them.
-    expect(screen.getAllByText('A canal at dusk')).toHaveLength(2);
+    expect(screen.getAllByText('A canal at dusk', {selector:'p.truncate'})).toHaveLength(2);
     expect(screen.getByText('Tracking stopped')).toBeInTheDocument();
   });
 

@@ -62,7 +62,7 @@ describe('VideoWorkspace provider selection', () => {
     useFalJobsStore.getState().clearJobs();
   });
 
-  it('lists only engines that publish an edit model', () => {
+  it('disables engines that do not publish an edit model and keeps fal on edit', async () => {
     useAppStore.setState({ videoEngine: 'runware' });
     render(
       <VideoWorkspace
@@ -74,9 +74,22 @@ describe('VideoWorkspace provider selection', () => {
     );
     expect(screen.getAllByRole('radio').map((radio) => radio.textContent?.trim())).toEqual([
       'Runware',
+      'Kie.ai',
       'fal.ai',
+      'Gemini',
+      'Atlas Cloud',
       'CometAPI',
+      'PiAPI',
     ]);
+    for (const name of ['Runware', 'fal.ai', 'CometAPI']) {
+      expect(screen.getByRole('radio', { name })).toBeEnabled();
+    }
+    for (const name of ['Kie.ai', 'Gemini', 'Atlas Cloud', 'PiAPI']) {
+      expect(screen.getByRole('radio', { name })).toBeDisabled();
+    }
+    await userEvent.click(screen.getByRole('radio', { name: 'fal.ai' }));
+    expect(useAppStore.getState().videoEngine).toBe('fal');
+    expect(screen.getByRole('button', { name: /Generate edit/ })).toBeInTheDocument();
   });
 
   it('keeps first-and-last selected when moving to a provider that can run it', async () => {
@@ -99,7 +112,7 @@ describe('VideoWorkspace provider selection', () => {
     expect(useAppStore.getState().videoEngine).toBe('runware');
   });
 
-  it('drops out of first-and-last for a provider that cannot run it', async () => {
+  it('does not switch into an engine that cannot run first-and-last', async () => {
     const onInputModeChange = vi.fn();
     useAppStore.setState({ videoEngine: 'fal' });
     render(
@@ -111,9 +124,11 @@ describe('VideoWorkspace provider selection', () => {
       />
     );
 
-    // Kie has no first-and-last model at all.
-    await userEvent.click(screen.getByRole('radio', { name: /Kie\.ai/i }));
-    expect(onInputModeChange).toHaveBeenCalledWith('image');
+    const kie = screen.getByRole('radio', { name: /Kie\.ai/i });
+    expect(kie).toBeDisabled();
+    await userEvent.click(kie);
+    expect(onInputModeChange).not.toHaveBeenCalled();
+    expect(useAppStore.getState().videoEngine).toBe('fal');
   });
 
   it('keeps Kie as the persisted default and lists every video provider', () => {
@@ -126,7 +141,7 @@ describe('VideoWorkspace provider selection', () => {
       />
     );
 
-    const providers = screen.getByRole('radiogroup', { name: 'Video provider' });
+    const providers = screen.getByRole('radiogroup', { name: 'Generation engine' });
     // Runware leads as the cheapest per second, then Kie and fal; Gemini is
     // the BYOK option in the fourth slot, then the remaining aggregators.
     expect(screen.getAllByRole('radio').map((radio) => radio.textContent?.trim())).toEqual([
@@ -303,7 +318,7 @@ describe('VideoWorkspace provider selection', () => {
     expect(useFalJobsStore.getState().jobs[0].requestId).toBe('request_keep01');
   });
 
-  it('offers first-and-last-frame only on fal, and leaves the mode on Kie', () => {
+  it('keeps first-and-last visible and will not mount Kie for it', () => {
     const onInputModeChange = vi.fn();
     const view = render(
       <VideoWorkspace
@@ -313,13 +328,11 @@ describe('VideoWorkspace provider selection', () => {
         onOpenConnections={() => undefined}
       />
     );
-    expect(screen.queryByRole('button', { name: /First & last frame/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /First & last frame/ })).toBeVisible();
 
-    fireEvent.click(screen.getByRole('radio', { name: /fal\.ai/i }));
     fireEvent.click(screen.getByRole('button', { name: /First & last frame/ }));
     expect(onInputModeChange).toHaveBeenCalledWith('frames');
 
-    // Kie has no frames models, so it falls back to image-to-video on the way out.
     view.rerender(
       <VideoWorkspace
         inputMode="frames"
@@ -328,8 +341,8 @@ describe('VideoWorkspace provider selection', () => {
         onOpenConnections={() => undefined}
       />
     );
-    fireEvent.click(screen.getByRole('radio', { name: /Kie\.ai/i }));
-    expect(onInputModeChange).toHaveBeenLastCalledWith('image');
-    expect(screen.getByTestId('kie-workspace')).toHaveTextContent('Kie workspace: image');
+    expect(screen.getByRole('radio', { name: /Kie\.ai/i })).toBeDisabled();
+    expect(screen.queryByTestId('kie-workspace')).not.toBeInTheDocument();
+    expect(useAppStore.getState().videoEngine).toBe('runware');
   });
 });
