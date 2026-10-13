@@ -148,6 +148,18 @@ A different type or byte count is refused by the upload link itself with an HTTP
 
 `mimeType` is one of `image/png`, `image/jpeg`, `image/webp`, `image/avif`, `video/mp4` or `video/webm`, with the same size limits as links.
 
+**From a YouTube video.** For edit mode, Scene Assembly can cut a section of a YouTube video into the source clip:
+
+```json
+{ "youtube": { "url": "https://youtu.be/aqz-KE-bpKQ", "startSeconds": 62, "endSeconds": 74.4, "provider": "runware", "modelId": "bytedance:seedance@2.5" } }
+```
+
+- Times are seconds to one decimal place. With `provider` and `modelId`, the section must fit that model's edit source length (`list_models`); without them, 1–30 seconds.
+- Only that section is downloaded, at 720p or above, and saved as an MP4 for 24 hours. It is never added to the library.
+- The response gives the clip's `durationSeconds`, `width` and `height`; check them against the model before calling `generate`.
+- Private, members-only, age-restricted and live videos cannot be imported. An account can import 10 sections an hour, one at a time, shared with the browser.
+- The call returns when the clip is ready, usually within 40 seconds and never more than 2 minutes.
+
 **Using it.** An `uploadId` lasts 24 hours. It is cleaned up soon after the jobs that used it finish, so stage the file again for a later job. A file already in your library needs no staging: pass its `assetId`. The refusals these steps can return are listed under [Errors](#references-2).
 
 ```json
@@ -173,7 +185,7 @@ The server offers 13 tools. `delete_asset` is offered only when you allowed the 
 | --- | --- | --- |
 | `list_models` | Models your connected providers can run. Filter by provider or model to get each mode's settings. | `provider`, `modelId`, `mediaType`, `inputMode` (all optional) |
 | `estimate_cost` | Prices a request and checks it against the agent's limit, without running it. | The same fields as `generate` |
-| `add_reference` | Stages a reference image, or a source video for edit mode, and returns an `uploadId`. | `url`, or `upload` with `mimeType` and `bytes` |
+| `add_reference` | Stages a reference image, or a source video for edit mode (from a file, a link, or a section of a YouTube video), and returns an `uploadId`. | `url`, `upload` with `mimeType` and `bytes`, or `youtube` with `url`, `startSeconds` and `endSeconds` |
 | `generate` | Starts an image or video job and charges its estimate to the agent's limit. Returns at once. | `provider`, `modelId`, `mediaType`, `inputMode`, `prompt`, `values`, `references`, `sourceVideo`, `idempotencyKey` |
 | `get_job` | A job's state and, once saved, its outputs with download links. Can wait for a change. | `jobId`, `waitSeconds` (0 to 25) |
 | `list_jobs` | The account's recent jobs, newest first, including ones started in the browser. | `state` (`active`, `needs_attention`, `finished` or `all`), `limit` (up to 100) |
@@ -243,6 +255,10 @@ An HTTP 401 from the server is not a refusal. It means the connection was discon
 | `input_capacity` | No | Too many staged references are still in use: an account holds up to 32, 256 MB in all. Wait for the jobs using them to finish. |
 | `reference_unavailable` | No | A staged upload has expired, was never finished, or was already cleaned up, or a library file cannot be used as a reference (too large or the wrong type). Stage it again. |
 | `inline_input_size` | No | Gemini and CometAPI take up to 12 MB of reference images per job in all. Use smaller images. |
+| `invalid_range` | No | A YouTube section is outside the model's source length, not to a tenth of a second, or runs past the end of the video. |
+| `source_unavailable` | No | The YouTube video is private, members-only, age-restricted, live or a premiere, has no version at 720p or above, or the clip does not meet the model's source size. The message says which. |
+| `source_refused` | Yes | YouTube refused the download, the importer is busy or not available, or the import took too long. Wait `retryAfterSeconds`, then retry. |
+| `import_rate_limited` | Yes | This account has imported 10 YouTube sections in the last hour, or another import is still running. Wait `retryAfterSeconds`. |
 
 ### Job control
 

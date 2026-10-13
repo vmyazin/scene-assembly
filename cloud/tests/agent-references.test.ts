@@ -5,6 +5,7 @@ import { resolveReferences } from '../src/mcp/tools/references';
 import { INPUT_TTL, reserveUpload } from '../src/uploads';
 import { agentEnv, OWNER, seedAgent, seedAsset, seedUser } from './agent-fixtures';
 import { connectAgent, structured } from './mcp-harness';
+import { clipOk, fakeImporter } from './youtube-fixtures';
 
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
 const file = (bytes: Uint8Array, headers: Record<string, string> = {}) => new Response(bytes, { status: 200, headers });
@@ -188,6 +189,41 @@ describe('add_reference', () => {
     const { env } = agentEnv();
     const client = await connectAgent(env, await seedAgent(env));
     expect(structured(await client.callTool({ name: 'add_reference', arguments: {} }))).toMatchObject({ code: 'invalid_field' });
+  });
+});
+
+describe('add_reference with youtube', () => {
+  const youtube = { url: 'https://www.youtube.com/watch?v=aqz-KE-bpKQ', startSeconds: 62, endSeconds: 74.4 };
+  it('stages a section that generate accepts as an edit source', async () => {
+    const { env } = agentEnv({ YOUTUBE_IMPORTER: fakeImporter(() => clipOk()).namespace });
+    const client = await connectAgent(env, await seedAgent(env));
+    const staged = structured<{ uploadId: string; durationSeconds: number; width: number; height: number; source: { videoId: string } }>(
+      await client.callTool({ name: 'add_reference', arguments: { youtube: { ...youtube, provider: 'runware', modelId: 'bytedance:seedance@2.5' } } }));
+    expect(staged).toMatchObject({ durationSeconds: 12.4, width: 1280, height: 720, source: { videoId: 'aqz-KE-bpKQ' } });
+    expect(staged).not.toHaveProperty('previewUrl');
+    const resolved = await resolveReferences({ env, agent: { user_id: OWNER } } as never, [], { uploadId: staged.uploadId });
+    expect(resolved.sourceVideoId).toBe(staged.uploadId);
+  });
+  it('points a YouTube link given as url at the youtube option', async () => {
+    const { env } = agentEnv();
+    const client = await connectAgent(env, await seedAgent(env));
+    expect(structured(await client.callTool({ name: 'add_reference', arguments: { url: youtube.url } }))).toMatchObject({ code: 'invalid_field', message: expect.stringContaining('youtube:') });
+  });
+  it('needs provider and modelId together, and exactly one source', async () => {
+    const { env } = agentEnv({ YOUTUBE_IMPORTER: fakeImporter(() => clipOk()).namespace });
+    const client = await connectAgent(env, await seedAgent(env));
+    expect(structured(await client.callTool({ name: 'add_reference', arguments: { youtube: { ...youtube, provider: 'runware' } } }))).toMatchObject({ code: 'invalid_field' });
+    expect(structured(await client.callTool({ name: 'add_reference', arguments: { youtube, url: 'https://example.com/a.png' } }))).toMatchObject({ code: 'invalid_field' });
+  });
+  it.each([
+    [{ ok: false, code: 'rate_limited', detail: '', retryAfterSeconds: 600 }, { code: 'import_rate_limited', retryable: true, retryAfterSeconds: 600 }],
+    [{ ok: false, code: 'refused', detail: '', retryAfterSeconds: 60 }, { code: 'source_refused', retryable: true, retryAfterSeconds: 60 }],
+    [{ ok: false, code: 'unavailable', reason: 'members', detail: '' }, { code: 'source_unavailable', retryable: false }],
+    [{ ok: false, code: 'range', detail: '' }, { code: 'invalid_range', retryable: false }],
+  ] as const)('refuses %o as %o', async (failure, expected) => {
+    const { env } = agentEnv({ YOUTUBE_IMPORTER: fakeImporter(() => failure).namespace });
+    const client = await connectAgent(env, await seedAgent(env));
+    expect(structured(await client.callTool({ name: 'add_reference', arguments: { youtube } }))).toMatchObject(expected);
   });
 });
 

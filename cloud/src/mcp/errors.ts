@@ -18,6 +18,6 @@ export function refusal(code: string, message: string, extra: Record<string, unk
  *  credentials, the same rule handleRequest keeps for OAuth. */
 export function toRefusal(error: unknown): CallToolResult {
   if (error instanceof ToolError) return refusal(error.code, error.message, error.extra, error.retryable);
-  if (error instanceof AccountError) return refusal(error.code, error.message, {}, isRetryableStatus(error.status));
+  if (error instanceof AccountError) return refusal(error.code, error.message, error.retryAfterSeconds !== undefined ? { retryAfterSeconds: error.retryAfterSeconds } : {}, isRetryableStatus(error.status));
   return refusal('internal_error', 'Scene Assembly could not complete this request. Try again shortly.', {}, true);
 }

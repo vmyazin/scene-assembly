@@ -1,5 +1,7 @@
 import * as z from 'zod';
+import { parseYouTubeUrl } from '../../../../lib/youtube/clip';
 import { copyAssetToUpload, discardUploads, reserveUpload, storeStreamedUpload } from '../../uploads';
+import { importYouTubeClip } from '../../youtube/import';
 import { ToolError } from '../errors';
 import { fetchReference } from '../fetch-reference';
 import { defineTool, type ToolContext } from '../tool';
@@ -10,16 +12,33 @@ const STAGEABLE = ['image/png', 'image/jpeg', 'image/webp', 'image/avif', 'video
 export const addReference = defineTool({
   name: 'add_reference',
   title: 'Add a reference',
-  description: 'Stage a reference image, or a source video for edit mode, for generate. Either pass url (an https link Scene Assembly downloads now), or pass upload with the file\'s mimeType and exact byte size to get a putUrl, then PUT the file there with that Content-Type within 15 minutes, for example: curl -T cat.png -H "Content-Type: image/png" "<putUrl>". Both return an uploadId for references or sourceVideo that lasts 24 hours. A file already in the library does not need this: pass { assetId } to generate.',
+  description: 'Stage a reference image, or a source video for edit mode, for generate. Pass exactly one of: url (an https link to a media file, downloaded now); upload with the file\'s mimeType and exact byte size, to get a putUrl, then PUT the file there with that Content-Type; or youtube with a YouTube link and startSeconds/endSeconds (one decimal), which cuts that section into an MP4 source video for edit mode — add provider and modelId to check the length against that model. Returns an uploadId to pass to generate (as sourceVideo in edit mode). YouTube imports are limited to 10 per hour per account.',
   kind: 'write',
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   input: z.object({
     url: z.string().max(2048).optional(),
     upload: z.object({ mimeType: z.enum(STAGEABLE), bytes: z.number().int().positive() }).optional(),
+    youtube: z.object({
+      url: z.string().max(2048),
+      startSeconds: z.number().nonnegative(),
+      endSeconds: z.number().positive(),
+      provider: z.string().max(100).optional(),
+      modelId: z.string().max(200).optional(),
+    }).optional(),
   }),
   async run(ctx, args) {
-    if (Boolean(args.url) === Boolean(args.upload)) throw new ToolError('invalid_field', 'Pass either url or upload.', { field: 'url' });
+    if ([args.url, args.upload, args.youtube].filter(Boolean).length !== 1) throw new ToolError('invalid_field', 'Pass exactly one of url, upload or youtube.', { field: 'url' });
     const owner = ctx.agent.user_id;
+    if (args.youtube) {
+      const { provider, modelId, ...range } = args.youtube;
+      if (Boolean(provider) !== Boolean(modelId)) throw new ToolError('invalid_field', 'Pass provider and modelId together, or neither.', { field: 'youtube.modelId' });
+      const clip = await importYouTubeClip(ctx.env, owner, { ...range, ...(provider && modelId ? { edit: { provider, modelId } } : {}) });
+      return {
+        structured: { ...clip },
+        text: `Staged ${clip.durationSeconds}s (${clip.width}×${clip.height}) of YouTube video ${clip.source.videoId} as ${clip.uploadId}. Pass { "uploadId": "${clip.uploadId}" } as sourceVideo in edit mode.`,
+      };
+    }
+    if (args.url && parseYouTubeUrl(args.url)) throw new ToolError('invalid_field', 'That is a YouTube page, not a media file. Pass it as youtube: { url, startSeconds, endSeconds } instead.', { field: 'url' });
     if (args.url) {
       const fetched = await fetchReference(ctx.env, args.url);
       const stored = await storeStreamedUpload(ctx.env, owner, fetched.body, fetched.mimeType, fetched.maxBytes);
