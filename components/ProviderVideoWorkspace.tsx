@@ -840,7 +840,8 @@ export default function ProviderVideoWorkspace({
             </div>
           </section>
 
-          {isEdit && <VideoSourceInput capability={selectedModel!.videoEdit!} source={source} onChange={setSelectedSource} disabled={isSubmitting} />}
+          {isEdit && <VideoSourceInput capability={selectedModel!.videoEdit!} source={source} onChange={setSelectedSource} disabled={isSubmitting}
+            youtube={cloudWorkspace.cloud ? {provider, modelId: selectedModel!.id, modelLabel: selectedModel!.label} : undefined} />}
           {inputMode !== 'text' && (
             <section className="glass-card space-y-3 p-3.5 md:p-4">
               <div>
