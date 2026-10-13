@@ -22,6 +22,8 @@ function withRetry(error: AccountError, seconds: number): AccountError {
   return error;
 }
 
+const minutes = (seconds: number) => { const count = Math.ceil(seconds / 60); return `${count} ${count === 1 ? 'minute' : 'minutes'}`; };
+
 function toAccountError(failure: ClipFailure): AccountError {
   // yt-dlp's text is the one string here we did not write, and it can echo the proxy URL.
   const detail = sanitizeProviderMessage(failure.detail);
@@ -31,10 +33,11 @@ function toAccountError(failure: ClipFailure): AccountError {
     case 'range': return new AccountError('That section runs past the end of the video.', 400, 'invalid_range');
     case 'unavailable': return new AccountError(`This video can't be imported: ${UNAVAILABLE[failure.reason ?? 'removed']}.`, 422, 'source_unavailable');
     case 'no_720p': return new AccountError('This video has no 720p version, which video editing needs.', 422, 'source_unavailable');
-    case 'rate_limited': return withRetry(new AccountError(`Import limit reached. Try again in ${Math.ceil(wait / 60)} minutes.`, 429, 'import_rate_limited'), wait);
+    case 'rate_limited': return withRetry(new AccountError(`Import limit reached. Try again in ${minutes(wait)}.`, 429, 'import_rate_limited'), wait);
     case 'busy': return withRetry(new AccountError('Another import is still running for this account.', 429, 'import_rate_limited'), wait);
     case 'timeout': return withRetry(new AccountError('The import took too long. Try a shorter section.', 503, 'source_refused'), wait);
     case 'cancelled': return withRetry(new AccountError('Import cancelled.', 503, 'source_refused'), 5);
+    case 'unconfigured': return withRetry(new AccountError('YouTube import is not available right now.', 503, 'source_refused'), 300);
     default: return withRetry(new AccountError('YouTube refused the download. Try again in a few minutes.', 503, 'source_refused'), wait);
   }
 }
@@ -50,9 +53,19 @@ export async function importYouTubeClip(env: Env, owner: string, input: YouTubeI
   if (problem) throw new AccountError(problem, 400, 'invalid_range');
   if (!env.YOUTUBE_IMPORTER) throw withRetry(new AccountError('YouTube import is not available right now.', 503, 'source_refused'), 300);
   const source: ClipSource = { videoId: link.videoId, startSeconds: input.startSeconds, endSeconds: input.endSeconds };
-  const clip = await fromResponse(await env.YOUTUBE_IMPORTER.getByName(owner).fetch('https://youtube-importer/clip', {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(source), signal,
-  }));
+  let response: Response;
+  try {
+    response = await env.YOUTUBE_IMPORTER.getByName(owner).fetch('https://youtube-importer/clip', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(source), signal,
+    });
+  } catch (error) {
+    // The caller hung up: the same answer as a cancel the importer saw itself.
+    if (signal?.aborted) throw toAccountError({ ok: false, code: 'cancelled', detail: '' });
+    // A Durable Object that was reset, overloaded or failed to deploy.
+    console.warn('youtube importer unreachable', sanitizeProviderMessage(error instanceof Error ? error.message : String(error)));
+    throw withRetry(new AccountError('YouTube refused the download. Try again in a few minutes.', 503, 'source_refused'), 30);
+  }
+  const clip = await fromResponse(response);
   if (!clip.ok) throw toAccountError(clip);
   if (!Number.isSafeInteger(clip.bytes) || clip.bytes <= 0 || clip.bytes > MAX_EDIT_VIDEO_BYTES) {
     await clip.body.cancel().catch(() => {});

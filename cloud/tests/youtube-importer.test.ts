@@ -202,7 +202,33 @@ describe('runClip through handleImport', () => {
       .toEqual({ ok: false, code: 'busy', detail: '', retryAfterSeconds: 30 });
     const dead = fakeContainer(() => { throw new Error('max_instances reached'); }).container;
     expect(await handleImport(deps(dead), body, signal())).toMatchObject({ ok: false, code: 'refused', retryAfterSeconds: 60 });
-    expect(await handleImport(deps(undefined), body, signal())).toMatchObject({ ok: false, code: 'refused' });
+    expect(await handleImport(deps(undefined), body, signal())).toEqual({ ok: false, code: 'unconfigured', detail: 'No container is configured.', retryAfterSeconds: 300 });
+  });
+  it('spends the hourly quota only once the container is up', async () => {
+    // A container that never starts costs nothing.
+    const neverUp = deps(fakeContainer(() => { throw new Error('max_instances reached'); }).container);
+    expect(await handleImport(neverUp, body, signal())).toMatchObject({ ok: false, code: 'refused' });
+    expect(await neverUp.storage.get('imports')).toBeUndefined();
+    // Nor does a cancel while it is still starting.
+    const cancel = new AbortController();
+    let probes = 0;
+    const starting = deps(fakeContainer(() => { probes++; throw new Error('not up yet'); }).container, { sleep: async () => { if (probes === 2) cancel.abort(); } });
+    expect(await handleImport(starting, body, cancel.signal)).toMatchObject({ ok: false, code: 'cancelled' });
+    expect(await starting.storage.get('imports')).toBeUndefined();
+    // A run that reaches clip.py is counted, whatever it answers.
+    const refused = deps(fakeContainer(cmd => fakeProcess(encode(cmd[0] === 'python3' ? '{"ok":false,"code":"refused","detail":"bot check"}' : ''))).container);
+    expect(await handleImport(refused, body, signal())).toMatchObject({ ok: false, code: 'refused' });
+    expect(await refused.storage.get('imports')).toEqual([1_000_000]);
+  });
+  it('refuses an account at its hourly limit without starting a container', async () => {
+    const fake = fakeContainer(() => fakeProcess(new Uint8Array()));
+    const full = deps(fake.container);
+    await full.storage.put('imports', Array.from({ length: 10 }, (_, i) => 1_000_000 - 1_000 + i));
+    const state = full.state;
+    expect(await handleImport(full, body, signal())).toEqual({ ok: false, code: 'rate_limited', detail: '', retryAfterSeconds: 3599 });
+    expect(fake.calls).toHaveLength(0);
+    expect(fake.container.running).toBe(false);
+    expect(state.busy).toBe(false);
   });
   it('rejects malformed requests before touching the container', async () => {
     const { container, calls } = fakeContainer(() => fakeProcess(new Uint8Array()));

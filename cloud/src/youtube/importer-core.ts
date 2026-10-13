@@ -19,7 +19,8 @@ export interface GateStorage {
   put<T>(key: string, value: T): Promise<void>;
 }
 export type ClipRequest = ClipSource;
-export type ClipFailureCode = 'invalid' | 'range' | 'unavailable' | 'no_720p' | 'refused' | 'failed' | 'busy' | 'rate_limited' | 'timeout' | 'cancelled';
+/** `unconfigured`: the importer has no container attached (plain `pnpm dev`, which disables containers). */
+export type ClipFailureCode = 'invalid' | 'range' | 'unavailable' | 'no_720p' | 'refused' | 'unconfigured' | 'failed' | 'busy' | 'rate_limited' | 'timeout' | 'cancelled';
 export type UnavailableReason = 'private' | 'members' | 'age' | 'live' | 'removed';
 export interface ClipFailure { ok: false; code: ClipFailureCode; detail: string; reason?: UnavailableReason; retryAfterSeconds?: number }
 export interface ClipSuccess {
@@ -55,12 +56,21 @@ export function parseClipRequest(body: unknown): ClipRequest | null {
   return { videoId, startSeconds, endSeconds };
 }
 
-/** One account's rolling hour. Counted when the container is asked, not when it
- *  succeeds: a refused download spends the same proxy bandwidth. */
-export async function admit(storage: GateStorage, now: number): Promise<{ ok: true } | { ok: false; retryAfterSeconds: number }> {
+/** One account's rolling hour, read without spending it: an account already at its limit
+ *  is refused before a container is started for it. */
+export async function checkGate(storage: GateStorage, now: number): Promise<{ ok: true; recent: number[] } | { ok: false; retryAfterSeconds: number }> {
   const recent = ((await storage.get<number[]>('imports')) ?? []).filter(at => now - at < WINDOW_MS);
   if (recent.length >= YOUTUBE_IMPORTS_PER_HOUR) return { ok: false, retryAfterSeconds: Math.max(1, Math.ceil((recent[0] + WINDOW_MS - now) / 1000)) };
-  await storage.put('imports', [...recent, now]);
+  return { ok: true, recent };
+}
+
+/** Spends one of the account's hourly imports. Called once the container is up, just
+ *  before clip.py runs: a container that never started, or a cancel before any download,
+ *  costs nothing, while a refused download spends the same proxy bandwidth as a good one. */
+export async function admit(storage: GateStorage, now: number): Promise<{ ok: true } | { ok: false; retryAfterSeconds: number }> {
+  const gate = await checkGate(storage, now);
+  if (!gate.ok) return gate;
+  await storage.put('imports', [...gate.recent, now]);
   return { ok: true };
 }
 
@@ -108,8 +118,8 @@ function killOnAbort(proc: ClipProcess, signal: AbortSignal) {
   if (signal.aborted) kill(); else signal.addEventListener('abort', kill, { once: true });
 }
 
-export async function runClip(container: ClipContainer, request: ClipRequest, options: { proxyUrl?: string; signal: AbortSignal; workId: string; sleep(ms: number): Promise<void> }): Promise<ClipResult> {
-  await ready(container, options.sleep, options.signal);
+/** Runs clip.py in a container that is already up (see ready()). */
+export async function runClip(container: ClipContainer, request: ClipRequest, options: { proxyUrl?: string; signal: AbortSignal; workId: string }): Promise<ClipResult> {
   if (options.signal.aborted) return aborted(options.signal);
   const work = `/tmp/clips/${options.workId}`;
   const cleanup = () => container.exec(['rm', '-rf', work], { stdout: 'ignore', stderr: 'ignore' }).then(() => {}, () => {});
@@ -150,7 +160,7 @@ export async function runClip(container: ClipContainer, request: ClipRequest, op
 export async function handleImport(deps: ImporterDeps, body: unknown, signal: AbortSignal): Promise<ClipResult> {
   const request = parseClipRequest(body);
   if (!request) return { ok: false, code: 'invalid', detail: 'Malformed clip request.' };
-  if (!deps.container) return { ok: false, code: 'refused', detail: 'No container is configured.', retryAfterSeconds: 300 };
+  if (!deps.container) return { ok: false, code: 'unconfigured', detail: 'No container is configured.', retryAfterSeconds: 300 };
   if (deps.state.busy) return { ok: false, code: 'busy', detail: '', retryAfterSeconds: 30 };
   deps.state.busy = true;
   const release = async () => {
@@ -159,9 +169,15 @@ export async function handleImport(deps: ImporterDeps, body: unknown, signal: Ab
   };
   let handedOff = false;
   try {
+    const gate = await checkGate(deps.storage, deps.now());
+    if (!gate.ok) return { ok: false, code: 'rate_limited', detail: '', retryAfterSeconds: gate.retryAfterSeconds };
+    await ready(deps.container, deps.sleep, signal);
+    if (signal.aborted) return aborted(signal);
+    // Spent only now that the container is up; one import per account at a time (busy)
+    // means nothing can spend the hour between the check above and this.
     const admitted = await admit(deps.storage, deps.now());
     if (!admitted.ok) return { ok: false, code: 'rate_limited', detail: '', retryAfterSeconds: admitted.retryAfterSeconds };
-    const result = await runClip(deps.container, request, { proxyUrl: deps.proxyUrl, signal, workId: deps.workId(), sleep: deps.sleep });
+    const result = await runClip(deps.container, request, { proxyUrl: deps.proxyUrl, signal, workId: deps.workId() });
     if (result.ok && result.settled) {
       // The slot stays taken until the clip has been streamed out and removed; a second
       // import must not start mid-transfer, and the container must not idle out under it.

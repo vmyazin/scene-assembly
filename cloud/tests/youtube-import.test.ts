@@ -40,6 +40,7 @@ describe('importYouTubeClip', () => {
     [{ ok: false, code: 'busy', detail: '', retryAfterSeconds: 30 }, 'import_rate_limited', 30],
     [{ ok: false, code: 'refused', detail: '', retryAfterSeconds: 60 }, 'source_refused', 60],
     [{ ok: false, code: 'timeout', detail: '' }, 'source_refused', 60],
+    [{ ok: false, code: 'unconfigured', detail: 'No container is configured.', retryAfterSeconds: 300 }, 'source_refused', 300],
   ] as const)('maps %o to %s', async (failure, code, retry) => {
     const { env } = agentEnv({ YOUTUBE_IMPORTER: fakeImporter(() => failure).namespace });
     const error = await importYouTubeClip(env, OWNER, { url: URL_, startSeconds: 62, endSeconds: 74.4 }).catch(e => e);
@@ -62,6 +63,28 @@ describe('importYouTubeClip', () => {
       await expect(importYouTubeClip(env, OWNER, { url: URL_, startSeconds: 62, endSeconds: 74.4, edit: SEEDANCE })).rejects.toMatchObject({ code: expect.stringMatching(/source_unavailable|source_refused/) });
       expect(db.prepare("SELECT COUNT(*) AS n FROM account_uploads WHERE state='ready'").get()).toEqual({ n: 0 });
     }
+  });
+  it('says import is unavailable, not that YouTube refused, when no container is attached', async () => {
+    const { env } = agentEnv({ YOUTUBE_IMPORTER: fakeImporter(() => ({ ok: false, code: 'unconfigured', detail: 'No container is configured.', retryAfterSeconds: 300 })).namespace });
+    const error = await importYouTubeClip(env, OWNER, { url: URL_, startSeconds: 62, endSeconds: 74.4 }).catch(e => e);
+    expect(error).toMatchObject({ code: 'source_refused', message: 'YouTube import is not available right now.', retryAfterSeconds: 300 });
+  });
+  it('pluralises the wait in the hourly-limit message', async () => {
+    for (const [seconds, text] of [[45, '1 minute'], [60, '1 minute'], [61, '2 minutes'], [600, '10 minutes']] as const) {
+      const { env } = agentEnv({ YOUTUBE_IMPORTER: fakeImporter(() => ({ ok: false, code: 'rate_limited', detail: '', retryAfterSeconds: seconds })).namespace });
+      await expect(importYouTubeClip(env, OWNER, { url: URL_, startSeconds: 62, endSeconds: 74.4 })).rejects.toThrow(`Import limit reached. Try again in ${text}.`);
+    }
+  });
+  it('answers source_refused when the importer Durable Object cannot be reached, and cancelled when the caller left', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const broken = { getByName: () => ({ fetch: async () => { throw new Error('Durable Object reset because its code was updated.'); } }) } as unknown as DurableObjectNamespace;
+    const { env } = agentEnv({ YOUTUBE_IMPORTER: broken });
+    await expect(importYouTubeClip(env, OWNER, { url: URL_, startSeconds: 62, endSeconds: 74.4 })).rejects.toMatchObject({ code: 'source_refused', message: 'YouTube refused the download. Try again in a few minutes.', retryAfterSeconds: 30 });
+    expect(warn).toHaveBeenCalled();
+    const cancel = new AbortController();
+    const hangUp = { getByName: () => ({ fetch: async () => { cancel.abort(); throw new DOMException('The operation was aborted.', 'AbortError'); } }) } as unknown as DurableObjectNamespace;
+    const { env: left } = agentEnv({ YOUTUBE_IMPORTER: hangUp });
+    await expect(importYouTubeClip(left, OWNER, { url: URL_, startSeconds: 62, endSeconds: 74.4 }, cancel.signal)).rejects.toMatchObject({ code: 'source_refused', message: 'Import cancelled.', retryAfterSeconds: 5 });
   });
   it('answers source_refused with no importer bound', async () => {
     const { env } = agentEnv();
