@@ -2,7 +2,9 @@
 import { canRetryResultLocation } from './result-recovery';
 import { jobInputIds } from '../../lib/account/contracts';
 import { isReferenceAudioMime, isReferenceVideoMime } from '../../lib/providers/reference-clips';
+import { assertEditSourceLimits } from './edit-source-limits';
 import { assertReferenceClipLimits } from './reference-clip-limits';
+import { ALEPH_DATA_URI_MAX, alephDataUriLength } from '../../lib/providers/comet';
 import { isEditVideoMime } from '../../lib/providers/video-edit';
 import type { CloudJobRequest, CloudJobState, CloudJobView } from '../../lib/account/contracts';
 import { hash, isLocal, type Env } from './security';
@@ -121,6 +123,16 @@ export async function acceptJob(env: Env, owner: string, token: string, request:
     if(!roleOk)throw new AccountError('Source video, reference images, reference video and reference audio must match their input roles.',400,'invalid_references');
   }
   await assertReferenceClipLimits(env, owner, request);
+  await assertEditSourceLimits(env, owner, request);
+  // Local Comet has no public address for Aleph to fetch, so the source becomes
+  // a data URI. The schema caps that string; refusing here is before the quota
+  // reservation, matching the 12 MB inline gate below.
+  if (isLocal(env) && request.provider === 'comet' && request.modelId === 'aleph2' && request.sourceVideoId) {
+    const source = await env.DB.prepare('SELECT mime_type, expected_bytes FROM account_uploads WHERE user_id = ? AND id = ?').bind(owner, request.sourceVideoId).first<{ mime_type: string; expected_bytes: number }>();
+    if (source && alephDataUriLength(source.expected_bytes, source.mime_type) > ALEPH_DATA_URI_MAX) {
+      throw new AccountError('This clip is too large for a local Aleph 2 job. The provider receives it as a data URI of at most 5 MB. Use a smaller clip.', 400, 'inline_input_size');
+    }
+  }
   const localEdit = isLocal(env) && env.DEV_FAKE_GENERATION !== '1' && request.provider === 'runware' && request.inputMode === 'edit';
   const localClips = isLocal(env) && env.DEV_FAKE_GENERATION !== '1' && request.provider === 'runware' && (referenceVideos.size>0 || referenceAudios.size>0);
   if (request.provider === 'gemini' || request.provider === 'comet' || localEdit || localClips) {

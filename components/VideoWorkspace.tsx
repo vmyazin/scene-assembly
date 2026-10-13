@@ -9,6 +9,7 @@ import VideoDirectionSelector, { type VideoDirection } from '@/components/VideoD
 import ProviderSelector, { type VideoProvider } from '@/components/ProviderSelector';
 import ProviderVideoWorkspace from '@/components/ProviderVideoWorkspace';
 import type { EngineId } from '@/lib/engines/registry';
+import { modelsForFalMode } from '@/lib/fal/catalog';
 import { modelsFor } from '@/lib/providers/catalog';
 import { isProviderId } from '@/lib/providers';
 import type { ProviderId, ProviderMode } from '@/lib/providers/types';
@@ -103,7 +104,11 @@ export default function VideoWorkspace({
     modelsFor(engine, 'video').some((model) => model.modes.includes('reference'));
 
   const supportsMode = (engine: VideoProvider, mode: ProviderMode) =>
-    mode === 'edit' ? isProviderId(engine) && modelsFor(engine, 'video').some(model => model.modes.includes('edit')) : mode === 'frames' ? supportsFrames(engine) : mode === 'reference' ? supportsReference(engine) : true;
+    mode === 'edit'
+      ? engine === 'fal'
+        ? modelsForFalMode('video', 'edit').length > 0
+        : isProviderId(engine) && modelsFor(engine, 'video').some(model => model.modes.includes('edit'))
+      : mode === 'frames' ? supportsFrames(engine) : mode === 'reference' ? supportsReference(engine) : true;
 
   const framesProviders = supportsFrames(videoEngine);
   const referenceProviders = supportsReference(videoEngine);
@@ -114,7 +119,10 @@ export default function VideoWorkspace({
   // A deep link lands on the closest flow the current provider does have,
   // rather than passing a provider-only mode into fal or Kie.
   const activeMode: ProviderMode = supportsMode(videoEngine, inputMode) ? inputMode : 'image';
-  const legacyMode: FalInputMode = activeMode === 'reference' || activeMode === 'edit' ? 'image' : activeMode;
+  // Edit stays edit on fal. Folding it into image mode hid the source video
+  // and posted the clip to an image-to-video endpoint.
+  const falMode: FalInputMode = activeMode === 'edit' ? 'edit' : activeMode === 'frames' ? 'frames' : activeMode === 'text' ? 'text' : 'image';
+  const legacyMode: FalInputMode = falMode;
   
   // Gemini supports only text and image modes
   const geminiMode: 'text' | 'image' = activeMode === 'text' ? 'text' : 'image';
@@ -152,7 +160,11 @@ export default function VideoWorkspace({
         onChange={onInputModeChange}
       />
 
-      <ProviderSelector value={videoEngine} onChange={selectEngine} />
+      <ProviderSelector
+        value={videoEngine}
+        onChange={selectEngine}
+        include={activeMode === 'edit' ? (engine) => supportsMode(engine, 'edit') : undefined}
+      />
 
       {activeProvider ? (
         <ProviderVideoWorkspace

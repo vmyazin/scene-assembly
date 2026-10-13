@@ -2,13 +2,36 @@
 import type { ProviderModel } from './types';
 /** Application bounds for the first editing release, not vendor storage quotas. */
 export const MAX_EDIT_VIDEO_BYTES = 100_000_000;
+/** Largest source a catalog model currently publishes (Kling O1/O3 on fal). */
+export const MAX_EDIT_VIDEO_UPLOAD_BYTES = 200_000_000;
 export const EDIT_VIDEO_MIMES = ['video/mp4', 'video/quicktime', 'video/webm'] as const;
-export function isEditVideoMime(mime: string): boolean {
-  return (EDIT_VIDEO_MIMES as readonly string[]).includes(mime);
+export type VideoEditCapability = NonNullable<ProviderModel['videoEdit']>;
+
+export function editVideoMimes(capability?: Pick<VideoEditCapability, 'mimes'>): readonly string[] {
+  return capability?.mimes ?? EDIT_VIDEO_MIMES;
 }
-export function validateEditVideo(file: Pick<File, 'size' | 'type'>): void {
-  if (!isEditVideoMime(file.type) || file.size <= 0 || file.size > MAX_EDIT_VIDEO_BYTES) {
-    throw new Error('Choose an MP4, MOV or WebM video up to 100 MB.');
+export function editVideoMaxBytes(capability?: Pick<VideoEditCapability, 'maxBytes'>): number {
+  return capability?.maxBytes ?? MAX_EDIT_VIDEO_BYTES;
+}
+export function isEditVideoMime(mime: string, capability?: Pick<VideoEditCapability, 'mimes'>): boolean {
+  return editVideoMimes(capability).includes(mime);
+}
+function formatList(labels: string[]): string {
+  if (labels.length <= 1) return labels[0] ?? '';
+  return `${labels.slice(0, -1).join(', ')} or ${labels[labels.length - 1]}`;
+}
+function mimeLabel(mime: string): string {
+  if (mime === 'video/mp4') return 'MP4';
+  if (mime === 'video/quicktime') return 'MOV';
+  if (mime === 'video/webm') return 'WebM';
+  return mime;
+}
+export function validateEditVideo(file: Pick<File, 'size' | 'type'>, capability?: Pick<VideoEditCapability, 'mimes' | 'maxBytes'>): void {
+  const maxBytes = editVideoMaxBytes(capability);
+  const megabytes = Math.round(maxBytes / 1_000_000);
+  const formats = formatList(editVideoMimes(capability).map(mimeLabel));
+  if (!isEditVideoMime(file.type, capability) || file.size <= 0 || file.size > maxBytes) {
+    throw new Error(`Choose ${formats.startsWith('MP4') ? `an ${formats}` : `a ${formats}`} video up to ${megabytes} MB.`);
   }
 }
 export const EDIT_PROMPTS = {
@@ -18,9 +41,10 @@ export const EDIT_PROMPTS = {
 };
 
 /** Validate only model-owned settings; fixed-output models must not receive stale resolution. */
-export function editSettingsError(capability: NonNullable<ProviderModel['videoEdit']>, values: Record<string, unknown>): string | undefined {
+export function editSettingsError(capability: VideoEditCapability, values: Record<string, unknown>): string | undefined {
   const allowed = [
     ...(capability.sizes.length ? ['size'] : []),
+    ...(capability.aspectRatios?.length ? ['aspectRatio'] : []),
     ...(capability.draftRate || capability.draftPreview ? ['draft'] : []),
     // Stored for the price of a later finalize. The adapter still sends duration auto.
     ...(capability.draftPreview ? ['sourceDurationSeconds'] : []),
@@ -29,15 +53,16 @@ export function editSettingsError(capability: NonNullable<ProviderModel['videoEd
   if (values.draft !== undefined && typeof values.draft !== 'boolean') return 'Draft must be on or off.';
   if (capability.draftPreview && values.draft === true && values.size !== '480p') return 'A Seedance draft edit is 480p only.';
   if (capability.sizes.length && !capability.sizes.some(size => size.label === values.size)) return 'Choose a supported edit resolution.';
+  if (values.aspectRatio !== undefined && !capability.aspectRatios?.includes(String(values.aspectRatio))) return 'Choose a supported aspect ratio.';
   if (values.sourceDurationSeconds !== undefined && (typeof values.sourceDurationSeconds !== 'number' || !Number.isFinite(values.sourceDurationSeconds) || values.sourceDurationSeconds <= 0 || values.sourceDurationSeconds > capability.maxSeconds)) return 'Source duration must be a positive number of seconds within this model\'s limit.';
 }
 
-export function validateEditSource(source: {durationSeconds: number; width: number; height: number}, capability: NonNullable<ProviderModel['videoEdit']>): void {
+export function validateEditSource(source: {durationSeconds: number; width: number; height: number}, capability: VideoEditCapability): void {
   const {durationSeconds: duration, width, height} = source;
   if (!Number.isFinite(duration) || duration <= 0 || duration < (capability.minSeconds ?? 0) || duration > capability.maxSeconds || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) throw new Error(`Choose a readable clip ${capability.minSeconds ? `between ${capability.minSeconds} and ${capability.maxSeconds}` : `up to ${capability.maxSeconds}`} seconds long.`);
   const bounds = capability.sourceBounds;
   if (!bounds) return;
   if (width < bounds.minEdge || height < bounds.minEdge || width > bounds.maxEdge || height > bounds.maxEdge) throw new Error(`Source width and height must be between ${bounds.minEdge} and ${bounds.maxEdge} pixels.`);
-  if (width * height < bounds.minPixels) throw new Error(`This model requires at least ${bounds.minPixels.toLocaleString('en-US')} source pixels. Resize the clip before uploading.`);
-  if (width / height < bounds.minRatio || width / height > bounds.maxRatio) throw new Error('Choose a source aspect ratio between 1:2.5 and 2.5:1.');
+  if (bounds.minPixels !== undefined && width * height < bounds.minPixels) throw new Error(`This model requires at least ${bounds.minPixels.toLocaleString('en-US')} source pixels. Resize the clip before uploading.`);
+  if (bounds.minRatio !== undefined && bounds.maxRatio !== undefined && (width / height < bounds.minRatio || width / height > bounds.maxRatio)) throw new Error('Choose a source aspect ratio between 1:2.5 and 2.5:1.');
 }

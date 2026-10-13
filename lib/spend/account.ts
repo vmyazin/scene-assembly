@@ -103,7 +103,7 @@ export function buildAccountSpendEntry(args: BuildAccountSpendEntryArgs): Accoun
       const endpointId = resolveFalVariant(
         request.modelId,
         request.mediaType,
-        request.inputMode as 'text' | 'image' | 'frames'
+        request.inputMode as 'text' | 'image' | 'frames' | 'edit'
       ).endpointId;
       const resolved = resolveFalRun({
         estimate: null,

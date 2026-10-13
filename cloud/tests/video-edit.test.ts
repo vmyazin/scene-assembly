@@ -1,10 +1,11 @@
+// cloud/tests/video-edit.test.ts
 import { DatabaseSync } from 'node:sqlite';
 import { beforeEach, afterEach, it, expect, vi } from 'vitest';
 import { adapter } from './database';
 import { memoryBucket } from './bucket';
 import { LOCAL_SCHEMA } from '../src/schema';
 import { acceptJob, finishJob } from '../src/jobs';
-import { reserveUpload, publicMedia, cleanupUploads, inputUrls } from '../src/uploads';
+import { reserveUpload, publicMedia, cleanupUploads, inputUrls, storeUpload } from '../src/uploads';
 import { validateRequest, adapterFor } from '../src/providers';
 import { saveConnection } from '../src/vault';
 import type { Env } from '../src/security';
@@ -80,4 +81,93 @@ it('rejects P-Video-Edit settings that would spend money on an invalid request',
  const r={...request('source'),modelId:'prunaai:p-video@edit',values:{}};
  expect(validateRequest(env,r)).toEqual(r);
  for(const change of [{values:{size:'480p'}},{values:{draft:'true'}},{values:{durationSeconds:5}},{referenceIds:Array(5).fill('image')}]) expect(()=>validateRequest(env,{...r,...change})).toThrow();
+});
+
+function box(type: string, payload: Uint8Array): Uint8Array {
+  const out = new Uint8Array(8 + payload.length);
+  const view = new DataView(out.buffer);
+  view.setUint32(0, out.length);
+  out.set([type.charCodeAt(0), type.charCodeAt(1), type.charCodeAt(2), type.charCodeAt(3)], 4);
+  out.set(payload, 8);
+  return out;
+}
+function concat(...parts: Uint8Array[]): Uint8Array {
+  const out = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+  let offset = 0;
+  for (const part of parts) { out.set(part, offset); offset += part.length; }
+  return out;
+}
+/** mvhd duration plus a tkhd frame, so the Worker can refuse a clip the vendor would. */
+function mp4Clip(seconds: number, width: number, height: number): Uint8Array {
+  const mvhd = new Uint8Array(100);
+  const movie = new DataView(mvhd.buffer);
+  movie.setUint32(12, 1000);
+  movie.setUint32(16, Math.round(seconds * 1000));
+  const tkhd = new Uint8Array(84);
+  const track = new DataView(tkhd.buffer);
+  track.setUint32(76, Math.round(width * 65536));
+  track.setUint32(80, Math.round(height * 65536));
+  return concat(
+    box('ftyp', new Uint8Array([0x69, 0x73, 0x6f, 0x6d, 0, 0, 0, 0])),
+    box('mdat', new Uint8Array(4)),
+    box('moov', concat(box('mvhd', mvhd), box('trak', box('tkhd', tkhd)))),
+  );
+}
+async function stageClip(seconds: number, width: number, height: number) {
+  const bytes = mp4Clip(seconds, width, height);
+  return (await storeUpload(env, 'owner', bytes, bytes.length, 'video/mp4')).id;
+}
+
+it('refuses a Kling edit whose container misses the published duration or frame', async () => {
+  env.CLOUD_GENERATION_PROVIDERS = 'runware,fal';
+  await saveConnection(env, 'owner', 'fal', { apiKey: 'fal-key' });
+  const falEdit = (sourceVideoId: string, modelId = 'kling-o1-edit'): CloudJobRequest => ({
+    provider: 'fal', modelId, mediaType: 'video', inputMode: 'edit', prompt: 'Replace the coat',
+    referenceIds: [], sourceVideoId, values: { keep_audio: false },
+  });
+  const unread = await upload();
+  await expect(acceptJob(env, 'owner', 'kling-unread-token', validateRequest(env, falEdit(unread)))).rejects.toThrow(/could not be read/);
+  const webm = await upload('owner', 'video/webm');
+  await expect(acceptJob(env, 'owner', 'kling-webm-token', validateRequest(env, falEdit(webm)))).rejects.toThrow(/format/);
+  const short = await stageClip(2, 1280, 720);
+  await expect(acceptJob(env, 'owner', 'kling-short-token', validateRequest(env, falEdit(short)))).rejects.toThrow(/between 3 and 10.05/);
+  const small = await stageClip(5, 640, 360);
+  await expect(acceptJob(env, 'owner', 'kling-small-token', validateRequest(env, falEdit(small)))).rejects.toThrow(/720 and 2160/);
+  const wide = await stageClip(5, 4000, 720);
+  await expect(acceptJob(env, 'owner', 'kling-o3-wide-token', validateRequest(env, falEdit(wide, 'kling-o3-standard-edit')))).rejects.toThrow(/720 and 3840/);
+  const ok = await stageClip(8, 1280, 720);
+  await acceptJob(env, 'owner', 'kling-ok-token-1', validateRequest(env, falEdit(ok)));
+  expect(db.prepare("SELECT COUNT(*) AS n FROM account_jobs WHERE state != 'failed'").get()).toMatchObject({ n: 1 });
+});
+
+it('refuses an Aleph source the provider would reject, and posts the local clip as a data URI', async () => {
+  env.CLOUD_GENERATION_PROVIDERS = 'runware,comet';
+  await saveConnection(env, 'owner', 'comet', { apiKey: 'comet-key' });
+  const aleph = (sourceVideoId: string, values: CloudJobRequest['values'] = {}): CloudJobRequest => ({
+    provider: 'comet', modelId: 'aleph2', mediaType: 'video', inputMode: 'edit', prompt: 'Replace the sky',
+    referenceIds: [], sourceVideoId, values,
+  });
+  expect(() => validateRequest(env, { ...aleph('source'), prompt: 'x'.repeat(1001) })).toThrow(/1000/);
+  expect(() => validateRequest(env, aleph('source', { aspectRatio: '5:4' }))).toThrow();
+  expect(validateRequest(env, aleph('source', { aspectRatio: '16:9' })).values).toEqual({ aspectRatio: '16:9' });
+  const long = await stageClip(31, 1280, 720);
+  await expect(acceptJob(env, 'owner', 'aleph-long-token', validateRequest(env, aleph(long)))).rejects.toThrow(/up to 30/);
+  const huge = await stageClip(5, 1280, 720);
+  db.prepare('UPDATE account_uploads SET expected_bytes = ? WHERE id = ?').run(4_000_000, huge);
+  await expect(acceptJob(env, 'owner', 'aleph-inline-token', validateRequest(env, aleph(huge)))).rejects.toThrow(/5 MB/);
+  expect(db.prepare('SELECT COUNT(*) AS n FROM account_jobs').get()).toMatchObject({ n: 0 });
+  const source = await stageClip(6, 1280, 720);
+  const job = await acceptJob(env, 'owner', 'aleph-ok-token-1', validateRequest(env, aleph(source, { aspectRatio: '9:16' })));
+  const fetch = vi.fn().mockResolvedValue(Response.json({ id: 'task-aleph' }));
+  vi.stubGlobal('fetch', fetch);
+  const submitted = await adapterFor(env, 'comet').submit(env, job);
+  expect(fetch.mock.calls[0][0]).toBe('https://api.cometapi.com/runwayml/v1/video_to_video');
+  const body = JSON.parse(fetch.mock.calls[0][1].body);
+  expect(body).toMatchObject({ model: 'aleph2', promptText: 'Replace the sky', targetAspectRatio: '9:16' });
+  expect(body.videoUri).toMatch(/^data:video\/mp4;base64,/);
+  expect(submitted.handle).toMatchObject({ id: 'task-aleph', protocol: 'runway' });
+  fetch.mockResolvedValueOnce(Response.json({ status: 'SUCCEEDED', output: ['https://cdn.example/edit.mp4'] }));
+  const polled = await adapterFor(env, 'comet').poll(env, job, submitted.handle!);
+  expect(polled).toMatchObject({ state: 'success' });
+  expect(fetch.mock.calls[1][0]).toContain('/runwayml/v1/tasks/task-aleph');
 });

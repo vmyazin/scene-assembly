@@ -64,7 +64,11 @@ describe('provider catalog rates', () => {
   });
 
   it('leaves metered Comet models without a rate', () => {
-    expect(PROVIDER_MODELS.comet.every((model) => model.rate === undefined)).toBe(true);
+    // Aleph 2 publishes a per-second rate. The rest of Comet's video catalog is
+    // still metered, so a missing rate there stays unknown rather than guessed.
+    const metered = PROVIDER_MODELS.comet.filter((model) => model.price === 'metered');
+    expect(metered.length).toBeGreaterThan(0);
+    expect(metered.every((model) => model.rate === undefined)).toBe(true);
   });
 
   it('shows a published price for each structured rate', () => {

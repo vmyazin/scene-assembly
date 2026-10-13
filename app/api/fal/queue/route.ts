@@ -1,3 +1,4 @@
+// app/api/fal/queue/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
 import {
@@ -41,7 +42,7 @@ function isMediaType(value: unknown): value is FalMediaType {
 }
 
 function isInputMode(value: unknown): value is FalInputMode {
-  return value === 'text' || value === 'image' || value === 'frames';
+  return value === 'text' || value === 'image' || value === 'frames' || value === 'edit';
 }
 
 function isFalValue(value: unknown): value is FalValue {

@@ -1,3 +1,4 @@
+// app/api/fal/upload/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
 import { FalApiError, uploadFalFile } from '@/lib/fal/server';
@@ -7,11 +8,14 @@ import {
 } from '@/lib/fal/request-body';
 
 const GENERIC_FAL_ERROR = 'Something went wrong while contacting fal.';
-const MAX_UPLOAD_BODY_BYTES = 21 * 1024 * 1024;
-const MAX_FILE_BYTES = 20 * 1024 * 1024;
+// Kling O1/O3 publish a 200 MB source. The body cap leaves room for the multipart wrapper.
+const MAX_UPLOAD_BODY_BYTES = 201 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 200_000_000;
 const MAX_API_KEY_LENGTH = 1024;
 const SIGNATURE_PREFIX_BYTES = 64;
 const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/avif']);
+const ALLOWED_VIDEO_TYPES = new Set(['video/mp4', 'video/quicktime']);
 
 function isFile(value: unknown): value is File {
   if (value === null || typeof value !== 'object') return false;
@@ -93,6 +97,26 @@ async function hasValidImageSignature(file: File): Promise<boolean> {
   }
 }
 
+/** MP4 and MOV are ISO BMFF: the first box type is `ftyp`. */
+async function hasIsoBmffSignature(file: File): Promise<boolean> {
+  try {
+    const filePrototype = Object.getPrototypeOf(file);
+    const blobPrototype = Object.getPrototypeOf(filePrototype);
+    const slice = Reflect.get(blobPrototype, 'slice');
+    const arrayBuffer = Reflect.get(blobPrototype, 'arrayBuffer');
+    if (typeof slice !== 'function' || typeof arrayBuffer !== 'function') return false;
+    const prefix = Reflect.apply(slice, file, [0, 12]);
+    const bytes = new Uint8Array(await Reflect.apply(arrayBuffer, prefix, []));
+    return bytes.length >= 8
+      && bytes[4] === 0x66
+      && bytes[5] === 0x74
+      && bytes[6] === 0x79
+      && bytes[7] === 0x70;
+  } catch {
+    return false;
+  }
+}
+
 function errorResponse(error: unknown) {
   if (error instanceof FalApiError) {
     return NextResponse.json({ success: false, error: error.message }, { status: error.status });
@@ -135,21 +159,22 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
-  if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+  const video = ALLOWED_VIDEO_TYPES.has(file.type);
+  if (!ALLOWED_IMAGE_TYPES.has(file.type) && !video) {
     return NextResponse.json(
-      { success: false, error: 'The source file must be a supported raster image.' },
+      { success: false, error: 'The source file must be a supported raster image, or an MP4 or MOV video.' },
       { status: 415 }
     );
   }
-  if (file.size > MAX_FILE_BYTES) {
+  if (file.size > (video ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES)) {
     return NextResponse.json(
       { success: false, error: 'The source file is too large.' },
       { status: 413 }
     );
   }
-  if (!(await hasValidImageSignature(file))) {
+  if (video ? !(await hasIsoBmffSignature(file)) : !(await hasValidImageSignature(file))) {
     return NextResponse.json(
-      { success: false, error: 'The source file must be a supported raster image.' },
+      { success: false, error: video ? 'The source video must be an MP4 or MOV.' : 'The source file must be a supported raster image.' },
       { status: 415 }
     );
   }

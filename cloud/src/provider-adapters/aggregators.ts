@@ -6,7 +6,7 @@ import { piapiCreateImage, piapiCreateVideo, piapiPollTask } from '../../../lib/
 import { findModel, resolveDuration, resolveSize, resolveVideoInput } from '../../../lib/providers/catalog';
 import { atlasCreateImage, atlasCreateVideo, atlasPollVideo } from '../../../lib/providers/atlas';
 import { runwareCreateImage, runwareCreateVideo, runwarePollImage, runwarePollVideo, runwareStoreMedia, runwareDeleteMedia } from '../../../lib/providers/runware';
-import { cometGenerateImage, cometCreateVideo, cometPollVideo } from '../../../lib/providers/comet';
+import { cometGenerateImage, cometCreateVideo, cometPollVideo, cometPollRunway } from '../../../lib/providers/comet';
 import type { ProviderId } from '../../../lib/providers/types';
 import type { CloudJobRequest } from '../../../lib/account/contracts';
 import type { GenerationAdapter } from '../providers';
@@ -58,6 +58,7 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
   if (r.inputMode === 'edit') {
     if (!model.videoEdit || !r.sourceVideoId) return invalid('Choose a source video to edit.');
     if (count > model.videoEdit.maxImages) return invalid(`Add up to ${model.videoEdit.maxImages} replacement images.`);
+    if (model.videoEdit.maxPromptLength && r.prompt.length > model.videoEdit.maxPromptLength) return invalid(`This model's prompt is at most ${model.videoEdit.maxPromptLength} characters.`);
     const settingsError = editSettingsError(model.videoEdit, r.values);
     if (settingsError) return invalid(settingsError);
     return;
@@ -116,7 +117,7 @@ async function releaseStored(apiKey: string, ids: Array<string | undefined>) {
 }
 
 function describeMode(mode: CloudJobRequest['inputMode'], capitalized = false): string {
-  const label = mode === 'frames' ? 'first and last frame' : mode === 'reference' ? 'reference images' : mode === 'image' ? 'image input' : 'text input';
+  const label = mode === 'frames' ? 'first and last frame' : mode === 'reference' ? 'reference images' : mode === 'edit' ? 'edit video' : mode === 'image' ? 'image input' : 'text input';
   return capitalized ? label[0].toUpperCase() + label.slice(1) : label;
 }
 
@@ -152,6 +153,28 @@ export const aggregatorAdapter: GenerationAdapter = {
         draftId: String(r.values.draftId), resolution: '1080p',
       }, job.id);
       return {handle: {id: result.taskId}};
+    }
+    if (r.inputMode === 'edit' && provider === 'comet') {
+      // Aleph takes one https address in production. Locally the provider cannot
+      // fetch this machine, so the owned bytes go as a data URI. That URI is
+      // capped at 5,242,880 characters; acceptJob refuses a larger clip first.
+      let sourceVideo: string;
+      if (isLocal(env)) {
+        const inputs = await inlineInputs(env, job, [r.sourceVideoId!]);
+        const source = inputs[0];
+        sourceVideo = `data:${source.mimeType};base64,${source.data}`;
+      } else {
+        const urls = await inputUrls(env, job);
+        const index = jobInputIds(r).indexOf(r.sourceVideoId!);
+        const hosted = urls[index];
+        if (!hosted) throw new AccountError('Choose a source video to edit.', 400, 'invalid_references');
+        sourceVideo = hosted;
+      }
+      const result = await cometCreateVideo({
+        apiKey: common.apiKey, model: r.modelId, prompt: r.prompt, inputMode: 'edit', sourceVideo,
+        aspectRatio: typeof r.values.aspectRatio === 'string' ? r.values.aspectRatio : undefined,
+      });
+      return {handle: {id: result.taskId, protocol: 'runway'}};
     }
     if (r.inputMode === 'edit') {
       // inputUrls keeps the source last, matching jobInputIds; it is never an image.
@@ -214,7 +237,7 @@ export const aggregatorAdapter: GenerationAdapter = {
   },
   async poll(env, job, handle) {
     const r: CloudJobRequest = JSON.parse(job.request_json);
-    const poll = job.provider === 'piapi' ? piapiPollTask : job.provider === 'atlas' ? atlasPollVideo : job.provider === 'comet' ? cometPollVideo : r.mediaType === 'image' ? runwarePollImage : runwarePollVideo;
+    const poll = job.provider === 'piapi' ? piapiPollTask : job.provider === 'atlas' ? atlasPollVideo : job.provider === 'comet' ? (r.modelId === 'aleph2' || handle.protocol === 'runway' ? cometPollRunway : cometPollVideo) : r.mediaType === 'image' ? runwarePollImage : runwarePollVideo;
     const result = await poll({apiKey: await credentials(env, job), taskId: handle.id});
     const stored = [...(handle.sourceMedia ? [handle.sourceMedia] : []), ...(handle.storedMedia ?? [])];
     if (stored.length > 0 && (result.state === 'success' || result.state === 'error')) {

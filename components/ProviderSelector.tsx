@@ -9,6 +9,8 @@ export type VideoProvider = 'gemini' | 'kie' | 'fal' | 'runware' | 'atlas' | 'co
 interface ProviderSelectorProps {
   value: VideoProvider;
   onChange: (provider: VideoProvider) => void;
+  /** When set, engines that fail it are omitted. Edit video uses this so a provider with no edit model is not a dead end. */
+  include?: (provider: VideoProvider) => boolean;
 }
 
 const providers = [
@@ -25,23 +27,24 @@ const providers = [
   { id: 'piapi' as const, label: 'PiAPI' },
 ];
 
-export default function ProviderSelector({ value, onChange }: ProviderSelectorProps) {
+export default function ProviderSelector({ value, onChange, include }: ProviderSelectorProps) {
+  const visible = include ? providers.filter((provider) => include(provider.id)) : providers;
   const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const selectFromKeyboard = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     let nextIndex: number | undefined;
     if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-      nextIndex = (index + 1) % providers.length;
+      nextIndex = (index + 1) % visible.length;
     } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-      nextIndex = (index - 1 + providers.length) % providers.length;
+      nextIndex = (index - 1 + visible.length) % visible.length;
     } else if (event.key === 'Home') {
       nextIndex = 0;
     } else if (event.key === 'End') {
-      nextIndex = providers.length - 1;
+      nextIndex = visible.length - 1;
     }
     if (nextIndex === undefined) return;
     event.preventDefault();
-    onChange(providers[nextIndex].id);
+    onChange(visible[nextIndex].id);
     buttonRefs.current[nextIndex]?.focus();
   };
 
@@ -49,9 +52,9 @@ export default function ProviderSelector({ value, onChange }: ProviderSelectorPr
     <div
       role="radiogroup"
       aria-label="Video provider"
-      className="grid gap-2 sm:grid-cols-3 lg:grid-cols-7"
+      className={`grid gap-2 sm:grid-cols-3 ${visible.length > 3 ? 'lg:grid-cols-7' : ''}`}
     >
-      {providers.map((provider, index) => {
+      {visible.map((provider, index) => {
         const selected = provider.id === value;
         return (
           <button

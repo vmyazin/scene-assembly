@@ -130,7 +130,7 @@ Some input modes take reference images, and edit mode takes a source video. Mode
 - The URL must be public `https`, with a hostname rather than an IP address and no user name or password in it.
 - It cannot point at Scene Assembly itself. Pass `{ "assetId": … }` for a file already in the library.
 - Up to 3 redirects are followed, each checked by the same rules. The download times out after 20 seconds.
-- The type is read from the file's bytes, not its headers: PNG, JPEG, WebP or AVIF images up to 20 MB, MP4 or WebM video up to 100 MB, and MP3 or WAV audio up to 15 MB. WebM staged from a link is an edit source only. A reference video is MP4, or a MOV uploaded with `video/quicktime`. QuickTime and HEIC files are refused from a link, because those brands are not stored from a sniff.
+- The type is read from the file's bytes, not its headers: PNG, JPEG, WebP or AVIF images up to 20 MB, an edit-source MP4 up to 200 MB, WebM up to 100 MB, and MP3 or WAV audio up to 15 MB. WebM staged from a link is an edit source only. A reference video is MP4 up to 100 MB, or a MOV uploaded with `video/quicktime`. QuickTime and HEIC files are refused from a link, because those brands are not stored from a sniff.
 
 **From a file you have.** Ask for an upload link with the file's type and its exact size in bytes:
 

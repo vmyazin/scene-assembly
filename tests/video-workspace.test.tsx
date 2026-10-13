@@ -62,6 +62,23 @@ describe('VideoWorkspace provider selection', () => {
     useFalJobsStore.getState().clearJobs();
   });
 
+  it('lists only engines that publish an edit model', () => {
+    useAppStore.setState({ videoEngine: 'runware' });
+    render(
+      <VideoWorkspace
+        inputMode="edit"
+        onInputModeChange={() => undefined}
+        onExit={() => undefined}
+        onOpenConnections={() => undefined}
+      />
+    );
+    expect(screen.getAllByRole('radio').map((radio) => radio.textContent?.trim())).toEqual([
+      'Runware',
+      'fal.ai',
+      'CometAPI',
+    ]);
+  });
+
   it('keeps first-and-last selected when moving to a provider that can run it', async () => {
     // The downgrade used to fire for "anything but fal", so choosing Runware —
     // whose LTX-2.5 Fast and Seedance 2.0 Mini both take two frame images —

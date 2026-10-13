@@ -1,7 +1,8 @@
+// tests/providers/atlas-comet.test.ts
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { atlasCreateVideo, atlasGenerateImage, atlasPollVideo } from '@/lib/providers/atlas';
-import { cometCreateVideo, cometGenerateImage, cometPollVideo } from '@/lib/providers/comet';
+import { cometCreateVideo, cometGenerateImage, cometPollRunway, cometPollVideo } from '@/lib/providers/comet';
 import { resolveModel } from '@/lib/providers/catalog';
 
 /** Queues one response per call so a submit-then-poll pair can be scripted. */
@@ -504,6 +505,43 @@ describe('cometapi', () => {
       error: 'provider rejected the task',
     });
     expect(await cometPollVideo({ apiKey: 'cm-key', taskId: 'vid-1' })).toMatchObject({ state: 'error' });
+  });
+
+  it('posts Aleph 2 as JSON video-to-video and polls the Runway task route', async () => {
+    const fetchMock = mockFetchSequence([
+      { payload: { id: 'task-aleph' } },
+      { payload: { status: 'RUNNING', progress: 0.4 } },
+      { payload: { status: 'SUCCEEDED', output: ['https://cdn.comet/edit.mp4'] } },
+    ]);
+    const videoUri = 'data:video/mp4;base64,AAAA';
+    const { taskId } = await cometCreateVideo({
+      apiKey: 'cm-key',
+      model: 'aleph2',
+      prompt: 'Replace the sky',
+      inputMode: 'edit',
+      sourceVideo: videoUri,
+      aspectRatio: '16:9',
+    });
+    expect(taskId).toBe('task-aleph');
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.cometapi.com/runwayml/v1/video_to_video');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      model: 'aleph2',
+      videoUri,
+      promptText: 'Replace the sky',
+      targetAspectRatio: '16:9',
+    });
+    expect(await cometPollRunway({ apiKey: 'cm-key', taskId })).toMatchObject({ state: 'running', progress: 0.4 });
+    expect(fetchMock.mock.calls[1][0]).toBe('https://api.cometapi.com/runwayml/v1/tasks/task-aleph');
+    expect(await cometPollRunway({ apiKey: 'cm-key', taskId })).toMatchObject({
+      state: 'success',
+      urls: ['https://cdn.comet/edit.mp4'],
+    });
+  });
+
+  it('refuses an Aleph source that is neither a short https URL nor a 5 MB data URI', async () => {
+    await expect(cometCreateVideo({
+      apiKey: 'cm-key', model: 'aleph2', prompt: 'Edit', inputMode: 'edit', sourceVideo: 'http://insecure.example/clip.mp4',
+    })).rejects.toThrow(/https video URL/);
   });
 
   it('reports in-progress work with progress on the app scale', async () => {

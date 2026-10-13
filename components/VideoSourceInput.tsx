@@ -1,3 +1,4 @@
+// components/VideoSourceInput.tsx
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
@@ -6,7 +7,7 @@ import LibraryOverlay from './LibraryOverlay';
 import VideoPlayer from './video/VideoPlayer';
 import { probeDimensions, type ProbedDimensions } from '@/lib/timeline/probe';
 import type { ProviderModel } from '@/lib/providers/types';
-import { validateEditVideo, validateEditSource } from '@/lib/providers/video-edit';
+import { editVideoMaxBytes, editVideoMimes, validateEditVideo, validateEditSource } from '@/lib/providers/video-edit';
 import { useAccountStore } from '@/store/useAccountStore';
 
 export interface SourceVideo extends ProbedDimensions { file: File; epoch: number }
@@ -38,7 +39,7 @@ export default function VideoSourceInput({source, onChange, disabled, capability
     const epoch = useAccountStore.getState().epoch;
     setReading(true); setError(null);
     try {
-      validateEditVideo(file);
+      validateEditVideo(file, capability);
       const dimensions = await probeDimensions(file);
       validateEditSource(dimensions, capability);
       if (turn !== sequence.current) return;
@@ -50,9 +51,9 @@ export default function VideoSourceInput({source, onChange, disabled, capability
     } finally { if (turn === sequence.current) setReading(false); }
   }
   return <section className="glass-card space-y-3 p-3.5 md:p-4">
-    <div><h3 className="display text-base font-semibold">Source video</h3><p className="mt-1 text-xs text-[var(--foreground-muted)]">MP4, MOV or WebM · {capability.minSeconds ? `${capability.minSeconds}–${capability.maxSeconds}` : `Up to ${capability.maxSeconds}`} seconds · up to 100 MB. {capability.promptSyntax === 'image-index' ? 'Describe how to change the source video.' : 'Reference this clip as @Video1.'}</p></div>
+    <div><h3 className="display text-base font-semibold">Source video</h3><p className="mt-1 text-xs text-[var(--foreground-muted)]">{editVideoMimes(capability).map(mime => mime === 'video/mp4' ? 'MP4' : mime === 'video/quicktime' ? 'MOV' : mime === 'video/webm' ? 'WebM' : mime).join(', ')} · {capability.minSeconds ? `${capability.minSeconds}–${capability.maxSeconds}` : `Up to ${capability.maxSeconds}`} seconds · up to {Math.round(editVideoMaxBytes(capability) / 1_000_000)} MB{capability.sourceBounds ? ` · ${capability.sourceBounds.minEdge}–${capability.sourceBounds.maxEdge}px` : ''}. {capability.namesSource ? 'Reference this clip as @Video1.' : 'Describe how to change the source video.'}</p></div>
     {source && <><SourceVideoPreview file={source.file} /><p className="break-all text-xs text-[var(--foreground-muted)]">{source.file.name} · {source.durationSeconds.toFixed(1)}s · {source.width} × {source.height}</p></>}
-    <input ref={input} type="file" aria-label="Upload source video" accept="video/mp4,video/quicktime,video/webm" className="sr-only" disabled={disabled || reading} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void select(file).catch(() => {}); }} />
+    <input ref={input} type="file" aria-label="Upload source video" accept={editVideoMimes(capability).join(',')} className="sr-only" disabled={disabled || reading} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void select(file).catch(() => {}); }} />
     <div className="flex gap-2">
       <button type="button" disabled={disabled || reading} onClick={() => input.current?.click()} onDragOver={event => { if (!disabled && !reading && Array.from(event.dataTransfer.types).includes('Files')) event.preventDefault(); }} onDrop={event => { if (disabled || reading || !Array.from(event.dataTransfer.types).includes('Files')) return; event.preventDefault(); const files = Array.from(event.dataTransfer.files); if (files.length !== 1) setError('Choose one source video.'); else void select(files[0]).catch(() => {}); }} className="btn-secondary flex flex-1 items-center justify-center gap-2 border-dashed py-3">
         {reading ? <Loader2 size={18} className="animate-spin"/> : <Film size={18}/>} {reading ? 'Reading video…' : source ? 'Replace video' : 'Drop or upload video'}

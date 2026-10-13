@@ -143,9 +143,30 @@ export interface ProviderModel {
     /** Same draft preview as `draftPreview`, for edit mode. */
     draftPreview?: boolean;
     maxSeconds: number; minSeconds?: number;
-    sourceBounds?: { minEdge: number; maxEdge: number; minPixels: number; minRatio: number; maxRatio: number };
+    /** Vendor file cap. Absent means the application cap in `video-edit.ts`. */
+    maxBytes?: number;
+    /** Source MIME types this model accepts. Absent means MP4, MOV and WebM. */
+    mimes?: readonly string[];
+    /**
+     * Read duration and frame size from the file before a job is reserved.
+     * Seedance still accepts an unreadable container, because its draft path
+     * is the one that prices from the file; Kling and Aleph refuse it so a
+     * clip the vendor will reject never reserves.
+     */
+    requireMeasurement?: boolean;
+    sourceBounds?: { minEdge: number; maxEdge: number; minPixels?: number; minRatio?: number; maxRatio?: number };
+    /** Optional output shape. Aleph 2 letterboxes to `targetAspectRatio`. */
+    aspectRatios?: string[];
+    /** Vendor prompt cap, when it is tighter than the shared 20,000. */
+    maxPromptLength?: number;
     outputLabel?: string;
     promptSyntax?: VideoPromptSyntax;
+    /**
+     * The vendor's prompt names the source clip `@Video1`. Kling O3 does;
+     * Kling O1 only names images and elements, so the source line must not
+     * invent `@Video1` for it.
+     */
+    namesSource?: boolean;
     note?: string;
   };
   /** Max reference images the model accepts, when the vendor documents one. */

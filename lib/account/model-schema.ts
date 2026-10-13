@@ -83,13 +83,14 @@ function fromDefinition(field: {
 function falModels(): ModelDescriptor[] {
   return [FAL_IMAGE_MODEL, ...FAL_VIDEO_MODELS].map(model => ({
     provider: 'fal', modelId: model.id, label: model.label, mediaType: model.mediaType, note: model.description,
-    modes: model.variants.map(variant => ({
+      modes: model.variants.map(variant => ({
       mode: variant.inputMode,
       fields: variant.fields.map(fromDefinition),
       references: variant.inputMode === 'text' ? NO_REFERENCES
         : variant.inputMode === 'frames' ? { min: 2, max: 2 }
-          : { min: 1, max: variant.maxInputImages ?? 1 },
-      sourceVideo: false,
+          : variant.inputMode === 'edit' ? { min: 0, max: variant.maxInputImages ?? 0 }
+            : { min: 1, max: variant.maxInputImages ?? 1 },
+      sourceVideo: variant.inputMode === 'edit',
     })),
   }));
 }
@@ -174,6 +175,9 @@ function aggregatorModes(provider: ProviderId, model: ProviderModel): ModeDescri
         mode, sourceVideo: true, references: { min: 0, max: edit.maxImages },
         // editSettingsError accepts these keys; duration and ratio follow the source.
         fields: [
+          ...(edit.aspectRatios?.length ? [select('aspectRatio', 'Target aspect ratio', edit.aspectRatios, {
+            description: 'Letterboxes the source to this shape. Omit it to keep the source frame.',
+          })] : []),
           ...(edit.sizes.length ? [select('size', 'Resolution', edit.sizes.map(size => size.label), {
             // The catalog's first size (720p for Seedance). checkValues moves
             // it to 480p when draft is on, so the schema test can turn that

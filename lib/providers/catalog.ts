@@ -1106,6 +1106,30 @@ const COMET_MODELS: ProviderModel[] = [
       { label: '720p · 9:16', preset: '720x1280' },
     ],
   },
+  {
+    // Read 2026-10-13 from
+    // https://apidoc.cometapi.com/api/video/runway/official-format/generate-a-video-from-a-video
+    // Price from https://www.cometapi.com/models/runway/aleph2/ : $0.224/s standard,
+    // $0.448 minimum. ProRes, PNG sequences and 10-bit are published higher and
+    // are not offered here. The API reference itself does not list a price.
+    id: 'aleph2',
+    label: 'Runway Aleph 2',
+    fileCode: 'aleph-2',
+    kind: 'video',
+    modes: ['edit'],
+    price: '$0.224 / s',
+    rate: { per: 'second', usd: 0.224 },
+    videoEdit: {
+      sizes: [],
+      rate: { per: 'second', usd: 0.224 },
+      maxImages: 0,
+      maxSeconds: 30,
+      requireMeasurement: true,
+      aspectRatios: ['16:9', '4:3', '3:2', '1:1', '2:3', '3:4', '9:16', '21:9'],
+      maxPromptLength: 1000,
+      note: 'Edits a source clip of up to 30 seconds. An optional target aspect ratio letterboxes the frame. Standard output is $0.224 per second with a $0.448 minimum; a short clip still costs the minimum. Timed guidance images are not a control here. A browser upload is a data URI up to 5 MB; a larger clip runs as a background job.',
+    },
+  },
 ];
 
 /** PiAPI PAYG rates, https://piapi.ai/docs/llms.txt (2026-09-07). */

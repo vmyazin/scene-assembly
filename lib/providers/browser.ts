@@ -68,6 +68,8 @@ export async function getProviderVideoStatus(args: {
   provider: ProviderId;
   apiKey: string;
   taskId: string;
+  /** Selects the poll route when one provider has more than one. */
+  model?: string;
   sourceVideo?: string;
   referenceVideos?: string[];
   referenceAudios?: string[];

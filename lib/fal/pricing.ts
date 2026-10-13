@@ -33,5 +33,7 @@ export function falSecondsFrom(raw: string | number | boolean | undefined): numb
 export function falDurationSeconds(
   values: Record<string, string | number | boolean>
 ): number | undefined {
-  return falSecondsFrom(values.duration);
+  // Edit models have no duration control. The workspace stores the probed
+  // source length so the ledger can price per second without asking fal.
+  return falSecondsFrom(values.duration) ?? falSecondsFrom(values.sourceDurationSeconds);
 }

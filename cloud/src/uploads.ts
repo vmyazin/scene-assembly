@@ -2,7 +2,7 @@
 import { jobInputIds } from '../../lib/account/contracts';
 import { isImageInputMime } from '../../lib/providers/input-mimes';
 import { isReferenceAudioMime, REFERENCE_AUDIO_MAX_BYTES } from '../../lib/providers/reference-clips';
-import { MAX_EDIT_VIDEO_BYTES, isEditVideoMime } from '../../lib/providers/video-edit';
+import { MAX_EDIT_VIDEO_BYTES, MAX_EDIT_VIDEO_UPLOAD_BYTES, isEditVideoMime } from '../../lib/providers/video-edit';
 import { AccountError, type JobRow } from './jobs';
 import { getAsset, writeOutput } from './assets';
 import { mediaAccess, mediaCors, mediaOrigin, mediaToken, readMedia } from './media';
@@ -14,6 +14,10 @@ export const MAX_GLOBAL_TEMP_BYTES=10_000_000_000;
 export const INPUT_TTL=86_400_000;
 interface Upload {id:string;user_id:string;object_key:string;mime_type:string;expected_bytes:number;state:string;expires_at:number}
 function uploadByteCap(mime:string): number | null {
+  // Kling O1/O3 publish 200 MB. WebM stays at the original edit cap: no model
+  // that accepts WebM publishes the larger one, and Seedance still rejects
+  // anything over its own 100 MB before a job is reserved.
+  if(mime==='video/mp4'||mime==='video/quicktime')return MAX_EDIT_VIDEO_UPLOAD_BYTES;
   if(isEditVideoMime(mime))return MAX_EDIT_VIDEO_BYTES;
   if(isReferenceAudioMime(mime))return REFERENCE_AUDIO_MAX_BYTES;
   if(isImageInputMime(mime))return MAX_INPUT_BYTES;
@@ -22,7 +26,7 @@ function uploadByteCap(mime:string): number | null {
 export async function reserveUpload(env:Env,owner:string,bytes:number,mime:string,purpose:'upload'|'agent-upload'|null='upload'):Promise<{id:string;objectKey:string;expiresAt:number;url?:string;urlExpiresAt?:number}> {
   mediaOrigin(env);
   const cap=uploadByteCap(mime);
-  if(!Number.isSafeInteger(bytes)||bytes<=0||cap===null||bytes>cap)throw new AccountError('Use an image up to 20 MB, an MP3 or WAV up to 15 MB, or an MP4, MOV or WebM video up to 100 MB.',400,'invalid_upload');
+  if(!Number.isSafeInteger(bytes)||bytes<=0||cap===null||bytes>cap)throw new AccountError('Use an image up to 20 MB, an MP3 or WAV up to 15 MB, an MP4 or MOV up to 200 MB, or a WebM video up to 100 MB.',400,'invalid_upload');
   const id=crypto.randomUUID(),key=`accounts/${owner}/inputs/${id}`,now=Date.now();
   const inserted=await env.DB.prepare(`INSERT INTO account_uploads (id,user_id,object_key,mime_type,expected_bytes,created_at,expires_at)
     SELECT ?,?,?,?,?,?,? WHERE (SELECT COALESCE(SUM(expected_bytes),0) FROM account_uploads WHERE user_id=? AND state!='deleted')+?<=?
@@ -78,7 +82,7 @@ export async function storeStreamedUpload(env:Env,owner:string,body:ReadableStre
     await env.DB.prepare("UPDATE account_uploads SET state='deleted' WHERE id=?").bind(reserved.id).run();
     // writeOutput's own wording talks about "generated files"; an agent needs the
     // sentence it already read in add_reference's tool description.
-    if(error instanceof AccountError&&error.code==='result_size')throw new AccountError(mime.startsWith('image/')?'Reference images can be up to 20 MB.':mime.startsWith('audio/')?'Reference audio can be up to 15 MB.':'References can be up to 100 MB.',400,'reference_fetch_failed');
+    if(error instanceof AccountError&&error.code==='result_size')throw new AccountError(mime.startsWith('image/')?'Reference images can be up to 20 MB.':mime.startsWith('audio/')?'Reference audio can be up to 15 MB.':mime==='video/mp4'||mime==='video/quicktime'?'MP4 and MOV files can be up to 200 MB.':'WebM video can be up to 100 MB.',400,'reference_fetch_failed');
     throw error;
   }
 }
@@ -91,7 +95,7 @@ export async function copyAssetToUpload(env:Env,owner:string,assetId:string):Pro
   const unavailable=()=>new AccountError('That library file is not available to use as a reference.',404,'reference_unavailable');
   if(!asset)throw unavailable();
   const cap=uploadByteCap(asset.mime_type);
-  if(cap===null||asset.bytes>cap)throw new AccountError('That library file is too large or an unsupported type to use as a reference. Use an image up to 20 MB, audio up to 15 MB, or a video up to 100 MB.',404,'reference_unavailable');
+  if(cap===null||asset.bytes>cap)throw new AccountError('That library file is too large or an unsupported type to use as a reference. Use an image up to 20 MB, audio up to 15 MB, an MP4 or MOV up to 200 MB, or a WebM video up to 100 MB.',404,'reference_unavailable');
   const object=await env.ASSETS?.get(asset.object_key);
   if(!object)throw unavailable();
   try{

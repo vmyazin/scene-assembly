@@ -11,6 +11,7 @@ import CloudJobPanel from '@/components/account/CloudJobPanel';
 
 import VideoSourceInput, { type SourceVideo } from '@/components/VideoSourceInput';
 import { useAccountStore } from '@/store/useAccountStore';
+import { isAlephVideoUri } from '@/lib/providers/comet';
 import { EDIT_PROMPTS, validateEditSource } from '@/lib/providers/video-edit';
 import { uploadRunwareMedia, uploadRunwareVideo } from '@/lib/providers/upload-video';
 import ReferenceClipTray, { type AttachedReferenceClip } from '@/components/ReferenceClipTray';
@@ -270,6 +271,11 @@ export default function ProviderVideoWorkspace({
       return next;
     }
     const fields = controlFieldsFor({...selectedModel, duration: undefined, durations: undefined, sizes: selectedModel.videoEdit.sizes, aspectRatios: undefined, supportsAudio: false});
+    if (selectedModel.videoEdit.aspectRatios?.length) fields.push({
+      key: 'aspectRatio', label: 'Target aspect ratio', type: 'select', defaultValue: '',
+      description: 'Letterboxes the source. Leave this on “Keep source frame” to send the clip unchanged.',
+      options: [{ label: 'Keep source frame', value: '' }, ...selectedModel.videoEdit.aspectRatios.map(value => ({ label: value, value }))],
+    });
     if (selectedModel.videoEdit.draftRate) fields.push({key: 'draft', label: 'Draft mode', type: 'boolean', defaultValue: false, description: 'Faster, lower-quality preview at a lower price. Turn off for Standard quality.'});
     else if (selectedModel.videoEdit.draftPreview) fields.push(draftField);
     return fields;
@@ -606,6 +612,7 @@ export default function ProviderVideoWorkspace({
           provider,
           apiKey,
           taskId: job.taskId as string,
+          model: job.modelId,
           sourceVideo: job.sourceVideoId,
           ...(job.referenceVideoIds?.length ? { referenceVideos: job.referenceVideoIds } : {}),
           ...(job.referenceAudioIds?.length ? { referenceAudios: job.referenceAudioIds } : {}),
@@ -744,7 +751,8 @@ export default function ProviderVideoWorkspace({
     const referenceVideos: string[] = [];
     const referenceAudios: string[] = [];
     let taskStarted = false;
-    const aspectRatio = !isEdit ? submittedAspectRatio(selectedModel, values) : undefined;
+    const listedEditRatio = typeof values.aspectRatio === 'string' && selectedModel?.videoEdit?.aspectRatios?.includes(values.aspectRatio) ? values.aspectRatio : undefined;
+    const aspectRatio = isEdit ? listedEditRatio : submittedAspectRatio(selectedModel, values);
     try {
       if (isEdit && source && selectedModel.videoEdit) validateEditSource(source, selectedModel.videoEdit);
       if (cloudWorkspace.cloud) {
@@ -762,16 +770,27 @@ export default function ProviderVideoWorkspace({
         autoRetry.reset();
         return;
       }
+      const liveApiKey = () => {
+        const state = useAppStore.getState();
+        return provider === 'runware' ? state.runwareApiKey : provider === 'atlas' ? state.atlasApiKey : provider === 'piapi' ? state.piapiApiKey : state.cometApiKey;
+      };
       let sourceVideo: string | undefined;
       if (isEdit && source) {
-        if (uploadedSource.current?.file !== source.file || uploadedSource.current.key !== apiKey) {
-          setUploadKind('source');
-          setUploadProgress(0);
-          const id = await uploadRunwareVideo(source.file, apiKey, setUploadProgress);
-          uploadedSource.current = {file: source.file, key: apiKey, id};
+        if (provider === 'comet') {
+          // Aleph's browser route takes the clip inline. Runware's media store
+          // is a different vendor, so uploading there would hand Aleph an id it cannot fetch.
+          sourceVideo = await fileAsDataUrl(source.file);
+          if (!isAlephVideoUri(sourceVideo)) throw new Error('This clip is too large for a browser Aleph 2 edit. The provider accepts a data URI of at most 5 MB. Sign in and run it as a background job where the file has an https address, or use a smaller clip.');
+        } else {
+          if (uploadedSource.current?.file !== source.file || uploadedSource.current.key !== apiKey) {
+            setUploadKind('source');
+            setUploadProgress(0);
+            const id = await uploadRunwareVideo(source.file, apiKey, setUploadProgress);
+            uploadedSource.current = {file: source.file, key: apiKey, id};
+          }
+          sourceVideo = uploadedSource.current.id;
+          setUploadProgress(null);
         }
-        sourceVideo = uploadedSource.current.id;
-        setUploadProgress(null);
         if (!mountedRef.current || useAccountStore.getState().epoch !== epoch) throw new Error('Your session changed. Review the edit before submitting.');
       }
       const uploadClip = async (file: File, kind: 'video' | 'audio') => {
@@ -787,10 +806,10 @@ export default function ProviderVideoWorkspace({
       for (const clip of clipAudios) referenceAudios.push(await uploadClip(clip.file, 'audio'));
       if (referenceVideos.length > 0 || referenceAudios.length > 0) {
         setUploadProgress(null);
-        if (!mountedRef.current || useAccountStore.getState().epoch !== epoch || useAppStore.getState().runwareApiKey !== apiKey) throw new Error('Your session changed. Review the generation before submitting.');
+        if (!mountedRef.current || useAccountStore.getState().epoch !== epoch || liveApiKey() !== apiKey) throw new Error('Your session changed. Review the generation before submitting.');
       }
       const images = provider === 'piapi' && inputMode === 'text' ? [] : await Promise.all(references.map((reference) => fileAsDataUrl(reference.file)));
-      if (isEdit && (!mountedRef.current || useAccountStore.getState().epoch !== epoch || useAppStore.getState().runwareApiKey !== apiKey)) throw new Error('Your session changed. Review the edit before submitting.');
+      if (isEdit && (!mountedRef.current || useAccountStore.getState().epoch !== epoch || liveApiKey() !== apiKey)) throw new Error('Your session changed. Review the edit before submitting.');
       const submittedPrompt = prompt.trim();
       const taskId = await submitProviderVideo({
         provider,
@@ -964,7 +983,7 @@ export default function ProviderVideoWorkspace({
           </section>
 
           {isEdit && <VideoSourceInput capability={selectedModel!.videoEdit!} source={source} onChange={setSelectedSource} disabled={isSubmitting} />}
-          {inputMode !== 'text' && (
+          {inputMode !== 'text' && maxInputImages > 0 && (
             <section className="glass-card space-y-3 p-3.5 md:p-4">
               <div>
                 <h3 className="display text-base font-semibold">
@@ -1147,7 +1166,7 @@ export default function ProviderVideoWorkspace({
               id="provider-video-prompt"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              placeholder={isEdit ? "Describe what to change in @Video1 and what to keep…" : clipCapability ? `Describe the motion. Address clips as ${clipToken(clipSyntax, 'Video', 0)} and ${clipToken(clipSyntax, 'Audio', 0)}.` : "Describe the motion, camera, mood, and scene…"}
+              placeholder={isEdit ? (selectedModel?.videoEdit?.namesSource ? 'Describe what to change in @Video1 and what to keep…' : 'Describe what to change in the source video and what to keep…') : clipCapability ? `Describe the motion. Address clips as ${clipToken(clipSyntax, 'Video', 0)} and ${clipToken(clipSyntax, 'Audio', 0)}.` : "Describe the motion, camera, mood, and scene…"}
             />
           </PromptPanel>
         }
