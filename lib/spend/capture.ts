@@ -232,13 +232,16 @@ export function captureProviderJob(provider: ProviderId, job: ProviderJob, task:
       file(withFigure(base, catalog && catalog.costUsd !== null ? catalog : exact));
       return;
     }
-    const duration = job.controlValues?.duration;
+    const controls = job.controlValues ?? {};
+    const rawDuration = job.inputMode === 'edit' ? controls.sourceDurationSeconds : controls.duration;
     file(
       withFigure(
         base,
-        resolveCatalogRate(findModel(provider, job.modelId), typeof duration === 'number' ? duration : undefined, 1, {
-          audio: job.controlValues?.audio === true,
-          size: typeof job.controlValues?.size === 'string' ? job.controlValues.size : undefined,
+        resolveCatalogRate(findModel(provider, job.modelId), typeof rawDuration === 'number' ? rawDuration : undefined, 1, {
+          audio: controls.audio === true,
+          size: typeof controls.size === 'string' ? controls.size : undefined,
+          inputMode: job.inputMode,
+          draft: controls.draft === true,
         })
       )
     );

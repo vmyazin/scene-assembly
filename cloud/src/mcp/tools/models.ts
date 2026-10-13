@@ -5,7 +5,7 @@ import { CLOUD_PROVIDERS, enabledProviders } from '../../providers';
 import { previewCharge } from '../budget';
 import { defineTool } from '../tool';
 import { connectedProviders, describeEstimate, prepareRequest, requestShape } from './request';
-import { priceEditDraftSource } from './source-duration';
+import { priceEditSource } from './source-duration';
 
 export const listModels = defineTool({
   name: 'list_models',
@@ -48,7 +48,7 @@ export const estimateCost = defineTool({
   input: z.object(requestShape),
   async run(ctx, args) {
     const prepared = await prepareRequest(ctx, args);
-    const request = await priceEditDraftSource(ctx, prepared.request, args.sourceVideo);
+    const request = await priceEditSource(ctx, prepared.request, args.sourceVideo);
     const figure = estimateCloudJob(request);
     const outcome = await previewCharge(ctx.env, ctx.agent, figure, ctx.now());
     return {

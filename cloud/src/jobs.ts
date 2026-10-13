@@ -2,8 +2,11 @@
 import { canRetryResultLocation } from './result-recovery';
 import { jobInputIds } from '../../lib/account/contracts';
 import { isReferenceAudioMime, isReferenceVideoMime } from '../../lib/providers/reference-clips';
+import { assertEditSourceLimits } from './edit-source-limits';
 import { assertReferenceClipLimits } from './reference-clip-limits';
-import { isEditVideoMime } from '../../lib/providers/video-edit';
+import { ALEPH_DATA_URI_MAX, alephDataUriLength } from '../../lib/providers/comet';
+import { findModel } from '../../lib/providers/catalog';
+import { isEditVideoMime, isRunwayEditProtocol } from '../../lib/providers/video-edit';
 import type { CloudJobRequest, CloudJobState, CloudJobView } from '../../lib/account/contracts';
 import { hash, isLocal, type Env } from './security';
 import type { Provider } from './vault';
@@ -121,9 +124,21 @@ export async function acceptJob(env: Env, owner: string, token: string, request:
     if(!roleOk)throw new AccountError('Source video, reference images, reference video and reference audio must match their input roles.',400,'invalid_references');
   }
   await assertReferenceClipLimits(env, owner, request);
+  const measuredSeconds = await assertEditSourceLimits(env, owner, request);
+  // Local Comet has no public address for a Runway-protocol edit, so the source
+  // becomes a data URI. The schema caps that string; refusing here is before
+  // the quota reservation. Production sends an https URL, so the 12 MB inline
+  // gate below does not apply to it.
+  const runwayEdit = request.provider === 'comet' && isRunwayEditProtocol(findModel('comet', request.modelId)?.videoEdit);
+  if (isLocal(env) && runwayEdit && request.sourceVideoId) {
+    const source = await env.DB.prepare('SELECT mime_type, expected_bytes FROM account_uploads WHERE user_id = ? AND id = ?').bind(owner, request.sourceVideoId).first<{ mime_type: string; expected_bytes: number }>();
+    if (source && alephDataUriLength(source.expected_bytes, source.mime_type) > ALEPH_DATA_URI_MAX) {
+      throw new AccountError('This clip is too large for a local Aleph 2 job. The provider receives it as a data URI of at most 5 MB. Use a smaller clip.', 400, 'inline_input_size');
+    }
+  }
   const localEdit = isLocal(env) && env.DEV_FAKE_GENERATION !== '1' && request.provider === 'runware' && request.inputMode === 'edit';
   const localClips = isLocal(env) && env.DEV_FAKE_GENERATION !== '1' && request.provider === 'runware' && (referenceVideos.size>0 || referenceAudios.size>0);
-  if (request.provider === 'gemini' || request.provider === 'comet' || localEdit || localClips) {
+  if (request.provider === 'gemini' || (request.provider === 'comet' && !(runwayEdit && !isLocal(env))) || localEdit || localClips) {
     const inputs = await env.DB.prepare('SELECT COALESCE(SUM(expected_bytes),0) AS bytes FROM account_uploads WHERE user_id=? AND id IN (SELECT value FROM json_each(?))').bind(owner,references).first<{bytes:number}>();
     if ((inputs?.bytes ?? 0) > MAX_INLINE_INPUT_BYTES) throw new AccountError(localEdit ? 'Local background edits accept up to 12 MB of source video and images. Use a smaller clip or switch to in-browser.' : localClips ? 'Local background jobs accept up to 12 MB of reference video and audio. Use a smaller clip or switch to in-browser.' : 'This provider accepts up to 12 MB of reference images per background job. Use smaller images.',400,'inline_input_size');
   }
@@ -131,11 +146,14 @@ export async function acceptJob(env: Env, owner: string, token: string, request:
   if (!connection && request.provider !== 'local-test') throw new AccountError('Save this provider connection in your account first.', 409, 'connection_required');
   const id = crypto.randomUUID(), now = Date.now();
   const reservation = request.mediaType === 'video' ? VIDEO_RESERVATION : IMAGE_RESERVATION;
+  // Digest stays on the caller's body so a retry still matches. The stored
+  // copy carries the container length, which is what the ledger prices.
+  const stored = typeof measuredSeconds === 'number' ? { ...request, values: { ...request.values, sourceDurationSeconds: measuredSeconds } } : request;
   await env.DB.batch([
     env.DB.prepare('INSERT OR IGNORE INTO account_storage (user_id) VALUES (?)').bind(owner),
     env.DB.prepare(`INSERT OR IGNORE INTO account_jobs (id,user_id,request_token,request_digest,connection_id,connection_revision,provider,request_json,reservation_bytes,created_at,updated_at,agent_id)
       SELECT ?,?,?,?,?,?,?,?,?,?,?,? FROM account_storage WHERE user_id = ? AND used_bytes + reserved_bytes + ? <= limit_bytes AND (${RUNNING_JOB_COUNT}) < ? AND (${GLOBAL_OCCUPIED_SLOTS}) < ${MAX_GLOBAL_ACTIVE_JOBS} AND NOT EXISTS (${OWNER_OVERFLOW}) AND (SELECT COUNT(*) FROM account_uploads WHERE user_id=? AND state='ready' AND expires_at>? AND id IN (SELECT value FROM json_each(?)))=?`)
-      .bind(id, owner, token, digest, connection?.id ?? null, connection?.revision ?? null, request.provider, JSON.stringify(request), reservation, now, now, agentId, owner, reservation, owner, MAX_ACTIVE_JOBS, owner, owner, now, references, inputIds.length),
+      .bind(id, owner, token, digest, connection?.id ?? null, connection?.revision ?? null, request.provider, JSON.stringify(stored), reservation, now, now, agentId, owner, reservation, owner, MAX_ACTIVE_JOBS, owner, owner, now, references, inputIds.length),
     env.DB.prepare('UPDATE account_storage SET reserved_bytes = reserved_bytes + ?, active_jobs = active_jobs + 1 WHERE user_id = ? AND EXISTS (SELECT 1 FROM account_jobs WHERE id = ? AND reservation_accounted = 0)').bind(reservation, owner, id),
     env.DB.prepare('UPDATE account_jobs SET reservation_accounted = 1 WHERE id = ?').bind(id),
     env.DB.prepare('INSERT OR IGNORE INTO account_job_inputs (job_id,upload_id) SELECT ?,id FROM account_uploads WHERE user_id=? AND id IN (SELECT value FROM json_each(?)) AND EXISTS (SELECT 1 FROM account_jobs WHERE id=?)').bind(id,owner,references,id),

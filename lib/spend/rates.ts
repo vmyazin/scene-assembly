@@ -230,6 +230,11 @@ export const FAL_RATES: Record<string, FalRate> = {
   'fal-ai/kling-video/v3/standard/image-to-video': klingRate(0.084, 0.126),
   'fal-ai/kling-video/v3/pro/text-to-video': klingRate(0.112, 0.168),
   'fal-ai/kling-video/v3/pro/image-to-video': klingRate(0.112, 0.168),
+  // https://fal.ai/models/fal-ai/kling-video/o1/video-to-video/edit/llms.txt — $0.168/s.
+  // keep_audio does not change the published rate.
+  'fal-ai/kling-video/o1/video-to-video/edit': klingRate(0.168, 0.168),
+  // https://fal.ai/models/fal-ai/kling-video/o3/standard/video-to-video/edit/llms.txt — $0.126/s.
+  'fal-ai/kling-video/o3/standard/video-to-video/edit': klingRate(0.126, 0.126),
 
   'fal-ai/minimax/hailuo-2.3/standard/text-to-video': { unit: 'video', usdPerRun: { '6': 0.28, '10': 0.56 } },
   'fal-ai/minimax/hailuo-2.3/standard/image-to-video': { unit: 'video', usdPerRun: { '6': 0.28, '10': 0.56 } },

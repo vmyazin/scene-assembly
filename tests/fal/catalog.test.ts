@@ -45,7 +45,7 @@ const VIDEO_ENDPOINTS = [
 ] as const;
 
 describe('fal model catalog', () => {
-  it('contains Nano Banana 2 plus exactly ten curated video choices', () => {
+  it('contains Nano Banana 2 plus the curated video choices', () => {
     expect(FAL_IMAGE_MODEL.id).toBe('nano-banana-2');
     expect(FAL_VIDEO_MODELS.map((model) => model.id)).toEqual([
       'veo-3-1',
@@ -58,6 +58,8 @@ describe('fal model catalog', () => {
       'hailuo-2-3-standard',
       'hailuo-2-3-pro',
       'wan-2-7',
+      'kling-o1-edit',
+      'kling-o3-standard-edit',
     ]);
     expect(FAL_VIDEO_MODELS.map((model) => model.label)).toEqual([
       'Veo 3.1 Standard',
@@ -70,6 +72,8 @@ describe('fal model catalog', () => {
       'MiniMax Hailuo 2.3 Standard',
       'MiniMax Hailuo 2.3 Pro',
       'Wan 2.7',
+      'Kling O1 Edit',
+      'Kling O3 Standard Edit',
     ]);
   });
 
@@ -88,12 +92,32 @@ describe('fal model catalog', () => {
   it('defines text and image variants for all 20 curated video endpoints', () => {
     // 20 text/image variants, plus a frames variant on the eight models fal
     // documents as accepting a closing frame.
-    expect(FAL_VIDEO_MODELS.flatMap((model) => model.variants)).toHaveLength(28);
+    // Two edit-only Kling models sit beside the 28 text, image and frames variants.
+    expect(FAL_VIDEO_MODELS.flatMap((model) => model.variants)).toHaveLength(30);
 
     for (const [modelId, textEndpoint, imageEndpoint] of VIDEO_ENDPOINTS) {
       expect(resolveFalVariant(modelId, 'video', 'text').endpointId).toBe(textEndpoint);
       expect(resolveFalVariant(modelId, 'video', 'image').endpointId).toBe(imageEndpoint);
     }
+  });
+
+  it('builds a Kling edit with the source last and reference images ahead of it', () => {
+    const o1 = resolveFalVariant('kling-o1-edit', 'video', 'edit');
+    expect(o1.endpointId).toBe('fal-ai/kling-video/o1/video-to-video/edit');
+    expect(o1.edit).toMatchObject({ minSeconds: 3, maxSeconds: 10.05, maxImages: 4, maxBytes: 200_000_000 });
+    expect(o1.edit?.namesSource).toBeUndefined();
+    const urls = ['https://v3.fal.media/a.png', 'https://v3.fal.media/b.png', 'https://v3.fal.media/clip.mp4'];
+    expect(buildFalInput(o1, { prompt: 'Edit @Video1 with @Image1', uploadUrls: urls, values: { keep_audio: true } })).toMatchObject({
+      video_url: urls[2],
+      image_urls: urls.slice(0, 2),
+      keep_audio: true,
+    });
+    expect(validateFalInput(o1, { prompt: 'Edit', uploadUrls: [] })).toMatch(/source video/);
+    const o3 = resolveFalVariant('kling-o3-standard-edit', 'video', 'edit');
+    expect(o3.endpointId).toBe('fal-ai/kling-video/o3/standard/video-to-video/edit');
+    expect(o3.edit).toMatchObject({ maxSeconds: 15, maxImages: 4, namesSource: true });
+    expect(o3.edit?.sourceBounds).toMatchObject({ minEdge: 720, maxEdge: 3840 });
+    expect(modelsForFalMode('video', 'edit').map((model) => model.id)).toEqual(['kling-o1-edit', 'kling-o3-standard-edit']);
   });
 
   it('offers first-and-last-frame runs only where fal documents an end frame', () => {

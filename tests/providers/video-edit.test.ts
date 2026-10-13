@@ -6,6 +6,7 @@ import { runwareCreateVideo } from '@/lib/providers/runware';
 import { findModel } from '@/lib/providers/catalog';
 import { resolveCatalogRate } from '@/lib/spend/resolve';
 import { validateEditVideo, validateEditSource } from '@/lib/providers/video-edit';
+import { FAL_VIDEO_MODELS } from '@/lib/fal/catalog';
 const source = '989ba605-1449-4e1e-b462-cd83ec9c1a67';
 const request = {provider: 'runware', apiKey: 'test-key', model: 'bytedance:seedance@2.5', inputMode: 'edit', sourceVideo: source, prompt: 'Replace the background', size: '720p'};
 afterEach(() => vi.unstubAllGlobals());
@@ -35,6 +36,16 @@ describe('video editing contract', () => {
   it('rejects unsupported or oversized source files', () => {
     expect(() => validateEditVideo({size:1,type:'video/mp4'})).not.toThrow();
     for(const file of [{size:0,type:'video/mp4'},{size:100_000_001,type:'video/mp4'},{size:100,type:'image/png'}]) expect(() => validateEditVideo(file)).toThrow();
+    const kling = FAL_VIDEO_MODELS.find(model => model.id === 'kling-o1-edit')?.variants.find(variant => variant.inputMode === 'edit')?.edit;
+    expect(() => validateEditVideo({size:150_000_000,type:'video/mp4'}, kling)).not.toThrow();
+    expect(() => validateEditVideo({size:150_000_000,type:'video/mp4'})).toThrow(/100 MB/);
+  });
+  it('floors Aleph 2 at the published $0.448 minimum', () => {
+    const aleph = findModel('comet', 'aleph2');
+    expect(resolveCatalogRate(aleph, 1, 1, {inputMode:'edit'}).costUsd).toBeCloseTo(0.448, 6);
+    expect(resolveCatalogRate(aleph, 2, 1, {inputMode:'edit'}).costUsd).toBeCloseTo(0.448, 6);
+    expect(resolveCatalogRate(aleph, 3, 1, {inputMode:'edit'}).costUsd).toBeCloseTo(0.672, 6);
+    expect(resolveCatalogRate(aleph, 10, 1, {inputMode:'edit'}).costUsd).toBeCloseTo(2.24, 6);
   });
   it('preserves the upstream rejection detail for actionable errors', async () => {
     vi.stubGlobal('fetch',vi.fn().mockResolvedValue(Response.json({errors:[{message:'ByteDance responded with HTTP InvalidParameter. Additional information below.',additionalDetails:{responseContent:'Video pixel count must be greater than or equal to 407696.'}}]},{status:400})));

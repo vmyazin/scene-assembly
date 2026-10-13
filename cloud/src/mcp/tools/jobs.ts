@@ -15,7 +15,7 @@ import { ToolError } from '../errors';
 import { defineTool, type ToolContext } from '../tool';
 import { resolveReferences } from './references';
 import { budgetRefusal, connectedProviders, prepareRequest, requestShape } from './request';
-import { priceEditDraftSource } from './source-duration';
+import { priceEditSource } from './source-duration';
 
 const TERMINAL: CloudJobState[] = ['saved', 'failed', 'cancelled'];
 const POLL_MS = 2000;
@@ -146,7 +146,7 @@ export const generate = defineTool({
   async run(ctx, args) {
     const prepared = await prepareRequest(ctx, args);
     // Measured before the reserve. An agent-supplied length is only a check.
-    const request = await priceEditDraftSource(ctx, prepared.request, args.sourceVideo);
+    const request = await priceEditSource(ctx, prepared.request, args.sourceVideo);
     const estimate = estimateCloudJob(request);
     if (request.inputMode === 'edit' && request.values.draft === true && isSeedance25(request.modelId) && estimate.costUsd === null) {
       throw new ToolError('invalid_field', 'This Seedance draft could not be priced from the source clip, so it was not reserved.', { field: 'sourceVideo' });

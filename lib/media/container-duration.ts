@@ -30,6 +30,19 @@ function fourcc(bytes: Uint8Array, offset: number): string {
   return String.fromCharCode(bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]);
 }
 
+/** Width and height from a `tkhd`. Audio tracks store 0×0 and are skipped. */
+function tkhdFrame(payload: Uint8Array): { width: number; height: number } | null {
+  if (payload.length < 4) return null;
+  const version = payload[0];
+  const offset = version === 0 ? 76 : version === 1 ? 88 : -1;
+  if (offset < 0 || payload.length < offset + 8) return null;
+  const view = viewOf(payload);
+  const width = view.getUint32(offset) / 65536;
+  const height = view.getUint32(offset + 4) / 65536;
+  if (!(width > 0) || !(height > 0)) return null;
+  return { width, height };
+}
+
 function mvhdSeconds(payload: Uint8Array): number | null {
   if (payload.length < 20) return null;
   const view = viewOf(payload);
@@ -78,7 +91,9 @@ function walkBoxes(
   return false;
 }
 
-async function mp4Duration(source: ByteRangeSource): Promise<number | null> {
+interface MeasuredVideo { durationSeconds: number | null; width: number | null; height: number | null }
+
+async function mp4Video(source: ByteRangeSource): Promise<MeasuredVideo | null> {
   let offset = 0;
   while (offset + 8 <= source.size) {
     const header = await source.read(offset, 16);
@@ -95,14 +110,27 @@ async function mp4Duration(source: ByteRangeSource): Promise<number | null> {
     if (size === 0) size = source.size - offset;
     if (!Number.isFinite(size) || size < headerLen) return null;
     if (type === 'moov') {
-      const boxBytes = await source.read(offset, Math.min(size, 64 * 1024));
-      let found: number | null = null;
+      const boxBytes = await source.read(offset, Math.min(size, 256 * 1024));
+      let duration: number | null = null;
+      let width: number | null = null;
+      let height: number | null = null;
       walkBoxes(boxBytes, headerLen, boxBytes.length, (child, payloadStart, payloadEnd) => {
-        if (child !== 'mvhd') return false;
-        found = mvhdSeconds(boxBytes.subarray(payloadStart, payloadEnd));
-        return true;
+        if (child === 'mvhd') duration = mvhdSeconds(boxBytes.subarray(payloadStart, payloadEnd));
+        if (child === 'trak') {
+          walkBoxes(boxBytes, payloadStart, payloadEnd, (grand, grandStart, grandEnd) => {
+            if (grand !== 'tkhd' || width !== null) return false;
+            const frame = tkhdFrame(boxBytes.subarray(grandStart, grandEnd));
+            if (frame) {
+              width = frame.width;
+              height = frame.height;
+            }
+            return false;
+          });
+        }
+        return false;
       });
-      return found !== null && found > 0 ? found : null;
+      if ((duration === null || !(duration > 0)) && width === null) return null;
+      return { durationSeconds: duration !== null && duration > 0 ? duration : null, width, height };
     }
     offset += size;
     if (offset > source.size) return null;
@@ -229,14 +257,30 @@ async function wavDuration(source: ByteRangeSource): Promise<number | null> {
   return null;
 }
 
-/** Seconds, or null when the container has no duration we can trust. */
-export async function readContainerDuration(source: ByteRangeSource): Promise<number | null> {
+/**
+ * Duration plus the first video track's frame size.
+ *
+ * Width and height come from an MP4/MOV `tkhd` (16.16 fixed point). WebM and
+ * WAV stay duration-only: their picture size is not in the boxes this reader
+ * already walks, and a missing frame does not invent one.
+ */
+export async function readContainerVideo(source: ByteRangeSource): Promise<MeasuredVideo | null> {
   if (!Number.isFinite(source.size) || source.size < 8) return null;
   const head = await source.read(0, Math.min(12, source.size));
   if (isEbml(head)) {
     const window = await source.read(0, Math.min(source.size, 1024 * 1024));
-    return webmDuration(window);
+    const durationSeconds = webmDuration(window);
+    return durationSeconds === null ? null : { durationSeconds, width: null, height: null };
   }
-  if (isRiffWave(head)) return wavDuration(source);
-  return mp4Duration(source);
+  if (isRiffWave(head)) {
+    const durationSeconds = await wavDuration(source);
+    return durationSeconds === null ? null : { durationSeconds, width: null, height: null };
+  }
+  return mp4Video(source);
+}
+
+/** Seconds, or null when the container has no duration we can trust. */
+export async function readContainerDuration(source: ByteRangeSource): Promise<number | null> {
+  const measured = await readContainerVideo(source);
+  return measured?.durationSeconds ?? null;
 }

@@ -1,5 +1,6 @@
 // app/api/providers/video/route.ts
-import { editSettingsError } from '@/lib/providers/video-edit';
+import { cometPollRunway, isAlephVideoUri } from '@/lib/providers/comet';
+import { editSettingsError, isRunwayEditProtocol } from '@/lib/providers/video-edit';
 import { referenceClipCountError, referenceClipSetError, referenceClipsFor } from '@/lib/providers/reference-clips';
 import { SEEDANCE_25_MODEL, isSeedanceDraftSize } from '@/lib/providers/seedance-draft';
 import { runwareDeleteMedia } from '@/lib/providers/runware';
@@ -81,7 +82,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'A task ID is required' }, { status: 400 });
     }
     try {
-      const task = await adapter.pollVideo({ apiKey, taskId: body.taskId });
+      // A Runway-protocol edit lives on Runway's task route. The video poll
+      // would look up the same id under /v1/videos and report a task that is not there.
+      const runway = body.provider === 'comet' && isRunwayEditProtocol(findModel('comet', typeof body.model === 'string' ? body.model : '')?.videoEdit);
+      const task = runway
+        ? await cometPollRunway({ apiKey, taskId: body.taskId })
+        : await adapter.pollVideo({ apiKey, taskId: body.taskId });
       if (body.provider === 'runware' && (task.state === 'success' || task.state === 'error')) {
         const stored = [
           ...(typeof body.sourceVideo === 'string' && MEDIA_ID.test(body.sourceVideo) ? [body.sourceVideo] : []),
@@ -176,13 +182,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Edit mode takes a source video, not reference video or audio.' }, { status: 400 });
     }
     const capability = modelRecord?.videoEdit;
-    if (!capability || body.provider !== 'runware' || typeof body.sourceVideo !== 'string' || !/^[a-f\d-]{36}$/i.test(body.sourceVideo)) return NextResponse.json({success: false, error: 'Upload a source video for this editing model.'}, {status: 400});
-    if (body.durationSeconds !== undefined || body.aspectRatio !== undefined || body.width !== undefined || body.height !== undefined) return NextResponse.json({success: false, error: 'Edits inherit source duration and aspect ratio.'}, {status: 400});
+    const sourceVideo = typeof body.sourceVideo === 'string' ? body.sourceVideo : '';
+    const sourceOk = body.provider === 'runware' ? MEDIA_ID.test(sourceVideo) : body.provider === 'comet' && isAlephVideoUri(sourceVideo);
+    if (!capability || !sourceOk) return NextResponse.json({success: false, error: 'Upload a source video for this editing model.'}, {status: 400});
+    const lockedShape = body.durationSeconds !== undefined || body.width !== undefined || body.height !== undefined || (body.aspectRatio !== undefined && !capability.aspectRatios?.length);
+    if (lockedShape) return NextResponse.json({success: false, error: 'Edits inherit source duration and aspect ratio.'}, {status: 400});
     const size = capability.sizes.find(size => size.label === body.size);
-    const settingsError = editSettingsError(capability, {size: body.size, draft: body.draft, audio: body.audio, resolution: body.resolution});
+    const settingsError = editSettingsError(capability, {size: body.size, draft: body.draft, audio: body.audio, resolution: body.resolution, aspectRatio: body.aspectRatio});
     if (settingsError || images.length > capability.maxImages) return NextResponse.json({success: false, error: settingsError ?? `Add up to ${capability.maxImages} replacement images.`}, {status: 400});
     try {
-      const {taskId} = await adapter.createVideo({apiKey, model, prompt, inputMode, sourceVideo: body.sourceVideo, images, resolution: size?.preset, ...(capability.draftRate || (model === SEEDANCE_25_MODEL && body.draft === true) ? {draft: body.draft === true} : {}), ...(moderation === 'relaxed' ? {moderation} : {})});
+      const {taskId} = await adapter.createVideo({apiKey, model, prompt, inputMode, sourceVideo, images, resolution: size?.preset, ...(typeof body.aspectRatio === 'string' ? {aspectRatio: body.aspectRatio} : {}), ...(capability.draftRate || (model === SEEDANCE_25_MODEL && body.draft === true) ? {draft: body.draft === true} : {}), ...(moderation === 'relaxed' ? {moderation} : {})});
       return NextResponse.json({success: true, taskId});
     } catch (error) { return failure(error, 'Could not start this video edit.'); }
   }

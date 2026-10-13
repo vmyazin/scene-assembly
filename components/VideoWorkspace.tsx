@@ -10,6 +10,7 @@ import VideoDirectionSelector, { type VideoDirection } from '@/components/VideoD
 import ProviderSelector, { VIDEO_PROVIDERS, type VideoProvider } from '@/components/ProviderSelector';
 import ProviderVideoWorkspace from '@/components/ProviderVideoWorkspace';
 import type { EngineId } from '@/lib/engines/registry';
+import { modelsForFalMode } from '@/lib/fal/catalog';
 import { modelsFor } from '@/lib/providers/catalog';
 import { isProviderId } from '@/lib/providers';
 import type { ProviderId, ProviderMode } from '@/lib/providers/types';
@@ -78,6 +79,9 @@ const MODES: readonly VideoDirection[] = [
 // Aggregators advertise modes in their catalogs; the dedicated workspaces expose
 // only their implemented input modes, so unsupported forms are never mounted.
 function supportsMode(engine: VideoProvider, mode: ProviderMode): boolean {
+  // Fal is not a catalog ProviderId. Edit is a real fal mode; folding it into
+  // image posted the clip to image-to-video.
+  if (engine === 'fal' && mode === 'edit') return modelsForFalMode('video', 'edit').length > 0;
   if (isProviderId(engine)) return modelsFor(engine, 'video').some(model => model.modes.includes(mode));
   return mode === 'text' || mode === 'image' || (engine === 'fal' && mode === 'frames');
 }
@@ -105,7 +109,9 @@ export default function VideoWorkspace({
       ? videoEngine
       : null;
   const activeMode = inputMode;
-  const legacyMode: FalInputMode = activeMode === 'reference' || activeMode === 'edit' ? 'image' : activeMode;
+  // Edit stays edit on fal. Folding it into image mode hid the source video
+  // and posted the clip to an image-to-video endpoint.
+  const falMode: FalInputMode = activeMode === 'edit' ? 'edit' : activeMode === 'frames' ? 'frames' : activeMode === 'text' ? 'text' : 'image';
   
   // Gemini supports only text and image modes
   const geminiMode: 'text' | 'image' = activeMode === 'text' ? 'text' : 'image';
@@ -167,8 +173,8 @@ export default function VideoWorkspace({
         />
       ) : isFal ? (
         <FalGenerationWorkspace
-          key={`fal-${legacyMode}`}
-          inputMode={legacyMode}
+          key={`fal-${falMode}`}
+          inputMode={falMode}
           onBack={onExit}
           onOpenConnections={onOpenConnections}
           onContinueFromFrame={() => onInputModeChange('image')}
@@ -176,8 +182,8 @@ export default function VideoWorkspace({
       ) : (
         <KieGenerationWorkspace
           mediaType="video"
-          inputMode={legacyMode === 'text' ? 'text' : 'image'}
-          exampleFeatureId={legacyMode === 'text' ? 'text-to-video' : 'image-to-video'}
+          inputMode={falMode === 'text' ? 'text' : 'image'}
+          exampleFeatureId={falMode === 'text' ? 'text-to-video' : 'image-to-video'}
           onBack={onExit}
           onOpenConnections={onOpenConnections}
           onContinueFromFrame={() => onInputModeChange('image')}
