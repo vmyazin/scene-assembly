@@ -139,18 +139,25 @@ export function buildAccountSpendEntry(args: BuildAccountSpendEntryArgs): Accoun
   }
 
   const model = findModel(request.provider, request.modelId);
-  const duration = typeof request.values.durationSeconds === 'number' ? request.values.durationSeconds : undefined;
+  const edit = request.inputMode === 'edit';
+  const sourceDuration = typeof request.values.sourceDurationSeconds === 'number' ? request.values.sourceDurationSeconds : undefined;
+  const duration = edit && sourceDuration !== undefined
+    ? sourceDuration
+    : typeof request.values.durationSeconds === 'number' ? request.values.durationSeconds : undefined;
   const resolved = resolveCatalogRate(model, duration, outputs, {
     audio: request.values.audio === true,
     size: request.provider === 'piapi' && request.mediaType === 'image' ? String(request.values.resolution ?? '1K') : typeof request.values.size === 'string' ? request.values.size : undefined,
     inputImages: request.referenceIds.length,
+    inputMode: request.inputMode,
+    draft: request.values.draft === true,
   });
   if (resolved.costUsd !== null) return { ...base, ...resolved };
+  const perSecond = (edit ? model?.videoEdit?.rate : model?.rate)?.per === 'second';
   return {
     ...base,
     ...withNote(
       resolved,
-      resolved.note ?? (model?.rate?.per === 'second'
+      resolved.note ?? (perSecond
         ? 'The published per-second rate cannot be applied without a saved duration.'
         : 'The provider catalog does not publish a rate for this model.')
     ),

@@ -122,7 +122,6 @@ export default function VideoWorkspace({
   // Edit stays edit on fal. Folding it into image mode hid the source video
   // and posted the clip to an image-to-video endpoint.
   const falMode: FalInputMode = activeMode === 'edit' ? 'edit' : activeMode === 'frames' ? 'frames' : activeMode === 'text' ? 'text' : 'image';
-  const legacyMode: FalInputMode = falMode;
   
   // Gemini supports only text and image modes
   const geminiMode: 'text' | 'image' = activeMode === 'text' ? 'text' : 'image';
@@ -186,8 +185,8 @@ export default function VideoWorkspace({
         />
       ) : isFal ? (
         <FalGenerationWorkspace
-          key={`fal-${legacyMode}`}
-          inputMode={legacyMode}
+          key={`fal-${falMode}`}
+          inputMode={falMode}
           onBack={onExit}
           onOpenConnections={onOpenConnections}
           onContinueFromFrame={() => onInputModeChange('image')}
@@ -195,8 +194,8 @@ export default function VideoWorkspace({
       ) : (
         <KieGenerationWorkspace
           mediaType="video"
-          inputMode={legacyMode === 'text' ? 'text' : 'image'}
-          exampleFeatureId={legacyMode === 'text' ? 'text-to-video' : 'image-to-video'}
+          inputMode={falMode === 'text' ? 'text' : 'image'}
+          exampleFeatureId={falMode === 'text' ? 'text-to-video' : 'image-to-video'}
           onBack={onExit}
           onOpenConnections={onOpenConnections}
           onContinueFromFrame={() => onInputModeChange('image')}

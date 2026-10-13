@@ -183,7 +183,11 @@ function figuresIn(price: string): number[] {
 
 /** Every dollar amount the arithmetic form carries, whichever shape it takes. */
 function figuresOf(rate: NonNullable<ProviderModel['rate']>): number[] {
-  const base = [...(rate.usd !== undefined ? [rate.usd] : Object.values(rate.usdByResolution)), ...Object.values(rate.audioUsdByResolution ?? {})];
+  const base = [
+    ...(rate.usd !== undefined ? [rate.usd] : Object.values(rate.usdByResolution)),
+    ...Object.values(rate.audioUsdByResolution ?? {}),
+    ...(rate.minimumUsd !== undefined ? [rate.minimumUsd] : []),
+  ];
   return rate.extraInputImageUsd === undefined ? base : [...base, rate.extraInputImageUsd];
 }
 

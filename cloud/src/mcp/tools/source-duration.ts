@@ -3,7 +3,9 @@ import type { CloudJobRequest } from '../../../../lib/account/contracts';
 import { readContainerDuration } from '../../../../lib/media/container-duration';
 import { findModel } from '../../../../lib/providers/catalog';
 import { isSeedance25 } from '../../../../lib/providers/seedance-draft';
+import { FAL_VIDEO_MODELS } from '../../../../lib/fal/catalog';
 import { getAsset } from '../../assets';
+import { objectByteSize, readObjectRange } from '../../object-bytes';
 import { validateRequest } from '../../providers';
 import type { Env } from '../../security';
 import { ToolError } from '../errors';
@@ -15,34 +17,8 @@ function formatSeconds(value: number): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
 }
 
-async function readBody(body: ReadableStream<Uint8Array> | null | undefined): Promise<Uint8Array> {
-  if (!body) return new Uint8Array();
-  const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const next = await reader.read();
-    if (next.done) break;
-    if (next.value) {
-      chunks.push(next.value);
-      total += next.value.byteLength;
-    }
-  }
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return out;
-}
-
 async function objectSize(env: Env, key: string): Promise<number | null> {
-  const head = await env.ASSETS?.head(key);
-  if (!head) return null;
-  const body = (head as { body?: ReadableStream<Uint8Array> }).body;
-  await body?.cancel?.().catch(() => {});
-  return head.size;
+  return objectByteSize(env.ASSETS, key);
 }
 
 async function locatedSource(env: Env, owner: string, source: ReferenceInput): Promise<{ key: string; bytes: number } | null> {
@@ -77,10 +53,7 @@ export async function priceEditDraftSource(ctx: ToolContext, request: CloudJobRe
   }
   const measured = await readContainerDuration({
     size: located.bytes,
-    read: async (offset, length) => {
-      const object = await ctx.env.ASSETS?.get(located.key, { range: { offset, length } });
-      return readBody(object?.body);
-    },
+    read: (offset, length) => readObjectRange(ctx.env.ASSETS, located.key, offset, length),
   });
   if (measured === null) {
     throw new ToolError(
@@ -104,6 +77,52 @@ export async function priceEditDraftSource(ctx: ToolContext, request: CloudJobRe
       `The source clip is ${formatSeconds(measured)} seconds, not ${formatSeconds(claimed)}. A draft is priced from the file.`,
       { field: 'sourceDurationSeconds' },
     );
+  }
+  const priced: CloudJobRequest = { ...request, values: { ...request.values, sourceDurationSeconds: measured } };
+  return validateRequest(ctx.env, priced);
+}
+
+/**
+ * Per-second edits (Kling, Aleph) are priced from the file, the same way a
+ * Seedance draft is. The agent does not have to send a length. A length it
+ * does send is only a check: more than a second off the container is a
+ * refusal, and the stored value is the one that was read.
+ */
+function pricesFromFile(request: CloudJobRequest): boolean {
+  if (request.inputMode !== 'edit' || request.provider === 'runware') return false;
+  if (request.provider === 'fal') {
+    return FAL_VIDEO_MODELS.find((model) => model.id === request.modelId)?.variants.find((variant) => variant.inputMode === 'edit')?.edit?.rate.per === 'second';
+  }
+  if (request.provider !== 'atlas' && request.provider !== 'comet' && request.provider !== 'piapi') return false;
+  const rate = findModel(request.provider, request.modelId)?.videoEdit?.rate;
+  return rate?.per === 'second' && rate.usd !== undefined;
+}
+
+export async function priceEditSource(ctx: ToolContext, request: CloudJobRequest, source?: ReferenceInput): Promise<CloudJobRequest> {
+  const drafted = await priceEditDraftSource(ctx, request, source);
+  if (drafted !== request) return drafted;
+  if (!pricesFromFile(request)) return request;
+  if (!source) throw new ToolError('invalid_field', 'This edit needs the source clip so its length can be priced.', { field: 'sourceVideo' });
+  const located = await locatedSource(ctx.env, ctx.agent.user_id, source);
+  if (!located) throw new ToolError('invalid_field', 'The source clip is not available, so this edit was not priced or reserved.', { field: 'sourceVideo' });
+  const measured = await readContainerDuration({
+    size: located.bytes,
+    read: (offset, length) => readObjectRange(ctx.env.ASSETS, located.key, offset, length),
+  });
+  if (measured === null) {
+    throw new ToolError('invalid_field', 'The source clip\'s length could not be read, so this edit was not priced or reserved. Use an MP4 or MOV with a duration in the file.', { field: 'sourceVideo' });
+  }
+  const edit = request.provider === 'fal'
+    ? FAL_VIDEO_MODELS.find((model) => model.id === request.modelId)?.variants.find((variant) => variant.inputMode === 'edit')?.edit
+    : findModel(request.provider as 'atlas' | 'comet' | 'piapi', request.modelId)?.videoEdit;
+  const min = edit?.minSeconds ?? 0;
+  const max = edit?.maxSeconds;
+  if (max !== undefined && (measured < min || measured > max)) {
+    throw new ToolError('invalid_field', `The source clip is ${formatSeconds(measured)} seconds. This model edits clips from ${min} to ${max} seconds, so it was not reserved.`, { field: 'sourceVideo' });
+  }
+  const claimed = request.values.sourceDurationSeconds;
+  if (typeof claimed === 'number' && Math.abs(claimed - measured) > 1) {
+    throw new ToolError('invalid_field', `The source clip is ${formatSeconds(measured)} seconds, not ${formatSeconds(claimed)}. An edit is priced from the file.`, { field: 'sourceDurationSeconds' });
   }
   const priced: CloudJobRequest = { ...request, values: { ...request.values, sourceDurationSeconds: measured } };
   return validateRequest(ctx.env, priced);

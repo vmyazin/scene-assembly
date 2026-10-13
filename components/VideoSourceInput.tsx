@@ -62,6 +62,6 @@ export default function VideoSourceInput({source, onChange, disabled, capability
     </div>
     {source && <button type="button" disabled={disabled || reading} className="text-xs text-[var(--foreground-muted)] hover:text-[var(--foreground)]" onClick={() => onChange(null)}>Remove source video</button>}
     {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
-    <LibraryOverlay open={open} onOpenChange={setOpen} purpose="pick-clip" onPickVideo={select}/>
+    <LibraryOverlay open={open} onOpenChange={setOpen} purpose="pick-clip" onPickVideo={select} editCapability={capability}/>
   </section>;
 }

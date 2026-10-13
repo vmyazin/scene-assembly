@@ -1,6 +1,6 @@
 // cloud/src/provider-adapters/aggregators.ts
 import { referenceClipCountError, referenceClipSetError, referenceClipsFor } from '../../../lib/providers/reference-clips';
-import { editSettingsError } from '../../../lib/providers/video-edit';
+import { editSettingsError, isRunwayEditProtocol } from '../../../lib/providers/video-edit';
 import { isSeedance25, isSeedanceDraftSize, isSeedanceFinalizeValues, seedanceFinalizeValuesError } from '../../../lib/providers/seedance-draft';
 import { piapiCreateImage, piapiCreateVideo, piapiPollTask } from '../../../lib/providers/piapi';
 import { findModel, resolveDuration, resolveSize, resolveVideoInput } from '../../../lib/providers/catalog';
@@ -154,7 +154,7 @@ export const aggregatorAdapter: GenerationAdapter = {
       }, job.id);
       return {handle: {id: result.taskId}};
     }
-    if (r.inputMode === 'edit' && provider === 'comet') {
+    if (r.inputMode === 'edit' && provider === 'comet' && isRunwayEditProtocol(model.videoEdit)) {
       // Aleph takes one https address in production. Locally the provider cannot
       // fetch this machine, so the owned bytes go as a data URI. That URI is
       // capped at 5,242,880 characters; acceptJob refuses a larger clip first.
@@ -237,7 +237,7 @@ export const aggregatorAdapter: GenerationAdapter = {
   },
   async poll(env, job, handle) {
     const r: CloudJobRequest = JSON.parse(job.request_json);
-    const poll = job.provider === 'piapi' ? piapiPollTask : job.provider === 'atlas' ? atlasPollVideo : job.provider === 'comet' ? (r.modelId === 'aleph2' || handle.protocol === 'runway' ? cometPollRunway : cometPollVideo) : r.mediaType === 'image' ? runwarePollImage : runwarePollVideo;
+    const poll = job.provider === 'piapi' ? piapiPollTask : job.provider === 'atlas' ? atlasPollVideo : job.provider === 'comet' ? (handle.protocol === 'runway' ? cometPollRunway : cometPollVideo) : r.mediaType === 'image' ? runwarePollImage : runwarePollVideo;
     const result = await poll({apiKey: await credentials(env, job), taskId: handle.id});
     const stored = [...(handle.sourceMedia ? [handle.sourceMedia] : []), ...(handle.storedMedia ?? [])];
     if (stored.length > 0 && (result.state === 'success' || result.state === 'error')) {

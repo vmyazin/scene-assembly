@@ -211,6 +211,19 @@ describe('captureProviderJob', () => {
     }, { taskId: 'x', state: 'success', urls: job.urls });
     expect(entries()[0].costUsd).toBeCloseTo(0.242, 6);
   });
+
+  it('floors an Aleph edit at $0.448 and prices a longer clip from the source length', () => {
+    captureProviderJob('comet', {
+      ...job, provider: 'comet', modelId: 'aleph2', inputMode: 'edit',
+      controlValues: { sourceDurationSeconds: 1 },
+    }, { taskId: 'x', state: 'success', urls: job.urls });
+    expect(entries()[0].costUsd).toBeCloseTo(0.448, 6);
+    captureProviderJob('comet', {
+      ...job, id: 'aleph-10', provider: 'comet', modelId: 'aleph2', inputMode: 'edit',
+      controlValues: { sourceDurationSeconds: 10 },
+    }, { taskId: 'x', state: 'success', urls: job.urls });
+    expect(entries().find(entry => entry.id === 'comet-aleph-10')?.costUsd).toBeCloseTo(2.24, 6);
+  });
 });
 
 describe('captureHelper', () => {

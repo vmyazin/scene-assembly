@@ -1,6 +1,6 @@
 // app/api/providers/video/route.ts
 import { cometPollRunway, isAlephVideoUri } from '@/lib/providers/comet';
-import { editSettingsError } from '@/lib/providers/video-edit';
+import { editSettingsError, isRunwayEditProtocol } from '@/lib/providers/video-edit';
 import { referenceClipCountError, referenceClipSetError, referenceClipsFor } from '@/lib/providers/reference-clips';
 import { SEEDANCE_25_MODEL, isSeedanceDraftSize } from '@/lib/providers/seedance-draft';
 import { runwareDeleteMedia } from '@/lib/providers/runware';
@@ -82,9 +82,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'A task ID is required' }, { status: 400 });
     }
     try {
-      // Aleph lives on Runway's task route. The video poll would look up the
-      // same id under /v1/videos and report a task that is not there.
-      const task = body.provider === 'comet' && body.model === 'aleph2'
+      // A Runway-protocol edit lives on Runway's task route. The video poll
+      // would look up the same id under /v1/videos and report a task that is not there.
+      const runway = body.provider === 'comet' && isRunwayEditProtocol(findModel('comet', typeof body.model === 'string' ? body.model : '')?.videoEdit);
+      const task = runway
         ? await cometPollRunway({ apiKey, taskId: body.taskId })
         : await adapter.pollVideo({ apiKey, taskId: body.taskId });
       if (body.provider === 'runware' && (task.state === 'success' || task.state === 'error')) {

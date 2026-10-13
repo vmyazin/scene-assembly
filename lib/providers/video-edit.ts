@@ -46,8 +46,9 @@ export function editSettingsError(capability: VideoEditCapability, values: Recor
     ...(capability.sizes.length ? ['size'] : []),
     ...(capability.aspectRatios?.length ? ['aspectRatio'] : []),
     ...(capability.draftRate || capability.draftPreview ? ['draft'] : []),
-    // Stored for the price of a later finalize. The adapter still sends duration auto.
-    ...(capability.draftPreview ? ['sourceDurationSeconds'] : []),
+    // The Worker overwrites this with the container length before reserve.
+    // A caller-supplied number is only a check, within a second of the file.
+    ...(capability.draftPreview || capability.rate.per === 'second' ? ['sourceDurationSeconds'] : []),
   ];
   if (Object.keys(values).some(key => values[key] !== undefined && !allowed.includes(key))) return 'Unsupported edit setting. Duration and aspect ratio follow the source.';
   if (values.draft !== undefined && typeof values.draft !== 'boolean') return 'Draft must be on or off.';
@@ -65,4 +66,9 @@ export function validateEditSource(source: {durationSeconds: number; width: numb
   if (width < bounds.minEdge || height < bounds.minEdge || width > bounds.maxEdge || height > bounds.maxEdge) throw new Error(`Source width and height must be between ${bounds.minEdge} and ${bounds.maxEdge} pixels.`);
   if (bounds.minPixels !== undefined && width * height < bounds.minPixels) throw new Error(`This model requires at least ${bounds.minPixels.toLocaleString('en-US')} source pixels. Resize the clip before uploading.`);
   if (bounds.minRatio !== undefined && bounds.maxRatio !== undefined && (width / height < bounds.minRatio || width / height > bounds.maxRatio)) throw new Error('Choose a source aspect ratio between 1:2.5 and 2.5:1.');
+}
+
+/** Comet's Runway task route, not `/v1/videos`. Keyed off the catalog so a second model does not need another string compare. */
+export function isRunwayEditProtocol(capability?: { protocol?: string }): boolean {
+  return capability?.protocol === 'runway';
 }

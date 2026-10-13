@@ -11,8 +11,8 @@ import CloudJobPanel from '@/components/account/CloudJobPanel';
 
 import VideoSourceInput, { type SourceVideo } from '@/components/VideoSourceInput';
 import { useAccountStore } from '@/store/useAccountStore';
-import { isAlephVideoUri } from '@/lib/providers/comet';
-import { EDIT_PROMPTS, validateEditSource } from '@/lib/providers/video-edit';
+import { ALEPH_DATA_URI_MAX, alephDataUriLength, isAlephVideoUri } from '@/lib/providers/comet';
+import { EDIT_PROMPTS, isRunwayEditProtocol, validateEditSource } from '@/lib/providers/video-edit';
 import { uploadRunwareMedia, uploadRunwareVideo } from '@/lib/providers/upload-video';
 import ReferenceClipTray, { type AttachedReferenceClip } from '@/components/ReferenceClipTray';
 import { clipToken, fileWithReferenceClipType, referenceClipSetError, referenceClipsFor } from '@/lib/providers/reference-clips';
@@ -776,9 +776,12 @@ export default function ProviderVideoWorkspace({
       };
       let sourceVideo: string | undefined;
       if (isEdit && source) {
-        if (provider === 'comet') {
-          // Aleph's browser route takes the clip inline. Runware's media store
-          // is a different vendor, so uploading there would hand Aleph an id it cannot fetch.
+        if (provider === 'comet' && isRunwayEditProtocol(selectedModel.videoEdit)) {
+          // Length before any bytes are read. Encoding a 100 MB clip and then
+          // rejecting the data URI freezes the tab for a check the size already answers.
+          if (alephDataUriLength(source.file.size, source.file.type) > ALEPH_DATA_URI_MAX) {
+            throw new Error('This clip is too large for a browser Aleph 2 edit. The provider accepts a data URI of at most 5 MB. Sign in and run it as a background job where the file has an https address, or use a smaller clip.');
+          }
           sourceVideo = await fileAsDataUrl(source.file);
           if (!isAlephVideoUri(sourceVideo)) throw new Error('This clip is too large for a browser Aleph 2 edit. The provider accepts a data URI of at most 5 MB. Sign in and run it as a background job where the file has an https address, or use a smaller clip.');
         } else {

@@ -97,8 +97,10 @@ async function hasValidImageSignature(file: File): Promise<boolean> {
   }
 }
 
-/** MP4 and MOV are ISO BMFF: the first box type is `ftyp`. */
-async function hasIsoBmffSignature(file: File): Promise<boolean> {
+/** MP4 must start with `ftyp`. Classic QuickTime often starts with `wide`, `moov`, `mdat`, `free`, or `skip` and is still video/quicktime. */
+const QUICKTIME_ATOMS = new Set(['ftyp', 'wide', 'moov', 'mdat', 'free', 'skip']);
+
+async function hasVideoContainerSignature(file: File): Promise<boolean> {
   try {
     const filePrototype = Object.getPrototypeOf(file);
     const blobPrototype = Object.getPrototypeOf(filePrototype);
@@ -107,11 +109,11 @@ async function hasIsoBmffSignature(file: File): Promise<boolean> {
     if (typeof slice !== 'function' || typeof arrayBuffer !== 'function') return false;
     const prefix = Reflect.apply(slice, file, [0, 12]);
     const bytes = new Uint8Array(await Reflect.apply(arrayBuffer, prefix, []));
-    return bytes.length >= 8
-      && bytes[4] === 0x66
-      && bytes[5] === 0x74
-      && bytes[6] === 0x79
-      && bytes[7] === 0x70;
+    if (bytes.length < 8) return false;
+    const atom = String.fromCharCode(bytes[4], bytes[5], bytes[6], bytes[7]);
+    if (file.type === 'video/mp4') return atom === 'ftyp';
+    if (file.type === 'video/quicktime') return QUICKTIME_ATOMS.has(atom);
+    return false;
   } catch {
     return false;
   }
@@ -172,7 +174,7 @@ export async function POST(request: NextRequest) {
       { status: 413 }
     );
   }
-  if (video ? !(await hasIsoBmffSignature(file)) : !(await hasValidImageSignature(file))) {
+  if (video ? !(await hasVideoContainerSignature(file)) : !(await hasValidImageSignature(file))) {
     return NextResponse.json(
       { success: false, error: video ? 'The source video must be an MP4 or MOV.' : 'The source file must be a supported raster image.' },
       { status: 415 }

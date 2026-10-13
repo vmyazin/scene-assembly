@@ -136,7 +136,9 @@ it('refuses a Kling edit whose container misses the published duration or frame'
   const wide = await stageClip(5, 4000, 720);
   await expect(acceptJob(env, 'owner', 'kling-o3-wide-token', validateRequest(env, falEdit(wide, 'kling-o3-standard-edit')))).rejects.toThrow(/720 and 3840/);
   const ok = await stageClip(8, 1280, 720);
-  await acceptJob(env, 'owner', 'kling-ok-token-1', validateRequest(env, falEdit(ok)));
+  const accepted = await acceptJob(env, 'owner', 'kling-ok-token-1', validateRequest(env, falEdit(ok)));
+  expect(JSON.parse(accepted.request_json).values.sourceDurationSeconds).toBe(8);
+  await expect(acceptJob(env, 'owner', 'kling-lie-token-1', validateRequest(env, { ...falEdit(ok), values: { keep_audio: false, sourceDurationSeconds: 0.5 } }))).rejects.toThrow(/priced from the file/);
   expect(db.prepare("SELECT COUNT(*) AS n FROM account_jobs WHERE state != 'failed'").get()).toMatchObject({ n: 1 });
 });
 
@@ -170,4 +172,21 @@ it('refuses an Aleph source the provider would reject, and posts the local clip 
   const polled = await adapterFor(env, 'comet').poll(env, job, submitted.handle!);
   expect(polled).toMatchObject({ state: 'success' });
   expect(fetch.mock.calls[1][0]).toContain('/runwayml/v1/tasks/task-aleph');
+  expect(JSON.parse(job.request_json).values.sourceDurationSeconds).toBe(6);
+});
+
+it('accepts a production Aleph edit larger than the inline image cap and prices it from the file', async () => {
+  env.APP_ORIGIN = 'https://studio.example.test';
+  env.PUBLIC_WORKER_ORIGIN = 'https://media.example.test';
+  env.CLOUD_GENERATION_PROVIDERS = 'comet';
+  await saveConnection(env, 'owner', 'comet', { apiKey: 'comet-key' });
+  const source = await stageClip(6, 1280, 720);
+  db.prepare('UPDATE account_uploads SET expected_bytes = ? WHERE id = ?').run(40_000_000, source);
+  const request = validateRequest(env, {
+    provider: 'comet', modelId: 'aleph2', mediaType: 'video', inputMode: 'edit', prompt: 'Replace the sky',
+    referenceIds: [], sourceVideoId: source, values: {},
+  });
+  const job = await acceptJob(env, 'owner', 'aleph-prod-token-1', request);
+  expect(JSON.parse(job.request_json).values.sourceDurationSeconds).toBe(6);
+  expect(job.request_digest).not.toBe('');
 });

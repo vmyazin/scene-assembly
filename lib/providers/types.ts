@@ -102,6 +102,11 @@ export type ProviderRate = {
   /** The first reference is included; subsequent references are billed once per request. */
   extraInputImageUsd?: number;
   audioUsdByResolution?: Record<string, number>;
+  /**
+   * Floor applied after `usd × seconds`. Aleph 2 publishes $0.224/s and still
+   * charges $0.448 for a clip shorter than two seconds.
+   */
+  minimumUsd?: number;
 } & (
   | { usd: number; usdByResolution?: never }
   | { usd?: never; usdByResolution: Record<string, number> }
@@ -159,6 +164,11 @@ export interface ProviderModel {
     aspectRatios?: string[];
     /** Vendor prompt cap, when it is tighter than the shared 20,000. */
     maxPromptLength?: number;
+    /**
+     * Submit and poll protocol. `runway` is Comet's `/runwayml/v1/video_to_video`
+     * and `/runwayml/v1/tasks/{id}`. Absent means the provider's ordinary video route.
+     */
+    protocol?: 'runway';
     outputLabel?: string;
     promptSyntax?: VideoPromptSyntax;
     /**

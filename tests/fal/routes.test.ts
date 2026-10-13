@@ -485,6 +485,20 @@ describe('fal API routes', () => {
       expect(uploadFalFile).toHaveBeenCalledOnce();
     });
 
+    it('accepts a classic QuickTime file whose first atom is wide, and still requires ftyp for MP4', async () => {
+      uploadFalFile.mockResolvedValue('https://fal.media/source.mov');
+      const wide = new Uint8Array([0, 0, 0, 8, 0x77, 0x69, 0x64, 0x65]);
+      const mov = await uploadPost(formRequest([
+        ['apiKey', 'id:secret'],
+        ['file', new File([wide], 'source.mov', { type: 'video/quicktime' })],
+      ]));
+      expect(mov.status).toBe(200);
+      const mp4 = await uploadPost(formRequest([
+        ['apiKey', 'id:secret'],
+        ['file', new File([wide], 'source.mp4', { type: 'video/mp4' })],
+      ]));
+      expect(mp4.status).toBe(415);
+    });
     it('rejects a video that is not MP4 or MOV', async () => {
       const response = await uploadPost(formRequest([
         ['apiKey', 'id:secret'],
