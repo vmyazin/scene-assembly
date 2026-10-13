@@ -61,7 +61,7 @@ export interface JobRow {
   request_digest: string; workflow_attempt: number; dispatched: number; deleted: number; created_at: number; updated_at: number;
   agent_id: string | null; agent_name?: string | null;
 }
-export class AccountError extends Error { constructor(message: string, public status: number, public code: string) { super(message); } }
+export class AccountError extends Error { retryAfterSeconds?: number; constructor(message: string, public status: number, public code: string) { super(message); } }
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value && typeof value === 'object') return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(',')}}`;

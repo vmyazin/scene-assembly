@@ -14,6 +14,7 @@ import { cookie, cookieName, hash, isLocal, json, randomToken, readCookie, retur
 import { googleAuthorization, googleEnabled, googleIdentity } from './google';
 import { createSession, currentAccount, revokeSession } from './sessions';
 import { cleanupImports, importRoutes, publicImportMedia } from './imports';
+import { youtubeRoutes } from './youtube/routes';
 import { applyIngress, cleanupExpiredIngress } from './ingress';
 import { cleanupOrphanCharges } from './mcp/budget';
 import { agentRoutes } from './mcp/agent-routes';
@@ -62,6 +63,8 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if(expectedOwner&&(await currentAccount(request,env))?.id!==expectedOwner)return json({error:'Your account changed. Refresh before continuing.'},409);
     const uploadResponse = await uploadRoutes(request,env);
     if(uploadResponse)return uploadResponse;
+    const youtubeResponse = await youtubeRoutes(request,env);
+    if(youtubeResponse)return youtubeResponse;
     const importResponse = await importRoutes(request,env);
     if(importResponse)return importResponse;
     const lifecycleResponse=await lifecycleRoutes(request,env);
