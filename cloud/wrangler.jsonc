@@ -26,9 +26,12 @@
   "workflows": [{ "binding": "GENERATION", "name": "scene-assembly-generation", "class_name": "GenerationWorkflow" }],
   // YouTube clip import (docs/claude/specs/2026-10-13-youtube-clip-source-design.md).
   // A container because yt-dlp and ffmpeg need a real process; one Durable Object per
-  // account, so max_instances is also the global concurrency cap. standard-2 keeps a
-  // 30 s 1080p re-encode inside the 120 s ceiling.
-  "containers": [{ "class_name": "YouTubeImporter", "image": "./containers/youtube/Dockerfile", "max_instances": 3, "instance_type": "standard-2" }],
+  // account, so max_instances is also the global concurrency cap. The 30 s 1080p60
+  // re-encode is CPU-bound against the 120 s ceiling. Measured 2026-10-13 (one encode,
+  // Big Buck Bunny 30.0–60.0 s, amd64 under emulation on Apple Silicon, an upper bound):
+  // 1 vCPU 168 s, 2 vCPU 93 s, 4 vCPU 49 s; native arm64 1 vCPU 69 s, 2 vCPU 31 s.
+  // standard-2 (1 vCPU) cannot fit and standard-3 is not clearly inside it, so standard-4.
+  "containers": [{ "class_name": "YouTubeImporter", "image": "./containers/youtube/Dockerfile", "max_instances": 3, "instance_type": "standard-4" }],
   "durable_objects": { "bindings": [{ "name": "YOUTUBE_IMPORTER", "class_name": "YouTubeImporter" }] },
   "exports": { "YouTubeImporter": { "type": "durable-object", "storage": "sqlite" } },
   // A disconnecting browser must abort the import's exec(), which reads request.signal.

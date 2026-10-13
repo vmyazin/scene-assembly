@@ -90,38 +90,49 @@ def main():
         fail('unavailable', 'live', 'live')
     if (info.get('age_limit') or 0) >= 18:
         fail('unavailable', 'age-restricted', 'age')
+    # YouTube reports whole seconds, so the real end can be up to a second past it. A
+    # missing or zero duration is unknown, not "0 seconds": let the cut find the end.
     duration = info.get('duration') or 0
-    if end_s > duration + 0.05:
+    if duration > 0 and end_s > duration + 1.0:
         fail('range', f'video is {duration} seconds')
 
+    length = f'{end_s - start_s:.1f}'
     options = {**base,
                # Short edge >= 720 px (Seedance needs >= 407,696 source pixels), closest to 1080p.
                'format': 'bv*[height>=720][width>=720]+ba/b[height>=720][width>=720]',
-               'format_sort': ['res:1080'],
+               # SDR over HDR at the same size: the 8-bit H.264 output has no tone mapping,
+               # so an HDR source would come out washed out.
+               'format_sort': ['res:1080', 'hdr:sdr'],
                'download_ranges': download_range_func(None, [(start_s, end_s)]),
+               # yt-dlp's ffmpeg seeks each input (-ss before -i) and, with this set,
+               # re-encodes instead of stream-copying, so the cut starts on the exact frame.
+               # That encode is the only one: these are its output settings.
                'force_keyframes_at_cuts': True,
+               'external_downloader_args': {'ffmpeg_o': [
+                   '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-maxrate', '8M', '-bufsize', '16M',
+                   '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k']},
                'outtmpl': os.path.join(work, 'source.%(ext)s'),
-               'merge_output_format': 'mkv'}
+               'merge_output_format': 'mp4'}
     try:
         with yt_dlp.YoutubeDL(options) as ydl:
             ydl.process_ie_result(info, download=True)
     except DownloadError as error:
         code, reason = classify(str(error))
         fail(code, error, reason)
-    sources = [name for name in os.listdir(work) if name.startswith('source.')]
+    sources = [name for name in os.listdir(work) if name.startswith('source.') and not name.endswith('.part')]
     if not sources:
         fail('failed', 'no section was downloaded')
+    source = os.path.join(work, sources[0])
 
     out = os.path.join(work, 'clip.mp4')
-    # -t makes the length exact: a 30.0 s section must not come out 30.04 s against a 30 s limit.
-    encode = subprocess.run(
-        ['ffmpeg', '-nostdin', '-loglevel', 'error', '-y', '-i', os.path.join(work, sources[0]),
-         '-t', f'{end_s - start_s:.1f}', '-map', '0:v:0', '-map', '0:a:0?',
-         '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-maxrate', '8M', '-bufsize', '16M',
-         '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', out],
+    # A stream copy, not a second encode: -t makes the length exact (a 30.0 s section must
+    # not come out 30.04 s against a 30 s limit) and +faststart puts the index first.
+    remux = subprocess.run(
+        ['ffmpeg', '-nostdin', '-loglevel', 'error', '-y', '-i', source, '-t', length,
+         '-map', '0:v:0', '-map', '0:a:0?', '-c', 'copy', '-movflags', '+faststart', out],
         capture_output=True, text=True)
-    if encode.returncode != 0:
-        fail('failed', encode.stderr)
+    if remux.returncode != 0:
+        fail('failed', remux.stderr)
     probe = subprocess.run(
         ['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height:format=duration', '-of', 'json', out],
         capture_output=True, text=True)
