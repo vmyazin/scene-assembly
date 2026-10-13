@@ -82,6 +82,14 @@ it('strips anything credential-shaped out of a provider message',()=>{
   expect(sanitizeProviderMessage(undefined)).toBe(null);
 });
 
+it('strips SOCKS proxy URLs and bare user:pass@host credentials',()=>{
+  expect(sanitizeProviderMessage('Unable to connect to proxy socks5h://user:hunter2@proxy.example:1080 (timed out)')).toBe('Unable to connect to proxy (timed out)');
+  expect(sanitizeProviderMessage('proxy SOCKS5://u:p@h:1 refused')).toBe('proxy refused');
+  expect(sanitizeProviderMessage('Tunnel to user:hunter2@proxy.example:8000 failed')).toBe('Tunnel to failed');
+  // Ordinary "label: value" text and e-mail-like strings without a password survive.
+  expect(sanitizeProviderMessage('ERROR: [youtube] Private video. Ask owner@example.test for access')).toBe('ERROR: [youtube] Private video. Ask owner@example.test for access');
+});
+
 it('refuses to resume a cause that trying again cannot change',async()=>{
   const j=await job();
   await env.DB.prepare("UPDATE account_jobs SET state='needs_attention',error_code='save_failed',failure_reason='result_link_expired',provider_task='{}',result_json='{}' WHERE id=?").bind(j.id).run();

@@ -408,7 +408,7 @@ every real clip upload 413s.
 The account Worker owns a Cloudflare Container (`cloud/containers/youtube`), which `wrangler deploy` builds and pushes. It needs:
 
 - **Workers Paid** and a deploy token with **Containers:Edit**.
-- **`YOUTUBE_PROXY_URL`**, a residential proxy, because YouTube refuses most datacenter IPs with a bot check: `pnpm --dir cloud exec wrangler secret put YOUTUBE_PROXY_URL`. Without it, imports answer `source_refused`.
+- **`YOUTUBE_PROXY_URL`**, a residential proxy, because YouTube refuses most datacenter IPs with a bot check: `pnpm --dir cloud exec wrangler secret put YOUTUBE_PROXY_URL`. Without it, imports answer `source_refused`. It must be an `http://` or `https://` proxy URL: yt-dlp hands the section download to ffmpeg, which cannot use a SOCKS proxy.
 - **A current yt-dlp.** When imports of public videos start failing with "YouTube refused the download" or "no 720p version" while the proxy is healthy, raise `YTDLP_VERSION` in the Dockerfile, run `cloud/containers/youtube/smoke.sh`, and push.
 
 Locally, `pnpm --dir cloud dev` runs without containers, and the import route says it is unavailable. `pnpm --dir cloud dev:containers` needs Docker running.

@@ -27,7 +27,9 @@ export function sanitizeProviderMessage(text: string | null | undefined): string
   if (typeof text !== 'string') return null;
   const scrubbed = text
     .replace(/\s+/g, ' ')
-    .replace(/\b(?:https?|wss?|ftp|data):\S*/gi, '')
+    .replace(/\b(?:https?|wss?|ftp|data|socks\w*):\S*/gi, '')
+    // A proxy written without a scheme still carries its password: user:pass@host.
+    .replace(/[^\s:@/]+:[^\s@/]+@\S+/g, '')
     .replace(/\b(?:Bearer|Basic|api[_-]?key|token|secret|authorization)\b\s*[:=]?\s*\S*/gi, '')
     .replace(/\b(?:sk|pk|rw|xai|ghp|gsk)[-_][A-Za-z0-9_-]{8,}/g, '')
     .replace(/[A-Za-z0-9_-]{24,}/g, '')
