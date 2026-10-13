@@ -149,10 +149,14 @@ export default function YouTubeClipDialog({ open, target, onClose, onImported }:
             {duration && from !== undefined && to !== undefined && to > from && <div className="absolute inset-y-0 rounded-full bg-[var(--neon-cyan)]" style={{ left: percent(from), width: `calc(${percent(to)} - ${percent(from)})` }} />}
           </div>
           <div className="flex flex-wrap items-end gap-2">
-            <button type="button" className={BUTTON} disabled={busy} onClick={() => mark('from')}>Set start</button>
-            <label className="space-y-1 text-xs"><span>From</span><input aria-label="From" value={fromText} onChange={event => setTime('from', event.target.value)} disabled={busy} inputMode="decimal" className={TIME_FIELD} /></label>
-            <button type="button" className={BUTTON} disabled={busy} onClick={() => mark('to')}>Set end</button>
-            <label className="space-y-1 text-xs"><span>To</span><input aria-label="To" value={toText} onChange={event => setTime('to', event.target.value)} disabled={busy} inputMode="decimal" placeholder="m:ss.s" className={TIME_FIELD} /></label>
+            <div className="flex items-end gap-2">
+              <button type="button" className={BUTTON} disabled={busy} onClick={() => mark('from')}>Set start</button>
+              <label className="flex flex-col gap-1 text-xs"><span>From</span><input aria-label="From" value={fromText} onChange={event => setTime('from', event.target.value)} disabled={busy} inputMode="decimal" className={TIME_FIELD} /></label>
+            </div>
+            <div className="flex items-end gap-2">
+              <button type="button" className={BUTTON} disabled={busy} onClick={() => mark('to')}>Set end</button>
+              <label className="flex flex-col gap-1 text-xs"><span>To</span><input aria-label="To" value={toText} onChange={event => setTime('to', event.target.value)} disabled={busy} inputMode="decimal" placeholder="m:ss.s" className={TIME_FIELD} /></label>
+            </div>
             <button type="button" className={BUTTON} disabled={busy || (!looping && Boolean(problem))} onClick={preview}>{looping ? <><Square size={16} /> Stop preview</> : <><Play size={16} /> Preview range</>}</button>
           </div>
         </>}
