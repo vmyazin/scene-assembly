@@ -2,6 +2,9 @@
 
 Status: Approved design
 
+## Follow-up behavior — 2026-10-12
+All five directions and all seven engines stay visible. Direction determines engine availability: incompatible engines are disabled, dimmed, skipped by keyboard navigation, and show a custom tooltip above the card reading “No support for this mode/direction” on hover or wrapper focus (Escape dismisses it). Preserve a compatible selected engine; otherwise select the first compatible engine in display order and persist it. Deep links preserve their requested direction and resolve a compatible workspace before rendering. If none support a mode, show an explicit empty state. This supersedes direction filtering and the image-mode fallback below. Scope: `VideoWorkspace.tsx` capability checks and routing, `ProviderSelector.tsx` disabled states and keyboard traversal; do not change catalogs, generation forms, stores, submission, or billing.
+
 ## Follow-up refinement — 2026-10-12
 Direction tiles use equal-width grid columns (two on small screens, three from `sm`, five from `lg`), with wrapping labels and fixed-size icons so longer names do not widen their tile. Provider choices now sit under the eyebrow “Generation engine” with 48px minimum height, 18px icons, 14px labels and subtle persistent card borders. They remain smaller than the 76px direction tiles, so both groups are readable while direction stays primary.
 
