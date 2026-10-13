@@ -17,8 +17,15 @@ VIDEO_ID = re.compile(r'^[A-Za-z0-9_-]{11}$')
 SECONDS = re.compile(r'^\d{1,6}\.\d$')
 
 
+# Everything written to fd 1 (yt-dlp's ffmpeg downloader inherits it) goes to stderr;
+# the result line is the only thing that reaches the real stdout.
+REAL_STDOUT = os.dup(1)
+os.dup2(2, 1)
+
+
 def done(**fields):
-    print(json.dumps(fields), flush=True)
+    sys.stdout.flush()
+    os.write(REAL_STDOUT, (json.dumps(fields) + '\n').encode())
     sys.exit(0)
 
 
@@ -29,8 +36,11 @@ def fail(code, detail='', reason=None):
 def classify(message):
     """yt-dlp reports refusals as text; map the ones a person can act on."""
     text = message.lower()
-    if 'not a bot' in text or 'http error 429' in text or 'proxy' in text or 'unable to connect' in text:
+    if ('not a bot' in text or 'http error 429' in text or 'unable to connect to proxy' in text
+            or 'proxyerror' in text or 'tunnel connection failed' in text or 'unable to connect' in text):
         return 'refused', None
+    if 'available in your country' in text or 'geo restrict' in text or 'geo-restrict' in text:
+        return 'unavailable', 'removed'
     if 'private video' in text:
         return 'unavailable', 'private'
     if 'members' in text or 'join this channel' in text:
@@ -125,4 +135,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as error:  # SystemExit (from done) is not an Exception
+        fail('failed', repr(error))

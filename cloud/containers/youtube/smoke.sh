@@ -11,7 +11,9 @@ docker run --rm --platform linux/amd64 -e YOUTUBE_PROXY_URL="${YOUTUBE_PROXY_URL
   scene-assembly-youtube python3 /app/clip.py aqz-KE-bpKQ 62.0 74.4 /tmp/clips/smoke | tee "$out/result.json"
 python3 - "$out/result.json" "$out/smoke/clip.mp4" <<'PY'
 import json, subprocess, sys
-result = json.loads(open(sys.argv[1]).read().strip().splitlines()[-1])
+lines = [line for line in open(sys.argv[1]).read().splitlines() if line.strip()]
+assert len(lines) == 1, lines
+result = json.loads(lines[0])
 assert result["ok"], result
 probe = json.loads(subprocess.run(
     ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
