@@ -1,7 +1,7 @@
 // components/VideoWorkspace.tsx
 'use client';
 
-import { ImagePlus, MoveRight, ScanFace, Type } from 'lucide-react';
+import { ImagePlus, Images, ScanFace, Type } from 'lucide-react';
 import FalGenerationWorkspace from '@/components/FalGenerationWorkspace';
 import GeminiVideoWorkspace from '@/components/GeminiVideoWorkspace';
 import KieGenerationWorkspace from '@/components/KieGenerationWorkspace';
@@ -58,7 +58,7 @@ const MODES: readonly VideoDirection[] = [
     label: 'First & last frame',
     blurb: 'Fill the motion between two stills',
     requires: 'Needs two images',
-    icon: MoveRight,
+    icon: Images,
     thumbnail: bookendThumbnail,
     needsProviderSupport: true,
   },

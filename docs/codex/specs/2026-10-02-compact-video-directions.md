@@ -2,6 +2,12 @@
 
 Status: Approved design
 
+## Follow-up refinement — 2026-10-12
+Direction tiles use equal-width grid columns (two on small screens, three from `sm`, five from `lg`), with wrapping labels and fixed-size icons so longer names do not widen their tile. Provider choices now sit under the eyebrow “Generation engine” with 48px minimum height, 18px icons, 14px labels and subtle persistent card borders. They remain smaller than the 76px direction tiles, so both groups are readable while direction stays primary.
+
+## Follow-up decision — 2026-10-12
+The direction choices now use the larger bordered provider-tile treatment (22px icons, semibold labels, 76px minimum height), while provider choices use the former compact direction treatment (16px icons and 12px labels). This supersedes the compact direction dimensions and the provider-layout non-goal below. Both groups wrap; delayed direction previews, keyboard navigation, and selection remain unchanged. The styling lives in `VideoDirectionSelector.tsx` and `ProviderSelector.tsx`, because the visual hierarchy should prioritize what to make over which provider runs it.
+
 ## Context
 The user selected exploration A, amended to reveal its image and details only after a one-second hover and remove the permanent detail line. Large direction cards currently displace the generation controls.
 
