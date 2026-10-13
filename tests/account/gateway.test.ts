@@ -112,6 +112,18 @@ describe('account gateway', () => {
     expect(response.status).toBe(504);
     expect(await response.json()).toEqual({ error: 'Import cancelled.' });
   });
+  it('lets a YouTube import carry a 2048-character link, but no more than 4096 bytes', async () => {
+    vi.stubEnv('ACCOUNT_WORKER_ORIGIN', 'https://accounts.test');
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ uploadId: 'u' }, { status: 201 }));
+    vi.stubGlobal('fetch', fetcher);
+    const url = `https://www.youtube.com/watch?v=aqz-KE-bpKQ&list=${'x'.repeat(2048 - 'https://www.youtube.com/watch?v=aqz-KE-bpKQ&list='.length)}`;
+    const body = JSON.stringify({ url, startSeconds: 1, endSeconds: 9, edit: { provider: 'runware', modelId: 'bytedance:seedance@2.5' } });
+    expect(body.length).toBeGreaterThan(2048);
+    const post = (text: string) => accountGateway(new Request('https://app.test/api/account/youtube-clips', { method: 'POST', headers: { origin: 'https://app.test' }, body: text }));
+    expect((await post(body)).status).toBe(201);
+    expect(fetcher.mock.calls[0][1].body).toBe(body);
+    expect((await post('x'.repeat(4097))).status).toBe(413);
+  });
   it('still rejects neighbouring paths', async () => {
     vi.stubEnv('ACCOUNT_WORKER_ORIGIN', 'https://accounts.test');
     vi.stubGlobal('fetch', vi.fn());

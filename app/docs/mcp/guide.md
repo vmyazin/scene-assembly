@@ -158,7 +158,7 @@ A different type or byte count is refused by the upload link itself with an HTTP
 - Only that section is downloaded, at 720p or above, and saved as an MP4 for 24 hours. It is never added to the library.
 - The response gives the clip's `durationSeconds`, `width` and `height`; check them against the model before calling `generate`.
 - Private, members-only, age-restricted and live videos cannot be imported. An account can import 10 sections an hour, one at a time, shared with the browser.
-- The call returns when the clip is ready, usually within 40 seconds and up to about 2 minutes.
+- The call returns when the clip is ready, usually within 40 seconds and up to about 2 minutes, so set your client's tool timeout to at least 130 seconds (many default to 60).
 
 **Using it.** An `uploadId` lasts 24 hours. It is cleaned up soon after the jobs that used it finish, so stage the file again for a later job. A file already in your library needs no staging: pass its `assetId`. The refusals these steps can return are listed under [Errors](#references-2).
 

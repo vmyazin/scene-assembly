@@ -28,7 +28,7 @@ export async function accountGateway(request: Request): Promise<Response> {
         const { value, done } = await reader.read();
         if (done) break;
         length += value.byteLength;
-        if (length > (path === 'jobs' ? 40000 : path === 'imports' ? 32768 : path === 'connections' ? 8192 : 2048)) { await reader.cancel(); return new Response(null, { status: 413 }); }
+        if (length > (path === 'jobs' ? 40000 : path === 'imports' ? 32768 : path === 'connections' ? 8192 : path === 'youtube-clips' ? 4096 : 2048)) { await reader.cancel(); return new Response(null, { status: 413 }); }
         chunks.push(value);
       }
     }
