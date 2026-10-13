@@ -308,7 +308,15 @@
       "command": "ACCOUNT_WORKER_PORT=8887 npm run dev -- --port 3187",
       "cwd": "${workspaceFolder}",
       "runtimeExecutable": "env",
-      "runtimeArgs": ["ACCOUNT_WORKER_PORT=8887", "npm", "run", "dev", "--", "--port", "3187"],
+      "runtimeArgs": [
+        "ACCOUNT_WORKER_PORT=8887",
+        "npm",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "3187"
+      ],
       "port": 3187
     },
     {
@@ -338,6 +346,19 @@
       "request": "launch",
       "command": "ACCOUNT_WORKER_PORT=8895 pnpm dev -- --port 3275",
       "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "YouTube clip source",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "ACCOUNT_WORKER_PORT=8897",
+        "node",
+        "scripts/dev-account-services.mjs",
+        "--port",
+        "3197"
+      ],
+      "port": 3197
     }
-  ]
+  ],
+  "version": "0.0.1"
 }
