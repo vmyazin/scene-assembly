@@ -37,8 +37,8 @@ export interface CloudJobView {
    *  oversized clip and a transient blip, and only one of those is worth
    *  resuming. Null on jobs that stopped before the Worker recorded it. */
   failureReason?: string | null;
-  /** The provider's own sentence for a refusal, already sanitized Worker-side.
-   *  Only ever set alongside `provider_rejected` or `provider_policy`. */
+  /** Sanitized provider refusal or app-authored capture error. Older save
+   *  failures have no detail; never reconstruct evidence that was not retained. */
   failureDetail?: string | null;
   /** Resumes so far. The row says "attempt 2" with it, and stops offering a
    *  button the Worker would now refuse. */

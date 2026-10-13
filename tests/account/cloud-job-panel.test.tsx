@@ -39,7 +39,7 @@ describe('the workspace result panel', () => {
     expect(screen.queryByText('Already saved prompt')).toBeNull();
     expect(screen.queryByText('Saved')).toBeNull();
     expect(screen.getByText('Still running prompt')).toBeInTheDocument();
-    expect(screen.getByText('Stopped prompt')).toBeInTheDocument();
+    expect(screen.getByText('Stopped prompt', {selector:'p.truncate'})).toBeInTheDocument();
   });
 
   it('draws a running job as one card and leaves the pending frame out', () => {

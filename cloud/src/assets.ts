@@ -5,7 +5,7 @@ import type { Env } from './security';
 import { AVAILABLE_CAPACITY, OVERFLOW_TTL_MS, promoteTemporaryAsset } from './retention';
 import { deleteQueuedObject } from './cleanup';
 import { peekMediaType } from './media-type';
-import { acceptedResultUrl } from '../../lib/account/result-location';
+import { acceptedResultUrl, providerBrowserUrl } from '../../lib/account/result-location';
 import { isStageableInputMime } from '../../lib/providers/input-mimes';
 
 export const MAX_OUTPUT_BYTES = 1_000_000_000;
@@ -33,7 +33,10 @@ export async function jobAssets(env:Env,owner:string,jobId:string) {
 /** Every redirect passes the same policy as the original provider result. */
 export function safeResultUrl(value:string): URL {
   const url=acceptedResultUrl(value);
-  if(!url)throw new AccountError('Provider returned an unsupported result location.',502,'result_location');
+  if(!url){
+    const host=providerBrowserUrl(value)?.hostname;
+    throw new AccountError(host?`Automatic saving does not support the download host ${host}.`:'The provider download address did not pass HTTPS and public-host checks.',502,'result_location');
+  }
   return url;
 }
 async function fetchOutput(url:string):Promise<Response> {
@@ -44,7 +47,7 @@ async function fetchOutput(url:string):Promise<Response> {
     // Split on purpose: a link the provider has already expired answers the
     // same way on every resume, so it is not the retryable "transfer broke"
     // case the single `save_failed` code used to lump it in with.
-    if(!response.ok || !response.body)throw new AccountError([403,404,410].includes(response.status)?'The provider\'s download link for this result no longer works.':'Could not fetch the generated file.',502,[403,404,410].includes(response.status)?'result_link_expired':'save_failed');
+    if(!response.ok || !response.body)throw new AccountError(`Provider download returned HTTP ${response.status}${!response.body?' with no file body':''}.`,502,[403,404,410].includes(response.status)?'result_link_expired':'save_failed');
     return response;
   }
   throw new AccountError('Provider returned too many redirects.',502,'result_location');

@@ -3,10 +3,10 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { adapter } from './database';
 import { memoryBucket } from './bucket';
 import { LOCAL_SCHEMA } from '../src/schema';
-import { acceptJob, getJob } from '../src/jobs';
+import { acceptJob, AccountError, getJob } from '../src/jobs';
 import { jobRoutes } from '../src/job-routes';
 import { runGeneration, type DurableStep } from '../src/generation-runner';
-import { MAX_RESUME_ATTEMPTS, sanitizeProviderMessage } from '../src/failure';
+import { captureFailureDetail, MAX_RESUME_ATTEMPTS, sanitizeProviderMessage } from '../src/failure';
 import { hash, type Env } from '../src/security';
 import type { GenerationAdapter } from '../src/providers';
 
@@ -37,7 +37,7 @@ it('records why saving failed instead of only that it did',async()=>{
   vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(null,{status:404})));
   await runGeneration(env,j.id,step,{submit:vi.fn(),poll:vi.fn()});
   expect((await getJob(env,j.id))?.state).toBe('needs_attention');
-  expect(await reason(j.id)).toMatchObject({failure_reason:'result_link_expired'});
+  expect(await reason(j.id)).toMatchObject({failure_reason:'result_link_expired',failure_detail:'Provider download returned HTTP 404 with no file body.'});
 });
 
 it('keeps the specific reason when the coarse state transition follows it',async()=>{
@@ -49,7 +49,7 @@ it('keeps the specific reason when the coarse state transition follows it',async
   // `setJobState` coalesces on purpose: the outer catch runs after the step that
   // already knew this was a dead link, and a plain assignment would erase it.
   expect((await getJob(env,j.id))?.error_code).toBe('save_failed');
-  expect(await reason(j.id)).toMatchObject({failure_reason:'result_link_expired'});
+  expect(await reason(j.id)).toMatchObject({failure_reason:'result_link_expired',failure_detail:'Provider download returned HTTP 404 with no file body.'});
 });
 
 it('carries the provider’s own refusal onto the job',async()=>{
@@ -125,4 +125,17 @@ it('leaves the row in place when a caller does not ask for removal',async()=>{
   const response=await post(`${j.id}/dismiss`);
   expect(response?.status).toBe(200);
   expect(await getJob(env,j.id)).toMatchObject({state:'failed',error_code:'tracking_stopped'});
+});
+
+it('retains a blocked host but never the signed path or query',async()=>{
+  const j=await job();
+  await env.DB.prepare("UPDATE account_jobs SET state='saving',provider_task='{}',result_json=? WHERE id=?")
+    .bind(JSON.stringify({sources:[{url:'https://downloads.example.com/private-prompt?token=secret'}]}),j.id).run();
+  await runGeneration(env,j.id,step,{submit:vi.fn(),poll:vi.fn()});
+  expect(await reason(j.id)).toMatchObject({failure_reason:'result_location',failure_detail:'Automatic saving does not support the download host downloads.example.com.'});
+});
+
+it('only retains sanitized app-authored capture messages',()=>{
+  expect(captureFailureDetail(new Error('network key=private'))).toBeNull();
+  expect(captureFailureDetail(new AccountError('Download failed https://example.com/private?signature=secret Bearer shortsecret',502,'save_failed'))).toBe('Download failed');
 });

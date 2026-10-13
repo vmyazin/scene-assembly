@@ -110,6 +110,13 @@
   never by job lists or a server fetch proxy. `ProviderResultRecovery` guards the
   account epoch, because a late response can otherwise expose another account's file.
 
+- **Failed-job diagnostics** → `components/account/JobFailureDetails.tsx` and
+  `docs/codex/specs/2026-10-12-actionable-job-errors.md`. Use `failureSummary` for
+  the two short scan lines and `failureNextStep` inside the disclosure; preserve sanitized app-authored capture errors inside the
+  failing step, because the outer transition loses their specifics. Never copy
+  signed URLs or prompts into the diagnostic report. Older missing details stay
+  explicitly unknown rather than being reconstructed.
+
 - **A job stuck in "Needs attention", or copy about why one stopped** → the reason lives in
   `lib/account/job-failure.ts`, not in `error_code`. `error_code` names the arm of the runner that
   gave up, so one `save_failed` covered an expired provider link, an oversized clip and a transient
