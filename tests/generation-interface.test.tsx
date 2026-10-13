@@ -1408,7 +1408,7 @@ describe('GenerationInterface result stack', () => {
   });
 
   it('downloads the card that was clicked, not the newest', async () => {
-    const createObjectURL = vi.fn((_blob: Blob) => 'blob:older-card');
+    const createObjectURL = vi.fn<(blob: Blob) => string>(() => 'blob:older-card');
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
     const clickSpy = vi

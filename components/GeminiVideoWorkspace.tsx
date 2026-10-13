@@ -151,7 +151,10 @@ export default function GeminiVideoWorkspace({
   const needsKey = !apiKey;
   const gated = isGated(needsKey, false);
   const currentModel = GEMINI_VIDEO_MODELS.find((m) => m.id === geminiVideoModel) || GEMINI_VIDEO_MODELS[0];
-  const effectiveDuration = geminiVideoDuration(currentModel, duration, resolution) as 4 | 6 | 8;
+  // Number() tells React Compiler this is a primitive. Otherwise it treats the
+  // helper's result as mutable and, because handleGenerate captures it, reports
+  // that handler's Date.now() calls as impure work during render.
+  const effectiveDuration = Number(geminiVideoDuration(currentModel, duration, resolution)) as 4 | 6 | 8;
   const costEstimate = geminiVideoCost(geminiVideoModel, resolution, effectiveDuration);
   const rateLabel = geminiVideoRateLabel(geminiVideoModel, resolution);
   const isImageMode = inputMode === 'image';

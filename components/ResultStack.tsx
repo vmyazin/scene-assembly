@@ -159,6 +159,7 @@ export default function ResultStack({
               {/* A failed image is left in place rather than dropped: a provider
                   URL can expire while the page is open, and removing a result
                   the user just generated reads as data loss. */}
+              {/* eslint-disable-next-line @next/next/no-img-element -- data:, blob: and provider URLs, sized from naturalWidth on load */}
               <img
                 src={item.src}
                 alt={index === 0 ? 'Generated' : `Generated, ${index + 1} of ${visible.length}`}

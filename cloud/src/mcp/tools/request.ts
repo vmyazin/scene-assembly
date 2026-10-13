@@ -29,8 +29,7 @@ export const requestShape = {
   referenceAudios: z.array(referenceSchema).max(10).optional().describe('Reference audio clips, in order, for a model whose mode lists them.'),
   sourceVideo: referenceSchema.optional().describe('The clip to edit, in edit mode only.'),
 };
-const requestObject = z.object(requestShape);
-export type RequestInput = z.infer<typeof requestObject>;
+export type RequestInput = z.infer<z.ZodObject<typeof requestShape>>;
 
 export interface PreparedRequest { request: CloudJobRequest; model: ModelDescriptor; mode: ModeDescriptor }
 
