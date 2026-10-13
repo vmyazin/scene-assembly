@@ -13,6 +13,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FEATURES } from '@/types';
 import { useProviderJobsStore } from '@/store/useProviderJobsStore';
 import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
+import { stageSource } from '@/lib/account/staged-sources';
 const {refresh,upload,submit,guestSubmit}=vi.hoisted(()=>({refresh:vi.fn(),upload:vi.fn(),submit:vi.fn(),guestSubmit:vi.fn()}));
 vi.mock('@/lib/account/session',()=>({refreshAccount:refresh}));
 vi.mock('@/lib/account/client',()=>({uploadAccountReferences:upload,submitAccountJob:submit,accountRequest:vi.fn(),accountAssetUrl:vi.fn()}));
@@ -26,6 +27,31 @@ beforeEach(()=>{
   usePromptLibraryStore.setState({history:[],favourites:[]});
 });
 describe('account execution and isolation',()=>{
+  it('submits a staged YouTube source without uploading it, then uploads the browser copy on the second submission',async()=>{
+    const runware:AccountSession={...session,providers:['runware'],connections:[{id:'rw',provider:'runware',hint:'test',revision:1}]};
+    useAccountStore.getState().applySession(runware);refresh.mockResolvedValue(runware);
+    upload.mockResolvedValue(['uploaded-source']);
+    const edit={modelId:'bytedance:seedance@2.5',mediaType:'video' as const,inputMode:'edit' as const,prompt:'Clay',values:{size:'720p'}};
+    const clip=new File(['mp4'],'youtube.mp4',{type:'video/mp4'});
+    stageSource(clip,{uploadId:'staged-source',owner:'owner',expiresAt:Date.now()+86_400_000});
+    const {result}=renderHook(()=>useCloudWorkspace('runware'));
+    await act(async()=>{await result.current.submit(edit,[],'Clay',clip);});
+    expect(upload).toHaveBeenCalledWith([],undefined,'owner');
+    expect(submit.mock.calls[0][1]).toMatchObject({sourceVideoId:'staged-source'});
+    await act(async()=>{await result.current.submit({...edit,prompt:'Clay again'},[],'Clay again',clip);});
+    expect(upload).toHaveBeenLastCalledWith([clip],undefined,'owner');
+    expect(submit.mock.calls[1][1]).toMatchObject({sourceVideoId:'uploaded-source'});
+  });
+  it('uploads a staged source that belongs to a different account',async()=>{
+    const runware:AccountSession={...session,providers:['runware'],connections:[{id:'rw',provider:'runware',hint:'test',revision:1}]};
+    useAccountStore.getState().applySession(runware);refresh.mockResolvedValue(runware);
+    upload.mockResolvedValue(['uploaded-source']);
+    const clip=new File(['mp4'],'youtube.mp4',{type:'video/mp4'});
+    stageSource(clip,{uploadId:'someone-elses',owner:'other',expiresAt:Date.now()+86_400_000});
+    const {result}=renderHook(()=>useCloudWorkspace('runware'));
+    await act(async()=>{await result.current.submit({modelId:'bytedance:seedance@2.5',mediaType:'video',inputMode:'edit',prompt:'x',values:{}},[],'x',clip);});
+    expect(submit.mock.calls[0][1]).toMatchObject({sourceVideoId:'uploaded-source'});
+  });
   it('uses the common image workspace account connection without a browser key',async()=>{
     const geminiSession:AccountSession={...session,providers:['gemini'],connections:[{id:'gemini-connection',provider:'gemini',revision:1,hint:'test'}]};
     useAccountStore.getState().applySession(geminiSession);refresh.mockResolvedValue(geminiSession);

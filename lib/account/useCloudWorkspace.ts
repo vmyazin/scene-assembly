@@ -6,6 +6,7 @@ import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
 import { warmAccountSlug } from './asset-name';
 import { refreshAccount } from './session';
 import { submitAccountJob, uploadAccountReferences } from './client';
+import { forgetStagedSource, stagedSourceId } from './staged-sources';
 import type { CloudJobRequest, CloudJobView, CloudProvider } from './contracts';
 
 interface Pending { owner:string;signature:string;files:File[];sourceVideo?:File;token:string;request:CloudJobRequest }
@@ -42,14 +43,18 @@ export function useCloudWorkspace(provider:CloudProvider) {
     const signature=JSON.stringify(request);
     let attempt=pending.current;
     if(!attempt||attempt.owner!==owner||attempt.signature!==signature||attempt.sourceVideo!==sourceVideo||attempt.files.length!==files.length||files.some((file,i)=>file!==attempt!.files[i])){
-      const ids=await uploadAccountReferences([...files,...(sourceVideo?[sourceVideo]:[])],undefined,owner);
+      // A YouTube import is already on the Worker; upload only what is not.
+      const stagedId=sourceVideo?stagedSourceId(sourceVideo,owner):undefined;
+      const ids=await uploadAccountReferences([...files,...(sourceVideo&&!stagedId?[sourceVideo]:[])],undefined,owner);
       assertOwner();
-      const sourceVideoId=sourceVideo?ids.pop():undefined;
+      const sourceVideoId=stagedId??(sourceVideo?ids.pop():undefined);
       attempt={owner,signature,files:[...files],sourceVideo,token:crypto.randomUUID(),request:{...request,provider,referenceIds:ids,...(sourceVideoId?{sourceVideoId}:{})}};
       pending.current=attempt;
     }
     assertOwner();
     const {job}=await submitAccountJob(attempt.token,attempt.request,undefined,owner);
+    // One-use: once a job holds the staged input, cleanup may delete it when that job ends.
+    if(sourceVideo)forgetStagedSource(sourceVideo);
     assertOwner();
     // Same moment as every guest path: the provider has accepted the job. Before
     // this lived here, each workspace's cloud branch returned before its own
