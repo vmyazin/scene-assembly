@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleRequest } from '../src/index';
 import { REFERENCE_USER_AGENT, checkReferenceUrl, fetchReference, sniffMime } from '../src/mcp/fetch-reference';
+import { AccountError } from '../src/jobs';
+import { toRefusal } from '../src/mcp/errors';
 import { resolveReferences } from '../src/mcp/tools/references';
 import { INPUT_TTL, reserveUpload } from '../src/uploads';
 import { agentEnv, OWNER, seedAgent, seedAsset, seedUser } from './agent-fixtures';
@@ -224,6 +226,15 @@ describe('add_reference with youtube', () => {
     const { env } = agentEnv({ YOUTUBE_IMPORTER: fakeImporter(() => failure).namespace });
     const client = await connectAgent(env, await seedAgent(env));
     expect(structured(await client.callTool({ name: 'add_reference', arguments: { youtube } }))).toMatchObject(expected);
+  });
+});
+
+describe('refusal retry hint', () => {
+  it('carries retryAfterSeconds only when the AccountError has one', () => {
+    const plain = new AccountError('Too many staged inputs.', 409, 'input_capacity');
+    expect(toRefusal(plain).structuredContent).not.toHaveProperty('retryAfterSeconds');
+    const hinted = Object.assign(new AccountError('Wait.', 503, 'source_refused'), { retryAfterSeconds: 60 });
+    expect(toRefusal(hinted).structuredContent).toMatchObject({ code: 'source_refused', retryAfterSeconds: 60 });
   });
 });
 

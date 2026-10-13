@@ -34,7 +34,7 @@ function toAccountError(failure: ClipFailure): AccountError {
     case 'rate_limited': return withRetry(new AccountError(`Import limit reached. Try again in ${Math.ceil(wait / 60)} minutes.`, 429, 'import_rate_limited'), wait);
     case 'busy': return withRetry(new AccountError('Another import is still running for this account.', 429, 'import_rate_limited'), wait);
     case 'timeout': return withRetry(new AccountError('The import took too long. Try a shorter section.', 503, 'source_refused'), wait);
-    case 'cancelled': return new AccountError('Import cancelled.', 503, 'source_refused');
+    case 'cancelled': return withRetry(new AccountError('Import cancelled.', 503, 'source_refused'), 5);
     default: return withRetry(new AccountError('YouTube refused the download. Try again in a few minutes.', 503, 'source_refused'), wait);
   }
 }

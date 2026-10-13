@@ -12,7 +12,7 @@ const STAGEABLE = ['image/png', 'image/jpeg', 'image/webp', 'image/avif', 'video
 export const addReference = defineTool({
   name: 'add_reference',
   title: 'Add a reference',
-  description: 'Stage a reference image, or a source video for edit mode, for generate. Pass exactly one of: url (an https link to a media file, downloaded now); upload with the file\'s mimeType and exact byte size, to get a putUrl, then PUT the file there with that Content-Type; or youtube with a YouTube link and startSeconds/endSeconds (one decimal), which cuts that section into an MP4 source video for edit mode — add provider and modelId to check the length against that model. Returns an uploadId to pass to generate (as sourceVideo in edit mode). YouTube imports are limited to 10 per hour per account.',
+  description: 'Stage a reference image, or a source video for edit mode, for generate. Pass exactly one of: url (an https link to a media file, downloaded now); upload with the file\'s mimeType and exact byte size, to get a putUrl, then PUT the file there with that Content-Type; or youtube with a YouTube link and startSeconds/endSeconds (one decimal), which cuts that section into an MP4 source video for edit mode — add provider and modelId to check the length against that model. Returns an uploadId to pass to generate (as sourceVideo in edit mode). YouTube imports are limited to 10 per hour per account. A file already in the library needs no staging: pass { assetId } to generate. An uploadId lasts 24 hours, and a putUrl must be used within 15 minutes.',
   kind: 'write',
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   input: z.object({
