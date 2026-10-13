@@ -3,20 +3,28 @@ import { admit, fromResponse, handleImport, toResponse, type ClipContainer, type
 
 const ID = 'aqz-KE-bpKQ';
 const encode = (text: string) => new TextEncoder().encode(text);
-const process = (stdout: Uint8Array, exit = 0): ClipProcess => ({
+type Scripted = Omit<ClipProcess, 'kill'> & { kill?(signal?: number): void };
+const process = (stdout: Uint8Array, exit = 0): Scripted => ({
   stdout: new Blob([stdout]).stream(), exitCode: Promise.resolve(exit),
   output: async () => ({ stdout: stdout.slice().buffer, stderr: new ArrayBuffer(0), exitCode: exit }),
 });
-function fakeContainer(script: (cmd: string[], options?: { signal?: AbortSignal; env?: Record<string, string> }) => ClipProcess | Promise<ClipProcess>) {
+function fakeContainer(script: (cmd: string[]) => Scripted | Promise<Scripted>) {
   const calls: { cmd: string[]; env?: Record<string, string> }[] = [];
+  /** Every kill() on any process, as the signal argument it received. */
+  const kills: (number | undefined)[] = [];
   let running = false;
   const container: ClipContainer = {
     get running() { return running; },
     start: () => { running = true; },
     setInactivityTimeout: async () => {},
-    exec: async (cmd, options) => { calls.push({ cmd, env: options?.env }); return script(cmd, options); },
+    exec: async (cmd, options) => {
+      expect(options).not.toHaveProperty('signal'); // exec's own signal would SIGKILL and can throw after exit
+      calls.push({ cmd, env: options?.env });
+      const proc = await script(cmd);
+      return { ...proc, kill: signal => { kills.push(signal); proc.kill?.(signal); } };
+    },
   };
-  return { container, calls };
+  return { container, calls, kills };
 }
 const success = (work: string) => JSON.stringify({ ok: true, path: `${work}/clip.mp4`, bytes: 4, width: 1280, height: 720, duration: 12.4 });
 function memory(): GateStorage & { data: Map<string, unknown> } {
@@ -51,17 +59,45 @@ describe('runClip through handleImport', () => {
     expect(await handleImport(deps(reply('Traceback (most recent call last)')), body, signal())).toMatchObject({ ok: false, code: 'failed' });
     expect(await handleImport(deps(reply('{"ok":true,"path":"/etc/passwd","bytes":1,"width":1,"height":1,"duration":1}')), body, signal())).toMatchObject({ ok: false, code: 'failed' });
   });
-  it('reports cancelled and timeout separately, and releases the slot', async () => {
-    const hang = fakeContainer((cmd, options) => cmd[0] === 'python3'
-      ? { stdout: null, exitCode: new Promise<number>(() => {}), output: () => options!.signal!.aborted ? Promise.reject(options!.signal!.reason) : new Promise((_, reject) => options!.signal!.addEventListener('abort', () => reject(options!.signal!.reason))) }
-      : process(new Uint8Array())).container;
-    const cancel = new AbortController();
-    const state = { busy: false };
-    const pending = handleImport(deps(hang, { state }), body, cancel.signal);
-    cancel.abort();
-    expect(await pending).toMatchObject({ ok: false, code: 'cancelled' });
-    expect(state.busy).toBe(false);
-    expect(await handleImport(deps(hang), body, AbortSignal.timeout(5))).toMatchObject({ ok: false, code: 'timeout' });
+  it('reports cancelled and timeout separately, sends SIGTERM, and releases the slot', async () => {
+    // A process that only ends once it is killed; `settle` decides whether output() rejects or resolves.
+    const hang = (settle: 'reject' | 'resolve') => {
+      const fake = fakeContainer(cmd => {
+        if (cmd[0] !== 'python3') return process(new Uint8Array());
+        let end!: () => void;
+        const ended = new Promise<void>(resolve => { end = resolve; });
+        return {
+          stdout: null, exitCode: ended.then(() => 143),
+          output: () => ended.then(() => settle === 'reject' ? Promise.reject(new Error('killed')) : { stdout: new ArrayBuffer(0), stderr: new ArrayBuffer(0), exitCode: 143 }),
+          kill: () => end(),
+        };
+      });
+      return fake;
+    };
+    for (const settle of ['reject', 'resolve'] as const) {
+      const fake = hang(settle);
+      const cancel = new AbortController();
+      const state = { busy: false };
+      const pending = handleImport(deps(fake.container, { state }), body, cancel.signal);
+      cancel.abort();
+      expect(await pending).toMatchObject({ ok: false, code: 'cancelled' });
+      expect(state.busy).toBe(false);
+      expect(fake.kills).toHaveLength(1);
+      expect([undefined, 15]).toContain(fake.kills[0]);
+      const timed = hang(settle);
+      expect(await handleImport(deps(timed.container), body, AbortSignal.timeout(5))).toMatchObject({ ok: false, code: 'timeout' });
+      expect(timed.kills).toHaveLength(1);
+      expect([undefined, 15]).toContain(timed.kills[0]);
+    }
+  });
+  it('kills a running process on a later abort but never touches one that already exited', async () => {
+    const { container, kills } = fakeContainer(cmd => cmd[0] === 'python3' ? process(encode(success('/tmp/clips/work-1'))) : process(encode('MP4!')));
+    const controller = new AbortController();
+    const result = await handleImport(deps(container), body, controller.signal);
+    await new Response((result as { body: ReadableStream }).body).text();
+    await Promise.resolve();
+    controller.abort();
+    expect(kills).toEqual([]);
   });
   it('refuses a second import while one runs, and a container that never starts', async () => {
     expect(await handleImport(deps(fakeContainer(() => process(new Uint8Array())).container, { state: { busy: true } }), body, signal()))

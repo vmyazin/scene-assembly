@@ -5,11 +5,13 @@ export interface ClipProcess {
   stdout: ReadableStream<Uint8Array> | null;
   exitCode: Promise<number>;
   output(): Promise<{ stdout: ArrayBuffer; stderr: ArrayBuffer; exitCode: number }>;
+  /** Queues a signal; the default is SIGTERM. */
+  kill(signal?: number): void;
 }
 export interface ClipContainer {
   readonly running: boolean;
   start(options: { enableInternet: boolean }): void;
-  exec(cmd: string[], options?: { env?: Record<string, string>; signal?: AbortSignal; stdout?: 'pipe' | 'ignore'; stderr?: 'pipe' | 'ignore' }): Promise<ClipProcess>;
+  exec(cmd: string[], options?: { env?: Record<string, string>; stdout?: 'pipe' | 'ignore'; stderr?: 'pipe' | 'ignore' }): Promise<ClipProcess>;
   setInactivityTimeout(durationMs: number): Promise<void>;
 }
 export interface GateStorage {
@@ -73,6 +75,19 @@ async function ready(container: ClipContainer, sleep: (ms: number) => Promise<vo
 const aborted = (signal: AbortSignal): ClipFailure =>
   ({ ok: false, code: (signal.reason as { name?: string } | undefined)?.name === 'TimeoutError' ? 'timeout' : 'cancelled', detail: '' });
 
+/** Deliberately not exec()'s own `signal` option: that sends SIGKILL to the exec'd
+ *  process only, which would orphan yt-dlp and ffmpeg and skip clip.py's SIGTERM
+ *  handler (it kills the whole process group), and aborting an exec that already
+ *  exited throws inside the Durable Object. kill() defaults to SIGTERM, and the
+ *  listener goes away once the process has exited. */
+function killOnAbort(proc: ClipProcess, signal: AbortSignal) {
+  if (signal.aborted) { proc.kill(); return; }
+  const kill = () => proc.kill();
+  signal.addEventListener('abort', kill, { once: true });
+  const remove = () => signal.removeEventListener('abort', kill);
+  proc.exitCode.then(remove, remove);
+}
+
 export async function runClip(container: ClipContainer, request: ClipRequest, options: { proxyUrl?: string; signal: AbortSignal; workId: string; sleep(ms: number): Promise<void> }): Promise<ClipResult> {
   await ready(container, options.sleep);
   const work = `/tmp/clips/${options.workId}`;
@@ -81,8 +96,9 @@ export async function runClip(container: ClipContainer, request: ClipRequest, op
   try {
     const clip = await container.exec(
       ['python3', '/app/clip.py', request.videoId, request.startSeconds.toFixed(1), request.endSeconds.toFixed(1), work],
-      { env: options.proxyUrl ? { YOUTUBE_PROXY_URL: options.proxyUrl } : {}, signal: options.signal, stdout: 'pipe', stderr: 'ignore' },
+      { env: options.proxyUrl ? { YOUTUBE_PROXY_URL: options.proxyUrl } : {}, stdout: 'pipe', stderr: 'ignore' },
     );
+    killOnAbort(clip, options.signal);
     line = new TextDecoder().decode((await clip.output()).stdout).trim().split('\n').at(-1) ?? '';
   } catch (error) {
     if (!options.signal.aborted) throw error;
@@ -101,7 +117,8 @@ export async function runClip(container: ClipContainer, request: ClipRequest, op
     void cleanup();
     return { ok: false, code: 'failed', detail: 'The importer returned an unreadable result.' };
   }
-  const file = await container.exec(['cat', path], { signal: options.signal, stdout: 'pipe', stderr: 'ignore' });
+  const file = await container.exec(['cat', path], { stdout: 'pipe', stderr: 'ignore' });
+  killOnAbort(file, options.signal);
   if (!file.stdout) { void cleanup(); return { ok: false, code: 'failed', detail: 'The clip could not be read back.' }; }
   void file.exitCode.then(cleanup, cleanup);
   return { ok: true, body: file.stdout, bytes: bytes as number, width: width as number, height: height as number, durationSeconds: duration as number };
