@@ -18,4 +18,7 @@ COPY --from=ffmpeg /ffmpeg /ffprobe /usr/local/bin/
 COPY --from=deno /deno /usr/local/bin/deno
 RUN pip install --no-cache-dir "yt-dlp[default]==${YTDLP_VERSION}"
 COPY clip.py /app/clip.py
+# Nothing listens here: the Durable Object only exec()s clip.py. Wrangler's local dev
+# refuses an image that exposes no port, so declare one.
+EXPOSE 8080
 CMD ["sleep", "infinity"]
