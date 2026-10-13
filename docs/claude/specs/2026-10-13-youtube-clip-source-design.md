@@ -1,7 +1,45 @@
 # YouTube clip as an edit source
 
-Status: Approved design (pending written-spec review)
+Status: Approved design
 Date: 2026-10-13
+
+## Follow-up decisions (2026-10-13, while planning)
+
+These override the body below where they differ. Each was forced by code or docs read
+during planning; the plan is `docs/claude/plans/2026-10-13-youtube-clip-source.md`.
+
+- **Module and route names.** `cloud/src/imports.ts` and `/api/account/imports/*`
+  already belong to the browser → cloud library import, and the gateway's `imports(/…)`
+  pattern would route `imports/youtube` into it. The Worker code lives in
+  `cloud/src/youtube/` and the browser route is `POST /api/account/youtube-clips`.
+- **Durable Object Container API, no HTTP server in the image.** Cloudflare now
+  recommends `ctx.container` for new applications; its `exec()` runs `clip.py` directly
+  and streams the file back through `cat`. The image holds Python, yt-dlp, Deno (yt-dlp
+  needs a JavaScript runtime for YouTube) and a static ffmpeg, and its entrypoint only
+  sleeps. Configuration uses the `exports` block, not legacy `migrations`.
+- **Known-size write.** `clip.py` reports the byte count before the Worker reads the
+  file, so the Worker uses `storeUpload` (known size) rather than `storeStreamedUpload`.
+- **Catalog-wide bound is 1–30 s, not 4–30 s.** P-Video-Edit has no minimum; the floor is
+  a 1-second application minimum.
+- **Exact length.** `clip.py` passes `-t <end − start>` to ffmpeg, and the Worker accepts
+  a probed length up to 0.25 s over the request (reporting the requested length), because
+  container padding of a few hundredths of a second would otherwise fail a 30.0 s
+  section against a 30 s maximum.
+- **Cancellation.** The Worker gains the `enable_request_signal` compatibility flag so a
+  disconnecting browser aborts `exec()`. The Next gateway forwards the browser's abort
+  and allows this one path 130 s instead of its 25 s upstream timeout.
+- **Browser preview link.** Vercel cannot return a 30 MB body, so the route returns a
+  10-minute `preview` media link on the Worker origin (a new `account_media_tokens`
+  purpose, no schema change) and the browser fetches the clip from there.
+- **One-use staging.** The upload cleanup deletes an input once every job holding it has
+  finished, so a staged clip is used for one submission only; a second edit with the same
+  source re-uploads the browser's copy.
+- **Same-account concurrency** is refused as `import_rate_limited` ("Another import is
+  still running for this account."), since it is the per-account limit doing the refusing.
+- **Local development.** `wrangler.jsonc` sets `dev.enable_containers: false` so
+  `pnpm dev` keeps working without Docker; `pnpm dev:containers` turns them on.
+- **Preview Worker.** `wrangler.preview.jsonc` gets no container; there the route answers
+  `source_refused` ("YouTube import is not available right now.").
 
 ## Context
 
