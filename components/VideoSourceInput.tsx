@@ -9,6 +9,7 @@ import { probeDimensions, type ProbedDimensions } from '@/lib/timeline/probe';
 import type { ProviderModel } from '@/lib/providers/types';
 import { validateEditVideo, validateEditSource } from '@/lib/providers/video-edit';
 import { formatClock, watchUrl, type ClipSource } from '@/lib/youtube/clip';
+import { discardStagedSource } from '@/lib/account/staged-sources';
 import { useAccountStore } from '@/store/useAccountStore';
 
 export interface SourceVideo extends ProbedDimensions { file: File; epoch: number; origin?: ClipSource }
@@ -37,6 +38,12 @@ export default function VideoSourceInput({source, onChange, disabled, capability
   const [reading, setReading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => () => { sequence.current++; }, []);
+  /** A YouTube import that stops being (or never becomes) the source is released on the
+   *  Worker; device and library files are not staged, so this is a no-op for them. */
+  function change(next: SourceVideo | null) {
+    if (source && source.file !== next?.file) discardStagedSource(source.file);
+    onChange(next);
+  }
   async function select(file: File, origin?: ClipSource) {
     const turn = ++sequence.current;
     const epoch = useAccountStore.getState().epoch;
@@ -45,10 +52,11 @@ export default function VideoSourceInput({source, onChange, disabled, capability
       validateEditVideo(file);
       const dimensions = await probeDimensions(file);
       validateEditSource(dimensions, capability);
-      if (turn !== sequence.current) return;
+      if (turn !== sequence.current) { discardStagedSource(file); return; }
       if (useAccountStore.getState().epoch !== epoch) throw new Error('Your account changed. Choose the source again.');
-      onChange({file, ...dimensions, epoch, ...(origin ? {origin} : {})}); setOpen(false);
+      change({file, ...dimensions, epoch, ...(origin ? {origin} : {})}); setOpen(false);
     } catch (cause) {
+      discardStagedSource(file);
       if (turn === sequence.current) setError(cause instanceof Error ? cause.message : 'Could not read that video.');
       throw cause;
     } finally { if (turn === sequence.current) setReading(false); }
@@ -66,7 +74,7 @@ export default function VideoSourceInput({source, onChange, disabled, capability
       <button type="button" disabled={disabled || reading} onClick={() => setOpen(true)} className="flex items-center justify-center gap-2 rounded-xl border border-[var(--neon-cyan)]/30 bg-[var(--neon-cyan)]/5 px-4 py-3 text-sm font-medium text-[var(--foreground-muted)] transition-colors enabled:hover:border-[var(--neon-cyan)]/60 enabled:hover:bg-[var(--neon-cyan)]/10 enabled:hover:text-[var(--neon-cyan)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neon-cyan)] disabled:cursor-not-allowed disabled:opacity-50"><Library size={18} aria-hidden="true"/>From library</button>
       {youtube && <button type="button" disabled={disabled || reading} onClick={() => setYoutubeOpen(true)} className="flex items-center justify-center gap-2 rounded-xl border border-[var(--neon-cyan)]/30 bg-[var(--neon-cyan)]/5 px-4 py-3 text-sm font-medium text-[var(--foreground-muted)] transition-colors enabled:hover:border-[var(--neon-cyan)]/60 enabled:hover:bg-[var(--neon-cyan)]/10 enabled:hover:text-[var(--foreground)]"><Scissors size={18}/> From YouTube</button>}
     </div>
-    {source && <button type="button" disabled={disabled || reading} className="text-xs text-[var(--foreground-muted)] hover:text-[var(--foreground)]" onClick={() => onChange(null)}>Remove source video</button>}
+    {source && <button type="button" disabled={disabled || reading} className="text-xs text-[var(--foreground-muted)] hover:text-[var(--foreground)]" onClick={() => change(null)}>Remove source video</button>}
     {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
     <LibraryOverlay open={open} onOpenChange={setOpen} purpose="pick-clip" onPickVideo={select}/>
     {youtube && <YouTubeClipDialog open={youtubeOpen} target={youtube} onClose={() => setYoutubeOpen(false)} onImported={(file, origin) => select(file, origin)} />}

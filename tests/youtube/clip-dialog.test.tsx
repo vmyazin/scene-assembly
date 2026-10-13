@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import YouTubeClipDialog from '@/components/YouTubeClipDialog';
 import { createClipPlayer } from '@/lib/youtube/iframe-api';
+import { stageSource, stagedSourceId } from '@/lib/account/staged-sources';
 import { useAccountStore, type AccountSession } from '@/store/useAccountStore';
 
 const { player, importClip } = vi.hoisted(() => ({
@@ -58,8 +59,18 @@ describe('YouTubeClipDialog', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'To' }), { target: { value: '1:14.4' } });
     fireEvent.click(screen.getByRole('button', { name: 'Import clip' }));
     act(() => { useAccountStore.getState().clear(); useAccountStore.getState().applySession({ ...session, account: { id: 'other', name: 'Other', email: 'x@example.test' } }); });
-    await act(async () => { finish({ file, source: { videoId: 'aqz-KE-bpKQ', startSeconds: 62, endSeconds: 74.4 } }); });
-    expect(onImported).not.toHaveBeenCalled();
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    vi.stubGlobal('fetch', fetcher);
+    const dropped = new File(['mp4'], 'dropped.mp4', { type: 'video/mp4' });
+    stageSource(dropped, { uploadId: 'dropped', owner: 'owner', expiresAt: Date.now() + 86_400_000 });
+    try {
+      await act(async () => { finish({ file: dropped, source: { videoId: 'aqz-KE-bpKQ', startSeconds: 62, endSeconds: 74.4 } }); });
+      expect(onImported).not.toHaveBeenCalled();
+      // Released as the account that imported it; the clip is never attached.
+      expect(stagedSourceId(dropped, 'owner')).toBeUndefined();
+      await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/account/uploads/dropped', expect.objectContaining({ method: 'DELETE' })));
+      expect(new Headers((fetcher.mock.calls[0][1] as RequestInit).headers).get('X-Account-Id')).toBe('owner');
+    } finally { vi.unstubAllGlobals(); }
   });
   it('cancels an import in flight and says so', async () => {
     importClip.mockImplementation((_input, signal: AbortSignal) => new Promise((_, reject) => signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))));

@@ -1,5 +1,5 @@
 import { accountRequest } from './client';
-import { stageSource } from './staged-sources';
+import { discardUpload, stageSource } from './staged-sources';
 import type { ClipSource } from '@/lib/youtube/clip';
 
 export interface YouTubeClipInput { url: string; startSeconds: number; endSeconds: number; provider: string; modelId: string }
@@ -16,9 +16,16 @@ export async function importYouTubeClip(input: YouTubeClipInput, signal: AbortSi
     body: JSON.stringify({ url: input.url, startSeconds: input.startSeconds, endSeconds: input.endSeconds, edit: { provider: input.provider, modelId: input.modelId } }),
   });
   onImported?.();
-  const response = await fetch(clip.previewUrl, { signal, credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' });
-  if (!response.ok) throw new Error('The clip was imported but could not be loaded. Try again.');
-  const file = new File([await response.blob()], `youtube-${clip.source.videoId}-${Math.floor(clip.source.startSeconds)}s.mp4`, { type: 'video/mp4' });
+  let file: File;
+  try {
+    const response = await fetch(clip.previewUrl, { signal, credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' });
+    if (!response.ok) throw new Error('The clip was imported but could not be loaded. Try again.');
+    file = new File([await response.blob()], `youtube-${clip.source.videoId}-${Math.floor(clip.source.startSeconds)}s.mp4`, { type: 'video/mp4' });
+  } catch (error) {
+    // Cancelled or failed after the Worker stored it: nothing else knows this id.
+    void discardUpload(clip.uploadId, owner);
+    throw error;
+  }
   stageSource(file, { uploadId: clip.uploadId, owner, expiresAt: clip.expiresAt });
   return { file, source: clip.source };
 }

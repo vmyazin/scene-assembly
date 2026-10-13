@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Loader2, Play, Square, X } from 'lucide-react';
 import DialogPortal from '@/components/DialogPortal';
 import { useAccessibleDialog } from '@/hooks/useAccessibleDialog';
+import { discardStagedSource } from '@/lib/account/staged-sources';
 import { importYouTubeClip } from '@/lib/account/youtube-clips';
 import { createClipPlayer, type ClipPlayer } from '@/lib/youtube/iframe-api';
 import { formatClock, importBounds, parseClock, parseYouTubeUrl, rangeProblem, roundTenth, type ClipSource } from '@/lib/youtube/clip';
@@ -116,7 +117,7 @@ export default function YouTubeClipDialog({ open, target, onClose, onImported }:
     try {
       const { file, source } = await importYouTubeClip({ url: linkText, startSeconds: from, endSeconds: to, provider: target.provider, modelId: target.modelId }, abort.signal, owner, () => setPhase('preparing'));
       // A clip imported for one account never attaches after a switch to another.
-      if (switched || useAccountStore.getState().epoch !== epoch) { setError(ACCOUNT_CHANGED); return; }
+      if (switched || useAccountStore.getState().epoch !== epoch) { discardStagedSource(file); setError(ACCOUNT_CHANGED); return; }
       attaching = true; setPhase('attaching');
       await onImported(file, source);
       onClose();
