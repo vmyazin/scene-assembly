@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { roundTenth } from '../../lib/youtube/clip';
 import { handleRequest } from '../src/index';
 import { importYouTubeClip } from '../src/youtube/import';
-import { accountCall, agentEnv, OWNER, signIn } from './agent-fixtures';
+import { mediaAccess } from '../src/media';
+import { accountCall, agentEnv, OWNER, seedUser, signIn } from './agent-fixtures';
 import { CLIP_BYTES, clipOk, fakeImporter } from './youtube-fixtures';
 
 const URL_ = 'https://youtu.be/aqz-KE-bpKQ?si=x';
@@ -109,6 +110,34 @@ describe('POST /api/account/youtube-clips', () => {
     const response = await accountCall(env, 'youtube-clips', 'POST', await signIn(env), { url: URL_, startSeconds: 62, endSeconds: 74.4 });
     expect(response.status).toBe(429);
     expect(await response.json()).toEqual({ error: 'Import limit reached. Try again in 10 minutes.', code: 'import_rate_limited', retryAfterSeconds: 600 });
+  });
+  it('serves a preview link only to its own reader, while the upload is live, and never for writing', async () => {
+    const { env, db } = agentEnv({ YOUTUBE_IMPORTER: fakeImporter(() => clipOk()).namespace });
+    const cookie = await signIn(env);
+    const imported = async () => await (await accountCall(env, 'youtube-clips', 'POST', cookie, { url: URL_, startSeconds: 62, endSeconds: 74.4 })).json() as { uploadId: string; previewUrl: string };
+    // A link minted for another account cannot read this account's upload.
+    const mine = await imported();
+    seedUser(db, 'intruder');
+    const theirs = await mediaAccess(env, 'intruder', mine.uploadId, 'preview');
+    expect((await handleRequest(new Request(theirs.url), env)).status).toBe(404);
+    // Writing through a preview link is refused outright.
+    expect((await handleRequest(new Request(mine.previewUrl, { method: 'PUT', body: 'x', headers: { origin: env.APP_ORIGIN } }), env)).status).toBe(405);
+    // A deleted upload is gone.
+    db.prepare("UPDATE account_uploads SET state='deleted' WHERE id=?").run(mine.uploadId);
+    expect((await handleRequest(new Request(mine.previewUrl), env)).status).toBe(404);
+    // An expired link is refused even though the upload is still ready.
+    const fresh = await imported();
+    expect((await handleRequest(new Request(fresh.previewUrl), env)).status).toBe(200);
+    db.prepare("UPDATE account_media_tokens SET expires_at=1 WHERE purpose='preview'").run();
+    expect((await handleRequest(new Request(fresh.previewUrl), env)).status).toBe(404);
+  });
+  it('tombstones the new upload when the preview link cannot be issued', async () => {
+    const { env, db } = agentEnv({ YOUTUBE_IMPORTER: fakeImporter(() => clipOk()).namespace });
+    const cookie = await signIn(env);
+    db.exec("CREATE TRIGGER no_links BEFORE INSERT ON account_media_tokens BEGIN SELECT RAISE(ABORT, 'D1 unavailable'); END");
+    const response = await accountCall(env, 'youtube-clips', 'POST', cookie, { url: URL_, startSeconds: 62, endSeconds: 74.4 });
+    expect(response.status).toBeGreaterThanOrEqual(500);
+    expect(db.prepare('SELECT state FROM account_uploads').all()).toEqual([{ state: 'deleted' }]);
   });
   it('refuses malformed bodies', async () => {
     const { env } = agentEnv({ YOUTUBE_IMPORTER: fakeImporter(() => clipOk()).namespace });

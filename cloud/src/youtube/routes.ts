@@ -2,6 +2,7 @@ import { mediaAccess } from '../media';
 import { AccountError } from '../jobs';
 import { json, type Env } from '../security';
 import { currentAccount } from '../sessions';
+import { discardUploads } from '../uploads';
 import { importYouTubeClip, type YouTubeImportInput } from './import';
 
 function parseBody(value: unknown): YouTubeImportInput | null {
@@ -29,7 +30,14 @@ export async function youtubeRoutes(request: Request, env: Env): Promise<Respons
   try {
     const clip = await importYouTubeClip(env, account.id, input, request.signal);
     // Vercel cannot relay a clip this size, so the browser fetches it from the Worker origin.
-    const preview = await mediaAccess(env, account.id, clip.uploadId, 'preview');
+    let preview: Awaited<ReturnType<typeof mediaAccess>>;
+    try { preview = await mediaAccess(env, account.id, clip.uploadId, 'preview'); }
+    catch (error) {
+      // The browser never learns this upload's id, so nothing would ever delete it, and it
+      // would hold the account's temporary-input room for 24 hours.
+      await discardUploads(env, account.id, [clip.uploadId]);
+      throw error;
+    }
     return json({ ...clip, previewUrl: preview.url }, 201);
   } catch (error) {
     if (!(error instanceof AccountError)) throw error;
