@@ -20,6 +20,10 @@ export interface Env {
   OAUTH_PROVIDER?: OAuthHelpers;
   OAUTH_KV?: KVNamespace;
   IMAGES?: ImagesBinding;
+  /** Per-account YouTube clip importer (a Durable Object with a container). */
+  YOUTUBE_IMPORTER?: DurableObjectNamespace;
+  /** Residential proxy for the importer; YouTube refuses most datacenter IPs. A secret. */
+  YOUTUBE_PROXY_URL?: string;
 }
 export function isLocal(env: Env): boolean {
   return typeof __LOCAL_DEV__ !== 'undefined' && __LOCAL_DEV__ === true

@@ -5,6 +5,7 @@ import { withResourceDocumentation } from './mcp/docs';
 import { mcpApiHandler } from './mcp/handler';
 import { json, type Env } from './security';
 export { GenerationWorkflow } from './workflow';
+export { YouTubeImporter } from './youtube/importer';
 
 /**
  * Paths the OAuth library itself answers. When `mcpResource` finds no usable

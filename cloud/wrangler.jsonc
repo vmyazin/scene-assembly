@@ -24,6 +24,17 @@
   // Inline previews for the agents' view_asset tool. Local by default in Wrangler 4.
   "images": { "binding": "IMAGES" },
   "workflows": [{ "binding": "GENERATION", "name": "scene-assembly-generation", "class_name": "GenerationWorkflow" }],
+  // YouTube clip import (docs/claude/specs/2026-10-13-youtube-clip-source-design.md).
+  // A container because yt-dlp and ffmpeg need a real process; one Durable Object per
+  // account, so max_instances is also the global concurrency cap. standard-2 keeps a
+  // 30 s 1080p re-encode inside the 120 s ceiling.
+  "containers": [{ "class_name": "YouTubeImporter", "image": "./containers/youtube/Dockerfile", "max_instances": 3, "instance_type": "standard-2" }],
+  "durable_objects": { "bindings": [{ "name": "YOUTUBE_IMPORTER", "class_name": "YouTubeImporter" }] },
+  "exports": { "YouTubeImporter": { "type": "durable-object", "storage": "sqlite" } },
+  // A disconnecting browser must abort the import's exec(), which reads request.signal.
+  "compatibility_flags": ["enable_request_signal"],
+  // `pnpm dev` must keep working without Docker; `pnpm dev:containers` turns them on.
+  "dev": { "enable_containers": false },
   // File capabilities live in URL paths. Do not retain request URLs in invocation logs.
   "observability": { "enabled": true, "logs": { "invocation_logs": false } },
   "triggers": { "crons": ["*/5 * * * *"] },

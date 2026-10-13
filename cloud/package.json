@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --local --port 8797 --define __LOCAL_DEV__:true",
+    "dev:containers": "wrangler dev --local --port 8797 --define __LOCAL_DEV__:true --enable-containers",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "deploy": "wrangler deploy"

@@ -25,4 +25,14 @@ describe('agent MCP deployment configuration', () => {
     expect(preview.kv_namespaces[0].id).toMatch(/^[0-9a-f]{32}$/);
     expect(preview.kv_namespaces[0].id).not.toBe(config('wrangler.jsonc').kv_namespaces[0].id);
   });
+
+  it('runs the YouTube importer as a capped container on a request-signal Worker, without forcing Docker on pnpm dev', () => {
+    const production = config('wrangler.jsonc');
+    expect(production.containers).toEqual([expect.objectContaining({ class_name: 'YouTubeImporter', max_instances: 3, image: './containers/youtube/Dockerfile' })]);
+    expect(production.durable_objects.bindings).toContainEqual({ name: 'YOUTUBE_IMPORTER', class_name: 'YouTubeImporter' });
+    expect(production.exports.YouTubeImporter).toEqual({ type: 'durable-object', storage: 'sqlite' });
+    expect(production.compatibility_flags).toContain('enable_request_signal');
+    expect(production.dev.enable_containers).toBe(false);
+    expect(config('wrangler.preview.jsonc').containers).toBeUndefined();
+  });
 });
