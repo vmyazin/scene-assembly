@@ -21,6 +21,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { useDraftStore } from '@/store/useDraftStore';
 import { useGalleryStore } from '@/store/useGalleryStore';
 import { useTimelineStore } from '@/store/useTimelineStore';
+import { saveBlobAs } from '@/lib/save-file';
 
 /** Generous ceiling; the workspace trims to its own model's limit on mount. */
 const REFERENCE_LIMIT = 8;
@@ -217,15 +218,7 @@ export default function GalleryGrid({
         record.kind === 'image'
           ? await convertedForDownload(record.blob, imageFormat)
           : record.blob;
-      const url = URL.createObjectURL(saved);
-      try {
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${base}.${extensionForMedia(record.kind, saved.type || record.mimeType)}`;
-        link.click();
-      } finally {
-        URL.revokeObjectURL(url);
-      }
+      saveBlobAs(saved, `${base}.${extensionForMedia(record.kind, saved.type || record.mimeType)}`);
       return;
     }
     if (record.sourceUrl) {

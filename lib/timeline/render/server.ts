@@ -1,4 +1,5 @@
 import type { RenderEngine, RenderProgress, RenderRequest } from './port';
+import { formatBytes } from '@/lib/format-bytes';
 
 /**
  * The client half of server-side rendering: uploads the timeline to
@@ -22,18 +23,6 @@ const NOT_APPROVED = 'Your account is not approved for server rendering.';
 
 function abortError(): DOMException {
   return new DOMException('The export was cancelled.', 'AbortError');
-}
-
-function formatBytes(bytes: number): string {
-  const units = ['KB', 'MB', 'GB', 'TB'];
-  if (bytes < 1024) return `${bytes} B`;
-  let value = bytes / 1024;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
 }
 
 async function safeJson(response: Response): Promise<Record<string, unknown> | null> {

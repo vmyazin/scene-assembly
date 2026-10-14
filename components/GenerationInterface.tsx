@@ -89,6 +89,7 @@ import {
   Info,
   Sparkles,
 } from 'lucide-react';
+import { fileAsDataUrl } from '@/lib/file-data-url';
 
 interface GenerationInterfaceProps {
   feature: Feature;
@@ -98,20 +99,6 @@ interface GenerationInterfaceProps {
   /** Switch to image-to-video, seeded with a finished image. */
   onUseAsFirstFrame?: () => void;
 }
-
-const readImageAsDataUrl = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        resolve(reader.result);
-      } else {
-        reject(new Error('Image could not be read'));
-      }
-    };
-    reader.onerror = () => reject(reader.error ?? new Error('Image could not be read'));
-    reader.readAsDataURL(file);
-  });
 
 const RESOLUTION_OPTIONS = ['1K', '2K', '4K'].map((value) => ({
   label: value,
@@ -527,7 +514,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
     Promise.all(
       references.map(async (reference) => ({
         id: reference.id,
-        dataUrl: await readImageAsDataUrl(reference.file),
+        dataUrl: await fileAsDataUrl(reference.file, 'Image could not be read'),
       }))
     )
       .then((next) => {

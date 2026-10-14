@@ -153,6 +153,9 @@ export default function KieGenerationWorkspace({
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [isReadingFrame, setIsReadingFrame] = useState(false);
   const autoRetry = useAutoRetry();
+  // Latest submit, so a queued retry re-runs the button's own path with the
+  // prompt and settings on screen now, not the ones from the failed render.
+  const submitRef = useRef<() => void>(() => {});
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Latest addReferences, so the paste listener attaches once instead of per render.
   const addReferencesRef = useRef<(files: File[]) => Promise<void>>(async () => {});
@@ -474,12 +477,16 @@ export default function KieGenerationWorkspace({
       // Only for failures that never reached a decision: a rejected key or an
       // empty balance would fail identically five more times, and the retry
       // would only bury the sentence explaining why.
-      const retrying = !cloudWorkspace.cloud && isRetryableFailure(submissionError) && autoRetry.schedule(() => void submit());
+      const retrying = !cloudWorkspace.cloud && isRetryableFailure(submissionError) && autoRetry.schedule(() => submitRef.current());
       toast.error(retrying ? `${message} Retrying in ${AUTO_RETRY_DELAY_SECONDS}s.` : message);
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    submitRef.current = () => void submit();
+  });
 
   const refusal = error
     ? refusalPresentation(error, {

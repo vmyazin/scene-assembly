@@ -5,6 +5,7 @@ import { Check, Clipboard, Film, ImageDown, Loader2 } from 'lucide-react';
 
 import { extractLastFrame, FRAME_EXTRACTION_ERROR, lastFrameFilename } from '@/lib/video-frame';
 import { useSeedFrameStore } from '@/store/useSeedFrameStore';
+import { saveBlobAs } from '@/lib/save-file';
 
 interface LastFrameActionsProps {
   videoUrl: string;
@@ -76,15 +77,7 @@ export default function LastFrameActions({
   const save = () =>
     run('save', async () => {
       const blob = await ensureFrame();
-      const objectUrl = URL.createObjectURL(blob);
-      try {
-        const link = document.createElement('a');
-        link.href = objectUrl;
-        link.download = lastFrameFilename(filenameBase);
-        link.click();
-      } finally {
-        URL.revokeObjectURL(objectUrl);
-      }
+      saveBlobAs(blob, lastFrameFilename(filenameBase));
     });
 
   const copy = () =>

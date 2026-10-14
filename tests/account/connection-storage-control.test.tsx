@@ -86,12 +86,13 @@ describe('ConnectionStorageControl', () => {
     expect(useAppStore.getState().accountKeyOptOuts).toEqual(['gemini']);
   });
 
-  it('cancelling the confirm leaves the connection untouched', () => {
+  it('cancelling the confirm leaves the connection untouched', async () => {
     signIn([gemini()]);
     render(<><ConnectionStorageButton provider="gemini" apiKey="AIzaSyLocal" /><ConnectionStorageBadge provider="gemini" apiKey="AIzaSyLocal" /></>);
     fireEvent.click(screen.getByRole('button', { name: /Remove from account/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    // The dialog stays mounted so its exit animation can play.
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
     expect(removeConnection).not.toHaveBeenCalled();
   });
 

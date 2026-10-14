@@ -17,6 +17,8 @@ import { resolveTrim, trimmedDuration } from '@/lib/timeline/trim';
 import { useGalleryStore } from '@/store/useGalleryStore';
 import type { TimelineClip, TimelineOutput } from '@/store/useTimelineStore';
 import type { ClipState } from '@/components/TimelineWorkspace';
+import { formatBytes } from '@/lib/format-bytes';
+import { saveBlobAs } from '@/lib/save-file';
 
 export interface TimelineExportPanelProps {
   /**
@@ -31,18 +33,6 @@ export interface TimelineExportPanelProps {
   output: TimelineOutput;
 }
 
-function formatBytes(bytes: number): string {
-  const units = ['KB', 'MB', 'GB', 'TB'];
-  if (bytes < 1024) return `${bytes} B`;
-  let value = bytes / 1024;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
-}
-
 function titleOf(record: { slug?: string; prompt?: string } | undefined) {
   if (!record) return 'Untitled clip';
   return record.slug?.replace(/-/g, ' ') || record.prompt || 'Untitled clip';
@@ -54,26 +44,6 @@ const PHASE_LABEL: Record<RenderProgress['phase'], string> = {
   muxing: 'Finalizing',
   uploading: 'Uploading',
 };
-
-/**
- * Downloads the finished blob via a throwaway anchor.
- *
- * Never written back into the gallery *automatically* — doing that would
- * double the storage cost of every export against a budget the pinning rules
- * already strain. The end state below offers a "Save to library" button
- * instead, so the cost is paid only for the exports somebody deliberately
- * keeps, and the bytes are not thrown away by the one path that has them.
- */
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
-}
 
 /**
  * Timestamped so two exports in one session never collide, and kept at module
@@ -313,8 +283,14 @@ export default function TimelineExportPanel({ engines, clips, clipStates, output
       // The download still fires on its own — that is what someone pressing
       // Export asked for. What is new is that the panel says what it produced
       // rather than snapping back as though nothing happened.
+      //
+      // Never written back into the gallery *automatically* — doing that would
+      // double the storage cost of every export against a budget the pinning rules
+      // already strain. The end state below offers a "Save to library" button
+      // instead, so the cost is paid only for the exports somebody deliberately
+      // keeps, and the bytes are not thrown away by the one path that has them.
       const filename = exportFilename();
-      downloadBlob(blob, filename);
+      saveBlobAs(blob, filename);
       setRender(null);
       setCompleted({
         blob,
@@ -451,7 +427,7 @@ export default function TimelineExportPanel({ engines, clips, clipStates, output
               costs nothing, because the bytes are still here. */}
           <button
             type="button"
-            onClick={() => downloadBlob(completed.blob, completed.filename)}
+            onClick={() => saveBlobAs(completed.blob, completed.filename)}
             className="btn-secondary px-3 py-1.5 text-xs"
           >
             <Download size={13} aria-hidden /> Download

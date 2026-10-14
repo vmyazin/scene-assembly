@@ -10,6 +10,7 @@ import SpendLedger from '@/components/spend/SpendLedger';
 import SpendSummary from '@/components/spend/SpendSummary';
 import { providerLabel, type SpendEntry, type SpendProvider } from '@/lib/spend/ledger';
 import { byDay, byModel, byProvider, inRange, toCsv, totals, type SpendRange, type SpendTotals } from '@/lib/spend/rollup';
+import { saveBlobAs } from '@/lib/save-file';
 
 interface SpendReportProps {
   source: 'account' | 'browser';
@@ -51,12 +52,7 @@ export default function SpendReport({
 
   const exportCsv = () => {
     const blob = new Blob([toCsv(shown)], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `scene-assembly-spend-${cloud ? 'cloud' : 'browser'}-${range}.csv`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    saveBlobAs(blob, `scene-assembly-spend-${cloud ? 'cloud' : 'browser'}-${range}.csv`);
   };
 
   if (loading && entries.length === 0) {

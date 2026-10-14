@@ -1,6 +1,5 @@
 'use client';
 import { useState } from 'react';
-import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import type { CloudJobView } from '@/lib/account/contracts';
@@ -55,7 +54,7 @@ export default function CloudJobList({jobs,onResume,onCancel,onDismiss,onClear,b
     </div>}
     {failure&&<JobFailureDetails key={`${job.id}-${job.updatedAt}`} job={job}/>}
   </li>;})}</ul>
-  {dismissing&&typeof document!=='undefined'&&createPortal(<ConfirmDialog open title="Stop tracking and remove this job?" description={stopTrackingDescription} confirmLabel="Stop and remove" onConfirm={()=>{onDismiss?.(dismissing.id);setDismissing(null);}} onCancel={()=>setDismissing(null)}/>,document.body)}
-  {clearing&&typeof document!=='undefined'&&createPortal(<ConfirmDialog open title={`Clear ${clearable.length} jobs from this list?`} description={clearableWaiting>0?`Removes these rows from the list. ${clearableWaiting===1?'One of them is':`${clearableWaiting} of them are`} still waiting on a decision, so Scene Assembly stops checking ${clearableWaiting===1?'it':'them'} — the provider may still finish and charge, and nothing is recovered. Saved assets and spend records are not affected.`:'Removes these stopped and cancelled jobs from the list. Saved assets and spend records are not affected, and nothing is recovered from the provider.'} confirmLabel="Clear jobs" onConfirm={()=>{onClear?.(clearable);setClearing(false);}} onCancel={()=>setClearing(false)}/>,document.body)}
+  <ConfirmDialog open={Boolean(dismissing)} title="Stop tracking and remove this job?" description={stopTrackingDescription} confirmLabel="Stop and remove" onConfirm={()=>{if(dismissing)onDismiss?.(dismissing.id);setDismissing(null);}} onCancel={()=>setDismissing(null)}/>
+  <ConfirmDialog open={clearing} title={`Clear ${clearable.length} jobs from this list?`} description={clearableWaiting>0?`Removes these rows from the list. ${clearableWaiting===1?'One of them is':`${clearableWaiting} of them are`} still waiting on a decision, so Scene Assembly stops checking ${clearableWaiting===1?'it':'them'} — the provider may still finish and charge, and nothing is recovered. Saved assets and spend records are not affected.`:'Removes these stopped and cancelled jobs from the list. Saved assets and spend records are not affected, and nothing is recovered from the provider.'} confirmLabel="Clear jobs" onConfirm={()=>{onClear?.(clearable);setClearing(false);}} onCancel={()=>setClearing(false)}/>
   </>;
 }

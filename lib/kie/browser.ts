@@ -71,16 +71,20 @@ export async function fetchKieCredits(apiKey: string): Promise<number | null> {
   }
 }
 
-export async function getKieJobStatus(args: {
-  apiKey: string;
-  taskId: string;
-  protocol: KieProtocol;
-}): Promise<KieTask> {
+export async function getKieJobStatus(
+  args: {
+    apiKey: string;
+    taskId: string;
+    protocol: KieProtocol;
+  },
+  options: { signal?: AbortSignal } = {}
+): Promise<KieTask> {
   const data = await parseKieResponse(
     await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ engine: 'kie', operation: 'status', ...args }),
+      signal: options.signal,
     })
   );
   if (!data.task) throw new Error('Kie did not return the task status.');

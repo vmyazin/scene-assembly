@@ -48,6 +48,7 @@ import { useGalleryStore } from '@/store/useGalleryStore';
 import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
 import { useSeedFrameStore } from '@/store/useSeedFrameStore';
 import type { EngineId } from '@/lib/engines/registry';
+import { fileAsDataUrl } from '@/lib/file-data-url';
 
 interface GeminiVideoWorkspaceProps {
   inputMode: 'text' | 'image';
@@ -73,15 +74,6 @@ interface GeminiClip {
 }
 
 /** References are held as Files; the SDK wants bare base64. */
-function fileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error('Could not read that image.'));
-    reader.readAsDataURL(file);
-  });
-}
-
 function bareBase64(dataUrl: string): string {
   const comma = dataUrl.indexOf(',');
   return comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
@@ -327,7 +319,7 @@ export default function GeminiVideoWorkspace({
       let image: string | undefined;
       let imageMimeType: string | undefined;
       if (isImageMode && references[0]) {
-        image = bareBase64(await fileAsDataUrl(references[0].file));
+        image = bareBase64(await fileAsDataUrl(references[0].file, 'Could not read that image.'));
         imageMimeType = references[0].file.type || 'image/png';
       }
       const startedJob = await geminiGenerateVideo({

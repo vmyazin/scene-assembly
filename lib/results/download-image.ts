@@ -11,6 +11,7 @@ import {
   normalizedMimeType,
   SUPPORTED_RASTER_MIMES,
 } from '@/lib/media-download';
+import { clickDownload, saveBlobAs } from '@/lib/save-file';
 
 export const IMAGE_DOWNLOAD_ERROR = 'Unable to download this image. Please try again.';
 export const KIE_URL_EXPIRED_ERROR = 'This Kie result URL has expired and can no longer be downloaded.';
@@ -23,13 +24,6 @@ function isSafeFalMediaUrl(value: string) {
   } catch {
     return false;
   }
-}
-
-function clickDownload(href: string, filename: string) {
-  const link = document.createElement('a');
-  link.href = href;
-  link.download = filename;
-  link.click();
 }
 
 /**
@@ -65,12 +59,7 @@ export async function downloadImageResult(
     // saving the result must not depend on converting it.
     try {
       const saved = await convertedForDownload(blobFromDataUrl(src), imageFormat);
-      const objectUrl = URL.createObjectURL(saved);
-      try {
-        clickDownload(objectUrl, `${filenameBase}.${extensionForMimeType(saved.type)}`);
-      } finally {
-        URL.revokeObjectURL(objectUrl);
-      }
+      saveBlobAs(saved, `${filenameBase}.${extensionForMimeType(saved.type)}`);
     } catch {
       clickDownload(src, `${filenameBase}.${extensionForMimeType(item.mimeType ?? fallbackMimeType)}`);
     }
@@ -122,13 +111,8 @@ async function saveFalImage(
   const saved = await convertedForDownload(blob, imageFormat);
   if (signal?.aborted) return;
 
-  const objectUrl = URL.createObjectURL(saved);
-  try {
-    // From the saved blob, never the response header: a browser that cannot
-    // encode the chosen format leaves the original bytes, and the name must
-    // follow the bytes.
-    clickDownload(objectUrl, `${filenameBase}.${extensionForMimeType(saved.type)}`);
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
+  // From the saved blob, never the response header: a browser that cannot
+  // encode the chosen format leaves the original bytes, and the name must
+  // follow the bytes.
+  saveBlobAs(saved, `${filenameBase}.${extensionForMimeType(saved.type)}`);
 }

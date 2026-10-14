@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Download, Film, ImageDown, Loader2, Trash2, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -149,6 +148,6 @@ export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLi
       onClose={()=>setPreviewId(null)}
       onDownload={preview?()=>void run(preview,()=>downloadAccountAsset(preview)):undefined}
     />
-    {removing&&createPortal(<ConfirmDialog open title="Delete this saved asset?" description="This removes the cloud copy from your account on every device. Download a copy first if you want to keep it." confirmLabel="Delete asset" onConfirm={()=>void remove(removing)} onCancel={()=>setRemoving(null)}/>,document.body)}
+    <ConfirmDialog open={Boolean(removing)} title="Delete this saved asset?" description="This removes the cloud copy from your account on every device. Download a copy first if you want to keep it." confirmLabel="Delete asset" onConfirm={()=>{if(removing)void remove(removing);}} onCancel={()=>setRemoving(null)}/>
   </>;
 }

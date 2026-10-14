@@ -1,6 +1,7 @@
 import { slugify } from '@/lib/example-prompts';
 import { convertedForDownload } from '@/lib/image/download-format';
 import type { ImageFormatPreference } from '@/lib/image/policy';
+import { clickDownload } from '@/lib/save-file';
 
 export type DownloadMediaType = 'image' | 'video';
 
@@ -269,7 +270,7 @@ export async function downloadRemoteMedia(args: {
     objectUrl = URL.createObjectURL(saved);
     // Named after the saved bytes, not the requested format: conversion falls
     // back to the original whenever the browser cannot encode the target.
-    triggerAnchorDownload(objectUrl, `${filenameBase}.${extensionForMedia(mediaType, saved.type)}`);
+    clickDownload(objectUrl, `${filenameBase}.${extensionForMedia(mediaType, saved.type)}`);
   };
 
   try {
@@ -297,7 +298,7 @@ export async function downloadRemoteMedia(args: {
       if (isAbort(proxyError)) return false;
     }
 
-    triggerAnchorDownload(url, `${filenameBase}.${extensionForMedia(mediaType, mimeType)}`);
+    clickDownload(url, `${filenameBase}.${extensionForMedia(mediaType, mimeType)}`);
     return false;
   } finally {
     if (objectUrl) URL.revokeObjectURL(objectUrl);
@@ -432,11 +433,4 @@ async function proxiedMediaBlob(
     return undefined;
   }
   return verifiedMediaBlob(response, mediaType, mimeType, abortSignal);
-}
-
-function triggerAnchorDownload(href: string, filename: string) {
-  const link = document.createElement('a');
-  link.href = href;
-  link.download = filename;
-  link.click();
 }

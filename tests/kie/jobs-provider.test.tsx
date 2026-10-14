@@ -51,11 +51,14 @@ describe('KieJobsProvider', () => {
       await vi.advanceTimersByTimeAsync(2_500);
     });
 
-    expect(getKieJobStatus).toHaveBeenCalledWith({
-      apiKey: 'kie_test_key',
-      taskId: 'task_poll_1',
-      protocol: 'market',
-    });
+    expect(getKieJobStatus).toHaveBeenCalledWith(
+      {
+        apiKey: 'kie_test_key',
+        taskId: 'task_poll_1',
+        protocol: 'market',
+      },
+      { signal: expect.any(AbortSignal) }
+    );
     expect(useKieJobsStore.getState().jobs[0]).toMatchObject({
       state: 'success',
       resultUrls: ['https://temp.kie.ai/result.png'],
@@ -133,5 +136,51 @@ describe('KieJobsProvider', () => {
       media: 'image',
     });
     delete (window as { plausible?: unknown }).plausible;
+  });
+
+  it('keeps one poll per task when the job changes while a status call is in flight', async () => {
+    let resolveStatus: (task: unknown) => void = () => {};
+    getKieJobStatus.mockImplementation(() => new Promise((resolve) => { resolveStatus = resolve; }));
+    const job = {
+      id: 'task_race_1',
+      taskId: 'task_race_1',
+      protocol: 'market' as const,
+      state: 'queuing' as const,
+      resultUrls: [],
+      modelId: 'nano-banana-pro',
+      mediaType: 'image' as const,
+      inputMode: 'text' as const,
+      prompt: 'A studio banana',
+      creditsBefore: 1000,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      pollAttempt: 0,
+    };
+    useKieJobsStore.getState().upsertJob(job);
+    render(<KieJobsProvider><div /></KieJobsProvider>);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_500);
+    });
+    expect(getKieJobStatus).toHaveBeenCalledTimes(1);
+
+    // The workspace names the file while Kie is still answering.
+    await act(async () => {
+      useKieJobsStore.getState().upsertJob({ ...job, slug: 'studio-banana' });
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(getKieJobStatus).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveStatus({ taskId: 'task_race_1', state: 'success', resultUrls: ['https://temp.kie.ai/result.png'] });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(useKieJobsStore.getState().jobs[0]).toMatchObject({
+      state: 'success',
+      slug: 'studio-banana',
+      pollAttempt: 1,
+    });
+    await vi.waitFor(() => expect(useSpendStore.getState().entries).toHaveLength(1));
   });
 });

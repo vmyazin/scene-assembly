@@ -79,6 +79,7 @@ import { useProviderJobsStore, type ProviderJob } from '@/store/useProviderJobsS
 import { useSeedFrameStore } from '@/store/useSeedFrameStore';
 import VideoPlayer from '@/components/video/VideoPlayer';
 import JobElapsed from '@/components/JobElapsed';
+import { fileAsDataUrl } from '@/lib/file-data-url';
 
 /**
  * Video for Runware, Atlas Cloud, and CometAPI, laid out the way the Kie and
@@ -215,15 +216,6 @@ function submittedAspectRatio(
 }
 
 /** References are held as Files; every provider here wants a data URI. */
-function fileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error('Could not read that image.'));
-    reader.readAsDataURL(file);
-  });
-}
-
 export default function ProviderVideoWorkspace({
   provider,
   label,
@@ -361,6 +353,9 @@ export default function ProviderVideoWorkspace({
   const [describeError, setDescribeError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const autoRetry = useAutoRetry();
+  // Latest submit, so a queued retry re-runs the button's own path with the
+  // prompt and settings on screen now, not the ones from the failed render.
+  const submitRef = useRef<() => void>(() => {});
   const [isDownloading, setIsDownloading] = useState(false);
   const [isReadingFrame, setIsReadingFrame] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -782,7 +777,7 @@ export default function ProviderVideoWorkspace({
           if (alephDataUriLength(source.file.size, source.file.type) > ALEPH_DATA_URI_MAX) {
             throw new Error('This clip is too large for a browser Aleph 2 edit. The provider accepts a data URI of at most 5 MB. Sign in and run it as a background job where the file has an https address, or use a smaller clip.');
           }
-          sourceVideo = await fileAsDataUrl(source.file);
+          sourceVideo = await fileAsDataUrl(source.file, 'Could not read that video.');
           if (!isAlephVideoUri(sourceVideo)) throw new Error('This clip is too large for a browser Aleph 2 edit. The provider accepts a data URI of at most 5 MB. Sign in and run it as a background job where the file has an https address, or use a smaller clip.');
         } else {
           if (uploadedSource.current?.file !== source.file || uploadedSource.current.key !== apiKey) {
@@ -811,7 +806,7 @@ export default function ProviderVideoWorkspace({
         setUploadProgress(null);
         if (!mountedRef.current || useAccountStore.getState().epoch !== epoch || liveApiKey() !== apiKey) throw new Error('Your session changed. Review the generation before submitting.');
       }
-      const images = provider === 'piapi' && inputMode === 'text' ? [] : await Promise.all(references.map((reference) => fileAsDataUrl(reference.file)));
+      const images = provider === 'piapi' && inputMode === 'text' ? [] : await Promise.all(references.map((reference) => fileAsDataUrl(reference.file, 'Could not read that image.')));
       if (isEdit && (!mountedRef.current || useAccountStore.getState().epoch !== epoch || liveApiKey() !== apiKey)) throw new Error('Your session changed. Review the edit before submitting.');
       const submittedPrompt = prompt.trim();
       const taskId = await submitProviderVideo({
@@ -877,13 +872,17 @@ export default function ProviderVideoWorkspace({
       // Sent again only when the request never reached a decision — a bad key or
       // an empty balance would fail identically five more times, and the retry
       // would only bury the sentence explaining why.
-      const retrying = !isEdit && !cloudWorkspace.cloud && isRetryableFailure(submissionError) && autoRetry.schedule(() => void submit());
+      const retrying = !isEdit && !cloudWorkspace.cloud && isRetryableFailure(submissionError) && autoRetry.schedule(() => submitRef.current());
       toast.error(retrying ? `${message} Retrying in ${AUTO_RETRY_DELAY_SECONDS}s.` : message);
     } finally {
       submitFlight.current = false;
       if (mountedRef.current) { setIsSubmitting(false); setUploadProgress(null); }
     }
   };
+
+  useEffect(() => {
+    submitRef.current = () => void submit();
+  });
 
   const refusal = error
     ? refusalPresentation(error, {

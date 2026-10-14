@@ -19,6 +19,7 @@ import { keepUploadedImages } from '@/lib/gallery/keep-upload';
 import { useDraftStore } from '@/store/useDraftStore';
 import type { CloudAssetCounts } from '@/lib/account/contracts';
 import type { VideoEditCapability } from '@/lib/providers/video-edit';
+import { formatBytes } from '@/lib/format-bytes';
 
 interface LibraryOverlayProps {
   open: boolean;
@@ -40,18 +41,6 @@ interface LibraryOverlayProps {
    * lint-clean way to reset the tab without a setState-in-effect.
    */
   initialTab?: 'results' | 'prompts';
-}
-
-function formatBytes(bytes: number) {
-  const units = ['KB', 'MB', 'GB', 'TB'];
-  if (bytes < 1024) return `${bytes} B`;
-  let value = bytes / 1024;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
 }
 
 export default function LibraryOverlay({

@@ -17,6 +17,7 @@ import TimelineList from '@/components/TimelineList';
 import TimelineOutputFormat from '@/components/TimelineOutputFormat';
 import TimelinePreview from '@/components/TimelinePreview';
 import TimelineTrack from '@/components/TimelineTrack';
+import { formatBytes } from '@/lib/format-bytes';
 
 /**
  * The state of one placement on the timeline while its bytes are acquired.
@@ -40,18 +41,6 @@ interface TimelineWorkspaceProps {
    * whether its stale write was guarded away or not.
    */
   onClipStatesChange?: (states: Record<string, ClipState>) => void;
-}
-
-function formatBytes(bytes: number) {
-  const units = ['KB', 'MB', 'GB', 'TB'];
-  if (bytes < 1024) return `${bytes} B`;
-  let value = bytes / 1024;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
 }
 
 export default function TimelineWorkspace({ onClipStatesChange }: TimelineWorkspaceProps = {}) {

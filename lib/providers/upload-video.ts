@@ -1,4 +1,5 @@
 // lib/providers/upload-video.ts
+import { fileAsDataUrl } from '@/lib/file-data-url';
 import { validateEditVideo } from './video-edit';
 const API = 'https://api.runware.ai/v1';
 
@@ -7,12 +8,7 @@ const API = 'https://api.runware.ai/v1';
  * Reference video and audio use the same media-storage task as an edit source.
  */
 export async function uploadRunwareMedia(file: File, apiKey: string, onProgress: (percent: number) => void): Promise<string> {
-  const media = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error('Could not read that file.'));
-    reader.readAsDataURL(file);
-  });
+  const media = await fileAsDataUrl(file);
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', API);

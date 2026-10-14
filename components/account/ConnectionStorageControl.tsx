@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { createPortal } from 'react-dom';
 import { CloudUpload, Loader2, Lock, MonitorSmartphone } from 'lucide-react';
 
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -120,20 +119,17 @@ export function ConnectionStorageButton({
           {error}
         </p>
       )}
-      {confirming && typeof document !== 'undefined' && createPortal(
-        <ConfirmDialog
-          open
-          title="Remove this connection?"
-          description="Jobs that still need this key may stop. Your existing saved assets remain available."
-          confirmLabel="Remove connection"
-          onConfirm={() => {
-            setConfirming(false);
-            void remove();
-          }}
-          onCancel={() => setConfirming(false)}
-        />,
-        document.body
-      )}
+      <ConfirmDialog
+        open={confirming}
+        title="Remove this connection?"
+        description="Jobs that still need this key may stop. Your existing saved assets remain available."
+        confirmLabel="Remove connection"
+        onConfirm={() => {
+          setConfirming(false);
+          void remove();
+        }}
+        onCancel={() => setConfirming(false)}
+      />
     </div>
   );
 }
