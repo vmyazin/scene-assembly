@@ -1,7 +1,10 @@
 /** Capture trusts only provider-owned hosts, never an entire shared storage service.
  * Atlas's specific Alibaba bucket was verified on a live job on 2026-09-29;
- * allowing all of aliyuncs.com would also trust buckets anybody can create. */
-const RESULT_DOMAINS = ['fal.media', 'fal.ai', 'kie.ai', 'kieai.redpandaai.co', 'tempfile.ai', 'tempfile.redpandaai.co', 'redpandaai.co', 'runware.ai', 'atlascloud.ai', 'atlas-media.oss-us-west-1.aliyuncs.com', 'cometapi.com', 'filesystem.site', 'piapi.ai', 'theapi.app'];
+ * allowing all of aliyuncs.com would also trust buckets anybody can create.
+ * Comet's Runway Aleph 2 returns results on Runway's own CloudFront distribution
+ * (seen on a live job on 2026-10-14); that one distribution is allowed, never
+ * cloudfront.net, which anybody can put a distribution on. */
+const RESULT_DOMAINS = ['fal.media', 'fal.ai', 'kie.ai', 'kieai.redpandaai.co', 'tempfile.ai', 'tempfile.redpandaai.co', 'redpandaai.co', 'runware.ai', 'atlascloud.ai', 'atlas-media.oss-us-west-1.aliyuncs.com', 'cometapi.com', 'filesystem.site', 'piapi.ai', 'theapi.app', 'dnznrvs05pmza.cloudfront.net'];
 
 /** Browser navigation only. This MUST NOT authorize a Worker fetch: an unknown
  * public-looking hostname can resolve or redirect anywhere. Links are shown

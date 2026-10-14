@@ -42,6 +42,12 @@ it('lets an older blocked job use the now-approved address and saves without sub
   expect(db.prepare('SELECT COUNT(*) AS n FROM account_assets WHERE job_id=?').get(job.id)?.n).toBe(1);
 });
 
+it('accepts the Runway CloudFront distribution Comet Aleph returns, but not all of cloudfront.net',async()=>{
+  expect(jobView(await blocked('https://dnznrvs05pmza.cloudfront.net/aleph/output.mp4?_jwt=signed')).canRetrySave).toBe(true);
+  expect(jobView(await blocked('https://d1234example.cloudfront.net/output.mp4')).canRetrySave).toBe(false);
+  expect(jobView(await blocked('https://cloudfront.net/output.mp4')).canRetrySave).toBe(false);
+});
+
 it('offers owner-requested manual links for unknown hosts without fetching them or enabling capture',async()=>{
   const url='https://new-provider-cdn.example.com/result.mp4?signature=private';
   const job=await blocked(url);

@@ -365,6 +365,24 @@
         "3197"
       ],
       "port": 3197
+    },
+    {
+      "name": "Aleph result host smoke test",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "ACCOUNT_WORKER_PORT=8899 npm run dev -- --port 3199",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "ACCOUNT_WORKER_PORT=8899",
+        "npm",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "3199"
+      ],
+      "port": 3199
     }
   ],
   "version": "0.0.1"
