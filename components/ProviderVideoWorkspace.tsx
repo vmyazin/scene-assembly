@@ -80,6 +80,7 @@ import { useSeedFrameStore } from '@/store/useSeedFrameStore';
 import VideoPlayer from '@/components/video/VideoPlayer';
 import JobElapsed from '@/components/JobElapsed';
 import { fileAsDataUrl } from '@/lib/file-data-url';
+import { JobStatusPill } from '@/components/StatusPill';
 
 /**
  * Video for Runware, Atlas Cloud, and CometAPI, laid out the way the Kie and
@@ -1230,24 +1231,20 @@ export default function ProviderVideoWorkspace({
               )}
             </div>
             {latestJob && (
-              <span
-                className={`rounded-full border px-2.5 py-1 text-xs ${latestJob.state === 'error' ? 'border-red-500/30 bg-red-500/10 text-red-300' : latestJob.state === 'success' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/30 bg-amber-500/10 text-amber-200'}`}
-              >
-                <span>
-                  {latestJob.state === 'queued'
+              <JobStatusPill
+                tone={latestJob.state === 'error' ? 'danger' : latestJob.state === 'success' ? 'success' : 'warning'}
+                label={
+                  latestJob.state === 'queued'
                     ? 'Queued'
                     : latestJob.state === 'running'
                       ? 'Generating'
                       : latestJob.state === 'success'
                         ? `Done${latestJob.cost !== undefined ? ` · $${latestJob.cost.toFixed(3)}` : ''}`
-                        : 'Failed'}
-                </span>
-                <span aria-hidden="true">{' · '}</span>
-                <JobElapsed
-                  startedAt={latestJob.createdAt}
-                  finishedAt={isTerminal(latestJob.state) ? latestJob.updatedAt : undefined}
-                />
-              </span>
+                        : 'Failed'
+                }
+                startedAt={latestJob.createdAt}
+                finishedAt={isTerminal(latestJob.state) ? latestJob.updatedAt : undefined}
+              />
             )}
           </div>
           <div className="flex min-h-[300px] flex-1 items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--background-elevated)]/70">

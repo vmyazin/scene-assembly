@@ -6,6 +6,7 @@ import { Check, Cpu } from 'lucide-react';
 import { formatUsd } from '@/lib/spend/format';
 import { PRICING_NOTE } from '@/lib/micro-ai/models';
 import { useMicroAiUsageStore } from '@/store/useMicroAiUsageStore';
+import { StatusPill } from '@/components/StatusPill';
 
 /**
  * Read-only telemetry for the shared micro-AI tier that names downloads,
@@ -25,9 +26,9 @@ export default function MicroAiUsagePanel() {
       <h3 className="field-label flex flex-wrap items-center gap-2">
         <Cpu size={22} className="text-[var(--foreground-muted)]" /> Shared fast tier
         {active && (
-          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-px text-xs font-medium text-emerald-300">
+          <StatusPill tone="success">
             <Check size={13} /> Active
-          </span>
+          </StatusPill>
         )}
       </h3>
       <p className="field-hint">

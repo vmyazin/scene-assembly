@@ -59,6 +59,7 @@ import {
 import type { EngineId } from '@/lib/engines/registry';
 import VideoPlayer from '@/components/video/VideoPlayer';
 import JobElapsed from '@/components/JobElapsed';
+import { JobStatusPill } from '@/components/StatusPill';
 
 interface KieGenerationWorkspaceProps {
   mediaType: MediaType;
@@ -713,14 +714,12 @@ export default function KieGenerationWorkspace({
               {latestJob && <p className="mt-0.5 text-xs text-[var(--foreground-subtle)]">{models.find(model => model.id === latestJob.modelId)?.label ?? latestJob.modelId}</p>}
             </div>
             {latestJob && (
-              <span className={`rounded-full border px-2.5 py-1 text-xs ${latestJob.state === 'fail' ? 'border-red-500/30 bg-red-500/10 text-red-300' : latestJob.state === 'success' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/30 bg-amber-500/10 text-amber-200'}`}>
-                <span>{latestJob.state === 'queuing' ? 'Queued' : latestJob.state === 'generating' ? 'Generating' : latestJob.state}</span>
-                <span aria-hidden="true">{' · '}</span>
-                <JobElapsed
-                  startedAt={latestJob.createdAt}
-                  finishedAt={isKieJobTerminal(latestJob.state) ? latestJob.updatedAt : undefined}
-                />
-              </span>
+              <JobStatusPill
+                tone={latestJob.state === 'fail' ? 'danger' : latestJob.state === 'success' ? 'success' : 'warning'}
+                label={latestJob.state === 'queuing' ? 'Queued' : latestJob.state === 'success' ? 'Done' : latestJob.state === 'fail' ? 'Failed' : 'Generating'}
+                startedAt={latestJob.createdAt}
+                finishedAt={isKieJobTerminal(latestJob.state) ? latestJob.updatedAt : undefined}
+              />
             )}
           </div>
           {mediaType === 'video' ? (

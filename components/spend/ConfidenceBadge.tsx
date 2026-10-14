@@ -1,3 +1,4 @@
+import { STATUS_TONE_CLASSES, type StatusTone } from '@/components/StatusPill';
 import type { SpendConfidence, SpendSource } from '@/lib/spend/ledger';
 
 const LABELS: Record<SpendConfidence, string> = { exact: 'Exact', estimated: 'Estimated', unknown: 'Unknown' };
@@ -11,17 +12,13 @@ const SOURCES: Record<SpendSource, string> = {
   free: 'This engine is free.',
 };
 
-const STYLES: Record<SpendConfidence, string> = {
-  exact: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300',
-  estimated: 'border-amber-500/30 bg-amber-500/10 text-amber-200',
-  unknown: 'border-[var(--border)] bg-[var(--background-elevated)] text-[var(--foreground-muted)]',
-};
+const TONES: Record<SpendConfidence, StatusTone> = { exact: 'success', estimated: 'warning', unknown: 'neutral' };
 
 export default function ConfidenceBadge({ confidence, source, note }: { confidence: SpendConfidence; source: SpendSource; note?: string }) {
   return (
     <span
       title={note ? `${SOURCES[source]} ${note}` : SOURCES[source]}
-      className={`inline-flex items-center rounded-full border px-1.5 py-px text-[0.6875rem] font-medium ${STYLES[confidence]}`}
+      className={`inline-flex items-center rounded-full border px-1.5 py-px text-[0.6875rem] font-medium ${STATUS_TONE_CLASSES[TONES[confidence]]}`}
     >
       {LABELS[confidence]}
     </span>

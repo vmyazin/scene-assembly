@@ -17,6 +17,7 @@ import { pendingConnectionWrites, syncPendingConnections } from '@/lib/account/c
 import { accountChanged, refreshAccount } from '@/lib/account/session';
 import { KEY_SOURCES } from '@/lib/providers/key-source';
 import type { ProviderId } from '@/lib/providers/types';
+import { StatusPill } from '@/components/StatusPill';
 
 interface ApiKeyConfigProps {
   open: boolean;
@@ -121,9 +122,9 @@ function ProviderCard({
           <ProviderLogo provider={provider} size={22} />
           {name}
           {connected && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-px text-xs font-medium text-emerald-300">
+            <StatusPill tone="success">
               <Check size={13} /> Connected
-            </span>
+            </StatusPill>
           )}
         </h3>
         {storage}
