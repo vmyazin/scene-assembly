@@ -63,7 +63,7 @@ function SpendView() {
       <main className="mx-auto w-full max-w-7xl space-y-4 px-6 py-10 sm:px-8 md:px-12 md:py-14 lg:px-16">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div className="max-w-2xl">
-            <h1 className="display text-3xl font-semibold tracking-tight text-[var(--foreground)] sm:text-4xl">Spend</h1>
+            <h1 className="display text-3xl font-semibold text-[var(--foreground)] sm:text-4xl">Spend</h1>
             <p className="mt-3 text-base leading-relaxed text-[var(--foreground-muted)]">What your generations cost. Estimates use published rates.</p>
           </div>
           {hasAnyEntries && (
@@ -83,7 +83,7 @@ function SpendView() {
         {waitingForSession ? (
           <div className="flex items-center justify-center py-16"><div className="loading-spinner" /></div>
         ) : accountStatus === 'unavailable' && ownerId && source === 'account' ? (
-          <div role="alert" className="glass-card border-[var(--neon-pink)]/35 p-6 text-center">
+          <div role="alert" className="glass-card p-6 text-center">
             <p className="text-[var(--foreground)]">Account spend is temporarily unavailable.</p>
             <p className="field-hint mt-2">Try again in a moment. Your browser ledger is kept separately and is unaffected.</p>
           </div>

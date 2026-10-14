@@ -43,7 +43,7 @@ export default function AccountConnections({ onManage }: { onManage: () => void 
         <p className="mt-2 text-[11px] leading-relaxed text-[var(--foreground-subtle)]">No provider keys are saved to this account yet.</p>
       )}
 
-      <button type="button" onClick={onManage} className="btn-secondary mt-3 flex w-full justify-center">
+      <button type="button" onClick={onManage} className="btn-secondary mt-3 w-full">
         <KeyRound size={15} aria-hidden="true" />Manage connections
       </button>
     </section>

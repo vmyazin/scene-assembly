@@ -95,7 +95,7 @@ export default function ConnectedAgentsPanel({ ownerId }: { ownerId: string }) {
           </div>
           <div className="mt-1.5 flex items-center gap-2">
             <code className="min-w-0 flex-1 truncate text-xs text-[var(--foreground)]">{data.mcpUrl}</code>
-            <button type="button" aria-label="Copy MCP URL" onClick={() => void copy(data.mcpUrl!)} className="btn-secondary px-2 py-1"><Copy size={13} aria-hidden="true" /></button>
+            <button type="button" aria-label="Copy MCP URL" onClick={() => void copy(data.mcpUrl!)} className="btn-secondary"><Copy size={13} aria-hidden="true" /></button>
           </div>
         </div>
       )}
@@ -147,8 +147,8 @@ function AgentRow({ agent, limits, disconnecting, onSave, onDisconnect }: { agen
         <input id={`${id}-delete`} type="checkbox" checked={allowDelete} onChange={event => setAllowDelete(event.target.checked)} className="h-4 w-4 accent-[var(--neon-cyan)]" />
       </label>
       <div className="mt-3 flex gap-2">
-        <button type="button" disabled={!changed || !valid || busy || disconnecting} onClick={async () => { setBusy(true); await onSave({ budgetUsd, allowUnknownCost, allowDelete }); setBusy(false); }} className="btn-secondary flex flex-1 justify-center">Save</button>
-        <button type="button" disabled={disconnecting} onClick={onDisconnect} className="btn-secondary flex flex-1 justify-center text-red-300">Disconnect</button>
+        <button type="button" disabled={!changed || !valid || busy || disconnecting} onClick={async () => { setBusy(true); await onSave({ budgetUsd, allowUnknownCost, allowDelete }); setBusy(false); }} className="btn-secondary flex-1">Save</button>
+        <button type="button" disabled={disconnecting} onClick={onDisconnect} className="btn-secondary flex-1">Disconnect</button>
       </div>
     </li>
   );

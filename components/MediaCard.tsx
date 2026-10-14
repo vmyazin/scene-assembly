@@ -15,11 +15,11 @@ import type { ReactNode } from 'react';
  */
 const ACCENTS = {
   cyan: {
-    selectedCard: '[--media-card-accent:var(--neon-cyan)] shadow-[var(--glow-cyan)]',
+    selectedCard: '[--media-card-accent:var(--neon-cyan)]',
     check: 'bg-[var(--neon-cyan)]',
   },
   purple: {
-    selectedCard: '[--media-card-accent:var(--neon-purple)] shadow-[var(--glow-purple)]',
+    selectedCard: '[--media-card-accent:var(--neon-purple)]',
     check: 'bg-[var(--neon-purple)]',
   },
 } as const;
@@ -104,7 +104,7 @@ export default function MediaCard({
       </div>
 
       <div className="flex flex-1 flex-col gap-1">
-        <h3 className="display text-[0.9375rem] font-semibold leading-snug text-[var(--foreground)]">{title}</h3>
+        <h3 className="display text-[0.9375rem] font-semibold text-[var(--foreground)]">{title}</h3>
 
         {/* Two lines, not three: at three cards per row the third line was the
             single largest contributor to card height on a tablet. */}

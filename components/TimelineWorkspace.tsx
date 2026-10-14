@@ -337,7 +337,7 @@ export default function TimelineWorkspace({ onClipStatesChange }: TimelineWorksp
           <button
             type="button"
             onClick={() => useTimelineStore.getState().undo()}
-            className="btn-secondary shrink-0 px-3 py-1.5 text-xs"
+            className="btn-secondary shrink-0"
           >
             <RotateCcw size={13} /> Undo {undoLabel}
           </button>
@@ -346,7 +346,7 @@ export default function TimelineWorkspace({ onClipStatesChange }: TimelineWorksp
           <button
             type="button"
             onClick={() => setConfirmingNew(true)}
-            className="btn-secondary shrink-0 px-3 py-1.5 text-xs"
+            className="btn-secondary shrink-0"
           >
             <FilePlus2 size={13} /> New
           </button>

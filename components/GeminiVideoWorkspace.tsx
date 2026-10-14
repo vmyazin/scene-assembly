@@ -599,7 +599,7 @@ export default function GeminiVideoWorkspace({
                   setDownloadingId(null);
                 }
               }}
-              className="btn-secondary flex w-full items-center justify-center gap-2"
+              className="btn-secondary w-full"
             >
               {downloadingId === clip.id ? <Loader2 className="animate-spin" size={17} /> : <Download size={17} />}
               {downloadingId === clip.id ? 'Preparing download…' : 'Download video'}

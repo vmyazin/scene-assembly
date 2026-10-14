@@ -145,7 +145,7 @@ export default function ModelControls({ namespace, fields, values, onChange }: M
           />
         )}
         {field.description && (
-          <span id={descriptionId} className="block text-xs text-[var(--foreground-subtle)]">{field.description}</span>
+          <span id={descriptionId} className="block">{field.description}</span>
         )}
       </label>
     );

@@ -42,7 +42,7 @@ export default function StoredImagePicker({ referenceLimit, replaceIndex }: Stor
         <button
           type="button"
           onClick={() => change(true)}
-          className="btn-secondary flex flex-1 items-center justify-center gap-1.5 px-2 py-1 text-xs"
+          className="btn-secondary flex-1"
         >
           <Repeat2 size={13} aria-hidden="true" /> Replace
         </button>

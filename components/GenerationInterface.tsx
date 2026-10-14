@@ -1060,7 +1060,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
           <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
             <button
               onClick={handleBack}
-              className="btn-secondary text-xs sm:text-sm py-2 px-3 sm:px-4 flex-shrink-0"
+              className="btn-secondary flex-shrink-0"
             >
               ← Back
             </button>
@@ -1226,7 +1226,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                         <button
                           type="button"
                           onClick={() => onOpenConnections(activeEngine.id)}
-                          className="btn-secondary text-xs py-1.5 px-3 flex-shrink-0"
+                          className="btn-secondary flex-shrink-0"
                         >
                           Connect →
                         </button>
@@ -1241,7 +1241,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                         <button
                           type="button"
                           onClick={() => onOpenConnections(activeEngine.id)}
-                          className="btn-secondary text-xs py-1.5 px-3 flex-shrink-0"
+                          className="btn-secondary flex-shrink-0"
                         >
                           Connect →
                         </button>
@@ -1403,7 +1403,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
             <button
               onClick={handleGenerate}
               disabled={isGenerating || cloudWorkspace.checking}
-              className="btn-primary w-full py-3 text-base flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-primary w-full"
             >
               {isGenerating ? (
                 <>
@@ -1431,13 +1431,13 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="glass-card p-4 bg-red-500/10 border-red-500/30 text-red-300 whitespace-pre-wrap"
+                  className="glass-card p-4 text-red-300 whitespace-pre-wrap"
                 >
                   {displayError}
                   {refusal?.offerTryRelaxed && relaxed.offered && (
                     <button
                       type="button"
-                      className="btn-secondary mt-2 text-xs"
+                      className="btn-secondary mt-2"
                       onClick={() => relaxed.requestRelaxed(() => generateRef.current())}
                     >
                       Try with Relaxed

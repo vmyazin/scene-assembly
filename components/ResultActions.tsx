@@ -125,9 +125,7 @@ export default function ResultActions({
   const addToTimeline = () => run('timeline', async () => { await onAddToTimeline?.(); });
 
   const size = dense ? 13 : 15;
-  const buttonClass = `btn-secondary flex flex-1 items-center justify-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-50 ${
-    dense ? 'px-2 py-1 text-xs' : 'py-2 text-xs'
-  }${stack ? ' @lg:w-full @lg:flex-none' : ''}`;
+  const buttonClass = `btn-secondary flex-1${stack ? ' @lg:w-full @lg:flex-none' : ''}`;
   const spinner = <Loader2 className="animate-spin motion-reduce:animate-none" size={size} aria-hidden="true" />;
 
   return (

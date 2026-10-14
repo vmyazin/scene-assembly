@@ -63,10 +63,7 @@ interface TimelineOutputFormatProps {
 
 type Field = 'width' | 'height' | 'fps';
 
-const INPUT_CLASS =
-  'w-[4.5rem] rounded-md border border-[var(--border)] bg-[var(--background-elevated)]/60 px-1.5 py-0.5 ' +
-  'text-right text-[0.8125rem] tabular-nums text-[var(--foreground)] outline-none ' +
-  'focus:border-[var(--neon-cyan)]/60';
+const INPUT_CLASS = 'w-[4.5rem] text-right tabular-nums outline-none';
 
 export default function TimelineOutputFormat({
   output,

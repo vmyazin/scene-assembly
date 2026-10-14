@@ -223,7 +223,7 @@ export default function AccountConsole({
             <p className="break-all text-xs text-[var(--foreground-muted)]">{account.email}</p>
           </div>
         </div>
-        <button type="button" disabled={busy} onClick={onSignOut} className="btn-secondary mt-3.5 flex w-full justify-center">
+        <button type="button" disabled={busy} onClick={onSignOut} className="btn-secondary mt-3.5 w-full">
           <LogOut size={15} aria-hidden="true" />{busy ? 'Signing out…' : 'Sign out'}
         </button>
         {error && <p role="alert" className="mt-3 text-sm text-[var(--neon-pink)]">{error}</p>}
@@ -275,7 +275,7 @@ export default function AccountConsole({
               {spend.totals ? `${spend.totals.runs} run${spend.totals.runs === 1 ? '' : 's'}` : spend.error ? 'Unavailable' : 'Loading…'}
             </span>
           </div>
-          <Link href="/spend" className="btn-secondary mt-2.5 flex w-full justify-center">
+          <Link href="/spend" className="btn-secondary mt-2.5 w-full">
             <WalletCards size={15} aria-hidden="true" />View spend
           </Link>
         </RailBlock>
@@ -302,7 +302,7 @@ export default function AccountConsole({
             </p>
             {/* The picker needs far more room than 300px, so the rail keeps the
                 summary and hands the choosing to a dialog. */}
-            <button type="button" onClick={() => setImporting(true)} className="btn-secondary mt-2.5 flex w-full justify-center">
+            <button type="button" onClick={() => setImporting(true)} className="btn-secondary mt-2.5 w-full">
               {`Review ${pendingImports} item${pendingImports === 1 ? '' : 's'}`}
             </button>
           </RailBlock>
@@ -322,7 +322,7 @@ export default function AccountConsole({
       </aside>
 
       <div className="min-w-0 p-5 sm:p-6">
-        <h2 className="display text-2xl font-semibold tracking-tight text-[var(--foreground)]">Cloud library</h2>
+        <h2 className="display text-2xl font-semibold text-[var(--foreground)]">Cloud library</h2>
         <p className="mt-1.5 text-sm text-[var(--foreground-muted)]">Everything saved to your private cloud account, newest first.</p>
 
         <LibraryFilters
@@ -338,7 +338,7 @@ export default function AccountConsole({
           <button
             type="button"
             disabled={actionBusy}
-            className="btn-secondary mt-4 px-2.5 py-1 text-xs"
+            className="btn-secondary mt-4"
             onClick={() => void jobAction('jobs', { token: crypto.randomUUID(), request: { provider: 'local-test', modelId: 'local-test', mediaType: 'image', inputMode: 'text', prompt: 'Local background test', values: {}, referenceIds: [] } })}
           >
             Run local background test
@@ -413,15 +413,15 @@ export default function AccountConsole({
 
         {(library.cursor || library.nextCursor) && !showingJobs && (
           <div className="mt-4 flex justify-between gap-2">
-            {library.cursor && <button type="button" disabled={loading} className="btn-secondary text-sm" onClick={() => library.page(null)}>Latest assets</button>}
-            {library.nextCursor && <button type="button" disabled={loading} className="btn-secondary text-sm" onClick={() => library.page(library.nextCursor)}>Older assets</button>}
+            {library.cursor && <button type="button" disabled={loading} className="btn-secondary" onClick={() => library.page(null)}>Latest assets</button>}
+            {library.nextCursor && <button type="button" disabled={loading} className="btn-secondary" onClick={() => library.page(library.nextCursor)}>Older assets</button>}
           </div>
         )}
 
         {(actionError || library.error) && (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
             <p role="alert" className="text-sm text-red-300">{actionError || library.error}</p>
-            {library.error && <button type="button" disabled={loading} className="btn-secondary px-2 py-1 text-xs" onClick={library.refresh}>Try again</button>}
+            {library.error && <button type="button" disabled={loading} className="btn-secondary" onClick={library.refresh}>Try again</button>}
           </div>
         )}
       </div>

@@ -91,7 +91,7 @@ export function ConnectionStorageButton({
       disabled={busy}
       onClick={() => setConfirming(true)}
       aria-label={`Remove from account: ${name}`}
-      className="btn-secondary shrink-0 gap-1.5 px-2 py-1 text-xs disabled:opacity-50"
+      className="btn-secondary shrink-0"
     >
       {busy ? <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : null}
       Remove from account
@@ -102,7 +102,7 @@ export function ConnectionStorageButton({
       disabled={busy}
       onClick={() => void save()}
       aria-label={`Save to account: ${name}`}
-      className="btn-secondary shrink-0 gap-1.5 border-[var(--neon-cyan)]/30 px-2 py-1 text-xs text-[var(--neon-cyan)] disabled:opacity-50"
+      className="btn-secondary shrink-0"
     >
       {busy ? <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <CloudUpload size={13} aria-hidden="true" />}
       Save to account

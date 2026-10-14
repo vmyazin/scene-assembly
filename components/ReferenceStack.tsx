@@ -96,7 +96,7 @@ export default function ReferenceStack({
                 type="button"
                 onClick={() => onRemove(index)}
                 aria-label={item.removeLabel}
-                className="btn-secondary flex flex-1 items-center justify-center gap-1.5 px-2 py-1 text-xs"
+                className="btn-secondary flex-1"
               >
                 <Trash2 size={13} aria-hidden="true" /> Remove
               </button>

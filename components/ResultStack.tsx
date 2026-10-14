@@ -190,7 +190,7 @@ export default function ResultStack({
               <button
                 type="button"
                 onClick={() => void onDownload(item)}
-                className="btn-secondary flex w-full items-center justify-center gap-2 py-2 text-sm"
+                className="btn-secondary w-full"
               >
                 {downloadingId === item.id ? (
                   <Loader2 className="animate-spin" size={16} />

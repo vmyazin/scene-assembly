@@ -79,10 +79,10 @@ export default function ConfirmDialog({
               </div>
             </div>
             <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button type="button" onClick={onCancel} className="btn-secondary px-3 py-2 text-sm">
+              <button type="button" onClick={onCancel} className="btn-secondary">
                 {cancelLabel}
               </button>
-              <button type="button" onClick={onConfirm} className="btn-primary px-3 py-2 text-sm">
+              <button type="button" onClick={onConfirm} className="btn-primary">
                 {confirmLabel}
               </button>
             </div>

@@ -45,7 +45,7 @@ export default function ConnectKeyCallout({
             <KeyRound size={19} />
           </span>
           <div className="min-w-0 space-y-2">
-            <p className="eyebrow flex items-center gap-1.5 text-[var(--brand-accent)]">
+            <p className="eyebrow flex items-center gap-1.5">
               <span className="connect-key-dot" aria-hidden /> Not connected
             </p>
             <h3
@@ -61,7 +61,7 @@ export default function ConnectKeyCallout({
         </div>
 
         <div className="flex shrink-0 flex-col items-stretch gap-3 sm:items-end">
-          <button type="button" onClick={onConnect} className="btn-primary px-5 py-2.5">
+          <button type="button" onClick={onConnect} className="btn-primary">
             <ProviderLogo provider={provider} size={14} />
             Connect key
           </button>

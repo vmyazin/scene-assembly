@@ -233,7 +233,7 @@ function JobCard({
               event.preventDefault();
               void download(resultUrl);
             }}
-            className="btn-secondary flex w-full items-center justify-center gap-2"
+            className="btn-secondary w-full"
           >
             {isDownloading ? <Loader2 className="animate-spin" size={17} /> : <Download size={17} />}
             {isDownloading ? 'Preparing download…' : 'Download video'}
@@ -269,7 +269,7 @@ function JobCard({
           aria-label={`Cancel request ${job.requestId}`}
           disabled={cancelling}
           onClick={() => onCancel(job)}
-          className="btn-secondary w-full disabled:cursor-not-allowed disabled:opacity-50"
+          className="btn-secondary w-full"
         >
           {cancelling ? 'Cancelling…' : 'Cancel'}
         </button>
@@ -745,12 +745,12 @@ function FalGenerationWorkspaceSession({
             <button
               type="button"
               onClick={() => { abortSubmission(); onBack(); }}
-              className="btn-secondary shrink-0 px-3 py-2 text-sm"
+              className="btn-secondary shrink-0"
             >
               ← Back
             </button>
             <div className="min-w-0">
-              <p className="eyebrow mb-1 flex items-center gap-1.5 text-[var(--neon-cyan)]">
+              <p className="eyebrow mb-1 flex items-center gap-1.5">
                 <ProviderLogo provider="fal" size={13} /> fal.ai
               </p>
               <h2 className="display text-lg font-semibold sm:text-xl">
@@ -765,7 +765,7 @@ function FalGenerationWorkspaceSession({
             <button
               type="button"
               onClick={() => onOpenConnections('fal')}
-              className="btn-secondary shrink-0 px-3 py-2 text-xs"
+              className="btn-secondary shrink-0"
             >
               fal.ai key connected
             </button>
@@ -797,7 +797,7 @@ function FalGenerationWorkspaceSession({
                   value={modelSearch}
                   onChange={(event) => setModelSearch(event.target.value)}
                   placeholder="Find a model"
-                  className="min-w-0 flex-1 py-1.5 text-xs"
+                  className="min-w-0 flex-1"
                 />
               </div>
             </div>
@@ -901,7 +901,7 @@ function FalGenerationWorkspaceSession({
                 <button
                   type="button"
                   onClick={() => useDraftStore.getState().reorderReference(0, 1)}
-                  className="btn-secondary flex w-full items-center justify-center gap-2 text-sm"
+                  className="btn-secondary w-full"
                 >
                   <ArrowUpDown size={15} /> Swap first and last
                 </button>
@@ -965,7 +965,7 @@ function FalGenerationWorkspaceSession({
                 autoRetry.reset();
                 void submit();
               }}
-              className="btn-primary flex w-full items-center justify-center gap-2 py-3 text-base disabled:cursor-not-allowed disabled:opacity-50">
+              className="btn-primary w-full">
               {isSubmitting ? <><Loader2 className="animate-spin" size={21} /> Uploading & starting…</> : <><Sparkles size={21} /> {isEdit ? 'Generate edit' : 'Generate video'}<FalRunCost modelId={selectedModel.id} mediaType="video" inputMode={inputMode} resolution={values.resolution} audio={isEdit ? values.keep_audio : values.generate_audio} duration={isEdit ? source?.durationSeconds : values.duration} /></>}
             </button>
             <CloudExecutionNotice workspace={cloudWorkspace} />

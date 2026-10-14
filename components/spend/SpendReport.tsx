@@ -62,7 +62,7 @@ export default function SpendReport({
   return (
     <>
       {error && (
-        <div role="alert" className="glass-card border-[var(--neon-pink)]/35 p-4 text-sm">
+        <div role="alert" className="glass-card p-4 text-sm">
           <p className="text-[var(--foreground)]">{error}</p>
           {onRetry && <button type="button" onClick={onRetry} className="btn-secondary mt-3">Try again</button>}
         </div>
@@ -77,7 +77,7 @@ export default function SpendReport({
                 ? 'Finished and failed account runs can appear here when provider billing information is available. A failed or interrupted save may still be billed by the provider.'
                 : 'Every finished image, video, and helper task is filed here with its cost. A provider may still bill an accepted run if saving or delivery later fails.'}
             </p>
-            {!cloud && <Link href="/" className="btn-primary mt-4 inline-flex">Open the studio</Link>}
+            {!cloud && <Link href="/" className="btn-primary mt-4">Open the studio</Link>}
             {cloud && hasOlder && onLoadOlder && (
               <button type="button" onClick={onLoadOlder} disabled={loadingOlder} className="btn-secondary mt-4">
                 {loadingOlder ? 'Loading…' : 'Load older records'}

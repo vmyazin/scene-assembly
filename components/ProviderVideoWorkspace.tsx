@@ -899,11 +899,11 @@ export default function ProviderVideoWorkspace({
       <section className="glass-card p-3.5 md:p-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 items-start gap-3">
-            <button type="button" onClick={onBack} className="btn-secondary shrink-0 px-3 py-2 text-sm">
+            <button type="button" onClick={onBack} className="btn-secondary shrink-0">
               ← Back
             </button>
             <div className="min-w-0">
-              <div className="eyebrow mb-1 flex items-center gap-1.5 text-[var(--neon-purple)]">
+              <div className="eyebrow mb-1 flex items-center gap-1.5">
                 <ProviderLogo provider={provider} size={13} /> {label}
               </div>
               <h2 className="display text-lg font-semibold text-[var(--foreground)] sm:text-xl">
@@ -922,7 +922,7 @@ export default function ProviderVideoWorkspace({
             <button
               type="button"
               onClick={() => onOpenConnections(provider)}
-              className="btn-secondary shrink-0 px-3 py-2 text-xs"
+              className="btn-secondary shrink-0"
             >
               {label} key connected
             </button>
@@ -954,7 +954,7 @@ export default function ProviderVideoWorkspace({
                   value={modelSearch}
                   onChange={(event) => setModelSearch(event.target.value)}
                   placeholder="Find a model"
-                  className="min-w-0 flex-1 py-1.5 text-xs"
+                  className="min-w-0 flex-1"
                 />
               </div>
             </div>
@@ -1072,7 +1072,7 @@ export default function ProviderVideoWorkspace({
                 <button
                   type="button"
                   onClick={() => useDraftStore.getState().reorderReference(0, 1)}
-                  className="btn-secondary flex w-full items-center justify-center gap-2 text-sm"
+                  className="btn-secondary w-full"
                 >
                   <ArrowUpDown size={15} /> Swap first and last
                 </button>
@@ -1164,7 +1164,7 @@ export default function ProviderVideoWorkspace({
             {describeError && (
               <p role="alert" className="text-xs text-red-300">{describeError}</p>
             )}
-            {isEdit && <div className="flex flex-wrap gap-2">{Object.entries(EDIT_PROMPTS).map(([label, text]) => <button key={label} type="button" className="btn-secondary px-2.5 py-1.5 text-xs" onClick={() => setPrompt(selectedModel?.videoEdit?.promptSyntax === 'image-index' ? text.replace('@Video1', 'the source video').replace(/@Image(\d+)/g, 'image $1') : text)}>{label}</button>)}</div>}
+            {isEdit && <div className="flex flex-wrap gap-2">{Object.entries(EDIT_PROMPTS).map(([label, text]) => <button key={label} type="button" className="btn-secondary" onClick={() => setPrompt(selectedModel?.videoEdit?.promptSyntax === 'image-index' ? text.replace('@Video1', 'the source video').replace(/@Image(\d+)/g, 'image $1') : text)}>{label}</button>)}</div>}
             <AutoExpandingPrompt
               id="provider-video-prompt"
               value={prompt}
@@ -1188,7 +1188,7 @@ export default function ProviderVideoWorkspace({
               // can only be reached programmatically, so for a pointer this
               // button going dead is the whole of the explanation on offer.
               title={cloudWorkspace.checking ? 'Still checking your account.' : undefined}
-              className="btn-primary flex w-full items-center justify-center gap-2 py-3 text-base disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn-primary w-full"
             >
               {isSubmitting ? (
                 <>
@@ -1294,7 +1294,7 @@ export default function ProviderVideoWorkspace({
                 event.preventDefault();
                 void downloadResult();
               }}
-              className="btn-secondary flex w-full items-center justify-center gap-2"
+              className="btn-secondary w-full"
             >
               {isDownloading ? <Loader2 className="animate-spin" size={18} /> : <Download size={18} />}
               {isDownloading ? 'Preparing download…' : 'Download video'}

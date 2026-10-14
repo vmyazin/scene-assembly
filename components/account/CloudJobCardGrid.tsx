@@ -112,14 +112,14 @@ function CloudJobCard({ job, busy, onCancel }: { job: CloudJobView; busy: boolea
       {(location || (job.state === 'queued' && onCancel)) && (
         <div className="flex flex-wrap gap-1.5">
           {location && (
-            <Link href={location.href} onClick={location.select} className="btn-secondary px-2 py-1 text-xs">
+            <Link href={location.href} onClick={location.select} className="btn-secondary">
               Open the studio form
             </Link>
           )}
           {/* Unconfirmed, like the list's own cancel: nothing has been charged
               for a job the provider has not been handed yet. */}
           {job.state === 'queued' && onCancel && (
-            <button type="button" disabled={busy} onClick={() => onCancel(job.id)} className="btn-secondary px-2 py-1 text-xs disabled:opacity-50">
+            <button type="button" disabled={busy} onClick={() => onCancel(job.id)} className="btn-secondary">
               Cancel
             </button>
           )}

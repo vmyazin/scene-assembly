@@ -317,7 +317,7 @@ export default function LibraryOverlay({
                   <button
                     type="button"
                     onClick={() => void useGalleryStore.getState().clear()}
-                    className="btn-secondary px-3 py-1.5 text-sm"
+                    className="btn-secondary"
                   >
                     Clear library
                   </button>

@@ -586,10 +586,9 @@ export default function TimelineTrack({
       <TimelineDropZone
         data-testid="timeline-track"
         onDropRecord={(recordId) => onAdd(recordId)}
-        className={`glass-card border border-dashed border-transparent p-4 text-center transition-colors ${
+        className={`glass-card p-4 text-center ${
           fill ? 'flex h-full items-center justify-center' : ''
         }`}
-        activeClassName="border-[var(--neon-cyan)]/60 bg-[var(--neon-cyan)]/5"
       >
         <p className="text-[0.8125rem] text-[var(--foreground-muted)]">
           No clips yet. Drag one over from your clips, or press its + button.
@@ -612,7 +611,7 @@ export default function TimelineTrack({
         {/* Names the band. In the shell this row is the track's only header —
             the workspace above it has its own — so without this the largest
             surface on screen is labelled by nothing but a zoom percentage. */}
-        <span className="eyebrow text-[var(--neon-cyan)]">Timeline</span>
+        <span className="eyebrow">Timeline</span>
         <span className="text-xs text-[var(--foreground-subtle)]">
           {clips.length} {clips.length === 1 ? 'clip' : 'clips'}
           {layout.totalSeconds > 0 ? ` · ${formatDuration(layout.totalSeconds)}` : ''}

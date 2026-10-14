@@ -503,11 +503,11 @@ export default function KieGenerationWorkspace({
       <section className="glass-card p-3.5 md:p-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 items-start gap-3">
-            <button type="button" onClick={onBack} className="btn-secondary shrink-0 px-3 py-2 text-sm">
+            <button type="button" onClick={onBack} className="btn-secondary shrink-0">
               ← Back
             </button>
             <div className="min-w-0">
-              <div className="eyebrow mb-1 flex items-center gap-1.5 text-[var(--neon-cyan)]">
+              <div className="eyebrow mb-1 flex items-center gap-1.5">
                 <ProviderLogo provider="kie" size={13} /> Kie.ai
               </div>
               <h2 className="display text-lg font-semibold text-[var(--foreground)] sm:text-xl">
@@ -525,7 +525,7 @@ export default function KieGenerationWorkspace({
             <button
               type="button"
               onClick={() => onOpenConnections('kie')}
-              className="btn-secondary shrink-0 px-3 py-2 text-xs"
+              className="btn-secondary shrink-0"
             >
               Kie.ai key connected
             </button>
@@ -558,7 +558,7 @@ export default function KieGenerationWorkspace({
                   value={modelSearch}
                   onChange={(event) => setModelSearch(event.target.value)}
                   placeholder="Find a model"
-                  className="min-w-0 flex-1 py-1.5 text-xs"
+                  className="min-w-0 flex-1"
                 />
               </div>
             </div>
@@ -687,7 +687,7 @@ export default function KieGenerationWorkspace({
                 void submit();
               }}
               disabled={isSubmitting || cloudWorkspace.checking}
-              className="btn-primary flex w-full items-center justify-center gap-2 py-3 text-base disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn-primary w-full"
             >
               {isSubmitting ? <><Loader2 className="animate-spin" size={21} /> Uploading & starting…</> : <><Sparkles size={21} /> Generate {mediaType}</>}
             </button>
@@ -756,7 +756,7 @@ export default function KieGenerationWorkspace({
                     event.preventDefault();
                     void downloadResult();
                   }}
-                  className="btn-secondary flex w-full items-center justify-center gap-2"
+                  className="btn-secondary w-full"
                 >
                   {downloadingId ? <Loader2 className="animate-spin" size={18} /> : <Download size={18} />}
                   {downloadingId ? 'Preparing download…' : `Download ${mediaType}`}

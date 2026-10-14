@@ -36,8 +36,8 @@ export default function AccountPageShell({
       </header>
       <main className={`mx-auto w-full px-6 py-10 sm:px-8 md:px-12 md:py-14 lg:px-16 ${narrow ? 'max-w-xl' : wide ? 'max-w-[110rem]' : 'max-w-7xl'}`}>
         <div className={narrow ? '' : 'max-w-2xl'}>
-          {eyebrow && <p className="eyebrow mb-3 text-[var(--brand-accent)]">{eyebrow}</p>}
-          <h1 className="display text-3xl font-semibold tracking-tight text-[var(--foreground)] sm:text-4xl">{title}</h1>
+          {eyebrow && <p className="eyebrow mb-3">{eyebrow}</p>}
+          <h1 className="display text-3xl font-semibold text-[var(--foreground)] sm:text-4xl">{title}</h1>
           <p className="mt-3 text-base leading-relaxed text-[var(--foreground-muted)]">{description}</p>
         </div>
         {children}

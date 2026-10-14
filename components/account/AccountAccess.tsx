@@ -74,13 +74,13 @@ export default function AccountAccess({ mode, signInFailed = false, returnTo }: 
         ) : status === 'unavailable' ? (
           <>
             <p role="alert" className="text-sm text-amber-300">Account service is temporarily unavailable. Please try again shortly.</p>
-            <button type="button" disabled={busy} onClick={() => void retry()} className="btn-secondary mt-5 flex w-full justify-center"><RefreshCw size={15} aria-hidden="true" />{busy ? 'Checking…' : 'Try again'}</button>
+            <button type="button" disabled={busy} onClick={() => void retry()} className="btn-secondary mt-5 w-full"><RefreshCw size={15} aria-hidden="true" />{busy ? 'Checking…' : 'Try again'}</button>
           </>
         ) : (
           <>
             <button type="button" disabled={busy || !session?.googleEnabled} onClick={() => void act('sign-in/google')} className="flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-[var(--border-hover)] bg-white px-4 py-3 text-sm font-medium text-zinc-900 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--brand-accent)]"><GoogleMark />{busy ? 'Connecting…' : 'Continue with Google'}</button>
             {session && !session.googleEnabled && <p className="mt-3 text-sm text-[var(--foreground-muted)]">Google sign-in isn’t available yet. You can keep creating as a guest.</p>}
-            {session?.localSignIn && <button type="button" disabled={busy} onClick={() => void act('local-sign-in')} className="btn-secondary mt-4 flex w-full justify-center">Use local test account</button>}
+            {session?.localSignIn && <button type="button" disabled={busy} onClick={() => void act('local-sign-in')} className="btn-secondary mt-4 w-full">Use local test account</button>}
             <p className="mt-5 text-center text-sm leading-relaxed text-[var(--foreground-muted)]">An account is optional. You can create and download without signing in.</p>
           </>
         )}

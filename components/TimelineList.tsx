@@ -220,7 +220,7 @@ function ClipRow({
         type="button"
         onClick={() => onRemove(clip.id)}
         aria-label={`Remove ${titleOf(record)} from the timeline`}
-        className="btn-secondary shrink-0 px-2 py-1 text-xs"
+        className="btn-secondary shrink-0"
       >
         {/* See TimelineTrack: a cross removes from the sequence, a trash can
             deletes the file. */}
@@ -250,8 +250,7 @@ export default function TimelineList({
       <TimelineDropZone
         data-testid="timeline-list"
         onDropRecord={(recordId) => onAdd(recordId)}
-        className="glass-card border border-dashed border-transparent p-4 text-center transition-colors"
-        activeClassName="border-[var(--neon-cyan)]/60 bg-[var(--neon-cyan)]/5"
+        className="glass-card p-4 text-center"
       >
         <p className="text-[0.8125rem] text-[var(--foreground-muted)]">
           No clips yet. Drag one over from your clips, or press its + button.

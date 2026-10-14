@@ -75,7 +75,7 @@ export default function LandingIntro() {
           <p className="eyebrow mb-3">About {brand.name}</p>
           <h1
             id="about-scene-assembly"
-            className="display text-2xl sm:text-3xl md:text-4xl font-semibold leading-[1.08] text-balance"
+            className="display text-2xl sm:text-3xl md:text-4xl font-semibold text-balance"
           >
             <span className="text-[var(--foreground)]">Pick the right</span>{' '}
             <span className="gradient-text">AI engine for every image and video</span>

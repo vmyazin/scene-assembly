@@ -116,7 +116,7 @@ export default function AccountKeyImport({ ownerId }: { ownerId: string }) {
           </label>;
         })}
       </fieldset>
-      <button type="submit" disabled={busy || selected.size === 0} className="btn-primary mt-4 flex min-h-11 w-full items-center justify-center gap-2"><LockKeyhole size={16} aria-hidden="true" />{busy ? 'Importing…' : 'Import selected'}</button>
+      <button type="submit" disabled={busy || selected.size === 0} className="btn-primary mt-4 w-full"><LockKeyhole size={16} aria-hidden="true" />{busy ? 'Importing…' : 'Import selected'}</button>
     </form>}
     {notice && <p role="status" className="mt-4 text-sm text-emerald-300">{notice}</p>}
     {error && <p role="alert" className="mt-4 text-sm text-red-300">{error}</p>}

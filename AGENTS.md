@@ -16,6 +16,12 @@
 
 ## Auto-load routing
 
+- **UI consistency scan, component extraction, or a Tailwind utility that does
+  nothing** → first read `docs/ui-consistency-seeds.md`. Shared classes in
+  `app/globals.css` sit in `@layer components` (field defaults in `@layer base`)
+  so utilities beside them apply; a new unlayered class rule silently beats every
+  utility, which is how about 400 tweaks went dead before October 2026.
+
 - **Relaxed filter** → `lib/moderation/`. Standard sends today's payload
   (Kie still includes `nsfw_checker: true` and Veo `enableFallback: false`).
   Relaxed writes one documented host key and is text-only: a reference or a

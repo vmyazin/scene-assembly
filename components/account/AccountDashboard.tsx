@@ -83,7 +83,7 @@ export default function AccountDashboard() {
     return (
       <AccountState>
         <p role="alert" className="text-sm text-amber-300">Account service is temporarily unavailable. Your account data has not been changed.</p>
-        <button type="button" disabled={busy} onClick={() => void retry()} className="btn-secondary mt-5 flex w-full justify-center">
+        <button type="button" disabled={busy} onClick={() => void retry()} className="btn-secondary mt-5 w-full">
           <RefreshCw size={15} aria-hidden="true" />{busy ? 'Checking…' : 'Try again'}
         </button>
         {error && <p role="alert" className="mt-4 text-sm text-[var(--neon-pink)]">{error}</p>}

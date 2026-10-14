@@ -48,7 +48,7 @@ export default function FinalizeDraftButton({
         type="button"
         disabled={busy}
         onClick={() => setOpen(true)}
-        className="btn-secondary flex w-full items-center justify-center gap-2 disabled:opacity-50"
+        className="btn-secondary w-full"
       >
         <Sparkles size={16} aria-hidden="true" />
         {`Finalize at 1080p${price}`}
@@ -70,12 +70,12 @@ export default function FinalizeDraftButton({
           type="button"
           disabled={busy || figure?.costUsd == null}
           onClick={() => void approve()}
-          className="btn-primary px-3 py-2 text-sm disabled:opacity-50"
+          className="btn-primary"
         >
           {busy ? <Loader2 className="animate-spin" size={16} aria-hidden="true" /> : null}
           Approve and finalize
         </button>
-        <button type="button" disabled={busy} onClick={() => setOpen(false)} className="btn-secondary px-3 py-2 text-sm">
+        <button type="button" disabled={busy} onClick={() => setOpen(false)} className="btn-secondary">
           Cancel
         </button>
       </div>

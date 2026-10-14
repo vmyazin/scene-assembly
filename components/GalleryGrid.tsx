@@ -302,7 +302,7 @@ export default function GalleryGrid({
                 <button
                   type="button"
                   onClick={() => void sendAsReference(record)}
-                  className="btn-secondary flex items-center gap-1.5 px-2 py-1 text-xs"
+                  className="btn-secondary"
                 >
                   <ImageDown size={13} /> Use image
                 </button>
@@ -313,7 +313,7 @@ export default function GalleryGrid({
                     if (onPickVideo && record.blob) void onPickVideo(new File([record.blob], `${fallbackFilenameBase(record.prompt, 'video')}.${extensionForMedia('video', record.blob.type || record.mimeType)}`, {type: record.blob.type || record.mimeType})).catch(error => toast.error(error instanceof Error ? error.message : 'Could not select video.'));
                     else addToTimeline(record);
                   }}
-                  className="btn-secondary flex items-center gap-1.5 px-2 py-1 text-xs"
+                  className="btn-secondary"
                 >
                   <Film size={13} /> {onPickVideo ? 'Use video' : 'Add to timeline'}
                 </button>
@@ -324,7 +324,7 @@ export default function GalleryGrid({
                       type="button"
                       onClick={() => void keep(record)}
                       disabled={busy}
-                      className="btn-secondary flex items-center gap-1.5 px-2 py-1 text-xs disabled:opacity-50"
+                      className="btn-secondary"
                     >
                       {busy ? <Loader2 className="animate-spin" size={13} /> : <ImageDown size={13} />}
                       {busy ? 'Keeping…' : 'Keep'}
@@ -333,7 +333,7 @@ export default function GalleryGrid({
                   <button
                     type="button"
                     onClick={() => void sendAsReference(record)}
-                    className="btn-secondary flex items-center gap-1.5 px-2 py-1 text-xs"
+                    className="btn-secondary"
                   >
                     <ImageDown size={13} /> Use as reference
                   </button>
@@ -346,7 +346,7 @@ export default function GalleryGrid({
                     if (onPickVideo && record.blob) void onPickVideo(new File([record.blob], `${fallbackFilenameBase(record.prompt, 'video')}.${extensionForMedia('video', record.blob.type || record.mimeType)}`, {type: record.blob.type || record.mimeType})).catch(error => toast.error(error instanceof Error ? error.message : 'Could not select video.'));
                     else addToTimeline(record);
                   }}
-                      className="btn-secondary flex items-center gap-1.5 px-2 py-1 text-xs"
+                      className="btn-secondary"
                     >
                       <Film size={13} /> {onPickVideo ? 'Use video' : 'Add to timeline'}
                     </button>
@@ -358,7 +358,7 @@ export default function GalleryGrid({
                     <button
                       type="button"
                       onClick={() => restore(record)}
-                      className="btn-secondary flex items-center gap-1.5 px-2 py-1 text-xs"
+                      className="btn-secondary"
                     >
                       <Wand2 size={13} /> Restore settings
                     </button>
@@ -391,7 +391,7 @@ export default function GalleryGrid({
                     type="button"
                     onClick={() => void download(record)}
                     aria-label={`Download ${titleOf(record)}`}
-                    className="btn-secondary px-2 py-1 text-xs"
+                    className="btn-secondary"
                   >
                     <Download size={13} />
                   </button>
@@ -399,7 +399,7 @@ export default function GalleryGrid({
                     type="button"
                     onClick={() => void useGalleryStore.getState().remove(record.id)}
                     aria-label={`Remove ${titleOf(record)}`}
-                    className="btn-secondary px-2 py-1 text-xs"
+                    className="btn-secondary"
                   >
                     <Trash2 size={13} />
                   </button>

@@ -128,8 +128,8 @@ export default function AgentConsent({ requestId, navigate = url => window.locat
             </label>
             {problem && <p role="alert" className="mt-4 text-sm leading-relaxed text-[var(--neon-pink)]">{problem}</p>}
             <div className="mt-6 flex gap-3">
-              <button type="submit" disabled={busy} className="btn-primary flex flex-1 justify-center">{busy ? 'Connecting…' : 'Approve'}</button>
-              <button type="button" disabled={busy} onClick={() => void decide('deny')} className="btn-secondary flex flex-1 justify-center">Deny</button>
+              <button type="submit" disabled={busy} className="btn-primary flex-1">{busy ? 'Connecting…' : 'Approve'}</button>
+              <button type="button" disabled={busy} onClick={() => void decide('deny')} className="btn-secondary flex-1">Deny</button>
             </div>
           </form>
         )}

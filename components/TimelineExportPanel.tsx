@@ -383,7 +383,7 @@ export default function TimelineExportPanel({ engines, clips, clipStates, output
             ? "Keeping the clips' own sound."
             : 'Exporting silently — the file has no sound.'}
         </p>
-        <button type="button" onClick={cancel} className="btn-secondary self-start px-3 py-1.5 text-xs">
+        <button type="button" onClick={cancel} className="btn-secondary self-start">
           <X size={13} /> Cancel
         </button>
       </div>
@@ -428,7 +428,7 @@ export default function TimelineExportPanel({ engines, clips, clipStates, output
           <button
             type="button"
             onClick={() => saveBlobAs(completed.blob, completed.filename)}
-            className="btn-secondary px-3 py-1.5 text-xs"
+            className="btn-secondary"
           >
             <Download size={13} aria-hidden /> Download
           </button>
@@ -442,7 +442,7 @@ export default function TimelineExportPanel({ engines, clips, clipStates, output
               type="button"
               onClick={() => void saveToLibrary()}
               disabled={completed.saving}
-              className="btn-secondary px-3 py-1.5 text-xs disabled:opacity-50"
+              className="btn-secondary"
             >
               {completed.saving ? (
                 <Loader2 size={13} className="animate-spin" aria-hidden />
@@ -467,7 +467,7 @@ export default function TimelineExportPanel({ engines, clips, clipStates, output
         <button
           type="button"
           disabled
-          className="btn-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-50"
+          className="btn-primary w-full"
         >
           <Download size={14} aria-hidden />
           Export
@@ -487,7 +487,7 @@ export default function TimelineExportPanel({ engines, clips, clipStates, output
         <button
           type="button"
           disabled
-          className="btn-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-50"
+          className="btn-primary w-full"
         >
           <Download size={14} aria-hidden />
           Export
@@ -503,7 +503,7 @@ export default function TimelineExportPanel({ engines, clips, clipStates, output
         <button
           type="button"
           disabled
-          className="btn-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-50"
+          className="btn-primary w-full"
         >
           <Loader2 size={14} className="animate-spin" aria-hidden /> Export
         </button>
@@ -524,7 +524,7 @@ export default function TimelineExportPanel({ engines, clips, clipStates, output
         <button
           type="button"
           onClick={() => void runExport(engine)}
-          className="btn-primary w-full justify-center"
+          className="btn-primary w-full"
         >
           <Download size={14} aria-hidden />
           Export {formatCompactDuration(totalDuration)} · {soundLabel}
@@ -538,7 +538,7 @@ export default function TimelineExportPanel({ engines, clips, clipStates, output
           <button
             type="button"
             onClick={() => void runExport(fallbackEngine)}
-            className="btn-secondary w-full justify-center text-xs"
+            className="btn-secondary w-full"
           >
             <UploadCloud size={13} aria-hidden />
             Export on the server instead · upload {formatBytes(totalUploadBytes)}
@@ -563,7 +563,7 @@ export default function TimelineExportPanel({ engines, clips, clipStates, output
         <button
           type="button"
           onClick={() => void runExport(engine)}
-          className="btn-primary w-full justify-center"
+          className="btn-primary w-full"
         >
           <UploadCloud size={14} aria-hidden />
           Export {formatCompactDuration(totalDuration)} · {soundLabel} · on the server · upload {formatBytes(totalUploadBytes)}
@@ -591,7 +591,7 @@ export default function TimelineExportPanel({ engines, clips, clipStates, output
       <button
         type="button"
         disabled
-        className="btn-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-50"
+        className="btn-primary w-full"
       >
         <AlertTriangle size={14} aria-hidden />
         Export unavailable

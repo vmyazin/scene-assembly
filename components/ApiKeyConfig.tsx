@@ -178,7 +178,7 @@ function SecretInput({
           if (event.key === 'Enter') onEnter?.();
         }}
         placeholder={placeholder}
-        className="w-full pr-11"
+        className="w-full"
         disabled={disabled}
       />
       <button
@@ -718,7 +718,7 @@ export default function ApiKeyConfig({ open, onOpenChange, focusProvider }: ApiK
                         value={cfAccountId}
                         onChange={(e) => setCfAccountId(e.target.value.trim())}
                         placeholder="32-character account ID"
-                        className="w-full font-mono text-[0.9375rem]"
+                        className="w-full"
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -732,7 +732,7 @@ export default function ApiKeyConfig({ open, onOpenChange, focusProvider }: ApiK
                           value={cfToken}
                           onChange={(e) => setCfToken(e.target.value.trim())}
                           placeholder="Workers AI API token"
-                          className="w-full pr-11 font-mono text-[0.9375rem]"
+                          className="w-full"
                         />
                         <button
                           onClick={() => setShowCfToken(!showCfToken)}
@@ -804,7 +804,7 @@ export default function ApiKeyConfig({ open, onOpenChange, focusProvider }: ApiK
               <button
                 onClick={handleSave}
                 disabled={isValidating}
-                className="btn-primary w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
+                className="btn-primary w-full sm:w-auto"
               >
                 {isValidating ? (
                   <>

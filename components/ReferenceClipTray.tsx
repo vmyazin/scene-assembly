@@ -247,7 +247,7 @@ function ClipColumn({
         onClick={onPick}
         onDragOver={(event) => { if (!locked && Array.from(event.dataTransfer.types).includes('Files')) event.preventDefault(); }}
         onDrop={onDrop}
-        className="btn-secondary flex w-full items-center justify-center gap-2 border-dashed py-3 disabled:cursor-not-allowed disabled:opacity-50"
+        className="btn-secondary w-full"
       >
         {reading ? <Loader2 size={18} className="animate-spin" /> : kind === 'video' ? <Film size={18} /> : <Music size={18} />}
         {reading ? 'Reading clip…' : `Drop or upload ${label}`}

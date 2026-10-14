@@ -98,7 +98,7 @@ export default function ProviderBilling({ source, ownerId, epoch }: { source: 'a
         </div>
         <button
           type="button"
-          className="btn-secondary grid size-10 place-items-center p-0"
+          className="btn-secondary size-10 place-items-center"
           onClick={reload}
           disabled={loading}
           aria-label={loading ? 'Checking balances' : 'Refresh balances'}

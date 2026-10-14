@@ -148,46 +148,54 @@ body::after {
     radial-gradient(55% 40% at 8% 100%, rgba(255, 168, 84, 0.07), transparent 65%);
 }
 
-/* Surface card — hairline border, calm fill, gradient hairline at the top edge.
-   Hover brightens the border and lifts a touch (no loud glow). */
-.glass-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-md);
-  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+/* Shared component classes live in the components layer so a Tailwind utility
+   on the same element wins, as it does everywhere else in Tailwind. Unlayered,
+   these beat every utility regardless of specificity: `btn-secondary text-xs`
+   rendered at --text-ui, and about 1,400 such tweaks silently did nothing. */
+@layer components {
+  /* Surface card — hairline border, calm fill, gradient hairline at the top edge.
+     Hover brightens the border and lifts a touch (no loud glow). */
+  .glass-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+    transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+  }
+
+  .glass-card:hover {
+    border-color: var(--border-hover);
+    background: var(--surface-hover);
+  }
+
+  /* Reserve the selected border's width so choosing a card never shifts its
+     content. Keep this above the generic glass hover state in specificity. */
+  .glass-card.media-card {
+    border-width: 2px;
+  }
+
+  .glass-card.media-card[aria-pressed='true'] {
+    border-color: var(--media-card-accent);
+  }
+
+
+  /* Dialog surface — a solid, quiet panel. Modals are read, not admired: no
+     hover lift, no translucency, and enough contrast to sit above the canvas. */
+  .dialog-panel {
+    background: var(--background-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 30px 70px -25px rgba(0, 8, 9, 0.85);
+  }
+
+  .dialog-scroll-region {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
-.glass-card:hover {
-  border-color: var(--border-hover);
-  background: var(--surface-hover);
-}
-
-/* Reserve the selected border's width so choosing a card never shifts its
-   content. Keep this above the generic glass hover state in specificity. */
-.glass-card.media-card {
-  border-width: 2px;
-}
-
-.glass-card.media-card[aria-pressed='true'] {
-  border-color: var(--media-card-accent);
-}
-
-
-/* Dialog surface — a solid, quiet panel. Modals are read, not admired: no
-   hover lift, no translucency, and enough contrast to sit above the canvas. */
-.dialog-panel {
-  background: var(--background-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 30px 70px -25px rgba(0, 8, 9, 0.85);
-}
-
-.dialog-scroll-region {
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-}
-
+/* Deliberately unlayered: on phones these must beat the padding and sizing
+   utilities a dialog sets for wider screens. */
 @media (max-width: 639px) {
   .dialog-mobile-sheet {
     max-height: 90dvh;
@@ -200,8 +208,12 @@ body::after {
     padding-bottom: max(0.875rem, env(safe-area-inset-bottom));
   }
 
+  /* Text-like inputs are left out: the global field height (an `input:not(...)`
+     chain, so more specific than this) always outranked this rule for them, and
+     phone dialogs have shipped 36px text fields. List `input` here to give them
+     the 48px target too. */
   .dialog-touch-targets button,
-  .dialog-touch-targets input,
+  .dialog-touch-targets input:is([type='checkbox'], [type='radio'], [type='range']),
   .dialog-touch-targets select,
   .dialog-touch-targets textarea {
     min-height: 3rem;
@@ -226,189 +238,199 @@ body::after {
   }
 }
 
-/* Labels inside dialogs and forms. The mono eyebrow is too tracked-out to
-   read at form density, so labels here stay sentence case in the UI face.
-   All three sit on the --text-ui ramp: at this density a 17px label read as a
-   heading and pushed every field apart, so the label now leads on weight
-   rather than size. */
-.field-label {
-  font-size: var(--text-ui);
-  font-weight: 600;
-  line-height: 1.35;
-  color: var(--foreground);
+@layer components {
+  /* Labels inside dialogs and forms. The mono eyebrow is too tracked-out to
+     read at form density, so labels here stay sentence case in the UI face.
+     All three sit on the --text-ui ramp: at this density a 17px label read as a
+     heading and pushed every field apart, so the label now leads on weight
+     rather than size. */
+  .field-label {
+    font-size: var(--text-ui);
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--foreground);
+  }
+
+  .field-sublabel {
+    font-size: var(--text-ui-sm);
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--foreground);
+  }
+
+  .field-hint {
+    font-size: var(--text-ui-sm);
+    line-height: 1.5;
+    color: var(--foreground-muted);
+  }
 }
 
-.field-sublabel {
-  font-size: var(--text-ui-sm);
-  font-weight: 500;
-  line-height: 1.4;
-  color: var(--foreground);
-}
-
-.field-hint {
-  font-size: var(--text-ui-sm);
-  line-height: 1.5;
-  color: var(--foreground-muted);
-}
-
-/* Refined display headings: clean Geist, tight tracking, optional gradient ink */
+/* Refined display headings: clean Geist, tight tracking, optional gradient ink.
+   Deliberately unlayered: the tight leading is the heading role, so it beats the
+   line-height a `text-*` size utility brings along. */
 .display {
   font-family: var(--font-geist-sans), sans-serif;
   letter-spacing: -0.035em;
   line-height: 1.02;
 }
 
-.gradient-text {
-  background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+@layer components {
+  .gradient-text {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+
+  /* Eyebrow / micro-label — the Linear/Vercel uppercase mono tag */
+  .eyebrow {
+    font-family: var(--font-geist-mono), monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--foreground-muted);
+  }
+
+  /* Small bordered pill */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: var(--text-ui-sm);
+    font-weight: 500;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--foreground-muted);
+  }
+
+  /* Buttons — crisp, defined, no shimmer/uppercase/Orbitron.
+     Both variants declare their own font-size: a bare <button> otherwise falls
+     back to the UA's 13.33px, which made identical buttons render at different
+     heights depending on whether the caller happened to add a text-* class. */
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    min-height: var(--control-h);
+    background: var(--neon-cyan);
+    color: #04141a;
+    font-size: var(--text-ui);
+    font-weight: 600;
+    font-family: var(--font-geist-sans), sans-serif;
+    padding: var(--control-py) 0.95rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: filter 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    filter: brightness(1.08);
+    box-shadow: var(--glow-cyan);
+  }
+
+  .btn-primary:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    min-height: var(--control-h);
+    background: var(--surface);
+    color: var(--foreground);
+    border: 1px solid var(--border);
+    font-size: var(--text-ui);
+    font-weight: 500;
+    font-family: var(--font-geist-sans), sans-serif;
+    padding: var(--control-py) 0.85rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease;
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--surface-hover);
+    border-color: var(--border-hover);
+  }
+
+  /*
+   * Disabled buttons carried no styling at all: a disabled primary kept its full
+   * cyan fill and still lit up on hover, so it read as the loudest thing on the
+   * screen while doing nothing. Stated once here rather than per button, because
+   * every surface that disables one had the same problem.
+   */
+  .btn-primary:disabled,
+  .btn-secondary:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    filter: none;
+    box-shadow: none;
+  }
 }
 
+/* Element defaults sit in the base layer, after Tailwind's preflight, so a
+   field's own utilities (padding, size, background) apply. */
+@layer base {
+  /* Inputs — hairline border, calm focus ring in cyan */
+  input,
+  textarea,
+  select {
+    background: var(--background-elevated);
+    border: 1px solid var(--border-input);
+    color: var(--foreground);
+    padding: var(--control-py) var(--control-px);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-geist-sans), sans-serif;
+    font-size: var(--text-ui);
+    line-height: 1.45;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
 
-/* Eyebrow / micro-label — the Linear/Vercel uppercase mono tag */
-.eyebrow {
-  font-family: var(--font-geist-mono), monospace;
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-  font-size: 0.7rem;
-  font-weight: 500;
-  color: var(--foreground-muted);
-}
+  /* Single-line fields share the button height so a field sitting next to a
+     button lines up. Textareas are excluded — they size to their rows. */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select {
+    min-height: var(--control-h);
+  }
 
-/* Small bordered pill */
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: var(--text-ui-sm);
-  font-weight: 500;
-  padding: 0.2rem 0.6rem;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--foreground-muted);
-}
+  input:focus,
+  textarea:focus,
+  select:focus {
+    outline: none;
+    border-color: rgba(0, 255, 249, 0.6);
+    box-shadow: 0 0 0 3px rgba(0, 255, 249, 0.12);
+  }
 
-/* Buttons — crisp, defined, no shimmer/uppercase/Orbitron.
-   Both variants declare their own font-size: a bare <button> otherwise falls
-   back to the UA's 13.33px, which made identical buttons render at different
-   heights depending on whether the caller happened to add a text-* class. */
-.btn-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  min-height: var(--control-h);
-  background: var(--neon-cyan);
-  color: #04141a;
-  font-size: var(--text-ui);
-  font-weight: 600;
-  font-family: var(--font-geist-sans), sans-serif;
-  padding: var(--control-py) 0.95rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: filter 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
-}
+  /* A field still waiting on something says so where the reader is looking,
+     rather than only in a sentence somewhere below the button. Hung off
+     aria-invalid so the visual state and the one assistive tech reads cannot
+     drift apart. In the brand accent, not red: nothing has failed, the field is
+     asking to be filled in. */
+  input[aria-invalid='true'],
+  textarea[aria-invalid='true'],
+  select[aria-invalid='true'] {
+    border-color: rgba(255, 237, 78, 0.55);
+  }
 
-.btn-primary:hover:not(:disabled) {
-  filter: brightness(1.08);
-  box-shadow: var(--glow-cyan);
-}
+  input[aria-invalid='true']:focus,
+  textarea[aria-invalid='true']:focus,
+  select[aria-invalid='true']:focus {
+    border-color: rgba(255, 237, 78, 0.8);
+    box-shadow: 0 0 0 3px rgba(255, 237, 78, 0.14);
+  }
 
-.btn-primary:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-.btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  min-height: var(--control-h);
-  background: var(--surface);
-  color: var(--foreground);
-  border: 1px solid var(--border);
-  font-size: var(--text-ui);
-  font-weight: 500;
-  font-family: var(--font-geist-sans), sans-serif;
-  padding: var(--control-py) 0.85rem;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: var(--surface-hover);
-  border-color: var(--border-hover);
-}
-
-/*
- * Disabled buttons carried no styling at all: a disabled primary kept its full
- * cyan fill and still lit up on hover, so it read as the loudest thing on the
- * screen while doing nothing. Stated once here rather than per button, because
- * every surface that disables one had the same problem.
- */
-.btn-primary:disabled,
-.btn-secondary:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  filter: none;
-  box-shadow: none;
-}
-
-/* Inputs — hairline border, calm focus ring in cyan */
-input,
-textarea,
-select {
-  background: var(--background-elevated);
-  border: 1px solid var(--border-input);
-  color: var(--foreground);
-  padding: var(--control-py) var(--control-px);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-geist-sans), sans-serif;
-  font-size: var(--text-ui);
-  line-height: 1.45;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-/* Single-line fields share the button height so a field sitting next to a
-   button lines up. Textareas are excluded — they size to their rows. */
-input:not([type='checkbox']):not([type='radio']):not([type='range']),
-select {
-  min-height: var(--control-h);
-}
-
-input:focus,
-textarea:focus,
-select:focus {
-  outline: none;
-  border-color: rgba(0, 255, 249, 0.6);
-  box-shadow: 0 0 0 3px rgba(0, 255, 249, 0.12);
-}
-
-/* A field still waiting on something says so where the reader is looking,
-   rather than only in a sentence somewhere below the button. Hung off
-   aria-invalid so the visual state and the one assistive tech reads cannot
-   drift apart. In the brand accent, not red: nothing has failed, the field is
-   asking to be filled in. */
-input[aria-invalid='true'],
-textarea[aria-invalid='true'],
-select[aria-invalid='true'] {
-  border-color: rgba(255, 237, 78, 0.55);
-}
-
-input[aria-invalid='true']:focus,
-textarea[aria-invalid='true']:focus,
-select[aria-invalid='true']:focus {
-  border-color: rgba(255, 237, 78, 0.8);
-  box-shadow: 0 0 0 3px rgba(255, 237, 78, 0.14);
-}
-
-input::placeholder,
-textarea::placeholder {
-  color: var(--foreground-subtle);
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--foreground-subtle);
+  }
 }
 
 /* Thin, subtle scrollbar */

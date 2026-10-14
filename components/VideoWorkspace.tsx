@@ -127,7 +127,7 @@ export default function VideoWorkspace({
           blurb. No eyebrow; the nav's Image/Video toggle already says where
           you are. */}
       <div className="space-y-2 py-0 text-center sm:space-y-2.5 sm:py-1">
-        <h2 className="display px-4 text-2xl font-semibold leading-[1.1] text-balance sm:text-3xl md:text-4xl">
+        <h2 className="display px-4 text-2xl font-semibold text-balance sm:text-3xl md:text-4xl">
           <span className="gradient-text">Create a video</span>{' '}
           <span className="text-[var(--foreground)]">from an idea or image</span>
         </h2>

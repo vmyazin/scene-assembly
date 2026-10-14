@@ -74,7 +74,7 @@ export default function ImageLightbox({
                 event.stopPropagation();
                 onDownload();
               }}
-              className="btn-secondary image-lightbox-download absolute bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-2"
+              className="btn-secondary image-lightbox-download absolute bottom-5 left-1/2 -translate-x-1/2"
             >
               <Download size={18} />
               Download

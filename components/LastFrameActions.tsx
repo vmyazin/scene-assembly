@@ -106,7 +106,7 @@ export default function LastFrameActions({
           type="button"
           onClick={() => void save()}
           disabled={pending !== null}
-          className="btn-secondary flex flex-1 items-center justify-center gap-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+          className="btn-secondary flex-1"
         >
           {pending === 'save' ? <Loader2 className="animate-spin" size={15} /> : <ImageDown size={15} />}
           {pending === 'save' ? 'Reading frame…' : 'Save last frame'}
@@ -116,7 +116,7 @@ export default function LastFrameActions({
             type="button"
             onClick={() => void copy()}
             disabled={pending !== null}
-            className="btn-secondary flex flex-1 items-center justify-center gap-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+            className="btn-secondary flex-1"
           >
             {pending === 'copy' ? (
               <Loader2 className="animate-spin" size={15} />
@@ -134,7 +134,7 @@ export default function LastFrameActions({
           type="button"
           onClick={() => void continueFrom()}
           disabled={pending !== null}
-          className="btn-secondary flex w-full items-center justify-center gap-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+          className="btn-secondary w-full"
         >
           {pending === 'continue' ? <Loader2 className="animate-spin" size={15} /> : <Film size={15} />}
           {pending === 'continue' ? 'Reading frame…' : 'Continue from last frame'}

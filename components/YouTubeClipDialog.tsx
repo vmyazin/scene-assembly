@@ -14,7 +14,6 @@ import { useAccountStore } from '@/store/useAccountStore';
 export interface YouTubeClipTarget { provider: string; modelId: string; modelLabel: string }
 
 const BUTTON = 'flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-[var(--neon-cyan)]/30 bg-[var(--neon-cyan)]/5 px-4 text-sm font-medium text-[var(--foreground-muted)] transition-colors enabled:hover:border-[var(--neon-cyan)]/60 enabled:hover:text-[var(--foreground)] disabled:opacity-50';
-const FIELD = 'rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm';
 const ACCOUNT_CHANGED = 'Your account changed. Import the section again.';
 
 export default function YouTubeClipDialog({ open, target, onClose, onImported }: {
@@ -164,7 +163,7 @@ export default function YouTubeClipDialog({ open, target, onClose, onImported }:
       <span aria-hidden="true">{label}</span>
       <div className="flex items-center rounded-xl border border-[var(--border)] bg-[var(--surface)] focus-within:border-[var(--neon-cyan)]/60">
         <input aria-label={label} value={which === 'from' ? fromText : toText} onChange={event => setTime(which, event.target.value)} disabled={busy} inputMode="decimal" placeholder={which === 'to' ? 'm:ss.s' : undefined}
-          className="w-full min-w-0 border-0! bg-transparent! px-3 text-sm shadow-none! outline-none sm:w-24" />
+          className="w-full min-w-0 shadow-none! outline-none sm:w-24" />
         <button type="button" aria-label={setLabel} title="Use the player\u2019s current time" disabled={busy} onClick={() => mark(which)}
           className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center gap-1.5 px-2 text-[var(--foreground-muted)] enabled:hover:text-[var(--foreground)] disabled:opacity-50">
           <Crosshair size={16} aria-hidden="true" /><span className="hidden text-sm sm:inline">{setLabel}</span>
@@ -176,12 +175,12 @@ export default function YouTubeClipDialog({ open, target, onClose, onImported }:
     // A bottom sheet on phones, sized to its content; a centred card from `sm` up.
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 backdrop-blur-md sm:items-center sm:p-4" onClick={close}>
       <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={event => event.stopPropagation()}
-        className="glass-card flex max-h-[100dvh] w-full max-w-2xl flex-col gap-3 overflow-y-auto rounded-t-2xl p-3 sm:max-h-[90vh] sm:gap-4 sm:rounded-2xl sm:p-4 md:p-5">
+        className="glass-card flex max-h-[100dvh] w-full max-w-2xl flex-col gap-3 overflow-y-auto p-3 sm:max-h-[90vh] sm:gap-4 sm:p-4 md:p-5">
         <div className="flex items-center justify-between gap-3">
           <h2 id={titleId} className="display text-base font-semibold sm:text-lg">Import a section from YouTube</h2>
           <button type="button" aria-label="Close" onClick={close} disabled={busy} className="-mr-2 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-[var(--foreground-muted)] enabled:hover:text-[var(--foreground)] disabled:opacity-50"><X size={18} /></button>
         </div>
-        <input aria-label="YouTube link" value={linkText} onChange={event => changeLink(event.target.value)} disabled={busy} inputMode="url" placeholder="Paste a YouTube link" className={`${FIELD} w-full`} />
+        <input aria-label="YouTube link" value={linkText} onChange={event => changeLink(event.target.value)} disabled={busy} inputMode="url" placeholder="Paste a YouTube link" className="w-full" />
         {linkText.trim() && !link && <p role="alert" className="text-sm text-red-300">Paste a YouTube video or Shorts link.</p>}
         {link && <>
           <div ref={playerHost} data-testid="youtube-player" className="aspect-video w-full overflow-hidden rounded-xl bg-black [&_iframe]:h-full [&_iframe]:w-full" />
@@ -212,7 +211,7 @@ export default function YouTubeClipDialog({ open, target, onClose, onImported }:
         </div>}
         {link && <label className="flex min-h-[44px] items-center gap-2 text-sm">
           <input type="checkbox" checked={saveToLibrary} disabled={busy} onChange={event => setSaveToLibrary(event.target.checked)} className="h-4 w-4 accent-[var(--neon-cyan)]" />
-          <span>Save to library <span className="hidden text-[var(--foreground-muted)] sm:inline">to reuse this clip for more edits</span></span>
+          <span>Save to library <span className="hidden sm:inline">to reuse this clip for more edits</span></span>
         </label>}
         <p role="status" className="sr-only">{phase === 'fetching' ? 'Fetching section…' : busy ? 'Preparing clip…' : ''}</p>
         {error && <p role="alert" className="text-sm text-red-300">{error}</p>}

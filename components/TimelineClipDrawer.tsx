@@ -429,7 +429,7 @@ export default function TimelineClipDrawer({
       <button
         type="button"
         onClick={() => setPickerOpen(true)}
-        className="btn-secondary w-full justify-center gap-1.5 px-2.5 py-2 text-xs"
+        className="btn-secondary w-full"
       >
         <Library size={13} aria-hidden="true" /> Add from library
       </button>

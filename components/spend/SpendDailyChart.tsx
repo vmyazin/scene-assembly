@@ -164,7 +164,7 @@ export default function SpendDailyChart({ days }: { days: SpendDay[] }) {
 
         {hoveredDay && hovered && (
           <div
-            className="glass-card pointer-events-none absolute top-0 z-10 w-44 -translate-x-1/2 border-[var(--border-hover)] p-2 text-xs shadow-lg"
+            className="glass-card pointer-events-none absolute top-0 z-10 w-44 -translate-x-1/2 p-2 text-xs"
             style={{ left: `${hovered.leftPct}%` }}
           >
             <p className="font-mono text-[var(--foreground-muted)]">{hoveredDay.day}</p>

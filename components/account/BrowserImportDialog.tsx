@@ -184,8 +184,8 @@ export default function BrowserImportDialog({
               <>
                 <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5">
                   <div className="flex flex-wrap gap-1.5">
-                    <button type="button" disabled={busy} onClick={() => asset.selectAll(visible.map(record => record.id))} className="btn-secondary px-2.5 py-1 text-xs">Select all</button>
-                    <button type="button" disabled={busy || asset.selectedCount === 0} onClick={asset.clearSelection} className="btn-secondary px-2.5 py-1 text-xs">Clear</button>
+                    <button type="button" disabled={busy} onClick={() => asset.selectAll(visible.map(record => record.id))} className="btn-secondary">Select all</button>
+                    <button type="button" disabled={busy || asset.selectedCount === 0} onClick={asset.clearSelection} className="btn-secondary">Clear</button>
                     {([['all', `All ${counts.all}`], ['image', `Images ${counts.image}`], ['video', `Video ${counts.video}`]] as const).map(([id, label]) => (
                       <button
                         key={id}
@@ -240,7 +240,7 @@ export default function BrowserImportDialog({
                               </span>
                             </label>
                             {asset.restartable.has(record.id) && (
-                              <button type="button" className="btn-secondary mt-2 w-full justify-center text-xs" onClick={() => asset.restart(record)}>{`Start new import attempt for ${title}`}</button>
+                              <button type="button" className="btn-secondary mt-2 w-full" onClick={() => asset.restart(record)}>{`Start new import attempt for ${title}`}</button>
                             )}
                           </li>
                         );
@@ -272,7 +272,7 @@ export default function BrowserImportDialog({
                         type="button"
                         disabled={busy || asset.selectedCount === 0 || overQuota}
                         onClick={() => void asset.submit()}
-                        className="btn-primary min-h-11 px-5"
+                        className="btn-primary"
                       >
                         {busy ? 'Importing…' : asset.selectedCount === 0 ? 'Import' : `Import ${asset.selectedCount} file${asset.selectedCount === 1 ? '' : 's'}`}
                       </button>

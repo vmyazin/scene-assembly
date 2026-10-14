@@ -24,7 +24,7 @@ export default function SubmissionError({ message, retry, onCancelRetry, offerTr
     <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
       <p role="alert">{message}</p>
       {offerTryRelaxed && onTryRelaxed && (
-        <button type="button" className="btn-secondary mt-2 text-xs" onClick={onTryRelaxed}>
+        <button type="button" className="btn-secondary mt-2" onClick={onTryRelaxed}>
           Try with Relaxed
         </button>
       )}

@@ -151,7 +151,7 @@ export default function Studio() {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.05 }}
-                  className="display text-2xl sm:text-3xl md:text-4xl font-semibold leading-[1.1] px-4 text-balance"
+                  className="display text-2xl sm:text-3xl md:text-4xl font-semibold px-4 text-balance"
                 >
                   <span className="gradient-text">Create stunning images</span>{' '}
                   <span className="text-[var(--foreground)]">with AI power</span>
