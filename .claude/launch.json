@@ -383,6 +383,15 @@
         "3199"
       ],
       "port": 3199
+    },
+    {
+      "name": "YouTube clip source (containers)",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "(cd cloud && WRANGLER_SEND_METRICS=false node node_modules/wrangler/bin/wrangler.js dev --local --port 8897 --define __LOCAL_DEV__:true --enable-containers) & ACCOUNT_WORKER_ORIGIN=http://127.0.0.1:8897 node node_modules/next/dist/bin/next dev --port 3197; wait"
+      ],
+      "port": 3197
     }
   ],
   "version": "0.0.1"
