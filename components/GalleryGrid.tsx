@@ -12,6 +12,9 @@ import { extractLastFrameFromBlob } from '@/lib/video-frame';
 import { LOCAL_PROVIDER } from '@/lib/timeline/import-local';
 import RecoverMediaDropZone from '@/components/RecoverMediaDropZone';
 import VideoPlayer from '@/components/video/VideoPlayer';
+import FinalizeDraftButton from '@/components/FinalizeDraftButton';
+import { runGuestFinalize } from '@/lib/providers/guest-finalize';
+import { seedanceDraftSeconds } from '@/lib/providers/seedance-draft';
 import { prepareReferences } from '@/lib/draft/ingest';
 import { convertedForDownload } from '@/lib/image/download-format';
 import { useAppStore } from '@/store/useAppStore';
@@ -84,6 +87,7 @@ export default function GalleryGrid({
   referenceLimit = REFERENCE_LIMIT,
 }: GalleryGridProps) {
   const records = useGalleryStore((state) => state.records);
+  const [finalizingId, setFinalizingId] = useState<string | null>(null);
 
   // Keep the filtered array stable: preview URLs are keyed to this dependency,
   // so recreating it on every picker render would revoke and rebuild every URL.
@@ -365,6 +369,30 @@ export default function GalleryGrid({
                     >
                       <Wand2 size={13} /> Restore settings
                     </button>
+                  )}
+                  {record.draftId && record.provider === 'runware' && record.kind === 'video' && (
+                    <FinalizeDraftButton
+                      inputMode={record.inputMode ?? 'text'}
+                      durationSeconds={seedanceDraftSeconds(record.controlValues)}
+                      busy={finalizingId === record.id}
+                      onApprove={async () => {
+                        const seconds = seedanceDraftSeconds(record.controlValues);
+                        const apiKey = useAppStore.getState().runwareApiKey;
+                        const inputMode = record.inputMode === 'image' || record.inputMode === 'frames' || record.inputMode === 'reference' || record.inputMode === 'edit' ? record.inputMode : 'text';
+                        if (!apiKey.trim()) throw new Error('Connect your Runware key before finalizing.');
+                        if (!record.draftId || seconds === undefined) throw new Error('This draft has no saved length, so it cannot be priced.');
+                        setFinalizingId(record.id);
+                        try {
+                          await runGuestFinalize({
+                            apiKey, modelId: record.modelId ?? 'bytedance:seedance@2.5', prompt: record.prompt,
+                            inputMode, draftId: record.draftId, durationSeconds: seconds,
+                          });
+                          toast.success('1080p video ready.');
+                        } finally {
+                          setFinalizingId(null);
+                        }
+                      }}
+                    />
                   )}
                   <button
                     type="button"

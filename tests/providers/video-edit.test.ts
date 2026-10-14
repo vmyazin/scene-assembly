@@ -6,6 +6,7 @@ import { runwareCreateVideo } from '@/lib/providers/runware';
 import { findModel } from '@/lib/providers/catalog';
 import { resolveCatalogRate } from '@/lib/spend/resolve';
 import { validateEditVideo, validateEditSource } from '@/lib/providers/video-edit';
+import { FAL_VIDEO_MODELS } from '@/lib/fal/catalog';
 const source = '989ba605-1449-4e1e-b462-cd83ec9c1a67';
 const request = {provider: 'runware', apiKey: 'test-key', model: 'bytedance:seedance@2.5', inputMode: 'edit', sourceVideo: source, prompt: 'Replace the background', size: '720p'};
 afterEach(() => vi.unstubAllGlobals());
@@ -22,17 +23,29 @@ describe('video editing contract', () => {
     const send = (body: unknown) => POST(new NextRequest('http://localhost/api/providers/video', {method:'POST', body:JSON.stringify(body)}));
     expect((await send(request)).status).toBe(200);
     fetch.mockClear();
-    for (const change of [{sourceVideo: undefined}, {sourceVideo: 'https://private.test/a.mp4'}, {provider: 'atlas'}, {model: 'alibaba:wan@3.0'}, {durationSeconds: 6}, {aspectRatio: '16:9'}, {size: '1080p'}, {images:Array(6).fill('data:image/png;base64,eA==')}]) expect((await send({...request,...change})).status).toBe(400);
+    for (const change of [{sourceVideo: undefined}, {sourceVideo: 'https://private.test/a.mp4'}, {provider: 'atlas'}, {model: 'alibaba:wan@3.0'}, {durationSeconds: 6}, {aspectRatio: '16:9'}, {size: '4k'}, {images:Array(6).fill('data:image/png;base64,eA==')}]) expect((await send({...request,...change})).status).toBe(400);
     expect(fetch).not.toHaveBeenCalled();
+    expect((await send({...request, size: '1080p'})).status).toBe(200);
   });
   it('estimates edits at the video-to-video rate instead of the generation rate', () => {
     const model=findModel('runware',request.model);
     expect(resolveCatalogRate(model, 4, 1, {inputMode:'edit',size:'720p'})).toMatchObject({costUsd:1.18,confidence:'estimated'});
+    expect(resolveCatalogRate(model, 1, 1, {inputMode:'edit',size:'1080p'}).costUsd).toBeCloseTo(0.734, 6);
     expect(resolveCatalogRate(model, undefined, 1, {inputMode:'edit',size:'720p'}).costUsd).toBeNull();
   });
   it('rejects unsupported or oversized source files', () => {
     expect(() => validateEditVideo({size:1,type:'video/mp4'})).not.toThrow();
     for(const file of [{size:0,type:'video/mp4'},{size:100_000_001,type:'video/mp4'},{size:100,type:'image/png'}]) expect(() => validateEditVideo(file)).toThrow();
+    const kling = FAL_VIDEO_MODELS.find(model => model.id === 'kling-o1-edit')?.variants.find(variant => variant.inputMode === 'edit')?.edit;
+    expect(() => validateEditVideo({size:150_000_000,type:'video/mp4'}, kling)).not.toThrow();
+    expect(() => validateEditVideo({size:150_000_000,type:'video/mp4'})).toThrow(/100 MB/);
+  });
+  it('floors Aleph 2 at the published $0.448 minimum', () => {
+    const aleph = findModel('comet', 'aleph2');
+    expect(resolveCatalogRate(aleph, 1, 1, {inputMode:'edit'}).costUsd).toBeCloseTo(0.448, 6);
+    expect(resolveCatalogRate(aleph, 2, 1, {inputMode:'edit'}).costUsd).toBeCloseTo(0.448, 6);
+    expect(resolveCatalogRate(aleph, 3, 1, {inputMode:'edit'}).costUsd).toBeCloseTo(0.672, 6);
+    expect(resolveCatalogRate(aleph, 10, 1, {inputMode:'edit'}).costUsd).toBeCloseTo(2.24, 6);
   });
   it('preserves the upstream rejection detail for actionable errors', async () => {
     vi.stubGlobal('fetch',vi.fn().mockResolvedValue(Response.json({errors:[{message:'ByteDance responded with HTTP InvalidParameter. Additional information below.',additionalDetails:{responseContent:'Video pixel count must be greater than or equal to 407696.'}}]},{status:400})));

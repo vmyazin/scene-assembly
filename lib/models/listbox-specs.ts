@@ -318,6 +318,12 @@ function fieldCells(specs: FieldSpecs): SpecCell[] {
 /** fal video rows: Max · Up to · Shapes · From, for the variant this mode submits to. */
 export function falVideoSpecs(model: FalModelDefinition, inputMode: FalInputMode): SpecCell[] {
   const variant = resolveFalVariant(model.id, 'video', inputMode);
+  if (variant.edit) {
+    const rate = falRateLabel(variant.endpointId);
+    const from = rate ? rate.replace(/^(\$[\d.]+)[–-]\$?[\d.]+/, '$1').replace(/\s*\/\s*/g, '/') : undefined;
+    const seconds = variant.edit.maxSeconds;
+    return [text(`${seconds}s`), text('source'), DASH, from ? text(from) : DASH];
+  }
   const cells = fieldCells(fieldSpecs(variant?.fields ?? []));
   const rate = variant ? falRateLabel(variant.endpointId) : null;
   // The label spans a range (`$0.10–0.15 / s`); the column says where it starts.

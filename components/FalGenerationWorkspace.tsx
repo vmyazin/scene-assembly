@@ -26,6 +26,7 @@ import { useRelaxedFilter } from '@/lib/moderation/use-relaxed-filter';
 import { isRetryableFailure, useAutoRetry } from '@/lib/providers/auto-retry';
 import ReferenceStack from '@/components/ReferenceStack';
 import { requestExamplePrompt, requestPromptSlug } from '@/lib/micro-ai/browser';
+import { validateEditSource, validateEditVideo } from '@/lib/providers/video-edit';
 import { cancelFalJob, submitFalJob, uploadFalFiles } from '@/lib/fal/browser';
 import {
   buildFalInput,
@@ -43,6 +44,7 @@ import {
   extensionForMedia,
 } from '@/lib/media-download';
 import { downloadFilenameBase } from '@/lib/download-name';
+import { useAccountStore } from '@/store/useAccountStore';
 import { useAppStore } from '@/store/useAppStore';
 import { useFalJobsStore } from '@/store/useFalJobsStore';
 import { useSeedFrameStore } from '@/store/useSeedFrameStore';
@@ -58,6 +60,7 @@ import FalRunCost from '@/components/FalRunCost';
 import { carryOverValues } from '@/lib/draft/carry-over';
 import { FRAME_EXTRACTION_ERROR, isVideoFile, lastFrameAsImageFile } from '@/lib/video-frame';
 import type { EngineId } from '@/lib/engines/registry';
+import VideoSourceInput, { type SourceVideo } from '@/components/VideoSourceInput';
 import VideoPlayer from '@/components/video/VideoPlayer';
 import JobElapsed from '@/components/JobElapsed';
 
@@ -90,6 +93,7 @@ const modeTitles: Record<FalInputMode, string> = {
   text: 'Text to video',
   image: 'Image to video',
   frames: 'First & last frame to video',
+  edit: 'Edit video',
 };
 
 const submissionError = 'fal could not start this job. Please try again.';
@@ -323,6 +327,9 @@ function FalGenerationWorkspaceSession({
   });
   const [modelSearch, setModelSearch] = useState('');
 
+  const epoch = useAccountStore((state) => state.epoch);
+  const [selectedSource, setSelectedSource] = useState<SourceVideo | null>(null);
+  const source = selectedSource?.epoch === epoch ? selectedSource : null;
   const [error, setError] = useState<string | null>(null);
   const [isGeneratingExample, setIsGeneratingExample] = useState(false);
   const [isReadingFrame, setIsReadingFrame] = useState(false);
@@ -339,6 +346,7 @@ function FalGenerationWorkspaceSession({
   const mountedRef = useRef(true);
   const maxInputImages = variant.maxInputImages ?? 1;
   const isFramesMode = inputMode === 'frames';
+  const isEdit = inputMode === 'edit';
   const pickerLabel = !isFramesMode
     ? 'Choose an image, or a video to use its last frame'
     : references.length === 0
@@ -443,11 +451,14 @@ function FalGenerationWorkspaceSession({
   };
 
   const addReferences = async (files: File[]) => {
-    const usable = files.filter(
-      (file) => allowedImageMimeTypes.has(file.type.toLowerCase()) || isVideoFile(file)
-    );
+    const usable = files.filter((file) => {
+      const image = allowedImageMimeTypes.has(file.type.toLowerCase());
+      return isEdit ? image : image || isVideoFile(file);
+    });
     if (usable.length !== files.length || usable.length === 0) {
-      setError('Choose a PNG, JPEG, WebP, or AVIF image, or a video to continue from its last frame.');
+      setError(isEdit
+        ? 'Choose a PNG, JPEG, WebP, or AVIF image.'
+        : 'Choose a PNG, JPEG, WebP, or AVIF image, or a video to continue from its last frame.');
       return;
     }
     if (references.length + usable.length > maxInputImages) {
@@ -489,7 +500,7 @@ function FalGenerationWorkspaceSession({
     }
   };
 
-  const isPickerFull = isFramesMode && references.length >= maxInputImages;
+  const isPickerFull = (isFramesMode || isEdit) && references.length >= maxInputImages;
   const { isDragging, isFetching, dropProps } = useFileDrop({
     onFiles: (files) => addReferences(files),
     onError: setError,
@@ -544,10 +555,29 @@ function FalGenerationWorkspaceSession({
       return;
     }
     const activeReferences = inputMode === 'text' ? [] : references;
-    const submittedValues = { ...values, ...relaxed.attach() };
+    if (isEdit && !source) {
+      setError('Choose a source video to edit.');
+      return;
+    }
+    if (isEdit && variant.edit && source) {
+      try {
+        validateEditVideo(source.file, variant.edit);
+        validateEditSource(source, variant.edit);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : 'Choose a source video this model accepts.');
+        return;
+      }
+    }
+    const submittedValues = {
+      ...values,
+      ...relaxed.attach(),
+      ...(isEdit && source ? { sourceDurationSeconds: source.durationSeconds } : {}),
+    };
     const validationError = validateFalInput(variant, {
       prompt,
-      uploadUrls: activeReferences.map((reference) => reference.previewUrl),
+      uploadUrls: isEdit
+        ? [...activeReferences.map((reference) => reference.previewUrl), 'https://source.invalid/video']
+        : activeReferences.map((reference) => reference.previewUrl),
     });
     if (validationError) {
       setError(validationError);
@@ -557,7 +587,9 @@ function FalGenerationWorkspaceSession({
     try {
       buildFalInput(variant, {
         prompt,
-        uploadUrls: activeReferences.map((reference) => reference.previewUrl),
+        uploadUrls: isEdit
+          ? [...activeReferences.map((reference) => reference.previewUrl), 'https://source.invalid/video']
+          : activeReferences.map((reference) => reference.previewUrl),
         values: submittedValues,
       });
     } catch {
@@ -567,7 +599,7 @@ function FalGenerationWorkspaceSession({
 
     if(cloudWorkspace.cloud){
       setError(null);setSubmittingVariantId(variant.id);
-      try{await cloudWorkspace.submit({modelId:selectedModel.id,mediaType:'video',inputMode,prompt:prompt.trim(),values:submittedValues},activeReferences.map(r=>r.file));autoRetry.reset();}
+      try{await cloudWorkspace.submit({modelId:selectedModel.id,mediaType:'video',inputMode,prompt:prompt.trim(),values:submittedValues},activeReferences.map(r=>r.file),prompt.trim(),isEdit?source?.file:undefined);autoRetry.reset();}
       catch(error){if(mountedRef.current)setError(error instanceof Error?error.message:'Could not confirm this background job.');}
       finally{if(mountedRef.current)setSubmittingVariantId(null);}
       return;
@@ -589,7 +621,7 @@ function FalGenerationWorkspaceSession({
     try {
       const uploadUrls = await uploadFalFiles(
         apiKey.trim(),
-        activeReferences.map((reference) => reference.file),
+        isEdit && source ? [...activeReferences.map((reference) => reference.file), source.file] : activeReferences.map((reference) => reference.file),
         { signal: operation.controller.signal }
       );
       if (!isCurrent()) return;
@@ -796,14 +828,20 @@ function FalGenerationWorkspaceSession({
             )}
           </section>
 
-          {inputMode !== 'text' && (
+          {isEdit && variant.edit && (
+            <VideoSourceInput capability={variant.edit} source={source} onChange={setSelectedSource} disabled={isSubmitting} />
+          )}
+
+          {inputMode !== 'text' && (!isEdit || maxInputImages > 0) && (
             <section className="glass-card space-y-3 p-3.5 md:p-4">
               <div>
                 <h3 className="display text-base font-semibold">
-                  {isFramesMode ? 'First and last frame' : 'Reference image'}
+                  {isEdit ? 'Reference images (optional)' : isFramesMode ? 'First and last frame' : 'Reference image'}
                 </h3>
                 <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">
-                  {isFramesMode
+                  {isEdit
+                    ? `Add up to ${maxInputImages} images. Address them as @Image1, @Image2, and so on.`
+                    : isFramesMode
                     ? `Two stills, in order: the frame the clip opens on and the one it lands on. ${selectedModel.label} generates the motion between them.`
                     : 'This video flow accepts exactly one image. Pick a saved clip instead and its last frame is used.'}
                 </p>
@@ -811,9 +849,9 @@ function FalGenerationWorkspaceSession({
               <input
                 ref={fileInputRef}
                 type="file"
-                multiple={isFramesMode}
-                accept="image/png,image/jpeg,image/webp,image/avif,video/*"
-                aria-label={isFramesMode ? 'Frame image file' : 'Reference image file'}
+                multiple={isFramesMode || isEdit}
+                accept={isEdit ? 'image/png,image/jpeg,image/webp,image/avif' : 'image/png,image/jpeg,image/webp,image/avif,video/*'}
+                aria-label={isEdit ? 'Reference image file' : isFramesMode ? 'Frame image file' : 'Reference image file'}
                 className="hidden"
                 onChange={(event) => {
                   void addReferences(Array.from(event.target.files ?? []));
@@ -834,8 +872,10 @@ function FalGenerationWorkspaceSession({
                       : isFetching
                         ? 'Fetching dropped image…'
                         : isDragging
-                          ? 'Drop to use as a source'
-                          : pickerLabel}
+                          ? (isEdit ? 'Drop to add a reference' : 'Drop to use as a source')
+                          : isEdit
+                            ? 'Choose an image'
+                            : pickerLabel}
                   </button>
                   {references.length < maxInputImages && (
                     <StoredImagePicker referenceLimit={maxInputImages} />
@@ -848,8 +888,8 @@ function FalGenerationWorkspaceSession({
                 items={references.map((reference, index) => ({
                   id: reference.id,
                   src: reference.previewUrl,
-                  caption: isFramesMode ? frameSlotLabel(index) : undefined,
-                  alt: isFramesMode ? frameSlotLabel(index) : `Reference ${index + 1}`,
+                  caption: isEdit ? `@Image${index + 1}` : isFramesMode ? frameSlotLabel(index) : undefined,
+                  alt: isEdit ? `@Image${index + 1}` : isFramesMode ? frameSlotLabel(index) : `Reference ${index + 1}`,
                   removeLabel: isFramesMode
                     ? `Remove ${frameSlotLabel(index).toLowerCase()}`
                     : `Remove reference ${index + 1}`,
@@ -910,7 +950,7 @@ function FalGenerationWorkspaceSession({
               required
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              placeholder="Describe the motion, camera, mood, and scene…"
+              placeholder={isEdit ? (variant.edit?.namesSource ? 'Describe what to change in @Video1 and what to keep…' : 'Describe what to change, and address reference images as @Image1…') : 'Describe the motion, camera, mood, and scene…'}
             />
           </PromptPanel>
         }
@@ -926,7 +966,7 @@ function FalGenerationWorkspaceSession({
                 void submit();
               }}
               className="btn-primary flex w-full items-center justify-center gap-2 py-3 text-base disabled:cursor-not-allowed disabled:opacity-50">
-              {isSubmitting ? <><Loader2 className="animate-spin" size={21} /> Uploading & starting…</> : <><Sparkles size={21} /> Generate video<FalRunCost modelId={selectedModel.id} mediaType="video" inputMode={inputMode} resolution={values.resolution} audio={values.generate_audio} duration={values.duration} /></>}
+              {isSubmitting ? <><Loader2 className="animate-spin" size={21} /> Uploading & starting…</> : <><Sparkles size={21} /> {isEdit ? 'Generate edit' : 'Generate video'}<FalRunCost modelId={selectedModel.id} mediaType="video" inputMode={inputMode} resolution={values.resolution} audio={isEdit ? values.keep_audio : values.generate_audio} duration={isEdit ? source?.durationSeconds : values.duration} /></>}
             </button>
             <CloudExecutionNotice workspace={cloudWorkspace} />
             {error && (

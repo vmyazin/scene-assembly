@@ -120,8 +120,9 @@ export function resolveCatalogRate(
   }
   if (rate.per === 'second') {
     if (durationSeconds === undefined || !Number.isFinite(durationSeconds) || !(durationSeconds > 0)) return unknownFigure('catalog-rate');
+    const variable = usd * durationSeconds + inputCost;
     return {
-      costUsd: usd * durationSeconds + inputCost,
+      costUsd: rate.minimumUsd !== undefined ? Math.max(variable, rate.minimumUsd) : variable,
       confidence: 'estimated',
       source: 'catalog-rate',
       quantity: { unit: 'second', value: durationSeconds },

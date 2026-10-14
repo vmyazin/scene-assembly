@@ -11,11 +11,14 @@ import CloudJobCardGrid from './CloudJobCardGrid';
 import CloudJobList from './CloudJobList';
 import CloudAssetGrid from './CloudAssetGrid';
 import { AccountSurface } from './AccountSurface';
+import type { VideoEditCapability } from '@/lib/providers/video-edit';
 
-export default function AccountLibrary({localTest=false,ownerId,mode='browse',referenceLimit,onUsedReference,onAddedToTimeline,onPickVideo,onCounts}: {
+export default function AccountLibrary({localTest=false,ownerId,mode='browse',referenceLimit,onUsedReference,onAddedToTimeline,onPickVideo,editCapability,onCounts}: {
   localTest?:boolean;ownerId:string;mode?:'browse'|'pick-image'|'pick-clip';referenceLimit?:number;onUsedReference?:()=>void;
   onAddedToTimeline?:()=>void;
   onPickVideo?:(file:File)=>Promise<void>;
+  /** Passed through so a Kling edit can pick a clip the 100 MB application cap would refuse. */
+  editCapability?:Pick<VideoEditCapability,'mimes'|'maxBytes'>;
   /** Account-wide asset counts, for a host that labels this library from outside it. */
   onCounts?:(counts:CloudAssetCounts)=>void;
 }) {
@@ -67,7 +70,7 @@ export default function AccountLibrary({localTest=false,ownerId,mode='browse',re
         job is not something to attach. */}
     {mode==='browse'&&jobs.some(isActiveJob)&&<div className="mt-5"><CloudJobCardGrid jobs={jobs.filter(isActiveJob)} columns={2} busy={busy} onCancel={id=>void action(`jobs/${id}/cancel`)}/></div>}
     {mode==='browse'&&<div className="mt-5"><CloudJobList jobs={jobs.filter(job=>isListedJob(job)&&!isActiveJob(job))} limit={10} busy={busy} onResume={id=>void action(`jobs/${id}/resume`)} onCancel={id=>void action(`jobs/${id}/cancel`)} onDismiss={id=>{const job=jobs.find(entry=>entry.id===id);if(job)void clearJobs([job]);}} onClear={targets=>void clearJobs(targets)}/></div>}
-    <div className="mt-5">{loading?<p role="status" className="py-6 text-center text-sm text-[var(--foreground-muted)]">Loading cloud assets…</p>:<CloudAssetGrid assets={assets} ownerId={ownerId} mode={mode} referenceLimit={referenceLimit} onUsedReference={onUsedReference} onAddedToTimeline={onAddedToTimeline} onPickVideo={onPickVideo} onChanged={library.refresh}/>}</div>
+    <div className="mt-5">{loading?<p role="status" className="py-6 text-center text-sm text-[var(--foreground-muted)]">Loading cloud assets…</p>:<CloudAssetGrid assets={assets} ownerId={ownerId} mode={mode} referenceLimit={referenceLimit} onUsedReference={onUsedReference} onAddedToTimeline={onAddedToTimeline} onPickVideo={onPickVideo} editCapability={editCapability} onChanged={library.refresh}/>}</div>
     {(cursor||nextCursor)&&<div className="mt-4 flex justify-between gap-2">{cursor&&<button type="button" disabled={loading} className="btn-secondary text-sm" onClick={()=>library.page(null)}>Latest assets</button>}{nextCursor&&<button type="button" disabled={loading} className="btn-secondary text-sm" onClick={()=>library.page(nextCursor)}>Older assets</button>}</div>}
     {(error||library.error)&&<div className="mt-4 flex flex-wrap items-center justify-between gap-2"><p role="alert" className="text-sm text-red-300">{error||library.error}</p>{library.error&&<button type="button" disabled={loading} className="btn-secondary px-2 py-1 text-xs" onClick={library.refresh}>Try again</button>}</div>}
   </AccountSurface>;

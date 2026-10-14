@@ -1,3 +1,4 @@
+// lib/micro-ai/models.ts
 /**
  * Model tiering for small helper tasks (filenames, example prompts).
  *
@@ -46,6 +47,29 @@ export const MICRO_AI_MODELS: Record<MicroAiTier, MicroAiModel> = {
  */
 export const GEMINI_MICRO_MODEL = 'gemini-2.5-flash-lite';
 
+/**
+ * Vision fallback for describing a source image or video, billed to the
+ * visitor's own Gemini key. Flash rather than the lite slug model: a source
+ * description has to notice motion, camera, and light, and lite is kept for
+ * the tiny text tasks.
+ */
+export const GEMINI_VISION_MODEL = 'gemini-2.5-flash';
+
+/**
+ * Shared vision model for the same job when `HF_TOKEN` is set. The text tiers
+ * above cannot see pixels, so source description does not use them.
+ *
+ * Rates are the cheapest widely listed per-token price for this model
+ * (Fireworks / Qwen, $0.20 per 1M in and out), read 2026-10-12. The router may
+ * bill a different provider; `PRICING_NOTE` already labels every figure here
+ * an estimate.
+ */
+export const VISION_MODEL: MicroAiModel = {
+  id: 'Qwen/Qwen2.5-VL-7B-Instruct',
+  inputPer1M: 0.2,
+  outputPer1M: 0.2,
+};
+
 export interface MicroAiUsage {
   promptTokens: number;
   completionTokens: number;
@@ -53,16 +77,19 @@ export interface MicroAiUsage {
   costUsd: number;
 }
 
-export function usageCost(tier: MicroAiTier, promptTokens: number, completionTokens: number): number {
-  const model = MICRO_AI_MODELS[tier];
+function modelCost(model: MicroAiModel, promptTokens: number, completionTokens: number): number {
   const cost =
     (promptTokens / 1_000_000) * model.inputPer1M +
     (completionTokens / 1_000_000) * model.outputPer1M;
   return Number.isFinite(cost) ? cost : 0;
 }
 
+export function usageCost(tier: MicroAiTier, promptTokens: number, completionTokens: number): number {
+  return modelCost(MICRO_AI_MODELS[tier], promptTokens, completionTokens);
+}
+
 /** Normalize the OpenAI-shaped `usage` block into our own accounting. */
-export function readUsage(tier: MicroAiTier, raw: unknown): MicroAiUsage {
+export function readModelUsage(model: MicroAiModel, raw: unknown): MicroAiUsage {
   const usage = (raw ?? {}) as Record<string, unknown>;
   const promptTokens = Number(usage.prompt_tokens);
   const completionTokens = Number(usage.completion_tokens);
@@ -73,6 +100,10 @@ export function readUsage(tier: MicroAiTier, raw: unknown): MicroAiUsage {
   return {
     promptTokens: safePrompt,
     completionTokens: safeCompletion,
-    costUsd: usageCost(tier, safePrompt, safeCompletion),
+    costUsd: modelCost(model, safePrompt, safeCompletion),
   };
+}
+
+export function readUsage(tier: MicroAiTier, raw: unknown): MicroAiUsage {
+  return readModelUsage(MICRO_AI_MODELS[tier], raw);
 }

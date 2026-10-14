@@ -1,3 +1,4 @@
+// cloud/src/mcp/tools/references.ts
 import * as z from 'zod';
 import { parseYouTubeUrl } from '../../../../lib/youtube/clip';
 import { copyAssetToUpload, discardUploads, reserveUpload, storeStreamedUpload } from '../../uploads';
@@ -5,14 +6,15 @@ import { importYouTubeClip } from '../../youtube/import';
 import { ToolError } from '../errors';
 import { fetchReference } from '../fetch-reference';
 import { defineTool, type ToolContext } from '../tool';
+import { STAGEABLE_INPUT_MIMES } from '../../../../lib/providers/input-mimes';
 import type { ReferenceInput } from './request';
 
-const STAGEABLE = ['image/png', 'image/jpeg', 'image/webp', 'image/avif', 'video/mp4', 'video/webm'] as const;
+const STAGEABLE = STAGEABLE_INPUT_MIMES;
 
 export const addReference = defineTool({
   name: 'add_reference',
   title: 'Add a reference',
-  description: 'Stage a reference image, or a source video for edit mode, for generate. Pass exactly one of: url (an https link to a media file, downloaded now); upload with the file\'s mimeType and exact byte size, to get a putUrl, then PUT the file there with that Content-Type; or youtube with a YouTube link and startSeconds/endSeconds (one decimal), which cuts that section into an MP4 source video for edit mode — add provider and modelId to check the length against that model. Returns an uploadId to pass to generate (as sourceVideo in edit mode). YouTube imports are limited to 10 per hour per account. A file already in the library needs no staging: pass { assetId } to generate. An uploadId lasts 24 hours, and a putUrl must be used within 15 minutes.',
+  description: 'Stage a reference image, a reference video, reference audio, or a source video for edit mode, for generate. Pass exactly one of: url (an https link to a media file, which Scene Assembly downloads now); upload with the file\'s mimeType and exact byte size, to get a putUrl, then PUT the file there with that Content-Type within 15 minutes, for example: curl -T cat.png -H "Content-Type: image/png" "<putUrl>"; or youtube with a YouTube link and startSeconds/endSeconds (one decimal), which cuts that section into an MP4 source video for edit mode — add provider and modelId to check the length against that model. Each returns an uploadId for references, referenceVideos, referenceAudios or sourceVideo that lasts 24 hours (a YouTube section is passed as sourceVideo in edit mode). YouTube imports are limited to 10 per hour per account. A file already in the library needs no staging: pass { assetId } to generate. Images are PNG, JPEG, WebP or AVIF up to 20 MB. A reference video is MP4 or QuickTime up to 100 MB. An edit source may be MP4 or MOV up to 200 MB, or WebM up to 100 MB. WebM is an edit source only and is refused if passed in referenceVideos. Audio is MP3 or WAV up to 15 MB. A URL is typed from its bytes, so QuickTime from a link is refused and a WebM from a link can only be an edit source; pass upload with video/quicktime for a MOV.',
   kind: 'write',
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   input: z.object({
@@ -64,7 +66,7 @@ export const addReference = defineTool({
  *  If a later reference in the same call fails, every earlier copy is discarded
  *  here before the error reaches the caller, so a failed generate never leaves
  *  copies occupying input slots for their full 24 hours. */
-export async function resolveReferences(ctx: ToolContext, references: ReferenceInput[] = [], sourceVideo?: ReferenceInput): Promise<{ referenceIds: string[]; sourceVideoId?: string; copiedIds: string[] }> {
+export async function resolveReferences(ctx: ToolContext, references: ReferenceInput[] = [], sourceVideo?: ReferenceInput, referenceVideos: ReferenceInput[] = [], referenceAudios: ReferenceInput[] = []): Promise<{ referenceIds: string[]; referenceVideoIds: string[]; referenceAudioIds: string[]; sourceVideoId?: string; copiedIds: string[] }> {
   const copiedIds: string[] = [];
   const resolve = async (reference: ReferenceInput) => {
     if ('uploadId' in reference) return reference.uploadId;
@@ -75,8 +77,12 @@ export async function resolveReferences(ctx: ToolContext, references: ReferenceI
   try {
     const referenceIds: string[] = [];
     for (const reference of references) referenceIds.push(await resolve(reference));
+    const referenceVideoIds: string[] = [];
+    for (const reference of referenceVideos) referenceVideoIds.push(await resolve(reference));
+    const referenceAudioIds: string[] = [];
+    for (const reference of referenceAudios) referenceAudioIds.push(await resolve(reference));
     const sourceVideoId = sourceVideo ? await resolve(sourceVideo) : undefined;
-    return { referenceIds, ...(sourceVideoId ? { sourceVideoId } : {}), copiedIds };
+    return { referenceIds, referenceVideoIds, referenceAudioIds, ...(sourceVideoId ? { sourceVideoId } : {}), copiedIds };
   } catch (error) {
     if (copiedIds.length) await discardUploads(ctx.env, ctx.agent.user_id, copiedIds);
     throw error;

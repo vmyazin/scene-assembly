@@ -1,14 +1,16 @@
 // components/VideoWorkspace.tsx
 'use client';
 
-import { ImagePlus, MoveRight, ScanFace, Type } from 'lucide-react';
+import { useEffect } from 'react';
+import { ImagePlus, Images, ScanFace, Type } from 'lucide-react';
 import FalGenerationWorkspace from '@/components/FalGenerationWorkspace';
 import GeminiVideoWorkspace from '@/components/GeminiVideoWorkspace';
 import KieGenerationWorkspace from '@/components/KieGenerationWorkspace';
 import VideoDirectionSelector, { type VideoDirection } from '@/components/VideoDirectionSelector';
-import ProviderSelector, { type VideoProvider } from '@/components/ProviderSelector';
+import ProviderSelector, { VIDEO_PROVIDERS, type VideoProvider } from '@/components/ProviderSelector';
 import ProviderVideoWorkspace from '@/components/ProviderVideoWorkspace';
 import type { EngineId } from '@/lib/engines/registry';
+import { modelsForFalMode } from '@/lib/fal/catalog';
 import { modelsFor } from '@/lib/providers/catalog';
 import { isProviderId } from '@/lib/providers';
 import type { ProviderId, ProviderMode } from '@/lib/providers/types';
@@ -35,7 +37,7 @@ interface VideoWorkspaceProps {
 }
 
 // The selector and its preview share these fixtures; provider capabilities below
-// still decide which directions can be offered before a submission is possible.
+// determine engine availability without hiding any direction.
 const MODES: readonly VideoDirection[] = [
   {
     id: 'text',
@@ -58,7 +60,7 @@ const MODES: readonly VideoDirection[] = [
     label: 'First & last frame',
     blurb: 'Fill the motion between two stills',
     requires: 'Needs two images',
-    icon: MoveRight,
+    icon: Images,
     thumbnail: bookendThumbnail,
     needsProviderSupport: true,
   },
@@ -74,53 +76,48 @@ const MODES: readonly VideoDirection[] = [
   },
 ];
 
+// Aggregators advertise modes in their catalogs; the dedicated workspaces expose
+// only their implemented input modes, so unsupported forms are never mounted.
+function supportsMode(engine: VideoProvider, mode: ProviderMode): boolean {
+  // Fal is not a catalog ProviderId. Edit is a real fal mode; folding it into
+  // image posted the clip to image-to-video.
+  if (engine === 'fal' && mode === 'edit') return modelsForFalMode('video', 'edit').length > 0;
+  if (isProviderId(engine)) return modelsFor(engine, 'video').some(model => model.modes.includes(mode));
+  return mode === 'text' || mode === 'image' || (engine === 'fal' && mode === 'frames');
+}
+
 export default function VideoWorkspace({
   inputMode,
   onInputModeChange,
   onExit,
   onOpenConnections,
 }: VideoWorkspaceProps) {
-  const videoEngine = useAppStore((state) => state.videoEngine);
+  const storedEngine = useAppStore((state) => state.videoEngine);
   const setVideoEngine = useAppStore((state) => state.setVideoEngine);
+  const availableEngines = VIDEO_PROVIDERS.filter(provider => supportsMode(provider.id, inputMode));
+  const videoEngine = supportsMode(storedEngine, inputMode) ? storedEngine : availableEngines[0]?.id;
+  const disabledProviders = VIDEO_PROVIDERS.filter(provider => !supportsMode(provider.id, inputMode)).map(provider => provider.id);
+  // Resolve before rendering as well as persisting: deep links must never mount
+  // an unsupported workspace for a frame while the stored engine catches up.
+  useEffect(() => {
+    if (videoEngine && videoEngine !== storedEngine) setVideoEngine(videoEngine);
+  }, [videoEngine, storedEngine, setVideoEngine]);
   const isGemini = videoEngine === 'gemini';
   const isFal = videoEngine === 'fal';
   const activeProvider: ProviderId | null =
     videoEngine === 'runware' || videoEngine === 'atlas' || videoEngine === 'comet' || videoEngine === 'piapi'
       ? videoEngine
       : null;
-  /**
-   * Who can bookend a clip between two stills: fal, and the Runware models
-   * whose `frameImages` takes two — the vendor reads a pair as first and last.
-   * Kie has no such model, so the card stays hidden there rather than offering
-   * a mode that would fail at submit.
-   */
-  const supportsFrames = (engine: VideoProvider) =>
-    engine === 'fal' ||
-    (isProviderId(engine) && modelsFor(engine, 'video').some((model) => model.modes.includes('frames')));
-
-  const supportsReference = (engine: VideoProvider) =>
-    isProviderId(engine) &&
-    modelsFor(engine, 'video').some((model) => model.modes.includes('reference'));
-
-  const supportsMode = (engine: VideoProvider, mode: ProviderMode) =>
-    mode === 'edit' ? isProviderId(engine) && modelsFor(engine, 'video').some(model => model.modes.includes('edit')) : mode === 'frames' ? supportsFrames(engine) : mode === 'reference' ? supportsReference(engine) : true;
-
-  const framesProviders = supportsFrames(videoEngine);
-  const referenceProviders = supportsReference(videoEngine);
-  const modes = MODES.filter((mode) => {
-    if (!mode.needsProviderSupport) return true;
-    return mode.id === 'edit' ? supportsMode(videoEngine, 'edit') : mode.id === 'frames' ? framesProviders : referenceProviders;
-  });
-  // A deep link lands on the closest flow the current provider does have,
-  // rather than passing a provider-only mode into fal or Kie.
-  const activeMode: ProviderMode = supportsMode(videoEngine, inputMode) ? inputMode : 'image';
-  const legacyMode: FalInputMode = activeMode === 'reference' || activeMode === 'edit' ? 'image' : activeMode;
+  const activeMode = inputMode;
+  // Edit stays edit on fal. Folding it into image mode hid the source video
+  // and posted the clip to an image-to-video endpoint.
+  const falMode: FalInputMode = activeMode === 'edit' ? 'edit' : activeMode === 'frames' ? 'frames' : activeMode === 'text' ? 'text' : 'image';
   
   // Gemini supports only text and image modes
   const geminiMode: 'text' | 'image' = activeMode === 'text' ? 'text' : 'image';
 
   const selectEngine = (engine: VideoProvider) => {
-    if (!supportsMode(engine, inputMode)) onInputModeChange('image');
+    if (!supportsMode(engine, inputMode)) return;
     setVideoEngine(engine);
   };
 
@@ -147,14 +144,16 @@ export default function VideoWorkspace({
 
       <VideoDirectionSelector
         key={videoEngine}
-        modes={modes}
+        modes={MODES}
         value={activeMode}
         onChange={onInputModeChange}
       />
 
-      <ProviderSelector value={videoEngine} onChange={selectEngine} />
+      <ProviderSelector value={videoEngine ?? storedEngine} onChange={selectEngine} disabledProviders={disabledProviders} />
 
-      {activeProvider ? (
+      {!videoEngine ? (
+        <p className="text-sm text-[var(--foreground-muted)]">No engine currently supports this direction.</p>
+      ) : activeProvider ? (
         <ProviderVideoWorkspace
           key={`${activeProvider}-${activeMode}`}
           provider={activeProvider}
@@ -174,8 +173,8 @@ export default function VideoWorkspace({
         />
       ) : isFal ? (
         <FalGenerationWorkspace
-          key={`fal-${legacyMode}`}
-          inputMode={legacyMode}
+          key={`fal-${falMode}`}
+          inputMode={falMode}
           onBack={onExit}
           onOpenConnections={onOpenConnections}
           onContinueFromFrame={() => onInputModeChange('image')}
@@ -183,8 +182,8 @@ export default function VideoWorkspace({
       ) : (
         <KieGenerationWorkspace
           mediaType="video"
-          inputMode={legacyMode === 'text' ? 'text' : 'image'}
-          exampleFeatureId={legacyMode === 'text' ? 'text-to-video' : 'image-to-video'}
+          inputMode={falMode === 'text' ? 'text' : 'image'}
+          exampleFeatureId={falMode === 'text' ? 'text-to-video' : 'image-to-video'}
           onBack={onExit}
           onOpenConnections={onOpenConnections}
           onContinueFromFrame={() => onInputModeChange('image')}

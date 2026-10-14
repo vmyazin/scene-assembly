@@ -33,5 +33,8 @@ export function falSecondsFrom(raw: string | number | boolean | undefined): numb
 export function falDurationSeconds(
   values: Record<string, string | number | boolean>
 ): number | undefined {
-  return falSecondsFrom(values.duration);
+  // Edit models have no duration control. The Worker writes the container
+  // length onto sourceDurationSeconds before reserve; a caller-supplied
+  // number is not the price.
+  return falSecondsFrom(values.duration) ?? falSecondsFrom(values.sourceDurationSeconds);
 }

@@ -1,3 +1,4 @@
+// lib/spend/account.ts
 /**
  * Pure account-ledger entry construction. The Worker passes only the durable
  * job request/result snapshot; this module never reads credentials, calls a
@@ -8,6 +9,7 @@ import type { EngineId } from '../engines/registry';
 import { resolveFalVariant } from '../fal/catalog';
 import { falDurationSeconds } from '../fal/pricing';
 import { findModel } from '../providers/catalog';
+import { seedanceCatalogFigure } from '../providers/seedance-draft';
 import { excerpt, type SpendEntry } from './ledger';
 import {
   resolveCatalogRate,
@@ -62,6 +64,13 @@ export function buildAccountSpendEntry(args: BuildAccountSpendEntryArgs): Accoun
 
   if (request.provider === 'runware') {
     const resolved = resolveRunware(result.cost);
+    // A reported cost stays exact. Only a Seedance draft or finalize, which
+    // has a published per-second rate, is estimated when the cost is missing.
+    // Every other Runware job stays unknown until the provider reports one.
+    if (resolved.costUsd === null) {
+      const catalog = seedanceCatalogFigure(request);
+      if (catalog && catalog.costUsd !== null) return { ...base, ...catalog };
+    }
     const figure = resolved.costUsd === null
       ? withNote(resolved, 'Runware did not include billing cost in the persisted response.')
       : outputs > 1
@@ -94,7 +103,7 @@ export function buildAccountSpendEntry(args: BuildAccountSpendEntryArgs): Accoun
       const endpointId = resolveFalVariant(
         request.modelId,
         request.mediaType,
-        request.inputMode as 'text' | 'image' | 'frames'
+        request.inputMode as 'text' | 'image' | 'frames' | 'edit'
       ).endpointId;
       const resolved = resolveFalRun({
         estimate: null,
@@ -130,18 +139,25 @@ export function buildAccountSpendEntry(args: BuildAccountSpendEntryArgs): Accoun
   }
 
   const model = findModel(request.provider, request.modelId);
-  const duration = typeof request.values.durationSeconds === 'number' ? request.values.durationSeconds : undefined;
+  const edit = request.inputMode === 'edit';
+  const sourceDuration = typeof request.values.sourceDurationSeconds === 'number' ? request.values.sourceDurationSeconds : undefined;
+  const duration = edit && sourceDuration !== undefined
+    ? sourceDuration
+    : typeof request.values.durationSeconds === 'number' ? request.values.durationSeconds : undefined;
   const resolved = resolveCatalogRate(model, duration, outputs, {
     audio: request.values.audio === true,
     size: request.provider === 'piapi' && request.mediaType === 'image' ? String(request.values.resolution ?? '1K') : typeof request.values.size === 'string' ? request.values.size : undefined,
     inputImages: request.referenceIds.length,
+    inputMode: request.inputMode,
+    draft: request.values.draft === true,
   });
   if (resolved.costUsd !== null) return { ...base, ...resolved };
+  const perSecond = (edit ? model?.videoEdit?.rate : model?.rate)?.per === 'second';
   return {
     ...base,
     ...withNote(
       resolved,
-      resolved.note ?? (model?.rate?.per === 'second'
+      resolved.note ?? (perSecond
         ? 'The published per-second rate cannot be applied without a saved duration.'
         : 'The provider catalog does not publish a rate for this model.')
     ),

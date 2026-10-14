@@ -18,6 +18,7 @@ import { prepareReferences } from '@/lib/draft/ingest';
 import { keepUploadedImages } from '@/lib/gallery/keep-upload';
 import { useDraftStore } from '@/store/useDraftStore';
 import type { CloudAssetCounts } from '@/lib/account/contracts';
+import type { VideoEditCapability } from '@/lib/providers/video-edit';
 
 interface LibraryOverlayProps {
   open: boolean;
@@ -25,6 +26,8 @@ interface LibraryOverlayProps {
   purpose?: 'browse' | 'pick-image' | 'pick-clip';
   referenceLimit?: number;
   onPickVideo?: (file: File) => Promise<void>;
+  /** The edit model's source cap. The timeline omits it and keeps the 100 MB default. */
+  editCapability?: Pick<VideoEditCapability, 'mimes' | 'maxBytes'>;
   /**
    * Fired after a clip lands on the timeline. The timeline's own picker only
    * closes; the main library also switches to the timeline workspace, which is
@@ -59,6 +62,7 @@ export default function LibraryOverlay({
   referenceLimit,
   onAddedToTimeline,
   onPickVideo,
+  editCapability,
 }: LibraryOverlayProps) {
   const account = useAccountStore(state => state.status === 'ready' ? state.session?.account : null);
   const [source, setSource] = useState<'auto' | 'browser' | 'cloud'>('auto');
@@ -275,7 +279,7 @@ export default function LibraryOverlay({
             )}
 
             {cloud && account && (isPicker || tab === 'results') ? (
-              <AccountLibrary key={account.id} ownerId={account.id} mode={isClipPicker ? 'pick-clip' : isImagePicker ? 'pick-image' : 'browse'} referenceLimit={referenceLimit} onUsedReference={close} onAddedToTimeline={onAddedToTimeline} onPickVideo={onPickVideo} onCounts={onCloudCounts} />
+              <AccountLibrary key={account.id} ownerId={account.id} mode={isClipPicker ? 'pick-clip' : isImagePicker ? 'pick-image' : 'browse'} referenceLimit={referenceLimit} onUsedReference={close} onAddedToTimeline={onAddedToTimeline} onPickVideo={onPickVideo} editCapability={editCapability} onCounts={onCloudCounts} />
             ) : isPicker ? (
               <GalleryGrid
                 mode={isClipPicker ? 'pick-clip' : 'pick-image'}

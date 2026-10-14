@@ -88,3 +88,9 @@ export function providerFailureReason(error: unknown): { reason: FailureReason; 
   }
   return { reason: 'provider_unreachable', detail: null };
 }
+
+/** Capture AccountErrors are authored by this app. Unknown storage/network
+ * exceptions can contain request data, so retain no raw message from them. */
+export function captureFailureDetail(error: unknown): string | null {
+  return error instanceof AccountError ? sanitizeProviderMessage(error.message) : null;
+}

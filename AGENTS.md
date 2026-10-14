@@ -46,11 +46,41 @@
   ledger, because vendor balances and totals include activity outside this app.
 
 - **Results when switching models** → first read `docs/codex/specs/2026-10-01-shared-model-results.md`. Keep the existing shared image feed; scope video results by provider and input mode, never by the selected model or most recent edit submission, because selection configures the next run and must not hide existing outputs. Read result labels and filenames from the producing job.
-- **Video direction selection** → first read `docs/codex/specs/2026-10-02-compact-video-directions.md`. Use `VideoDirectionSelector` for the compact choices and delayed image/details preview; keep capabilities and selection in `VideoWorkspace`, because hover must never change a mode or bypass provider filtering.
+- **Video direction selection** → first read `docs/codex/specs/2026-10-02-compact-video-directions.md`. Use `VideoDirectionSelector` for the larger bordered direction tiles and delayed image/details preview, and `ProviderSelector` for compact provider choices so direction carries the visual emphasis; keep capabilities and selection in `VideoWorkspace`: all directions remain visible, incompatible engines are disabled, and selecting a direction resolves a compatible engine because engine choice must never silently change the requested direction. Hover must never change a selection.
 
 - **Generate button placement** → first read `docs/codex/specs/2026-09-11-generate-under-prompt.md`. Use `GenerationWorkspaceLayout`’s `actions` slot for the button, cost, progress, execution notice and submission/retry feedback, because the shared prompt → actions → results order keeps submission next to the text being edited at every screen width. Setup holds only model, media and controls.
 
-- **Edit an existing video** → first read `docs/codex/specs/2026-09-11-edit-video.md`. For P-Video-Edit, also read `docs/codex/specs/2026-09-11-p-video-edit.md`; edit limits and Draft pricing belong to `videoEdit` capabilities, because P-Video-Edit has fixed output dimensions and must not inherit Seedance resolution controls. Source clips use `sourceVideoId` in account requests and `inputs.video` at Runware, never the image reference array, because their validation, duration and retention differ. Edit rates live on the catalog capability; normal generation rates undercharge edits. The existing clip library picker accepts `onPickVideo` so selection cannot accidentally place a clip on the timeline.
+- **Describe a selected source into the prompt** → `lib/describe-source/` and
+  `POST /api/describe-source`. The button is `DescribeSourceButton` on the
+  provider video prompt. It sends the selected image or source video to a
+  vision model and writes the paragraph into the draft prompt, which stays
+  editable before Generate. Text mode builds an empty source list, the same
+  way submit does, because a reference left in the draft from another mode is
+  not part of that run. The shared text tier cannot see pixels, so this uses
+  `VISION_MODEL` when `HF_TOKEN` is set and otherwise the visitor's Gemini key.
+  A short clip is sent whole only when a Gemini key will watch it; otherwise,
+  and for any clip that will not fit, `sampleVideoStills` turns it into ordered
+  stills, because the shared vision model only reads images and a 100MB source
+  cannot be the JSON body. The route rate-limits per address and checks
+  `Content-Length` before parsing, because this call can spend `HF_TOKEN` on
+  megabytes of vision input.
+
+- **Seedance 2.5 draft, then finalize** → `lib/providers/seedance-draft.ts`.
+  `settings.draft` is a 480p preview that returns `outputs.draftId`; finalize sends
+  `inputs.draftId` and `resolution: "1080p"` and cannot resend prompt or media.
+  That is not P-Video-Edit `draftRate`, which is a cheaper render with nothing
+  to finalize. Draft defaults off for people and for agents. The studio
+  remembers Seedance's toggle as `draftPreview` and P-Video-Edit's as `draft`,
+  because one shared `draft` key turned the other model's cheaper mode on.
+  Agents still send `values.draft`. `checkValues` forces 480p when that flag
+  is on, so the catalog's 720p edit default can stay. An edit draft is priced
+  from the clip's length, read from the file before the reservation;
+  `finalize_draft` with a jobId uses the length saved on that draft. The
+  button and the agent budget use the documented 1080p rate and label it
+  estimated: Runware does not publish a separate finalize price. A cost on
+  the task still wins.
+
+- **Edit an existing video** → first read `docs/codex/specs/2026-09-11-edit-video.md`. For P-Video-Edit, also read `docs/codex/specs/2026-09-11-p-video-edit.md`; edit limits and Draft pricing belong to `videoEdit` capabilities, because P-Video-Edit has fixed output dimensions and must not inherit Seedance resolution controls. Source clips use `sourceVideoId` in account requests and `inputs.video` at Runware, never the image reference array, because their validation, duration and retention differ. Edit rates live on the catalog capability; normal generation rates undercharge edits. The existing clip library picker accepts `onPickVideo` so selection cannot accidentally place a clip on the timeline. Edit is not Runware-only: fal Kling O1/O3 and Comet Aleph 2 use the same `videoEdit` block. fal edits stay on `FalGenerationWorkspace` and `/api/fal/*` (the source file is the last upload, because folding edit into image mode posted the clip to image-to-video). Aleph posts JSON to `/runwayml/v1/video_to_video` and polls `/runwayml/v1/tasks/{id}` via `cometPollRunway`, because `/v1/videos` is a different task. `maxImages: 0` hides the reference tray. Source duration, pixels and bytes are refused in the picker and in `assertEditSourceLimits` before a job is reserved. Per-second edits are priced from the container length written onto `sourceDurationSeconds` before reserve, because a client-supplied length undercharges the ledger. Aleph's `rate.minimumUsd` is $0.448. `videoEdit.protocol: 'runway'` selects `cometPollRunway` and skips the production 12 MB inline gate, because that model is fetched by https URL.
 
 - **YouTube clip import (edit source from a YouTube section)** → first read
   `docs/claude/specs/2026-10-13-youtube-clip-source-design.md` (its planning follow-ups
@@ -92,6 +122,13 @@
   recovery links are exposed by the owner-authenticated `/jobs/:id/recovery` read,
   never by job lists or a server fetch proxy. `ProviderResultRecovery` guards the
   account epoch, because a late response can otherwise expose another account's file.
+
+- **Failed-job diagnostics** → `components/account/JobFailureDetails.tsx` and
+  `docs/codex/specs/2026-10-12-actionable-job-errors.md`. Use `failureSummary` for
+  the two short scan lines and `failureNextStep` inside the disclosure; preserve sanitized app-authored capture errors inside the
+  failing step, because the outer transition loses their specifics. Never copy
+  signed URLs or prompts into the diagnostic report. Older missing details stay
+  explicitly unknown rather than being reconstructed.
 
 - **A job stuck in "Needs attention", or copy about why one stopped** → the reason lives in
   `lib/account/job-failure.ts`, not in `error_code`. `error_code` names the arm of the runner that

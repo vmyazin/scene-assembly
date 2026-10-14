@@ -14,7 +14,8 @@ import type { CloudJobRequest, CloudProvider } from './contracts';
 import { SINGLE_IMAGE_MODELS, SINGLE_IMAGE_MODEL_LABELS } from './models';
 import { FAL_IMAGE_MODEL, FAL_VIDEO_MODELS } from '../fal/catalog';
 import { KIE_MODELS } from '../kie/catalog';
-import { PROVIDER_MODELS, resolveVideoInput } from '../providers/catalog';
+import { findModel, PROVIDER_MODELS, resolveVideoInput } from '../providers/catalog';
+import { isSeedanceDraftSize } from '../providers/seedance-draft';
 import type { ProviderId, ProviderModel } from '../providers/types';
 import { GEMINI_IMAGE_MODELS } from '../engines/gemini-catalog';
 import { ENGINES } from '../engines/registry';
@@ -35,7 +36,14 @@ export interface ModelField {
   default?: FieldValue;
   required?: boolean;
 }
-export interface ModeDescriptor { mode: InputMode; fields: ModelField[]; references: { min: number; max: number }; sourceVideo: boolean }
+export interface ModeDescriptor {
+  mode: InputMode;
+  fields: ModelField[];
+  references: { min: number; max: number };
+  sourceVideo: boolean;
+  /** Reference video and audio. Absent means this mode refuses both. */
+  clips?: { video?: { max: number }; audio?: { max: number }; audioRequiresVisual: boolean };
+}
 export interface ModelDescriptor {
   provider: AgentProvider; modelId: string; label: string; mediaType: 'image' | 'video';
   price?: string; note?: string; modes: ModeDescriptor[];
@@ -53,6 +61,17 @@ export function providerLabel(provider: AgentProvider): string {
 
 function select(key: string, label: string, values: readonly (string | number)[], extra: Partial<ModelField> = {}): ModelField {
   return { key, label, type: 'select', options: values.map(value => ({ value, label: String(value) })), ...extra };
+}
+
+/** Optional. No default: a stand-in length would be written into a real request and then fail the measured-length check. */
+function sourceDurationField(min: number | undefined, max: number, draft: boolean): ModelField {
+  return {
+    key: 'sourceDurationSeconds', label: 'Source length (seconds)', type: 'number',
+    min: min ?? 1, max,
+    description: draft
+      ? 'Optional check. The clip length is read from the file before a draft is priced. If you pass this, it must be within a second of that length. It is not sent to Runware.'
+      : 'Optional check. The clip length is read from the file before this edit is priced. If you pass this, it must be within a second of that length.',
+  };
 }
 
 /** fal and Kie already describe their controls; only the spelling of the default differs. */
@@ -75,14 +94,21 @@ function fromDefinition(field: {
 function falModels(): ModelDescriptor[] {
   return [FAL_IMAGE_MODEL, ...FAL_VIDEO_MODELS].map(model => ({
     provider: 'fal', modelId: model.id, label: model.label, mediaType: model.mediaType, note: model.description,
-    modes: model.variants.map(variant => ({
-      mode: variant.inputMode,
-      fields: variant.fields.map(fromDefinition),
-      references: variant.inputMode === 'text' ? NO_REFERENCES
-        : variant.inputMode === 'frames' ? { min: 2, max: 2 }
-          : { min: 1, max: variant.maxInputImages ?? 1 },
-      sourceVideo: false,
-    })),
+    modes: model.variants.map(variant => {
+      const edit = variant.inputMode === 'edit' ? variant.edit : undefined;
+      return {
+        mode: variant.inputMode,
+        fields: [
+          ...variant.fields.map(fromDefinition),
+          ...(edit?.rate.per === 'second' ? [sourceDurationField(edit.minSeconds, edit.maxSeconds, false)] : []),
+        ],
+        references: variant.inputMode === 'text' ? NO_REFERENCES
+          : variant.inputMode === 'frames' ? { min: 2, max: 2 }
+            : variant.inputMode === 'edit' ? { min: 0, max: variant.maxInputImages ?? 0 }
+              : { min: 1, max: variant.maxInputImages ?? 1 },
+        sourceVideo: variant.inputMode === 'edit',
+      };
+    }),
   }));
 }
 
@@ -125,6 +151,13 @@ function aggregatorVideoFields(provider: ProviderId, model: ProviderModel): Mode
   else if (duration?.type === 'range') fields.push({ key: 'durationSeconds', label: 'Duration (seconds)', type: 'number', min: duration.min, max: duration.max, step: 1, default: duration.default });
   else if (model.durations?.length) fields.push(select('durationSeconds', 'Duration (seconds)', model.durations, { default: model.durations[0] }));
   if (model.supportsAudio) fields.push({ key: 'audio', label: 'Audio', type: 'boolean' });
+  // Off by default so a normal request is not a 480p preview. checkValues
+  // forces a 480p size when an agent turns it on, which is what lets the
+  // one-option schema test pass against a 720p or 1080p catalog default.
+  if (model.draftPreview) fields.push({
+    key: 'draft', label: 'Draft', type: 'boolean', default: false,
+    description: '480p preview only. Off by default. Turn it on, then call finalize_draft to render that preview at 1080p. That is a separate charge.',
+  });
   return fields;
 }
 
@@ -139,6 +172,16 @@ function aggregatorReferences(provider: ProviderId, model: ProviderModel, mode: 
   return max >= 1 ? { min: 1, max } : null;
 }
 
+function clipDescriptor(model: ProviderModel, mode: InputMode): ModeDescriptor['clips'] {
+  const clips = model.referenceClips;
+  if (!clips?.modes.includes(mode)) return undefined;
+  return {
+    ...(clips.video ? { video: { max: clips.video.max } } : {}),
+    ...(clips.audio ? { audio: { max: clips.audio.max } } : {}),
+    audioRequiresVisual: clips.audioRequiresVisual,
+  };
+}
+
 function aggregatorModes(provider: ProviderId, model: ProviderModel): ModeDescriptor[] {
   const modes: ModeDescriptor[] = [];
   for (const mode of model.modes) {
@@ -147,17 +190,34 @@ function aggregatorModes(provider: ProviderId, model: ProviderModel): ModeDescri
       if (!edit) continue;
       modes.push({
         mode, sourceVideo: true, references: { min: 0, max: edit.maxImages },
-        // editSettingsError accepts exactly these two keys; duration and ratio follow the source.
+        // editSettingsError accepts these keys; duration and ratio follow the source.
         fields: [
-          ...(edit.sizes.length ? [select('size', 'Resolution', edit.sizes.map(size => size.label), { default: edit.sizes[0].label, required: true })] : []),
-          ...(edit.draftRate ? [{ key: 'draft', label: 'Draft', type: 'boolean' as const, default: false }] : []),
+          ...(edit.aspectRatios?.length ? [select('aspectRatio', 'Target aspect ratio', edit.aspectRatios, {
+            description: 'Letterboxes the source to this shape. Omit it to keep the source frame.',
+          })] : []),
+          ...(edit.sizes.length ? [select('size', 'Resolution', edit.sizes.map(size => size.label), {
+            // The catalog's first size (720p for Seedance). checkValues moves
+            // it to 480p when draft is on, so the schema test can turn that
+            // one field on without the default size failing validation.
+            default: edit.sizes[0].label, required: true,
+          })] : []),
+          ...(edit.draftRate || edit.draftPreview ? [{
+            key: 'draft', label: 'Draft', type: 'boolean' as const, default: false,
+            ...(edit.draftPreview ? { description: '480p preview only. Off by default. Turn it on, then call finalize_draft to render that preview at 1080p. That is a separate charge.' } : {}),
+          }] : []),
+          ...(edit.draftPreview || edit.rate.per === 'second' ? [sourceDurationField(edit.minSeconds, edit.maxSeconds, Boolean(edit.draftPreview))] : []),
         ],
       });
       continue;
     }
     const references = aggregatorReferences(provider, model, mode);
     if (!references) continue;
-    modes.push({ mode, sourceVideo: false, references, fields: model.kind === 'image' ? aggregatorImageFields(provider, model) : aggregatorVideoFields(provider, model) });
+    const clips = clipDescriptor(model, mode);
+    modes.push({
+      mode, sourceVideo: false, references,
+      fields: model.kind === 'image' ? aggregatorImageFields(provider, model) : aggregatorVideoFields(provider, model),
+      ...(clips ? { clips } : {}),
+    });
   }
   return modes;
 }
@@ -248,26 +308,83 @@ export function checkValues(mode: ModeDescriptor, values: Record<string, FieldVa
     if (problem) return { ok: false, field: field.key, ...problem };
     out[field.key] = value;
   }
+  const draftSize = constrainDraftSize(mode, values, out);
+  if (draftSize) return draftSize;
   return { ok: true, values: out };
 }
 
-export function checkReferences(mode: ModeDescriptor, count: number, hasSourceVideo: boolean): string | null {
+/**
+ * A Seedance draft is 480p only. When the caller turned draft on and left
+ * size at the catalog default, rewrite that default. An explicit other size
+ * is a refusal, so a 720p default can stay in the descriptor.
+ */
+function constrainDraftSize(mode: ModeDescriptor, input: Record<string, FieldValue>, out: Record<string, FieldValue>): ValuesCheck | null {
+  if (out.draft !== true) return null;
+  const sizeField = mode.fields.find(field => field.key === 'size' && field.type === 'select');
+  const draftOptions = sizeField?.options?.filter(option => typeof option.value === 'string' && isSeedanceDraftSize(option.value)) ?? [];
+  if (!draftOptions.length) return null;
+  const explicit = input.size;
+  if (explicit !== undefined) {
+    if (typeof explicit !== 'string' || !isSeedanceDraftSize(explicit)) {
+      return {
+        ok: false, field: 'size',
+        message: 'A Seedance draft is 480p only. Pick a 480p size, or turn Draft off.',
+        allowed: draftOptions.map(option => option.value),
+      };
+    }
+    return null;
+  }
+  if (typeof out.size === 'string' && isSeedanceDraftSize(out.size)) return null;
+  out.size = draftOptions[0].value;
+  return null;
+}
+
+export function checkReferences(mode: ModeDescriptor, count: number, hasSourceVideo: boolean, clips: { videos?: number; audios?: number } = {}): string | null {
   if (mode.sourceVideo && !hasSourceVideo) return 'This mode edits a video: pass sourceVideo.';
   if (!mode.sourceVideo && hasSourceVideo) return 'sourceVideo is only accepted in edit mode.';
+  const videos = clips.videos ?? 0;
+  const audios = clips.audios ?? 0;
+  if ((videos > 0 || audios > 0) && !mode.clips) return 'This mode does not take reference video or audio.';
+  if (videos > 0 && !mode.clips?.video) return 'This mode does not take reference video.';
+  if (audios > 0 && !mode.clips?.audio) return 'This mode does not take reference audio.';
+  if (mode.clips?.video && videos > mode.clips.video.max) return `Add up to ${mode.clips.video.max} reference videos.`;
+  if (mode.clips?.audio && audios > mode.clips.audio.max) return `Add up to ${mode.clips.audio.max} reference audio clips.`;
+  if (audios > 0 && mode.clips?.audioRequiresVisual && count === 0 && videos === 0) return 'Add a reference image or reference video. This model cannot use audio on its own.';
   const { min, max } = mode.references;
+  const clipsStandIn = videos > 0 || (audios > 0 && Boolean(mode.clips && !mode.clips.audioRequiresVisual));
   if (count >= min && count <= max) return null;
+  if (clipsStandIn && count >= 0 && count <= max) return null;
   if (min === max) return min === 0 ? 'This mode takes no reference images.' : `This mode takes exactly ${min} reference image${min === 1 ? '' : 's'}.`;
   return `This mode takes ${min} to ${max} reference images.`;
 }
 
 /** A request this mode accepts, with placeholder reference ids: used to price
  *  and to test descriptors, never submitted. */
+function standInEditSeconds(model: ModelDescriptor, mode: ModeDescriptor): number | undefined {
+  if (mode.mode !== 'edit' || model.provider === 'runware') return undefined;
+  if (model.provider === 'fal') {
+    const edit = FAL_VIDEO_MODELS.find(entry => entry.id === model.modelId)?.variants.find(variant => variant.inputMode === 'edit')?.edit;
+    if (edit?.rate.per !== 'second') return undefined;
+    return edit.minSeconds ?? 1;
+  }
+  if (model.provider !== 'atlas' && model.provider !== 'comet' && model.provider !== 'piapi') return undefined;
+  const edit = findModel(model.provider, model.modelId)?.videoEdit;
+  if (!edit || edit.rate.per !== 'second' || edit.rate.usd === undefined) return undefined;
+  return edit.minSeconds ?? 1;
+}
+
 export function sampleRequest(model: ModelDescriptor, mode: ModeDescriptor, values: Record<string, FieldValue> = {}): CloudJobRequest {
   const check = checkValues(mode, values);
   if (!check.ok) throw new Error(check.message);
+  // After checkValues, and only on this sample. A default on the field would
+  // be copied into a real agent request and then fail the measured-length check.
+  const seconds = standInEditSeconds(model, mode);
+  const priced = seconds !== undefined && check.values.sourceDurationSeconds === undefined
+    ? { ...check.values, sourceDurationSeconds: seconds }
+    : check.values;
   return {
     provider: model.provider, modelId: model.modelId, mediaType: model.mediaType, inputMode: mode.mode,
-    prompt: 'A lighthouse on a cliff at dusk', values: check.values,
+    prompt: 'A lighthouse on a cliff at dusk', values: priced,
     referenceIds: Array.from({ length: mode.references.min }, (_, index) => `sample-reference-${index}`),
     ...(mode.sourceVideo ? { sourceVideoId: 'sample-source-video' } : {}),
   };

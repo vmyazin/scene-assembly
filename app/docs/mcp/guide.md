@@ -119,7 +119,7 @@ The `idempotencyKey` is any string you choose, up to 200 characters, and it belo
 
 ## References
 
-Some input modes take reference images, and edit mode takes a source video. Stage a file with `add_reference`, then pass the `uploadId` it returns to `generate`.
+Some input modes take reference images, and edit mode takes a source video. Models that list reference video or audio (Seedance 2.5 on Runware, and the Atlas Seedance reference-to-video models) also take `referenceVideos` and `referenceAudios` on `generate`. Stage a file with `add_reference`, then pass the `uploadId` it returns.
 
 **From a link.** Scene Assembly downloads the file straight away.
 
@@ -130,7 +130,7 @@ Some input modes take reference images, and edit mode takes a source video. Stag
 - The URL must be public `https`, with a hostname rather than an IP address and no user name or password in it.
 - It cannot point at Scene Assembly itself. Pass `{ "assetId": … }` for a file already in the library.
 - Up to 3 redirects are followed, each checked by the same rules. The download times out after 20 seconds.
-- The type is read from the file's bytes, not its headers: PNG, JPEG, WebP or AVIF images up to 20 MB, and MP4 or WebM video up to 100 MB. QuickTime and HEIC files are refused.
+- The type is read from the file's bytes, not its headers: PNG, JPEG, WebP or AVIF images up to 20 MB, an edit-source MP4 up to 200 MB, WebM up to 100 MB, and MP3 or WAV audio up to 15 MB. WebM staged from a link is an edit source only. A reference video is MP4 up to 100 MB, or a MOV uploaded with `video/quicktime`. QuickTime and HEIC files are refused from a link, because those brands are not stored from a sniff.
 
 **From a file you have.** Ask for an upload link with the file's type and its exact size in bytes:
 
@@ -146,7 +146,7 @@ curl -T cat.png -H "Content-Type: image/png" "<putUrl>"
 
 A different type or byte count is refused by the upload link itself with an HTTP 400, not by a tool; ask for a new link with the right figures.
 
-`mimeType` is one of `image/png`, `image/jpeg`, `image/webp`, `image/avif`, `video/mp4` or `video/webm`, with the same size limits as links.
+`mimeType` is one of `image/png`, `image/jpeg`, `image/webp`, `image/avif`, `video/mp4`, `video/webm`, `video/quicktime`, `audio/mpeg`, `audio/mp3`, `audio/wav`, `audio/wave` or `audio/x-wav`. Images stop at 20 MB, audio at 15 MB, and video at 100 MB. `video/webm` is an edit source. A reference video is `video/mp4` or `video/quicktime`.
 
 **From a YouTube video.** For edit mode, Scene Assembly can cut a section of a YouTube video into the source clip:
 
@@ -166,7 +166,7 @@ A different type or byte count is refused by the upload link itself with an HTTP
 { "provider": "gemini", "modelId": "gemini-3-pro-image-preview", "mediaType": "image", "inputMode": "image", "prompt": "The same kite, in watercolour", "references": [{ "uploadId": "<from add_reference>" }, { "assetId": "<from list_assets>" }], "idempotencyKey": "harbour-kite-watercolour" }
 ```
 
-References go in order. `list_models` gives each mode's minimum and maximum count. In edit mode, pass the clip as `sourceVideo` instead of in `references`. An account can hold up to 32 staged references, 256 MB in all, across the browser and every agent.
+References go in order. `list_models` gives each mode's minimum and maximum count, and whether that mode accepts reference video or audio. In edit mode, pass the clip as `sourceVideo` instead of in `references`. Reference video and audio are separate arrays, not extra images. A reference video is MP4 or MOV. WebM is an edit source only. A Seedance draft may include them; `finalize_draft` does not resend them. An account can hold up to 32 staged references, 256 MB in all, across the browser and every agent.
 
 ## Budget
 
@@ -179,15 +179,16 @@ References go in order. `list_models` gives each mode's minimum and maximum coun
 
 ## Tools
 
-The server offers 13 tools. `delete_asset` is offered only when you allowed the agent to delete files.
+The server offers 14 tools. `delete_asset` is offered only when you allowed the agent to delete files.
 
 | Tool | What it does | Key inputs |
 | --- | --- | --- |
 | `list_models` | Models your connected providers can run. Filter by provider or model to get each mode's settings. | `provider`, `modelId`, `mediaType`, `inputMode` (all optional) |
 | `estimate_cost` | Prices a request and checks it against the agent's limit, without running it. | The same fields as `generate` |
-| `add_reference` | Stages a reference image, or a source video for edit mode (from a file, a link, or a section of a YouTube video), and returns an `uploadId`. | `url`, `upload` with `mimeType` and `bytes`, or `youtube` with `url`, `startSeconds` and `endSeconds` |
-| `generate` | Starts an image or video job and charges its estimate to the agent's limit. Returns at once. | `provider`, `modelId`, `mediaType`, `inputMode`, `prompt`, `values`, `references`, `sourceVideo`, `idempotencyKey` |
-| `get_job` | A job's state and, once saved, its outputs with download links. Can wait for a change. | `jobId`, `waitSeconds` (0 to 25) |
+| `add_reference` | Stages a reference image, reference video, reference audio, or a source video for edit mode (from a file, a link, or a section of a YouTube video), and returns an `uploadId`. | `url`, `upload` with `mimeType` and `bytes`, or `youtube` with `url`, `startSeconds` and `endSeconds` |
+| `generate` | Starts an image or video job and charges its estimate to the agent's limit. Returns at once. Seedance 2.5 draft is `values.draft: true` and is off unless you set it. | `provider`, `modelId`, `mediaType`, `inputMode`, `prompt`, `values`, `references`, `referenceVideos`, `referenceAudios`, `sourceVideo`, `idempotencyKey` |
+| `finalize_draft` | Renders one Seedance 2.5 draft at 1080p. A new job and a separate charge. Do not resend the prompt or media. With `jobId`, the length is the one saved on that draft; a different `durationSeconds` is refused. | `jobId`, or `draftId` plus `durationSeconds` and `inputMode`, `idempotencyKey` |
+| `get_job` | A job's state and, once saved, its outputs with download links. A Seedance draft includes `draftId`. Can wait for a change. | `jobId`, `waitSeconds` (0 to 25) |
 | `list_jobs` | The account's recent jobs, newest first, including ones started in the browser. | `state` (`active`, `needs_attention`, `finished` or `all`), `limit` (up to 100) |
 | `cancel_job` | Cancels a job that is still queued and releases its charge. | `jobId` |
 | `resume_job` | Tries again on a job that needs attention, when its `failureReason` can be fixed by trying again. At most three times. | `jobId` |
@@ -197,7 +198,15 @@ The server offers 13 tools. `delete_asset` is offered only when you allowed the 
 | `delete_asset` | Permanently deletes a file from the library. Hidden unless you allowed it. | `assetId` |
 | `get_spend` | Account spend totals, this agent's limit and what is left, and optionally ledger entries and provider balances. | `entries` (up to 50), `balances` |
 
-Each agent can make 300 read calls, 60 write calls (`add_reference`, `cancel_job`, `dismiss_job`, `delete_asset`) and 10 submissions (`generate`, `resume_job`) per minute. An account runs at most 10 jobs at a time, shared with the browser.
+Each agent can make 300 read calls, 60 write calls (`add_reference`, `cancel_job`, `dismiss_job`, `delete_asset`) and 10 submissions (`generate`, `finalize_draft`, `resume_job`) per minute. An account runs at most 10 jobs at a time, shared with the browser.
+
+### Seedance drafts
+
+Seedance 2.5 on Runware can render a 480p draft (`values.draft` set to `true` on `generate`; the default is off) and later render that same preview at 1080p with `finalize_draft`. `get_job` and `view_asset` return `draftId` when the preview has one. Finalize does not take a prompt, references, reference video, reference audio, or a source video — those stay on the draft — and it is budget-checked on its own, using the documented 1080p rate. Runware does not publish a separate finalize price, so that figure is an estimate until the provider reports a cost.
+
+Pass `jobId` and the length is taken from that draft (`durationSeconds`, or `sourceDurationSeconds` on an edit). You can omit `durationSeconds`. Passing a length more than a second off the saved one is refused, and nothing is reserved. A bare `draftId` still needs `durationSeconds` and `inputMode`, because there is no saved job to read.
+
+An edit draft is priced from the source clip. The Worker reads the duration out of the file before it reserves. `sourceDurationSeconds` is optional and, when you pass it, must be within a second of that length. If the length cannot be read, the draft is refused instead of priced as unknown.
 
 ## Errors
 
@@ -213,9 +222,10 @@ An HTTP 401 from the server is not a refusal. It means the connection was discon
 | `invalid_settings` | No | The provider's own check rejected the settings. Compare them with `list_models` for that model and mode. |
 | `content_floor` | No | The request violates a content restriction that applies to every filter level. Explain the refusal; do not retry the same request or try another filter level. |
 | `invalid_request` | No | The request was malformed, for example a `cursor` that did not come from `list_assets`. |
-| `invalid_references` | No | The same reference was passed twice, or a file is in the wrong role: images go in `references`, a video goes in `sourceVideo`. |
+| `invalid_references` | No | The same reference was passed twice, or a file is in the wrong role: images go in `references`, reference videos in `referenceVideos`, reference audio in `referenceAudios`, and an edit source in `sourceVideo`. WebM passed as a reference video is refused: it is an edit source. A clip over that model's own size or length is refused before the job is reserved. |
 | `invalid_token` | No | Scene Assembly built an invalid submission token. This should not happen; report it. |
 | `not_found` | No | No job or file with that id on this account. |
+| `draft_unavailable` | No | That job is not a Seedance 2.5 draft, or it has no `draftId` yet. Generate a 480p draft and wait until `get_job` returns one. |
 | `local_fixture_mode` | No | Only on a local development server with fake generation switched on, which runs image jobs and edits only. |
 
 ### Providers

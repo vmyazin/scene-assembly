@@ -286,6 +286,8 @@ export async function atlasCreateVideo(request: VideoRequest): Promise<{ taskId:
     ...(request.durationSeconds ? { duration: request.durationSeconds } : {}),
     ...(request.resolution ? { resolution: request.resolution } : {}),
     ...(request.aspectRatio ? { [ratioField(request.model)]: request.aspectRatio } : {}),
+    ...(request.referenceVideos?.length ? { reference_videos: request.referenceVideos } : {}),
+    ...(request.referenceAudios?.length ? { reference_audios: request.referenceAudios } : {}),
   });
   return { taskId };
 }

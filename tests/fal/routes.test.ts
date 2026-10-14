@@ -1,4 +1,5 @@
 // @vitest-environment node
+// tests/fal/routes.test.ts
 
 import type { NextRequest } from 'next/server';
 import { runInNewContext } from 'node:vm';
@@ -236,7 +237,7 @@ describe('fal API routes', () => {
     it('rejects an oversized declared multipart body before parsing it', async () => {
       const formData = vi.fn();
       const response = await uploadPost({
-        headers: new Headers({ 'content-length': String(21 * 1024 * 1024 + 1) }),
+        headers: new Headers({ 'content-length': String(201 * 1024 * 1024 + 1) }),
         formData,
       } as unknown as NextRequest);
 
@@ -249,7 +250,8 @@ describe('fal API routes', () => {
       const { request, cancel } = repeatingStreamRequest(
         '/api/fal/upload',
         1024 * 1024,
-        'multipart/form-data; boundary=fal-test-boundary'
+        'multipart/form-data; boundary=fal-test-boundary',
+        202
       );
 
       const response = await uploadPost(request);
@@ -472,6 +474,40 @@ describe('fal API routes', () => {
       expect(uploadFalFile).not.toHaveBeenCalled();
     });
 
+    it('accepts an MP4 or MOV whose first box is ftyp', async () => {
+      uploadFalFile.mockResolvedValue('https://fal.media/source.mp4');
+      const ftyp = new Uint8Array([0, 0, 0, 16, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0, 0, 0, 0]);
+      const response = await uploadPost(formRequest([
+        ['apiKey', 'id:secret'],
+        ['file', new File([ftyp], 'source.mov', { type: 'video/quicktime' })],
+      ]));
+      expect(response.status).toBe(200);
+      expect(uploadFalFile).toHaveBeenCalledOnce();
+    });
+
+    it('accepts a classic QuickTime file whose first atom is wide, and still requires ftyp for MP4', async () => {
+      uploadFalFile.mockResolvedValue('https://fal.media/source.mov');
+      const wide = new Uint8Array([0, 0, 0, 8, 0x77, 0x69, 0x64, 0x65]);
+      const mov = await uploadPost(formRequest([
+        ['apiKey', 'id:secret'],
+        ['file', new File([wide], 'source.mov', { type: 'video/quicktime' })],
+      ]));
+      expect(mov.status).toBe(200);
+      const mp4 = await uploadPost(formRequest([
+        ['apiKey', 'id:secret'],
+        ['file', new File([wide], 'source.mp4', { type: 'video/mp4' })],
+      ]));
+      expect(mp4.status).toBe(415);
+    });
+    it('rejects a video that is not MP4 or MOV', async () => {
+      const response = await uploadPost(formRequest([
+        ['apiKey', 'id:secret'],
+        ['file', new File([new Uint8Array([0, 0, 0, 16, 0x66, 0x74, 0x79, 0x70])], 'source.webm', { type: 'video/webm' })],
+      ]));
+      expect(response.status).toBe(415);
+      expect(uploadFalFile).not.toHaveBeenCalled();
+    });
+
     it('rejects a source file larger than 20 MiB', async () => {
       const response = await uploadPost(
         formRequest([
@@ -594,6 +630,25 @@ describe('fal API routes', () => {
 
       expect(response.status).toBe(400);
       expect(submitFalTask).not.toHaveBeenCalled();
+    });
+
+    it('forwards a Kling edit with the source video last', async () => {
+      submitFalTask.mockResolvedValue({ requestId: 'req_edit_1234' });
+      const uploadUrls = ['https://fal.media/ref.png', 'https://fal.media/source.mp4'];
+      const response = await queuePost(jsonRequest('/api/fal/queue', {
+        ...submitBody,
+        modelId: 'kling-o1-edit',
+        inputMode: 'edit',
+        prompt: 'Replace the coat in @Video1 with @Image1',
+        uploadUrls,
+        values: { keep_audio: false },
+      }));
+      expect(response.status).toBe(200);
+      expect(submitFalTask).toHaveBeenCalledWith(expect.objectContaining({
+        modelId: 'kling-o1-edit',
+        inputMode: 'edit',
+        uploadUrls,
+      }));
     });
 
     it('forwards a first-and-last-frame run with both frames in order', async () => {

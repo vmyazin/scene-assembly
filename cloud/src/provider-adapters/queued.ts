@@ -1,3 +1,4 @@
+// cloud/src/provider-adapters/queued.ts
 import { inputUrls } from '../uploads';
 import { buildFalInput, resolveFalVariant, validateFalInput } from '../../../lib/fal/catalog';
 import { getFalTask, submitFalTask } from '../../../lib/fal/server';
@@ -21,18 +22,20 @@ function request(job: JobRow): CloudJobRequest { return JSON.parse(job.request_j
 /** Validate before reserving quota or entering the non-retrying submit step. */
 export function validateQueuedRequest(r: CloudJobRequest) {
   const endpointId = r.provider === 'fal'
-    ? (() => { try { return resolveFalVariant(r.modelId, r.mediaType, r.inputMode as 'text' | 'image' | 'frames').endpointId; } catch { return undefined; } })()
+    ? (() => { try { return resolveFalVariant(r.modelId, r.mediaType, r.inputMode as 'text' | 'image' | 'frames' | 'edit').endpointId; } catch { return undefined; } })()
     : undefined;
   const moderationError = moderationValueError({ provider: r.provider, modelId: r.modelId, endpointId }, r.values);
   if (moderationError) throw new AccountError(moderationError, 400, 'invalid_settings');
   const references=r.referenceIds.map(id=>`https://reference.invalid/${id}`);
-  if(r.inputMode==='edit'||r.inputMode==='reference'||r.provider==='kie'&&r.inputMode==='frames')throw new AccountError('This reference mode is not supported by the selected provider.',400,'invalid_settings');
+  if((r.inputMode==='edit'&&r.provider!=='fal')||r.inputMode==='reference'||r.provider==='kie'&&r.inputMode==='frames')throw new AccountError('This reference mode is not supported by the selected provider.',400,'invalid_settings');
+  if(r.inputMode==='edit'&&!r.sourceVideoId)throw new AccountError('Choose a source video to edit.',400,'invalid_settings');
+  const uploadUrls=r.inputMode==='edit'?[...references,`https://reference.invalid/${r.sourceVideoId}`]:references;
   try {
     if (r.provider === 'fal') {
       const variant = resolveFalVariant(r.modelId, r.mediaType, r.inputMode);
-      const error = validateFalInput(variant, {prompt:r.prompt, uploadUrls:references});
+      const error = validateFalInput(variant, {prompt:r.prompt, uploadUrls});
       if (error) throw new Error(error);
-      buildFalInput(variant, {prompt:r.prompt, uploadUrls:references, values:r.values});
+      buildFalInput(variant, {prompt:r.prompt, uploadUrls, values:r.values});
     } else if (r.provider === 'kie') {
       const model = KIE_MODELS.find(m => m.id === r.modelId && m.mediaType === r.mediaType);
       if (!model) throw new Error('Unknown model');
@@ -53,12 +56,12 @@ export function validateQueuedRequest(r: CloudJobRequest) {
 export const falAdapter: GenerationAdapter = {
   async submit(env, job) {
     const r = request(job);
-    const result = await submitFalTask({...r, inputMode:r.inputMode as 'text'|'image'|'frames', uploadUrls:await inputUrls(env,job), apiKey:await credentials(env,job)});
+    const result = await submitFalTask({...r, inputMode:r.inputMode as 'text'|'image'|'frames'|'edit', uploadUrls:await inputUrls(env,job), apiKey:await credentials(env,job)});
     return {handle:{id:result.requestId}};
   },
   async poll(env, job, handle) {
     const r = request(job);
-    const result = await getFalTask({...r, inputMode:r.inputMode as 'text'|'image'|'frames', requestId:handle.id, apiKey:await credentials(env,job)});
+    const result = await getFalTask({...r, inputMode:r.inputMode as 'text'|'image'|'frames'|'edit', requestId:handle.id, apiKey:await credentials(env,job)});
     if (result.state !== 'success') return {state:'running'};
     if (!result.resultUrl) throw new Error('Missing output');
     return {state:'success',result:{sources:[{url:result.resultUrl,mimeType:result.mimeType}]}};

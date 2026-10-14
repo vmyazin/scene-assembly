@@ -1,10 +1,12 @@
 // cloud/src/provider-adapters/aggregators.ts
-import { editSettingsError } from '../../../lib/providers/video-edit';
+import { referenceClipCountError, referenceClipSetError, referenceClipsFor } from '../../../lib/providers/reference-clips';
+import { editSettingsError, isRunwayEditProtocol } from '../../../lib/providers/video-edit';
+import { isSeedance25, isSeedanceDraftSize, isSeedanceFinalizeValues, seedanceFinalizeValuesError } from '../../../lib/providers/seedance-draft';
 import { piapiCreateImage, piapiCreateVideo, piapiPollTask } from '../../../lib/providers/piapi';
 import { findModel, resolveDuration, resolveSize, resolveVideoInput } from '../../../lib/providers/catalog';
 import { atlasCreateImage, atlasCreateVideo, atlasPollVideo } from '../../../lib/providers/atlas';
 import { runwareCreateImage, runwareCreateVideo, runwarePollImage, runwarePollVideo, runwareStoreMedia, runwareDeleteMedia } from '../../../lib/providers/runware';
-import { cometGenerateImage, cometCreateVideo, cometPollVideo } from '../../../lib/providers/comet';
+import { cometGenerateImage, cometCreateVideo, cometPollVideo, cometPollRunway } from '../../../lib/providers/comet';
 import type { ProviderId } from '../../../lib/providers/types';
 import type { CloudJobRequest } from '../../../lib/account/contracts';
 import type { GenerationAdapter } from '../providers';
@@ -27,21 +29,44 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
   const invalid = (message: string) => { throw new AccountError(message, 400, 'invalid_settings'); };
   const providerLabel = r.provider === 'runware' ? 'Runware' : r.provider === 'atlas' ? 'Atlas Cloud' : r.provider === 'piapi' ? 'PiAPI' : 'Comet';
   if (!model) return invalid(`${providerLabel} does not list the model "${r.modelId}". Pick a model from the list.`);
+  if (isSeedanceFinalizeValues(r.values)) {
+    if (!isSeedance25(r.modelId) || r.mediaType !== 'video') return invalid('Only a Seedance 2.5 video can be finalized.');
+    if (r.referenceIds.length > 0 || r.sourceVideoId || (r.referenceVideoIds?.length ?? 0) > 0 || (r.referenceAudioIds?.length ?? 0) > 0) return invalid('Finalizing a draft cannot include prompt media. Send only the draft ID.');
+    const finalizeError = seedanceFinalizeValuesError(r.values);
+    if (finalizeError) return invalid(finalizeError);
+    return;
+  }
   const moderationError = moderationValueError({ provider: r.provider, modelId: r.modelId }, r.values);
   if (moderationError) return invalid(moderationError);
   if (model.kind !== r.mediaType) return invalid(`${model.label} makes ${model.kind}s, not ${r.mediaType}s. Pick a ${r.mediaType} model.`);
   if (!model.modes.includes(r.inputMode)) return invalid(`${model.label} does not offer ${describeMode(r.inputMode)}. Pick another model or input mode.`);
   const count = r.referenceIds.length;
+  const referenceVideos = r.referenceVideoIds ?? [];
+  const referenceAudios = r.referenceAudioIds ?? [];
+  const clipCapability = referenceClipsFor(model, r.inputMode);
+  if ((referenceVideos.length > 0 || referenceAudios.length > 0) && !clipCapability) return invalid(`${model.label} does not take reference video or audio in ${describeMode(r.inputMode)}.`);
+  if (clipCapability?.video) {
+    const countError = referenceClipCountError(clipCapability.video, referenceVideos.length);
+    if (countError) return invalid(countError);
+  } else if (referenceVideos.length > 0) return invalid(`${model.label} does not take reference video.`);
+  if (clipCapability?.audio) {
+    const countError = referenceClipCountError(clipCapability.audio, referenceAudios.length);
+    if (countError) return invalid(countError);
+  } else if (referenceAudios.length > 0) return invalid(`${model.label} does not take reference audio.`);
+  const clipSetError = clipCapability ? referenceClipSetError(clipCapability, { images: count, videos: referenceVideos.length, audios: referenceAudios.length }) : null;
+  if (clipSetError) return invalid(clipSetError);
   if (r.inputMode === 'edit') {
     if (!model.videoEdit || !r.sourceVideoId) return invalid('Choose a source video to edit.');
     if (count > model.videoEdit.maxImages) return invalid(`Add up to ${model.videoEdit.maxImages} replacement images.`);
+    if (model.videoEdit.maxPromptLength && r.prompt.length > model.videoEdit.maxPromptLength) return invalid(`This model's prompt is at most ${model.videoEdit.maxPromptLength} characters.`);
     const settingsError = editSettingsError(model.videoEdit, r.values);
     if (settingsError) return invalid(settingsError);
     return;
   }
   if (r.sourceVideoId) return invalid('Source video is only accepted in Edit video mode.');
   if (r.inputMode === 'text' && count !== 0) return invalid('A text-only run cannot include images. Remove them or switch to an image input mode.');
-  if (r.inputMode !== 'text' && count === 0) return invalid(`${describeMode(r.inputMode, true)} needs at least one image.`);
+  const clipsStandIn = referenceVideos.length > 0 || (referenceAudios.length > 0 && Boolean(clipCapability && !clipCapability.audioRequiresVisual));
+  if (r.inputMode !== 'text' && count === 0 && !clipsStandIn) return invalid(`${describeMode(r.inputMode, true)} needs at least one image.`);
   if (r.mediaType === 'image') {
     // Atlas's editors are the reason this is not a flat 1: Nano Banana 2 Edit
     // takes 14 references and GPT Image 2.5 Edit 16, and the adapter sends them
@@ -72,20 +97,27 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
   if (r.provider === 'atlas' && resolution !== undefined && (r.mediaType !== 'image' || !model.sizes?.some(s => s.label === String(resolution)))) return invalid(`"${String(resolution)}" is not a resolution ${model.label} publishes. Pick one from the list.`);
   if (aspectRatio !== undefined && !['1:1','16:9','9:16','4:3','3:4','3:2','2:3','21:9'].includes(String(aspectRatio))) return invalid(`"${String(aspectRatio)}" is not an aspect ratio ${model.label} accepts.`);
   if (size !== undefined && (typeof size !== 'string' || !model.sizes?.some(s => s.label === size))) return invalid(`"${String(size)}" is not an output size ${model.label} publishes. Pick one from the list.`);
+  if (r.values.draft === true && (!model.draftPreview || typeof size !== 'string' || !isSeedanceDraftSize(size))) return invalid('A Seedance draft is 480p only. Pick a 480p size, or turn Draft off.');
   if (durationSeconds !== undefined && (typeof durationSeconds !== 'number' || resolveDuration(r.provider, r.modelId, durationSeconds) !== durationSeconds)) return invalid(`${String(durationSeconds)} seconds is not a length ${model.label} publishes. Pick one from the list.`);
   const relaxable = moderationCapability({ provider: r.provider, modelId: r.modelId }).relaxable;
   const accepted = r.provider === 'piapi'
     ? ['aspectRatio','size','durationSeconds','resolution','audio']
     : r.provider === 'atlas' ? ['aspectRatio','size','durationSeconds','resolution']
       : ['aspectRatio','size','durationSeconds'];
+  if (model.draftPreview) accepted.push('draft');
   if (relaxable) accepted.push('moderation');
   if (model.supportsAudio && !accepted.includes('audio')) accepted.push('audio');
   const stray = Object.keys(r.values).find(key => !accepted.includes(key));
   if (stray) return invalid(`"${stray}" is not a setting this provider accepts.`);
 }
 
+/** Ids already in Runware's media store. A later failure must delete them; the poll never sees a handle that was not returned. */
+async function releaseStored(apiKey: string, ids: Array<string | undefined>) {
+  for (const id of ids) if (id) await runwareDeleteMedia(apiKey, id).catch(() => {});
+}
+
 function describeMode(mode: CloudJobRequest['inputMode'], capitalized = false): string {
-  const label = mode === 'frames' ? 'first and last frame' : mode === 'reference' ? 'reference images' : mode === 'image' ? 'image input' : 'text input';
+  const label = mode === 'frames' ? 'first and last frame' : mode === 'reference' ? 'reference images' : mode === 'edit' ? 'edit video' : mode === 'image' ? 'image input' : 'text input';
   return capitalized ? label[0].toUpperCase() + label.slice(1) : label;
 }
 
@@ -115,44 +147,106 @@ export const aggregatorAdapter: GenerationAdapter = {
       const result = await create({...common, imageInput: model.imageInput, ...(provider === 'piapi' || provider === 'atlas' ? {resolution: r.values.resolution as string | undefined} : {})});
       return {handle: {id: result.taskId}};
     }
+    if (isSeedanceFinalizeValues(r.values)) {
+      const result = await runwareCreateVideo({
+        apiKey: common.apiKey, model: r.modelId, prompt: '', inputMode: r.inputMode,
+        draftId: String(r.values.draftId), resolution: '1080p',
+      }, job.id);
+      return {handle: {id: result.taskId}};
+    }
+    if (r.inputMode === 'edit' && provider === 'comet' && isRunwayEditProtocol(model.videoEdit)) {
+      // Aleph takes one https address in production. Locally the provider cannot
+      // fetch this machine, so the owned bytes go as a data URI. That URI is
+      // capped at 5,242,880 characters; acceptJob refuses a larger clip first.
+      let sourceVideo: string;
+      if (isLocal(env)) {
+        const inputs = await inlineInputs(env, job, [r.sourceVideoId!]);
+        const source = inputs[0];
+        sourceVideo = `data:${source.mimeType};base64,${source.data}`;
+      } else {
+        const urls = await inputUrls(env, job);
+        const index = jobInputIds(r).indexOf(r.sourceVideoId!);
+        const hosted = urls[index];
+        if (!hosted) throw new AccountError('Choose a source video to edit.', 400, 'invalid_references');
+        sourceVideo = hosted;
+      }
+      const result = await cometCreateVideo({
+        apiKey: common.apiKey, model: r.modelId, prompt: r.prompt, inputMode: 'edit', sourceVideo,
+        aspectRatio: typeof r.values.aspectRatio === 'string' ? r.values.aspectRatio : undefined,
+      });
+      return {handle: {id: result.taskId, protocol: 'runway'}};
+    }
     if (r.inputMode === 'edit') {
       // inputUrls keeps the source last, matching jobInputIds; it is never an image.
       let sourceVideo = common.images.pop();
       let sourceMedia: string | undefined;
-      if (isLocal(env)) {
-        // The provider cannot fetch localhost capabilities. Transfer owned bytes
-        // to its media store first; production retains scoped HTTPS R2 URLs.
-        const inputs = await inlineInputs(env, job, jobInputIds(r));
-        const source = inputs.pop()!;
-        sourceMedia = await runwareStoreMedia(common.apiKey, `data:${source.mimeType};base64,${source.data}`);
-        sourceVideo = sourceMedia;
-        common.images = inputs.map(input => `data:${input.mimeType};base64,${input.data}`);
+      try {
+        if (isLocal(env)) {
+          // The provider cannot fetch localhost capabilities. Transfer owned bytes
+          // to its media store first; production retains scoped HTTPS R2 URLs.
+          const inputs = await inlineInputs(env, job, jobInputIds(r));
+          const source = inputs.pop()!;
+          sourceMedia = await runwareStoreMedia(common.apiKey, `data:${source.mimeType};base64,${source.data}`);
+          sourceVideo = sourceMedia;
+          common.images = inputs.map(input => `data:${input.mimeType};base64,${input.data}`);
+        }
+        // The durable job ID remains available even when submission throws, so
+        // getTaskDetails can diagnose the attempt without another paid request.
+        const result = await runwareCreateVideo({...common, sourceVideo, inputMode: 'edit', resolution: typeof r.values.size === 'string' ? r.values.size : undefined, ...(model.videoEdit?.draftRate || model.videoEdit?.draftPreview ? {draft: r.values.draft === true} : {})}, job.id);
+        return {handle: {id: result.taskId, ...(sourceMedia ? {sourceMedia} : {})}};
+      } catch (error) {
+        await releaseStored(common.apiKey, [sourceMedia]);
+        throw error;
       }
-      // The durable job ID remains available even when submission throws, so
-      // getTaskDetails can diagnose the attempt without another paid request.
-      const result = await runwareCreateVideo({...common, sourceVideo, inputMode: 'edit', resolution: typeof r.values.size === 'string' ? r.values.size : undefined, ...(model.videoEdit?.draftRate ? {draft: r.values.draft === true} : {})}, job.id);
-      return {handle: {id: result.taskId, ...(sourceMedia ? {sourceMedia} : {})}};
     }
-    const size = resolveSize(provider, r.modelId, r.values.size as string | undefined);
-    const create = provider === 'piapi' ? piapiCreateVideo : provider === 'runware' ? runwareCreateVideo : provider === 'comet' ? cometCreateVideo : atlasCreateVideo;
-    const result = await create({
-      ...common, inputMode: r.inputMode, ...(provider === 'piapi' || model.supportsAudio ? {audio: r.values.audio === true} : {}),
-      inputField: resolveVideoInput(provider, r.modelId, r.inputMode)?.field,
-      durationSeconds: resolveDuration(provider, r.modelId, r.values.durationSeconds as number | undefined),
-      width: size?.width, height: size?.height, resolution: size?.preset,
-    });
-    return {handle: {id: result.taskId}};
+    const videoIds = r.referenceVideoIds ?? [];
+    const audioIds = r.referenceAudioIds ?? [];
+    // jobInputIds is images, then reference videos, then reference audio. Comet
+    // never reaches here with clips: its models have no referenceClips capability.
+    let referenceVideos = provider === 'comet' ? [] : common.images.slice(r.referenceIds.length, r.referenceIds.length + videoIds.length);
+    let referenceAudios = provider === 'comet' ? [] : common.images.slice(r.referenceIds.length + videoIds.length, r.referenceIds.length + videoIds.length + audioIds.length);
+    common.images = common.images.slice(0, r.referenceIds.length);
+    const storedMedia: string[] = [];
+    try {
+      if (provider === 'runware' && isLocal(env) && (videoIds.length > 0 || audioIds.length > 0)) {
+        // Seedance rejects data URIs on referenceVideos and referenceAudios, and
+        // it cannot fetch a localhost media URL. Store the owned bytes, then
+        // delete those UUIDs when the task ends. A store or create that throws
+        // before the handle is returned has to delete them here: poll never runs.
+        const inputs = await inlineInputs(env, job, [...videoIds, ...audioIds]);
+        for (const input of inputs) storedMedia.push(await runwareStoreMedia(common.apiKey, `data:${input.mimeType};base64,${input.data}`));
+        referenceVideos = storedMedia.slice(0, videoIds.length);
+        referenceAudios = storedMedia.slice(videoIds.length);
+      }
+      const size = resolveSize(provider, r.modelId, r.values.size as string | undefined);
+      const create = provider === 'piapi' ? piapiCreateVideo : provider === 'runware' ? runwareCreateVideo : provider === 'comet' ? cometCreateVideo : atlasCreateVideo;
+      const result = await create({
+        ...common, inputMode: r.inputMode, ...(provider === 'piapi' || model.supportsAudio ? {audio: r.values.audio === true} : {}),
+        inputField: resolveVideoInput(provider, r.modelId, r.inputMode)?.field,
+        durationSeconds: resolveDuration(provider, r.modelId, r.values.durationSeconds as number | undefined),
+        width: size?.width, height: size?.height, resolution: size?.preset,
+        ...(referenceVideos.length > 0 ? {referenceVideos} : {}),
+        ...(referenceAudios.length > 0 ? {referenceAudios} : {}),
+        ...(r.values.draft === true ? {draft: true} : {}),
+      });
+      return {handle: {id: result.taskId, ...(storedMedia.length ? {storedMedia} : {})}};
+    } catch (error) {
+      await releaseStored(common.apiKey, storedMedia);
+      throw error;
+    }
   },
   async poll(env, job, handle) {
     const r: CloudJobRequest = JSON.parse(job.request_json);
-    const poll = job.provider === 'piapi' ? piapiPollTask : job.provider === 'atlas' ? atlasPollVideo : job.provider === 'comet' ? cometPollVideo : r.mediaType === 'image' ? runwarePollImage : runwarePollVideo;
+    const poll = job.provider === 'piapi' ? piapiPollTask : job.provider === 'atlas' ? atlasPollVideo : job.provider === 'comet' ? (handle.protocol === 'runway' ? cometPollRunway : cometPollVideo) : r.mediaType === 'image' ? runwarePollImage : runwarePollVideo;
     const result = await poll({apiKey: await credentials(env, job), taskId: handle.id});
-    if (handle.sourceMedia && (result.state === 'success' || result.state === 'error')) {
-      await runwareDeleteMedia(await credentials(env, job), handle.sourceMedia).catch(() => {});
+    const stored = [...(handle.sourceMedia ? [handle.sourceMedia] : []), ...(handle.storedMedia ?? [])];
+    if (stored.length > 0 && (result.state === 'success' || result.state === 'error')) {
+      const apiKey = await credentials(env, job);
+      for (const id of stored) await runwareDeleteMedia(apiKey, id).catch(() => {});
     }
     if (result.state === 'error') return {state: 'failed', ...(result.error ? {reason: result.error} : {})};
     if (result.state !== 'success') return {state: 'running'};
     if (!result.urls.length) throw new Error('Missing output');
-    return {state: 'success', result: {sources: result.urls.map(url => ({url})), ...(result.cost !== undefined ? {cost: result.cost} : {})}};
+    return {state: 'success', result: {sources: result.urls.map(url => ({url})), ...(result.cost !== undefined ? {cost: result.cost} : {}), ...(result.draftId ? {draftId: result.draftId} : {})}};
   },
 };

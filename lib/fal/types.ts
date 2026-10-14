@@ -1,6 +1,9 @@
+// lib/fal/types.ts
+import type { VideoEditCapability } from '../providers/video-edit';
+
 export type FalMediaType = 'image' | 'video';
 /** `frames` is first-and-last-frame to video: two ordered source images. */
-export type FalInputMode = 'text' | 'image' | 'frames';
+export type FalInputMode = 'text' | 'image' | 'frames' | 'edit';
 export type FalValue = string | number | boolean;
 export type FalFieldType = 'text' | 'number' | 'boolean' | 'select';
 
@@ -34,6 +37,12 @@ export interface FalModelVariant {
    * endpoint, while the rest hang `end_image_url` off image-to-video.
    */
   frameInputKeys?: { first: string; last: string };
+  /**
+   * Video-to-video edit. The last upload URL is `video_url`; any URLs before
+   * it are `image_urls`. `edit` is the same limit block the source picker and
+   * the Worker use for Runware and Comet.
+   */
+  edit?: VideoEditCapability;
   fields: FalFieldDefinition[];
 }
 

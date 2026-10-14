@@ -105,7 +105,48 @@ export async function cometGenerateImage(request: ImageRequest): Promise<ImageRe
   throw new ProviderError('CometAPI accepted the request but returned no image.', 502, 'comet');
 }
 
+/** Runway's `videoUri` data-URI ceiling, in characters, from the official schema. */
+export const ALEPH_DATA_URI_MAX = 5_242_880;
+
+/** Encoded length of `data:<mime>;base64,…` for `bytes` of source video. */
+export function alephDataUriLength(bytes: number, mime: string): number {
+  return `data:${mime};base64,`.length + Math.ceil(Math.max(0, bytes) / 3) * 4;
+}
+
+/** https URL up to 2,048 characters, or a video data URI within the schema cap. */
+export function isAlephVideoUri(value: string): boolean {
+  const https = /^https:\/\/\S+$/.test(value) && value.length <= 2048;
+  const data = /^data:video\/[^;]+;base64,/.test(value) && value.length <= ALEPH_DATA_URI_MAX;
+  return https || data;
+}
+
+function alephVideoUri(value: string | undefined): string {
+  if (!value || !isAlephVideoUri(value)) throw new ProviderError('Aleph 2 needs an https video URL, or a data URI up to 5 MB.', 400, 'comet');
+  return value;
+}
+
 export async function cometCreateVideo(request: VideoRequest): Promise<{ taskId: string }> {
+  if (request.model === 'aleph2' && request.inputMode === 'edit') {
+    const prompt = request.prompt.trim();
+    if (prompt.length > 1000) throw new ProviderError('Aleph 2 prompts are at most 1,000 characters.', 400, 'comet');
+    const body: Record<string, string> = { model: 'aleph2', videoUri: alephVideoUri(request.sourceVideo) };
+    if (prompt) body.promptText = prompt;
+    if (request.aspectRatio) body.targetAspectRatio = request.aspectRatio;
+    const response = await fetch(`${COMET_API}/runwayml/v1/video_to_video`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${request.apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const payload = (await response.json().catch(() => ({}))) as CometVideoEnvelope & { failure?: string };
+    if (!response.ok || !payload.id) {
+      throw new ProviderError(
+        readableProviderError('comet', response.status, errorText(payload, response.status) || payload.failure || ''),
+        response.ok ? 502 : response.status,
+        'comet'
+      );
+    }
+    return { taskId: payload.id };
+  }
   // The video route is multipart even without a file: the vendor's own examples
   // send every field as form data.
   const form = new FormData();
@@ -138,6 +179,37 @@ export async function cometCreateVideo(request: VideoRequest): Promise<{ taskId:
     );
   }
   return { taskId: payload.id };
+}
+
+/** Runway tasks are a different route and vocabulary from `/v1/videos`. */
+export async function cometPollRunway(args: { apiKey: string; taskId: string }): Promise<ProviderTask> {
+  const response = await fetch(`${COMET_API}/runwayml/v1/tasks/${encodeURIComponent(args.taskId)}`, {
+    headers: { Authorization: `Bearer ${args.apiKey}` },
+  });
+  const payload = (await response.json().catch(() => ({}))) as CometVideoEnvelope & {
+    output?: string[];
+    failure?: string;
+    failureCode?: string;
+  };
+  if (!response.ok) {
+    throw new ProviderError(
+      readableProviderError('comet', response.status, errorText(payload, response.status)),
+      response.status,
+      'comet'
+    );
+  }
+  if (payload.status === 'SUCCEEDED') {
+    return { taskId: args.taskId, state: 'success', progress: 1, urls: Array.isArray(payload.output) ? payload.output.filter((url) => typeof url === 'string') : [] };
+  }
+  if (payload.status === 'FAILED' || payload.status === 'CANCELLED') {
+    return { taskId: args.taskId, state: 'error', urls: [], error: payload.failure || (payload.status === 'CANCELLED' ? 'CometAPI cancelled this edit.' : 'CometAPI could not finish this edit.') };
+  }
+  return {
+    taskId: args.taskId,
+    state: payload.status === 'RUNNING' ? 'running' : 'queued',
+    progress: typeof payload.progress === 'number' ? Math.min(1, payload.progress) : undefined,
+    urls: [],
+  };
 }
 
 export async function cometPollVideo(args: { apiKey: string; taskId: string }): Promise<ProviderTask> {

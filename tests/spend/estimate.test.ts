@@ -52,4 +52,12 @@ describe('unknownPriceProviders', () => {
     ]));
     expect(result.find(entry => entry.provider === 'gemini')).toBeUndefined();
   });
+
+  it('prices fal edits from a stand-in source length, so a default grant is not refused', () => {
+    const models = describeModels(['fal']);
+    for (const model of models) for (const mode of model.modes) {
+      if (mode.mode !== 'edit') continue;
+      expect(estimateCloudJob(sampleRequest(model, mode)).confidence, model.modelId).not.toBe('unknown');
+    }
+  });
 });

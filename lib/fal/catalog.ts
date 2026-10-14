@@ -314,7 +314,62 @@ const FAL_FILE_CODES: Record<string, string> = {
   'hailuo-2-3-standard': 'hailuo-2_3-standard',
   'hailuo-2-3-pro': 'hailuo-2_3-pro',
   'wan-2-7': 'wan-2_7',
+  'kling-o1-edit': 'kling-o1-edit',
+  'kling-o3-standard-edit': 'kling-o3-standard-edit',
 };
+
+const KLING_EDIT_MIMES = ['video/mp4', 'video/quicktime'] as const;
+
+/** Shared Kling video-to-video limits. Prices are the pages' per-second rates. */
+const klingEditLimits = ({
+  maxSeconds,
+  maxEdge,
+  usd,
+  namesSource = false,
+}: {
+  maxSeconds: number;
+  maxEdge: number;
+  usd: number;
+  /** O3's page tells the prompt to name the source `@Video1`. O1 does not. */
+  namesSource?: boolean;
+}) => ({
+  sizes: [],
+  rate: { per: 'second' as const, usd },
+  maxImages: 4,
+  minSeconds: 3,
+  maxSeconds,
+  maxBytes: 200_000_000,
+  mimes: KLING_EDIT_MIMES,
+  requireMeasurement: true,
+  sourceBounds: { minEdge: 720, maxEdge },
+  promptSyntax: 'at-image-index' as const,
+  ...(namesSource ? { namesSource: true as const } : {}),
+});
+
+const editVideoModel = (
+  id: string,
+  label: string,
+  description: string,
+  endpointId: string,
+  edit: ReturnType<typeof klingEditLimits>,
+  keepAudio: boolean
+): FalModelBase => ({
+  id,
+  label,
+  provider: 'Kuaishou',
+  description,
+  mediaType: 'video',
+  variants: [{
+    id: `${id}:edit`,
+    endpointId,
+    inputMode: 'edit',
+    imageInputKey: 'image_urls',
+    imageInputMultiple: true,
+    maxInputImages: edit.maxImages,
+    edit,
+    fields: [booleanField('keep_audio', 'Keep source audio', keepAudio)],
+  }],
+});
 
 const withFileCodes = (models: FalModelBase[]): FalModelDefinition[] =>
   models.map((model) => {
@@ -458,6 +513,31 @@ export const FAL_VIDEO_MODELS: FalModelDefinition[] = withFileCodes([
     ),
     { lastFrameKey: 'end_image_url' }
   ),
+  // Read 2026-10-13 from
+  // https://fal.ai/models/fal-ai/kling-video/o1/video-to-video/edit/llms.txt
+  // mp4/mov, 3–10s (hard max 10.05), 720–2160px, 200MB, ≤4 images, $0.168/s.
+  // keep_audio defaults to false. Element bundles are a separate object and
+  // are not a control here; reference images are @Image1, @Image2.
+  editVideoModel(
+    'kling-o1-edit',
+    'Kling O1 Edit',
+    'Edit a clip with Kling O1. Address reference images as @Image1, @Image2.',
+    'fal-ai/kling-video/o1/video-to-video/edit',
+    klingEditLimits({ maxSeconds: 10.05, maxEdge: 2160, usd: 0.168 }),
+    false
+  ),
+  // Read 2026-10-13 from
+  // https://fal.ai/models/fal-ai/kling-video/o3/standard/video-to-video/edit/llms.txt
+  // The page says 3–15s and 720–3840px, not the narrower 3–10s / 2160px figure.
+  // $0.126/s. keep_audio defaults to true. Reference the source as @Video1.
+  editVideoModel(
+    'kling-o3-standard-edit',
+    'Kling O3 Standard Edit',
+    'Edit a clip with Kling O3 Standard. Reference the source as @Video1 and images as @Image1.',
+    'fal-ai/kling-video/o3/standard/video-to-video/edit',
+    klingEditLimits({ maxSeconds: 15, maxEdge: 3840, usd: 0.126, namesSource: true }),
+    true
+  ),
 ]);
 
 /**
@@ -525,6 +605,15 @@ export function validateFalInput(
 ): string | null {
   if (!args.prompt.trim()) return 'Enter a prompt for the selected fal model.';
   if (variant.inputMode === 'text') return null;
+  if (variant.inputMode === 'edit') {
+    if (args.uploadUrls.length < 1) return 'Choose a source video to edit.';
+    const images = args.uploadUrls.length - 1;
+    const maxImages = variant.maxInputImages ?? 0;
+    if (images > maxImages) return maxImages === 0
+      ? 'This model does not take reference images.'
+      : `This fal model accepts up to ${maxImages} reference image${maxImages === 1 ? '' : 's'}.`;
+    return null;
+  }
   if (variant.inputMode === 'frames') {
     return args.uploadUrls.length === 2
       ? null
@@ -585,7 +674,11 @@ export function buildFalInput(
   args: { prompt: string; uploadUrls: string[]; values: Record<string, FalValue> }
 ): Record<string, unknown> {
   const input: Record<string, unknown> = { prompt: args.prompt.trim() };
-  if (variant.inputMode === 'frames' && variant.frameInputKeys) {
+  if (variant.inputMode === 'edit') {
+    input.video_url = args.uploadUrls[args.uploadUrls.length - 1];
+    const images = args.uploadUrls.slice(0, -1);
+    if (images.length > 0 && variant.imageInputKey) input[variant.imageInputKey] = images;
+  } else if (variant.inputMode === 'frames' && variant.frameInputKeys) {
     input[variant.frameInputKeys.first] = args.uploadUrls[0];
     input[variant.frameInputKeys.last] = args.uploadUrls[1];
   } else if (variant.inputMode === 'image' && variant.imageInputKey) {

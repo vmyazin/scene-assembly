@@ -15,6 +15,9 @@ import { isListedJob , isActiveJob} from '@/lib/account/job-status';
 import { isUploadedAsset } from '@/lib/account/import';
 import type { CloudAsset, CloudJobRequest, CloudJobView } from '@/lib/account/contracts';
 import VideoPlayer from '@/components/video/VideoPlayer';
+import FinalizeDraftButton from '@/components/FinalizeDraftButton';
+import { submitSeedanceFinalize } from '@/lib/account/finalize-draft';
+import { seedanceDraftSeconds } from '@/lib/providers/seedance-draft';
 import CloudJobCardGrid from './CloudJobCardGrid';
 import CloudJobList from './CloudJobList';
 import { AccountSurface } from './AccountSurface';
@@ -110,6 +113,16 @@ export default function CloudJobPanel({provider,mediaType,inputMode,onContinueFr
       const job=a.jobId?allJobs.find(j=>j.id===a.jobId):undefined;
       return {id:a.id,src:`/api/account/assets/${a.id}/content`,mimeType:a.mimeType,label:a.expiresAt?'Temporary result':undefined,provider:a.metadata.provider,modelId:a.metadata.modelId,relaxed:a.metadata.values.moderation==='relaxed',createdAt:a.createdAt,startedAt:job?.createdAt,finishedAt:job?.updatedAt};
     })} downloadingId={downloading} filenameBase={item=>{const asset=assets.find(a=>a.id===item.id);return asset?knownAccountAssetFilenameBase(asset):item.id;}} onUseAsFirstFrame={onContinueFromFrame} onDownload={item=>{const asset=assets.find(a=>a.id===item.id);if(asset)return download(asset);}} emptyState={<p className="p-5 text-center text-sm text-[var(--foreground-muted)]">Your saved images will appear here.</p>}/>):assets[0]?<><VideoPlayer crossOrigin label="Saved video" src={`/api/account/assets/${assets[0].id}/content`} className="w-full rounded-xl"/><button type="button" disabled={Boolean(downloading)} onClick={()=>void download(assets[0])} className="btn-secondary justify-center"><Download size={16} aria-hidden="true"/>Download video</button></>:active?null:<div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-[var(--foreground-muted)]">Your saved video will appear here.</div>}
+    {mediaType==='video'&&assets[0]?.draftId&&<FinalizeDraftButton inputMode={assets[0].metadata.inputMode} durationSeconds={seedanceDraftSeconds(assets[0].metadata.values)} busy={busy} onApprove={async()=>{
+      const asset=assets[0];
+      const seconds=seedanceDraftSeconds(asset.metadata.values);
+      if(!asset.draftId||seconds===undefined)throw new Error('This draft has no saved length, so it cannot be priced.');
+      setBusy(true);
+      try{
+        await submitSeedanceFinalize({prompt:asset.metadata.prompt,inputMode:asset.metadata.inputMode,modelId:asset.metadata.modelId,draftId:asset.draftId,durationSeconds:seconds});
+        toast.success('Finalize started. It saves to your account.');
+      }finally{setBusy(false);}
+    }}/>}
     {mediaType==='video'&&assets[0]&&<LastFrameActions key={assets[0].id} videoUrl={`/api/account/assets/${assets[0].id}/content`} filenameBase={knownAccountAssetFilenameBase(assets[0])} onContinue={onContinueFromFrame}/>}
     {/* The clip's other exits. `Continue from last frame` above is the one the
         app always had; these are the two it was missing — the frame as a

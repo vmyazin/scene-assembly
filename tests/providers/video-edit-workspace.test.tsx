@@ -1,3 +1,4 @@
+// tests/providers/video-edit-workspace.test.tsx
 import { findModel } from '@/lib/providers/catalog';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, afterEach, it, expect, vi } from 'vitest';
@@ -54,6 +55,41 @@ it.each([{width:320,height:180},{width:640,height:360}])('rejects an undersized 
   fireEvent.change(screen.getByLabelText('Upload source video'),{target:{files:[new File(['clip'],'small.mp4',{type:'video/mp4'})]}});
   expect(await screen.findByRole('alert')).toHaveTextContent(/pixels/);
   expect(onChange).not.toHaveBeenCalled();
+});
+
+it('sends Aleph a data URI and hides reference images', async () => {
+  useAppStore.setState({ cometApiKey: 'comet-key', cometVideoModel: 'aleph2' });
+  render(<ProviderVideoWorkspace provider="comet" label="CometAPI" inputMode="edit" onBack={() => {}} onOpenConnections={() => {}} />);
+  expect(screen.queryByText(/Replacement images/)).not.toBeInTheDocument();
+  expect(screen.getByRole('combobox', { name: 'Target aspect ratio' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Change scene' }));
+  fireEvent.change(screen.getByLabelText('Upload source video'), { target: { files: [new File(['clip'], 'source.mp4', { type: 'video/mp4' })] } });
+  await screen.findByText(/source.mp4/);
+  fireEvent.change(screen.getByRole('combobox', { name: 'Target aspect ratio' }), { target: { value: '1' } });
+  fireEvent.click(screen.getByRole('button', { name: /Generate edit/ }));
+  await waitFor(() => expect(submitProviderVideo).toHaveBeenCalled());
+  const sent = vi.mocked(submitProviderVideo).mock.calls[0][0];
+  expect(sent.model).toBe('aleph2');
+  expect(sent.sourceVideo).toMatch(/^data:video\/mp4;base64,/);
+  expect(sent.aspectRatio).toBe('16:9');
+  expect(uploadRunwareVideo).not.toHaveBeenCalled();
+});
+
+it('does not carry Seedance Draft onto P-Video-Edit', () => {
+  render(<ProviderVideoWorkspace provider="runware" label="Runware" inputMode="edit" onBack={()=>{}} onOpenConnections={()=>{}}/>);
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Draft' }));
+  expect(screen.getByRole('checkbox', { name: 'Draft' })).toBeChecked();
+  fireEvent.click(screen.getByRole('option', { name: /P-Video-Edit/ }));
+  expect(screen.getByRole('checkbox', { name: 'Draft mode' })).not.toBeChecked();
+});
+
+it('does not carry P-Video-Edit Draft mode onto Seedance', () => {
+  useAppStore.setState({ runwareVideoModel: 'prunaai:p-video@edit' });
+  useDraftStore.setState({ prompt: '', references: [], controlValues: {} });
+  render(<ProviderVideoWorkspace provider="runware" label="Runware" inputMode="edit" onBack={()=>{}} onOpenConnections={()=>{}}/>);
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Draft mode' }));
+  fireEvent.click(screen.getByRole('option', { name: /Seedance 2\.5/ }));
+  expect(screen.getByRole('checkbox', { name: 'Draft' })).not.toBeChecked();
 });
 
 it('submits P-Video-Edit draft without stale Seedance controls', async () => {

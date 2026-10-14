@@ -44,8 +44,30 @@ afterEach(() => {
   useProviderJobsStore.getState().clearJobs();
 });
 
+describe('reference video and audio controls', () => {
+  it('shows the clip tray on Seedance and hides it on Wan', () => {
+    useAppStore.setState({ runwareVideoModel: 'alibaba:wan@3.0' });
+    const view = renderVideo('reference');
+    expect(screen.queryByRole('heading', { name: 'Reference video and audio' })).not.toBeInTheDocument();
+
+    useAppStore.setState({ runwareVideoModel: 'bytedance:seedance@2.5' });
+    view.rerender(
+      <VideoWorkspace
+        inputMode="text"
+        onInputModeChange={vi.fn()}
+        onExit={() => undefined}
+        onOpenConnections={() => undefined}
+      />
+    );
+    expect(screen.getByRole('heading', { name: 'Reference video and audio' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Upload reference video')).toBeInTheDocument();
+    expect(screen.getByLabelText('Upload reference audio')).toBeInTheDocument();
+    expect(screen.getAllByText(/@Video1/).length).toBeGreaterThan(1);
+  });
+});
+
 describe('reference video mode routing', () => {
-  it('offers Character references only when the selected provider supports it', () => {
+  it('keeps Character references visible and disables engines without the mode', () => {
     const onInputModeChange = vi.fn();
     const view = render(
       <VideoWorkspace
@@ -60,21 +82,6 @@ describe('reference video mode routing', () => {
     fireEvent.click(screen.getByRole('button', { name: /Character references/i }));
     expect(onInputModeChange).toHaveBeenCalledWith('reference');
 
-    for (const provider of ['kie', 'fal', 'comet'] as const) {
-      useAppStore.setState({ videoEngine: provider });
-      view.rerender(
-        <VideoWorkspace
-          inputMode="reference"
-          onInputModeChange={onInputModeChange}
-          onExit={() => undefined}
-          onOpenConnections={() => undefined}
-        />
-      );
-      expect(screen.queryByRole('button', { name: /Character references/i })).not.toBeInTheDocument();
-    }
-
-    // Atlas gained the mode with Seedance 2.0's reference-to-video endpoints.
-    useAppStore.setState({ videoEngine: 'atlas' });
     view.rerender(
       <VideoWorkspace
         inputMode="reference"
@@ -84,13 +91,19 @@ describe('reference video mode routing', () => {
       />
     );
     expect(screen.getByRole('button', { name: /Character references/i })).toBeInTheDocument();
+    for (const name of ['Kie.ai', 'fal.ai', 'CometAPI']) {
+      expect(screen.getByRole('radio', { name })).toBeDisabled();
+    }
+    // Atlas gained the mode with Seedance 2.0's reference-to-video endpoints.
+    expect(screen.getByRole('radio', { name: 'Atlas Cloud' })).toBeEnabled();
   });
 
-  it('narrows an unsupported reference deep link to the existing image flow', () => {
+  it('moves an unsupported reference deep link to an engine that has the mode', () => {
     useAppStore.setState({ videoEngine: 'kie' });
     renderVideo();
-    expect(screen.getByText(/Kie image flow: image/i)).toBeInTheDocument();
-    expect(screen.queryByText(/reference/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Kie image flow/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Character references/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(useAppStore.getState().videoEngine).toBe('runware');
   });
 
   it('shows character-view guidance and Image tokens in the Runware workspace', () => {

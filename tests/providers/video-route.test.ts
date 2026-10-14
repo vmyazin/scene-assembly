@@ -172,6 +172,25 @@ describe('POST /api/providers/video', () => {
     });
   });
 
+  it('deletes reference clips once a Runware task ends and keeps them while it runs', async () => {
+    const video = '11111111-1111-4111-8111-111111111111';
+    const audio = '22222222-2222-4222-8222-222222222222';
+    const running = mockFetch({ data: [{ status: 'processing', progress: 20 }] });
+    await post({ provider: 'runware', apiKey: 'rw', operation: 'status', taskId: 'uuid-9', referenceVideos: [video], referenceAudios: [audio] });
+    expect(running).toHaveBeenCalledTimes(1);
+
+    vi.unstubAllGlobals();
+    const done = mockFetch({ data: [{ videoURL: 'https://cdn.example/clip.mp4' }] });
+    const response = await post({ provider: 'runware', apiKey: 'rw', operation: 'status', taskId: 'uuid-9', referenceVideos: [video], referenceAudios: [audio] });
+    expect(response.status).toBe(200);
+    expect(done).toHaveBeenCalledTimes(3);
+    const deleted = done.mock.calls.slice(1).map((call) => JSON.parse(call[1].body)[0]);
+    expect(deleted).toEqual([
+      expect.objectContaining({ operation: 'delete', media: video }),
+      expect.objectContaining({ operation: 'delete', media: audio }),
+    ]);
+  });
+
   it('reports task status for a running job', async () => {
     mockFetch({ data: [{ status: 'processing', progress: 20 }] });
 

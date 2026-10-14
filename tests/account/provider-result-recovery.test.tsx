@@ -15,7 +15,7 @@ beforeEach(()=>{
 it('makes the current-policy retry explicit, with no paid regeneration',()=>{
   const resume=vi.fn();
   render(<CloudJobList jobs={[{...job,canRetrySave:true}]} onResume={resume}/>);
-  expect(screen.getByText(/without generating again/)).toBeInTheDocument();
+  expect(screen.getByText('Saving is now supported. Retry without generating again.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'Retry saving'}));
   expect(resume).toHaveBeenCalledWith(job.id);
 });
@@ -29,7 +29,7 @@ it('retrieves links only on request, showing the external host without fetching 
   expect(link).toHaveAttribute('rel','noopener noreferrer');
   expect(link).toHaveAttribute('referrerpolicy','no-referrer');
   expect(request).toHaveBeenCalledExactlyOnceWith('jobs/blocked-job/recovery');
-  expect(screen.getByText(/These links may expire/)).toBeInTheDocument();
+  expect(screen.getByText(/Save this existing file to your device before the link expires/)).toBeInTheDocument();
 });
 it('discards an in-flight response when the account changes',async()=>{
   let resolve!:(data:typeof recovery)=>void;

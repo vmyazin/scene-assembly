@@ -6,9 +6,20 @@ import type { CloudJobRequest } from '../../lib/account/contracts';
 import { AccountError, type JobRow } from './jobs';
 import { isLocal, type Env } from './security';
 import { writeOutput, type ProviderResult } from './assets';
+import { findModel } from '../../lib/providers/catalog';
+import { referenceClipsFor } from '../../lib/providers/reference-clips';
+import type { ProviderId } from '../../lib/providers/types';
 import { inspectPrompt } from '../../lib/moderation/floors';
 
-export interface ProviderHandle { id: string; protocol?: string; notBefore?:number; sourceMedia?:string }
+export interface ProviderHandle { id: string; protocol?: string; notBefore?:number; sourceMedia?:string; storedMedia?:string[] }
+
+function idList(value: unknown, label: string): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 10 || value.some((id) => typeof id !== 'string' || !id || id.length > 128)) {
+    throw new AccountError(`Invalid ${label}.`, 400, 'invalid_request');
+  }
+  return value;
+}
 export interface GenerationAdapter {
   recover?(env: Env, job: JobRow): Promise<ProviderResult | undefined>;
   submit(env: Env, job: JobRow): Promise<{handle?:ProviderHandle; result?:ProviderResult}>;
@@ -61,15 +72,32 @@ export function validateRequest(env:Env,value:unknown):CloudJobRequest {
   if(typeof r.prompt!=='string'||!r.prompt.trim()||r.prompt.length>20000||typeof r.modelId!=='string'||r.modelId.length>256||!['image','video'].includes(r.mediaType||'')||!['text','image','frames','reference','edit'].includes(r.inputMode||'')||!Array.isArray(r.referenceIds)||r.referenceIds.length>16||r.referenceIds.some(id=>typeof id!=='string'||id.length>128)||!r.values||typeof r.values!=='object'||Array.isArray(r.values)||Object.keys(r.values).length>64||Object.values(r.values).some(v=>!['string','boolean','number'].includes(typeof v)||typeof v==='number'&&!Number.isFinite(v)||typeof v==='string'&&v.length>2048))throw new AccountError('Invalid generation settings.',400,'invalid_request');
   if(isLocal(env)&&env.DEV_FAKE_GENERATION==='1'&&r.mediaType!=='image'&&r.inputMode!=='edit')throw new AccountError('The local fixture currently supports image generation only.',409,'local_fixture_mode');
   if(r.sourceVideoId!==undefined&&(typeof r.sourceVideoId!=='string'||!r.sourceVideoId||r.sourceVideoId.length>128||r.inputMode!=='edit'))throw new AccountError('Invalid source video.',400,'invalid_request');
+  const referenceVideoIds = idList(r.referenceVideoIds, 'reference video');
+  const referenceAudioIds = idList(r.referenceAudioIds, 'reference audio');
+  // Finalize keeps the draft prompt as a library label and does not send it.
+  // The block does not depend on moderation level (a minor mention alone is
+  // allowed; a minor plus a suggestive term is blocked at every level), so a
+  // draft that was accepted can still be finalized, and a disallowed label
+  // is still refused.
   const floor = inspectPrompt(r.prompt!, r.values!.moderation);
   if (floor.blocked) throw new AccountError(floor.message ?? 'This request is not allowed.', 400, 'content_floor');
   // References and a minor mention keep the provider payload on Standard.
   // The key stays only when the route accepts it; validators reject it elsewhere.
-  const hasReferences = r.referenceIds!.length > 0 || Boolean(r.sourceVideoId);
+  const hasReferences = r.referenceIds!.length > 0 || Boolean(r.sourceVideoId) || referenceVideoIds.length > 0 || referenceAudioIds.length > 0;
   const values = (floor.forceStandard || hasReferences) && r.values!.moderation === 'relaxed'
     ? { ...r.values!, moderation: 'standard' as const }
     : r.values!;
-  const request: CloudJobRequest = {provider:r.provider!,modelId:r.modelId!,mediaType:r.mediaType as 'image'|'video',inputMode:r.inputMode as CloudJobRequest['inputMode'],prompt:r.prompt!.trim(),values,referenceIds:r.referenceIds!,...(r.sourceVideoId?{sourceVideoId:r.sourceVideoId}:{})};
+  const request: CloudJobRequest = {provider:r.provider!,modelId:r.modelId!,mediaType:r.mediaType as 'image'|'video',inputMode:r.inputMode as CloudJobRequest['inputMode'],prompt:r.prompt!.trim(),values,referenceIds:r.referenceIds!,...(r.sourceVideoId?{sourceVideoId:r.sourceVideoId}:{}),...(referenceVideoIds.length?{referenceVideoIds}:{}),...(referenceAudioIds.length?{referenceAudioIds}:{})};
+  // fal, Kie and the synchronous adapters never look at these ids. inputUrls
+  // would then hand a clip to them as another image on a paid run. Only a
+  // catalog model that declares referenceClips for this mode may carry them.
+  if (referenceVideoIds.length > 0 || referenceAudioIds.length > 0) {
+    const catalogProvider = (['runware', 'atlas', 'comet', 'piapi'] as const satisfies readonly ProviderId[]).find((id) => id === request.provider);
+    const model = catalogProvider ? findModel(catalogProvider, request.modelId) : undefined;
+    if (!referenceClipsFor(model, request.inputMode)) {
+      throw new AccountError(model ? `${model.label} does not take reference video or audio.` : 'This model does not take reference video or audio.', 400, 'invalid_settings');
+    }
+  }
   adapterFor(env,request.provider);
   if(request.provider==='fal'||request.provider==='kie')validateQueuedRequest(request);
   if(request.provider==='runware'||request.provider==='atlas'||request.provider==='comet'||request.provider==='piapi')validateAggregatorRequest(request);

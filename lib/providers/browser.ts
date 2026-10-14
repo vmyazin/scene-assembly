@@ -38,6 +38,8 @@ export async function submitProviderVideo(args: {
   inputMode: ProviderMode;
   images?: string[];
   sourceVideo?: string;
+  referenceVideos?: string[];
+  referenceAudios?: string[];
   durationSeconds?: number;
   /** Label of the model's documented size, resolved to pixels on the server. */
   size?: string;
@@ -50,15 +52,40 @@ export async function submitProviderVideo(args: {
   return data.taskId;
 }
 
+/** Finalize sends the draft id only. Prompt and media stay on the draft. */
+export async function finalizeProviderDraft(args: {
+  provider: ProviderId;
+  apiKey: string;
+  model: string;
+  draftId: string;
+}): Promise<string> {
+  const data = await post({ operation: 'finalize', provider: args.provider, apiKey: args.apiKey, model: args.model, draftId: args.draftId });
+  if (!data.taskId) throw new Error('The provider did not return a task ID.');
+  return data.taskId;
+}
+
 export async function getProviderVideoStatus(args: {
   provider: ProviderId;
   apiKey: string;
   taskId: string;
+  /** Selects the poll route when one provider has more than one. */
+  model?: string;
   sourceVideo?: string;
+  referenceVideos?: string[];
+  referenceAudios?: string[];
 }): Promise<ProviderTask> {
   const data = await post({ operation: 'status', ...args });
   if (!data.task) throw new Error('The provider did not return the task status.');
   return data.task;
+}
+
+/** Deletes media-storage ids when a browser submit never received a task. */
+export async function releaseRunwareMedia(args: {
+  apiKey: string;
+  referenceVideos?: string[];
+  referenceAudios?: string[];
+}): Promise<void> {
+  await post({ operation: 'discard', provider: 'runware', ...args });
 }
 
 /**

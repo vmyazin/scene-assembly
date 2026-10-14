@@ -30,6 +30,40 @@ export interface ProviderVideoInputCapability {
 }
 
 /**
+ * One reference video or audio clip a model will accept. Counts and durations
+ * are the vendor's; `maxBytes` may be tighter when the upload path cannot
+ * carry the vendor's full file size.
+ */
+export interface ReferenceClipLimit {
+  max: number;
+  minSeconds: number;
+  maxSeconds: number;
+  maxTotalSeconds: number;
+  maxBytes: number;
+  accept: readonly string[];
+  formatsLabel: string;
+  token: 'Video' | 'Audio';
+  minEdge?: number;
+  maxEdge?: number;
+  minRatio?: number;
+  maxRatio?: number;
+  minPixels?: number;
+  maxPixels?: number;
+  minFps?: number;
+  maxFps?: number;
+}
+
+/** Reference video and/or audio. Absent means the model has no such input. */
+export interface ReferenceClipsCapability {
+  /** Modes that may send these clips. Frame and edit modes stay off: those inputs mean something else. */
+  modes: ProviderMode[];
+  /** Seedance 2.0 refuses audio unless an image or a reference video is also attached. */
+  audioRequiresVisual: boolean;
+  video?: ReferenceClipLimit;
+  audio?: ReferenceClipLimit;
+}
+
+/**
  * One output size a video model actually accepts. Vendors express this two
  * ways: explicit pixels (Runware publishes a table of exact width/height pairs
  * per model architecture) or a named preset (Atlas `resolution`, Comet `size`).
@@ -68,6 +102,11 @@ export type ProviderRate = {
   /** The first reference is included; subsequent references are billed once per request. */
   extraInputImageUsd?: number;
   audioUsdByResolution?: Record<string, number>;
+  /**
+   * Floor applied after `usd × seconds`. Aleph 2 publishes $0.224/s and still
+   * charges $0.448 for a clip shorter than two seconds.
+   */
+  minimumUsd?: number;
 } & (
   | { usd: number; usdByResolution?: never }
   | { usd?: never; usdByResolution: Record<string, number> }
@@ -98,19 +137,57 @@ export interface ProviderModel {
    * cover only verified tiers; unsupported settings record as unknown.
    */
   rate?: ProviderRate;
+  /**
+   * Seedance 2.5 draft preview: 480p now, finalize later by draft ID at 1080p.
+   * Not `videoEdit.draftRate`, which is a cheaper render with no second step.
+   */
+  draftPreview?: boolean;
   videoEdit?: {
     sizes: ProviderSize[]; rate: ProviderRate; maxImages: number;
     draftRate?: ProviderRate;
+    /** Same draft preview as `draftPreview`, for edit mode. */
+    draftPreview?: boolean;
     maxSeconds: number; minSeconds?: number;
-    sourceBounds?: { minEdge: number; maxEdge: number; minPixels: number; minRatio: number; maxRatio: number };
+    /** Vendor file cap. Absent means the application cap in `video-edit.ts`. */
+    maxBytes?: number;
+    /** Source MIME types this model accepts. Absent means MP4, MOV and WebM. */
+    mimes?: readonly string[];
+    /**
+     * Read duration and frame size from the file before a job is reserved.
+     * Seedance still accepts an unreadable container, because its draft path
+     * is the one that prices from the file; Kling and Aleph refuse it so a
+     * clip the vendor will reject never reserves.
+     */
+    requireMeasurement?: boolean;
+    sourceBounds?: { minEdge: number; maxEdge: number; minPixels?: number; minRatio?: number; maxRatio?: number };
+    /** Optional output shape. Aleph 2 letterboxes to `targetAspectRatio`. */
+    aspectRatios?: string[];
+    /** Vendor prompt cap, when it is tighter than the shared 20,000. */
+    maxPromptLength?: number;
+    /**
+     * Submit and poll protocol. `runway` is Comet's `/runwayml/v1/video_to_video`
+     * and `/runwayml/v1/tasks/{id}`. Absent means the provider's ordinary video route.
+     */
+    protocol?: 'runway';
     outputLabel?: string;
     promptSyntax?: VideoPromptSyntax;
+    /**
+     * The vendor's prompt names the source clip `@Video1`. Kling O3 does;
+     * Kling O1 only names images and elements, so the source line must not
+     * invent `@Video1` for it.
+     */
+    namesSource?: boolean;
     note?: string;
   };
   /** Max reference images the model accepts, when the vendor documents one. */
   maxInputImages?: number;
   /** Per-mode video input contracts, when a model has more than the legacy frame input. */
   videoInputs?: Partial<Record<Exclude<ProviderMode, 'text'>, ProviderVideoInputCapability>>;
+  /**
+   * Reference video and reference audio. Separate from `videoInputs`, which is
+   * images, and from `videoEdit`, which is a source clip to change in place.
+   */
+  referenceClips?: ReferenceClipsCapability;
   /**
    * How this model takes an input image. Runware splits the two: older
    * checkpoints start from `inputs.seedImage` (with `strength`), while the
@@ -172,6 +249,8 @@ export interface ImageResult {
 
 export interface VideoRequest {
   draft?: boolean;
+  /** Finalize a Seedance draft. Prompt and media must not be sent with it. */
+  draftId?: string;
   sourceVideo?: string;
   audio?: boolean;
   apiKey: string;
@@ -179,6 +258,10 @@ export interface VideoRequest {
   prompt: string;
   /** Frame/reference images as data URLs, in order. */
   images?: string[];
+  /** Reference videos already stored with the provider (Runware UUID or a hosted URL). */
+  referenceVideos?: string[];
+  /** Reference audio clips, same transport as reference videos. */
+  referenceAudios?: string[];
   durationSeconds?: number;
   /** Explicit pixels, when the model publishes a table of exact sizes. */
   width?: number;
@@ -203,6 +286,8 @@ export interface ProviderTask {
   progress?: number;
   urls: string[];
   cost?: number;
+  /** Present when a Seedance draft finished. Used to finalize at 1080p. */
+  draftId?: string;
   error?: string;
 }
 
