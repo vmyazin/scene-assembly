@@ -13,6 +13,7 @@ import {
   type ProbedClip,
 } from '@/lib/providers/reference-clips';
 import type { ReferenceClipLimit, ReferenceClipsCapability, VideoPromptSyntax } from '@/lib/providers/types';
+import { useObjectUrl } from '@/lib/media/use-object-url';
 
 export interface AttachedReferenceClip extends ProbedClip {
   id: string;
@@ -51,15 +52,7 @@ async function probeVideo(file: File, spec: ReferenceClipLimit): Promise<ProbedC
 }
 
 function AudioPreview({ file }: { file: File }) {
-  const [url, setUrl] = useState('');
-  useEffect(() => {
-    const next = URL.createObjectURL(file);
-    // This state synchronizes an external browser resource. Creating inside the
-    // effect also recreates it after StrictMode cleanup; a memo stays revoked.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setUrl(next);
-    return () => URL.revokeObjectURL(next);
-  }, [file]);
+  const url = useObjectUrl(file);
   return url ? <audio controls src={url} className="w-full" /> : null;
 }
 

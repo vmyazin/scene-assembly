@@ -12,18 +12,11 @@ import { editVideoMaxBytes, editVideoMimes, validateEditVideo, validateEditSourc
 import { formatClock, watchUrl, type ImportedClipSource } from '@/lib/youtube/clip';
 import { discardStagedSource } from '@/lib/account/staged-sources';
 import { useAccountStore } from '@/store/useAccountStore';
+import { useObjectUrl } from '@/lib/media/use-object-url';
 
 export interface SourceVideo extends ProbedDimensions { file: File; epoch: number; origin?: ImportedClipSource }
 export function SourceVideoPreview({file, label = 'Original video'}: {file: File; label?: string}) {
-  const [url, setUrl] = useState('');
-  useEffect(() => {
-    const next = URL.createObjectURL(file);
-    // This state synchronizes an external browser resource. Creating inside the
-    // effect also recreates it after StrictMode cleanup; a memo stays revoked.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setUrl(next);
-    return () => URL.revokeObjectURL(next);
-  }, [file]);
+  const url = useObjectUrl(file);
   return url ? <VideoPlayer src={url} label={label} className="aspect-video w-full" /> : null;
 }
 

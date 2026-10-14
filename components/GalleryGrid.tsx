@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Download, Film, ImageDown, Loader2, Pin, PinOff, Trash2, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -22,6 +22,7 @@ import { useDraftStore } from '@/store/useDraftStore';
 import { useGalleryStore } from '@/store/useGalleryStore';
 import { useTimelineStore } from '@/store/useTimelineStore';
 import { saveBlobAs } from '@/lib/save-file';
+import { useObjectUrls } from '@/lib/media/use-object-url';
 
 /** Generous ceiling; the workspace trims to its own model's limit on mount. */
 const REFERENCE_LIMIT = 8;
@@ -55,29 +56,24 @@ interface Preview {
   isVideo: boolean;
 }
 
-function usePreviewUrls(records: GalleryRecord[]) {
-  const previews = useMemo(() => {
-    const entries = new Map<string, Preview>();
+function usePreviewUrls(records: GalleryRecord[]): ReadonlyMap<string, Preview> {
+  const blobs = useMemo(() => {
+    const entries = new Map<string, Blob>();
     for (const record of records) {
-      if (record.posterBlob) {
-        entries.set(record.id, { url: URL.createObjectURL(record.posterBlob), isVideo: false });
-      } else if (record.blob) {
-        entries.set(record.id, {
-          url: URL.createObjectURL(record.blob),
-          isVideo: record.kind === 'video',
-        });
-      }
+      const blob = record.posterBlob ?? record.blob;
+      if (blob) entries.set(record.id, blob);
     }
     return entries;
   }, [records]);
-
-  useEffect(() => {
-    return () => {
-      for (const preview of previews.values()) URL.revokeObjectURL(preview.url);
-    };
-  }, [previews]);
-
-  return previews;
+  const urls = useObjectUrls(blobs);
+  return useMemo(() => {
+    const previews = new Map<string, Preview>();
+    for (const record of records) {
+      const url = urls.get(record.id);
+      if (url) previews.set(record.id, { url, isVideo: !record.posterBlob && record.kind === 'video' });
+    }
+    return previews;
+  }, [records, urls]);
 }
 
 export default function GalleryGrid({

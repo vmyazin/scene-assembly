@@ -10,6 +10,7 @@ import { buildSequence, locate, type PlaybackSequence } from '@/lib/timeline/pla
 import { usePlayheadStore } from '@/store/usePlayheadStore';
 import type { TimelineClip, TimelineOutput } from '@/store/useTimelineStore';
 import type { ClipState } from '@/components/TimelineWorkspace';
+import { useObjectUrls } from '@/lib/media/use-object-url';
 
 interface TimelinePreviewProps {
   clips: TimelineClip[];
@@ -94,73 +95,15 @@ export default function TimelinePreview({ clips, clipStates, output, fill = fals
     if (store.time > sequence.total) store.setTime(sequence.total);
   }, [sequence.total]);
 
-  /**
-   * One object URL per placement, created once and kept until that placement
-   * goes away.
-   *
-   * It used to be a plain `useMemo` over `ready`, which rebuilt the whole map
-   * every time the array changed identity — and `ready` changes identity every
-   * time *any* clip resolves. Restoring a saved timeline resolves each clip in
-   * turn, so the map was rebuilt once per clip and each rebuild revoked the URL
-   * the video element was still loading: the slot ended at `readyState: 0` on a
-   * black frame, with `ERR_FILE_NOT_FOUND` in the console for a blob that had
-   * been valid a moment earlier. Keyed by placement id, only what actually
-   * left is revoked.
-   */
-  const heldRef = useRef(new Map<string, { blob: Blob; url: string }>());
-  const [urls, setUrls] = useState<ReadonlyMap<string, string>>(() => new Map());
-
-  /**
-   * One object URL per placement, created once and kept until that placement
-   * goes away or comes back holding different bytes.
-   *
-   * This used to be a `useMemo` that rebuilt the whole map from `ready` — and
-   * `ready` changes identity every time *any* clip resolves. Restoring a saved
-   * timeline resolves each clip in turn, so the map was rebuilt once per clip
-   * and every rebuild revoked the URL the video element was still loading: the
-   * slot ended at `readyState: 0` on a black frame, with `ERR_FILE_NOT_FOUND`
-   * logged for a blob that had been valid moments earlier.
-   *
-   * It lives in an effect rather than in render because creating and revoking
-   * URLs is a side effect with a lifetime, and the bookkeeping it needs is a
-   * ref. `loadInto` already returns early for a placement whose URL has not
-   * arrived, and it depends on `urls`, so the slot loads on the commit after
-   * one appears rather than missing it.
-   */
-  useEffect(() => {
-    const held = heldRef.current;
-    const wanted = new Map(ready.map((entry) => [entry.clip.id, entry.state.blob]));
-    let changed = false;
-
-    for (const [id, entry] of [...held]) {
-      // Gone, or holding different bytes than it did: a repaired clip keeps its
-      // placement id and arrives as a new blob, so identity — not the id alone
-      // — decides whether the URL still describes the clip.
-      if (wanted.get(id) === entry.blob) continue;
-      URL.revokeObjectURL(entry.url);
-      held.delete(id);
-      changed = true;
-    }
-    for (const entry of ready) {
-      if (held.has(entry.clip.id)) continue;
-      held.set(entry.clip.id, {
-        blob: entry.state.blob,
-        url: URL.createObjectURL(entry.state.blob),
-      });
-      changed = true;
-    }
-
-    if (changed) setUrls(new Map([...held].map(([id, entry]) => [id, entry.url])));
-  }, [ready]);
-
-  // Whatever is still held when the preview goes away.
-  useEffect(() => {
-    const held = heldRef.current;
-    return () => {
-      for (const entry of held.values()) URL.revokeObjectURL(entry.url);
-      held.clear();
-    };
-  }, []);
+  // One object URL per placement, kept until it leaves or comes back holding
+  // different bytes (a repaired clip keeps its id and arrives as a new blob).
+  // `loadInto` returns early until a placement's URL arrives and depends on
+  // `urls`, so the slot loads on the commit after one appears.
+  const placementBlobs = useMemo(
+    () => new Map(ready.map((entry) => [entry.clip.id, entry.state.blob])),
+    [ready]
+  );
+  const urls = useObjectUrls(placementBlobs);
 
   // Two plain refs rather than an array of them: an array built during render
   // is itself a render value, so everything reached through it reads as

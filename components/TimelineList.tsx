@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { DragEvent } from 'react';
 import { AlertTriangle, Crop, GripVertical, Scan, X } from 'lucide-react';
 
@@ -16,6 +16,7 @@ import type { ClipState } from '@/components/TimelineWorkspace';
 import RecoverMediaDropZone from '@/components/RecoverMediaDropZone';
 import TimelineDropZone from '@/components/TimelineDropZone';
 import TimelineTrimControl from '@/components/TimelineTrimControl';
+import { useObjectUrl } from '@/lib/media/use-object-url';
 
 interface TimelineListProps {
   clips: TimelineClip[];
@@ -36,22 +37,6 @@ function titleOf(record: GalleryRecord | undefined) {
   return record.slug?.replace(/-/g, ' ') || record.prompt || 'Untitled clip';
 }
 
-/**
- * Object URL for a single blob, revoked when it changes or the row unmounts.
- * Rows come and go individually (add/remove), so this is scoped per-row
- * rather than batched the way the drawer batches its whole list. Derives the
- * URL via `useMemo` rather than `useState`+effect, matching GalleryGrid's own
- * preview hook — an effect exists here only to revoke it, never to set it.
- */
-function usePreviewUrl(blob: Blob | undefined) {
-  const url = useMemo(() => (blob ? URL.createObjectURL(blob) : undefined), [blob]);
-  useEffect(() => {
-    return () => {
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [url]);
-  return url;
-}
 
 function ClipRow({
   clip,
@@ -74,7 +59,7 @@ function ClipRow({
 }) {
   const [draggedOver, setDraggedOver] = useState(false);
   const poster = posterImage(record?.posterBlob);
-  const previewUrl = usePreviewUrl(poster);
+  const previewUrl = useObjectUrl(poster);
 
   const handleDrop = (event: DragEvent<HTMLLIElement>) => {
     event.preventDefault();

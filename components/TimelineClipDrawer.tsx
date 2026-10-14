@@ -20,6 +20,7 @@ import { posterImage } from '@/lib/timeline/poster';
 import { probeDimensions } from '@/lib/timeline/probe';
 import { useGalleryStore } from '@/store/useGalleryStore';
 import { useTimelineStore } from '@/store/useTimelineStore';
+import { useObjectUrls } from '@/lib/media/use-object-url';
 
 interface TimelineClipDrawerProps {
   records: GalleryRecord[];
@@ -146,29 +147,17 @@ function titleOf(record: GalleryRecord) {
   return record.slug?.replace(/-/g, ' ') || record.prompt || 'Untitled result';
 }
 
-/**
- * Object URLs for whatever poster (or, lacking one, source) each video record
- * can show, revoked when the set changes. Mirrors GalleryGrid's own preview
- * hook — that one is not exported, so this is a small, deliberate duplicate
- * rather than a reach into a component this feature must not import from.
- */
-function usePreviewUrls(records: GalleryRecord[]) {
-  const previews = useMemo(() => {
-    const entries = new Map<string, string>();
+/** A poster URL per video record that has a poster image to show. */
+function usePosterUrls(records: GalleryRecord[]) {
+  const posters = useMemo(() => {
+    const entries = new Map<string, Blob>();
     for (const record of records) {
       const blob = posterImage(record.posterBlob);
-      if (blob) entries.set(record.id, URL.createObjectURL(blob));
+      if (blob) entries.set(record.id, blob);
     }
     return entries;
   }, [records]);
-
-  useEffect(() => {
-    return () => {
-      for (const url of previews.values()) URL.revokeObjectURL(url);
-    };
-  }, [previews]);
-
-  return previews;
+  return useObjectUrls(posters);
 }
 
 /**
@@ -380,7 +369,7 @@ export default function TimelineClipDrawer({
     () => records.filter((record) => record.kind === 'video').sort((a, b) => b.createdAt - a.createdAt),
     [records]
   );
-  const previews = usePreviewUrls(clips);
+  const previews = usePosterUrls(clips);
   useRailDimensions(clips);
   const [pickerOpen, setPickerOpen] = useState(false);
   /**

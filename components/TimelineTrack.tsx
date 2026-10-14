@@ -27,6 +27,7 @@ import type { ClipState } from '@/components/TimelineWorkspace';
 import RecoverMediaDropZone from '@/components/RecoverMediaDropZone';
 import TimelineDropZone from '@/components/TimelineDropZone';
 import TimelineFilmstrip from '@/components/TimelineFilmstrip';
+import { useObjectUrl } from '@/lib/media/use-object-url';
 
 interface TimelineTrackProps {
   clips: TimelineClip[];
@@ -63,22 +64,6 @@ function titleOf(record: GalleryRecord | undefined) {
   return record.slug?.replace(/-/g, ' ') || record.prompt || 'Untitled clip';
 }
 
-/**
- * Object URL for a single blob, revoked when it changes or the block
- * unmounts. Duplicated from TimelineList's identical hook rather than
- * imported — TimelineList is off-limits to modify (including what it
- * exports), and the two layouts otherwise share nothing beyond the store
- * and types.
- */
-function usePreviewUrl(blob: Blob | undefined) {
-  const url = useMemo(() => (blob ? URL.createObjectURL(blob) : undefined), [blob]);
-  useEffect(() => {
-    return () => {
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [url]);
-  return url;
-}
 
 const clampValue = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
@@ -252,7 +237,7 @@ function TrackBlock({
   // dragstart fires the pointer stream is already being torn down.
   const [trimming, setTrimming] = useState(false);
   const poster = posterImage(record?.posterBlob);
-  const previewUrl = usePreviewUrl(poster);
+  const previewUrl = useObjectUrl(poster);
 
   const isUnavailable = state?.status === 'unavailable';
   const isReady = state?.status === 'ready';
