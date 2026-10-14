@@ -38,6 +38,14 @@ rg -n '^\.[a-z]' app/globals.css
 | `lib/save-file.ts` `saveBlobAs`, `clickDownload` | saving a blob or URL through a temporary link |
 | `lib/file-data-url.ts` `fileAsDataUrl` | reading a picked or dropped file into a `data:` URL |
 | `components/ConfirmDialog.tsx` | portals itself; render it with `open={…}`, never inside `createPortal` or a conditional mount (the exit animation needs it mounted) |
+| `components/ModalShell.tsx` `ModalShell`, `ModalHeader`, `ModalBody`, `SHEET_PANEL_CLASS` | any modal: portal, backdrop, motion, focus trap. Keep it mounted and drive it with `open` |
+| `components/StatusPill.tsx` `StatusPill`, `JobStatusPill`, `STATUS_TONE_CLASSES` | state chips ("Connected", "Done · 0:42") and any success / warning / danger / neutral tint |
+| `lib/media/use-object-url.ts` `useObjectUrl`, `useObjectUrls` | object URLs for previews; never create one in a `useMemo` (StrictMode leaves it revoked) |
+| `lib/jobs/use-queued-job-polling.ts`, `store/createJobStore.ts` | a provider whose jobs are polled until terminal |
+
+Not yet on `ModalShell`: `YouTubeClipDialog` (a `glass-card` panel with no motion) and
+`RelaxedConsentDialog` (`z-[80]`, no blur, not a phone sheet). Moving them changes how
+they look, so it is a deliberate alignment, not a refactor.
 
 Two downloads still free their object URL after a 10 s delay instead of at once
 (`GeminiVideoWorkspace` `downloadBlob`, `lib/account/download.ts`). No reason is recorded;
