@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import YouTubeClipDialog from '@/components/YouTubeClipDialog';
 import { createClipPlayer } from '@/lib/youtube/iframe-api';
 import { stageSource, stagedSourceId } from '@/lib/account/staged-sources';
@@ -180,6 +180,50 @@ describe('YouTubeClipDialog', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(importClip.mock.calls[0][0]).toMatchObject({ saveToLibrary: true });
     expect(onImported).toHaveBeenCalledWith(file, expect.objectContaining({ savedToLibrary: true }));
-    expect(window.localStorage.getItem('scene-assembly:youtube-save-to-library')).toBe('1');
+    expect(JSON.parse(window.localStorage.getItem('scene-assembly:youtube-dialog')!)).toMatchObject({ saveToLibrary: true });
+  });
+  describe('quick lengths', () => {
+    const chip = (seconds: number) => screen.getByRole('button', { name: `Make the section ${seconds} seconds` });
+    it('sets To from From and shows which length is chosen', async () => {
+      open(); link('https://youtu.be/aqz-KE-bpKQ?t=62');
+      await waitFor(() => expect(player.getDuration).toHaveBeenCalled());
+      fireEvent.click(chip(7));
+      expect(screen.getByRole('textbox', { name: 'To' })).toHaveValue('1:09.0');
+      expect(chip(7)).toHaveAttribute('aria-pressed', 'true');
+      expect(chip(5)).toHaveAttribute('aria-pressed', 'false');
+      fireEvent.change(screen.getByRole('textbox', { name: 'To' }), { target: { value: '1:14.4' } });
+      expect(chip(7)).toHaveAttribute('aria-pressed', 'false');
+    });
+    it('is unavailable without a From time, and past the end of the video', async () => {
+      open(); link('https://youtu.be/aqz-KE-bpKQ');
+      fireEvent.change(screen.getByRole('textbox', { name: 'From' }), { target: { value: '' } });
+      expect(chip(5)).toBeDisabled();
+      expect(chip(5)).toHaveAttribute('title', 'Set From first.');
+      await waitFor(() => expect(player.getDuration).toHaveBeenCalled());
+      fireEvent.change(screen.getByRole('textbox', { name: 'From' }), { target: { value: '9:50.0' } });
+      expect(chip(5)).toBeEnabled();
+      expect(chip(10)).toBeDisabled();
+      expect(chip(10)).toHaveAttribute('title', 'That runs past the end of the video.');
+    });
+  });
+
+  describe('remembered settings', () => {
+    it('reopens with the last link, range, length and save choice', () => {
+      open(); link('https://youtu.be/aqz-KE-bpKQ?t=62');
+      fireEvent.click(screen.getByRole('button', { name: 'Make the section 10 seconds' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: /Save to library/ }));
+      cleanup();
+      open();
+      expect(screen.getByRole('textbox', { name: 'YouTube link' })).toHaveValue('https://youtu.be/aqz-KE-bpKQ?t=62');
+      expect(screen.getByRole('textbox', { name: 'From' })).toHaveValue('1:02.0');
+      expect(screen.getByRole('textbox', { name: 'To' })).toHaveValue('1:12.0');
+      expect(screen.getByRole('checkbox', { name: /Save to library/ })).toBeChecked();
+    });
+    it('gives a newly pasted video the last quick length', () => {
+      window.localStorage.setItem('scene-assembly:youtube-dialog', JSON.stringify({ link: '', from: '0:00.0', to: '', length: 5, saveToLibrary: false }));
+      open(); link('https://www.youtube.com/watch?v=aqz-KE-bpKQ&t=1m30s');
+      expect(screen.getByRole('textbox', { name: 'From' })).toHaveValue('1:30.0');
+      expect(screen.getByRole('textbox', { name: 'To' })).toHaveValue('1:35.0');
+    });
   });
 });

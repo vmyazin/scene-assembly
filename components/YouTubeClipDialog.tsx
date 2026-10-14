@@ -6,6 +6,7 @@ import DialogPortal from '@/components/DialogPortal';
 import { useAccessibleDialog } from '@/hooks/useAccessibleDialog';
 import { discardStagedSource } from '@/lib/account/staged-sources';
 import { importYouTubeClip } from '@/lib/account/youtube-clips';
+import { QUICK_LENGTHS, readClipDialogSettings, writeClipDialogSettings } from '@/lib/youtube/dialog-settings';
 import { createClipPlayer, type ClipPlayer } from '@/lib/youtube/iframe-api';
 import { formatClock, importBounds, parseClock, parseYouTubeUrl, rangeProblem, roundTenth, type ImportedClipSource } from '@/lib/youtube/clip';
 import { useAccountStore } from '@/store/useAccountStore';
@@ -15,10 +16,6 @@ export interface YouTubeClipTarget { provider: string; modelId: string; modelLab
 const BUTTON = 'flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-[var(--neon-cyan)]/30 bg-[var(--neon-cyan)]/5 px-4 text-sm font-medium text-[var(--foreground-muted)] transition-colors enabled:hover:border-[var(--neon-cyan)]/60 enabled:hover:text-[var(--foreground)] disabled:opacity-50';
 const FIELD = 'rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm';
 const ACCOUNT_CHANGED = 'Your account changed. Import the section again.';
-/** Per browser: whoever saves clips usually wants every import saved. */
-const SAVE_KEY = 'scene-assembly:youtube-save-to-library';
-function readSaveChoice(): boolean { try { return window.localStorage.getItem(SAVE_KEY) === '1'; } catch { return false; } }
-function writeSaveChoice(value: boolean) { try { window.localStorage.setItem(SAVE_KEY, value ? '1' : '0'); } catch { /* private mode: the choice lasts this visit */ } }
 
 export default function YouTubeClipDialog({ open, target, onClose, onImported }: {
   open: boolean; target: YouTubeClipTarget; onClose: () => void; onImported: (file: File, source: ImportedClipSource) => Promise<void>;
@@ -28,14 +25,20 @@ export default function YouTubeClipDialog({ open, target, onClose, onImported }:
   const player = useRef<ClipPlayer | null>(null);
   const controller = useRef<AbortController | null>(null);
   const titleId = useId();
-  const [linkText, setLinkText] = useState('');
-  const [fromText, setFromText] = useState('0:00.0');
-  const [toText, setToText] = useState('');
+  // Remembered per browser: the last link, its range, the quick length and the save choice.
+  const [remembered] = useState(readClipDialogSettings);
+  const [linkText, setLinkText] = useState(remembered.link);
+  const [fromText, setFromText] = useState(remembered.from);
+  const [toText, setToText] = useState(remembered.to);
+  const [preferredLength, setPreferredLength] = useState(remembered.length);
   const [duration, setDuration] = useState<number | null>(null);
   const [looping, setLooping] = useState(false);
   const [phase, setPhase] = useState<'idle' | 'fetching' | 'preparing' | 'attaching'>('idle');
   const [error, setError] = useState<string | null>(null);
-  const [saveToLibrary, setSaveToLibrary] = useState(readSaveChoice);
+  const [saveToLibrary, setSaveToLibrary] = useState(remembered.saveToLibrary);
+  useEffect(() => {
+    writeClipDialogSettings({ link: linkText, from: fromText, to: toText, length: preferredLength, saveToLibrary });
+  }, [linkText, fromText, toText, preferredLength, saveToLibrary]);
 
   const link = parseYouTubeUrl(linkText);
   const videoId = link?.videoId;
@@ -88,7 +91,27 @@ export default function YouTubeClipDialog({ open, target, onClose, onImported }:
   function changeLink(text: string) {
     setLinkText(text); setError(null); setLooping(false);
     const next = parseYouTubeUrl(text);
-    if (next && next.videoId !== videoId) { setFromText(formatClock(next.startSeconds ?? 0)); setToText(''); setDuration(null); }
+    if (next && next.videoId !== videoId) {
+      const start = next.startSeconds ?? 0;
+      setFromText(formatClock(start));
+      // A new video gets the last quick length, when that length suits the model.
+      const end = preferredLength === null ? undefined : roundTenth(start + preferredLength);
+      setToText(end !== undefined && bounds && !rangeProblem(start, end, bounds) ? formatClock(end) : '');
+      setDuration(null);
+    }
+  }
+  /** Why a quick length cannot be used right now, or null when it can. */
+  function lengthProblem(seconds: number): string | null {
+    if (from === undefined) return 'Set From first.';
+    if (!bounds) return 'This model cannot edit a source video.';
+    if (seconds < bounds.minSeconds || seconds > bounds.maxSeconds) return `${target.modelLabel} takes a ${bounds.minSeconds}–${bounds.maxSeconds} s source.`;
+    if (duration && from + seconds > duration + 1) return 'That runs past the end of the video.';
+    return null;
+  }
+  function pickLength(seconds: number) {
+    if (from === undefined) return;
+    setPreferredLength(seconds);
+    setTime('to', formatClock(roundTenth(from + seconds)));
   }
   /** Edits one end of the range; a running preview stops if the range stops being valid. */
   function setTime(which: 'from' | 'to', text: string) {
@@ -141,7 +164,7 @@ export default function YouTubeClipDialog({ open, target, onClose, onImported }:
       <span aria-hidden="true">{label}</span>
       <div className="flex items-center rounded-xl border border-[var(--border)] bg-[var(--surface)] focus-within:border-[var(--neon-cyan)]/60">
         <input aria-label={label} value={which === 'from' ? fromText : toText} onChange={event => setTime(which, event.target.value)} disabled={busy} inputMode="decimal" placeholder={which === 'to' ? 'm:ss.s' : undefined}
-          className="w-full min-w-0 border-0 bg-transparent px-3 text-sm shadow-none outline-none sm:w-24" />
+          className="w-full min-w-0 border-0! bg-transparent! px-3 text-sm shadow-none! outline-none sm:w-24" />
         <button type="button" aria-label={setLabel} title="Use the player\u2019s current time" disabled={busy} onClick={() => mark(which)}
           className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center gap-1.5 px-2 text-[var(--foreground-muted)] enabled:hover:text-[var(--foreground)] disabled:opacity-50">
           <Crosshair size={16} aria-hidden="true" /><span className="hidden text-sm sm:inline">{setLabel}</span>
@@ -174,9 +197,21 @@ export default function YouTubeClipDialog({ open, target, onClose, onImported }:
         <p aria-live="polite" className={`-mt-1 text-xs empty:hidden sm:text-sm ${problem && toText ? 'text-red-300' : 'text-[var(--foreground-muted)]'}`}>
           {link ? `${length !== null ? `${length.toFixed(1)} s · ` : ''}${bounds ? `${target.modelLabel} takes a ${bounds.minSeconds}–${bounds.maxSeconds} s source` : problem}` : ''}
         </p>
-        {link && <div className="flex gap-2 sm:gap-3">{timeField('from')}{timeField('to')}</div>}
+        {link && <div className="flex flex-wrap items-end gap-2 sm:gap-3">
+          {timeField('from')}{timeField('to')}
+          <div role="group" aria-label="Section length" className="flex basis-full gap-1.5 sm:basis-auto">
+            {QUICK_LENGTHS.map(seconds => {
+              const why = lengthProblem(seconds), chosen = length === seconds;
+              return <button key={seconds} type="button" aria-label={`Make the section ${seconds} seconds`} aria-pressed={chosen} title={why ?? undefined}
+                disabled={busy || Boolean(why)} onClick={() => pickLength(seconds)}
+                className={`flex min-h-[44px] min-w-[44px] flex-1 items-center justify-center rounded-xl border px-3 text-sm font-medium transition-colors disabled:opacity-40 sm:flex-none ${chosen ? 'border-[var(--neon-cyan)]/70 bg-[var(--neon-cyan)]/15 text-[var(--foreground)]' : 'border-[var(--border)] text-[var(--foreground-muted)] enabled:hover:border-[var(--neon-cyan)]/50 enabled:hover:text-[var(--foreground)]'}`}>
+                {seconds} s
+              </button>;
+            })}
+          </div>
+        </div>}
         {link && <label className="flex min-h-[44px] items-center gap-2 text-sm">
-          <input type="checkbox" checked={saveToLibrary} disabled={busy} onChange={event => { setSaveToLibrary(event.target.checked); writeSaveChoice(event.target.checked); }} className="h-4 w-4 accent-[var(--neon-cyan)]" />
+          <input type="checkbox" checked={saveToLibrary} disabled={busy} onChange={event => setSaveToLibrary(event.target.checked)} className="h-4 w-4 accent-[var(--neon-cyan)]" />
           <span>Save to library <span className="hidden text-[var(--foreground-muted)] sm:inline">to reuse this clip for more edits</span></span>
         </label>}
         <p role="status" className="sr-only">{phase === 'fetching' ? 'Fetching section…' : busy ? 'Preparing clip…' : ''}</p>
