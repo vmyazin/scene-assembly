@@ -2,22 +2,20 @@
 'use client';
 
 import { useState, useEffect, useId, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Key, Eye, EyeOff, AlertCircle, X, Loader2, Check } from 'lucide-react';
+import { Key, Eye, EyeOff, AlertCircle, Loader2, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAccountStore } from '@/store/useAccountStore';
-import DialogPortal from '@/components/DialogPortal';
 import { ConnectionStorageBadge, ConnectionStorageButton } from '@/components/account/ConnectionStorageControl';
 import { useAppStore } from '@/store/useAppStore';
 import MicroAiUsagePanel from '@/components/MicroAiUsagePanel';
 import ProviderLogo from '@/components/ProviderLogo';
-import { useAccessibleDialog } from '@/hooks/useAccessibleDialog';
 import type { EngineId } from '@/lib/engines/registry';
 import { pendingConnectionWrites, syncPendingConnections } from '@/lib/account/connection-sync';
 import { accountChanged, refreshAccount } from '@/lib/account/session';
 import { KEY_SOURCES } from '@/lib/providers/key-source';
 import type { ProviderId } from '@/lib/providers/types';
 import { StatusPill } from '@/components/StatusPill';
+import { ModalBody, ModalHeader, ModalShell, SHEET_PANEL_CLASS } from '@/components/ModalShell';
 
 interface ApiKeyConfigProps {
   open: boolean;
@@ -536,11 +534,9 @@ export default function ApiKeyConfig({ open, onOpenChange, focusProvider }: ApiK
     onOpenChange(false);
   };
 
-  useAccessibleDialog({ open, onClose: handleClose, dialogRef });
-
   /**
-   * Declared after useAccessibleDialog so it runs after the dialog has claimed
-   * focus for itself: the caller named a provider, so scroll that card into the
+   * Runs after the dialog has claimed focus for itself — ModalShell, a child,
+   * runs its effects first: the caller named a provider, so scroll that card into the
    * scroll region and put the cursor in its field, ready to paste.
    */
   useEffect(() => {
@@ -557,270 +553,239 @@ export default function ApiKeyConfig({ open, onOpenChange, focusProvider }: ApiK
   }, [open, focusProvider]);
 
   return (
-    <DialogPortal>
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 p-0 backdrop-blur-md sm:items-center sm:p-4"
-          onClick={handleClose}
-        >
-          <motion.div
-            ref={dialogRef}
-            tabIndex={-1}
-            initial={{ y: 24, opacity: 0, scale: 0.98 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: 24, opacity: 0, scale: 0.98 }}
-            transition={{ duration: 0.2 }}
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={titleId}
-            aria-describedby={descriptionId}
-            className="dialog-panel dialog-mobile-sheet dialog-touch-targets relative flex max-h-[90dvh] w-full max-w-4xl flex-col overflow-hidden outline-none sm:max-h-[90vh]"
+    <ModalShell
+      open={open}
+      onClose={handleClose}
+      labelledBy={titleId}
+      describedBy={descriptionId}
+      panelRef={dialogRef}
+      className={SHEET_PANEL_CLASS}
+    >
+      <ModalHeader
+        icon={<Key className="mt-0.5 shrink-0 text-[var(--neon-cyan)]" size={18} />}
+        title="API connections"
+        titleId={titleId}
+        description="Add a key for any engine you want to use."
+        descriptionId={descriptionId}
+        onClose={handleClose}
+      />
+
+      <ModalBody>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {/* Google Gemini */}
+          <ProviderCard
+            provider="gemini"
+            highlighted={focusProvider === 'gemini'}
+            name="Google Gemini"
+            connected={!!savedKey}
+            description="Image and video, billed to your Google account."
+            linkPrefix="Get a key at"
+            href="https://aistudio.google.com/apikey"
+            urlLabel="aistudio.google.com/apikey"
+            storage={<ConnectionStorageButton provider="gemini" apiKey={savedKey} />}
           >
-            <header className="flex items-start gap-3 border-b border-[var(--border)] px-3.5 py-3 sm:px-4">
-              <Key className="mt-0.5 shrink-0 text-[var(--neon-cyan)]" size={18} />
-              <div className="min-w-0 flex-1">
-                <h2 id={titleId} className="text-base font-semibold text-[var(--foreground)]">
-                  API connections
-                </h2>
-                <p id={descriptionId} className="text-[0.9375rem] text-[var(--foreground-muted)]">
-                  Add a key for any engine you want to use.
-                </p>
+            <SecretInput
+              ariaLabel="Gemini API key"
+              toggleLabels={['Show key', 'Hide key']}
+              value={keyInput}
+              onChange={(value) => {
+                setKeyInput(value);
+                setValidationError('');
+              }}
+              onEnter={() => void handleSave()}
+              placeholder="AIzaSy…"
+              visible={showKey}
+              onToggleVisible={() => setShowKey(!showKey)}
+              disabled={isValidating}
+            />
+            {validationError && <FieldError message={validationError} />}
+            <ConnectionStorageBadge provider="gemini" apiKey={savedKey} />
+          </ProviderCard>
+
+          {/* Kie.ai */}
+          <ProviderCard
+            provider="kie"
+            highlighted={focusProvider === 'kie'}
+            name="Kie.ai"
+            connected={kieConnected}
+            description="Image and video, billed to your own account. Checked against your Kie credit balance."
+            linkPrefix="Get a key at"
+            href="https://kie.ai/"
+            urlLabel="kie.ai"
+            storage={<ConnectionStorageButton provider="kie" apiKey={savedKieKey} />}
+          >
+            <SecretInput
+              ariaLabel="Kie API key"
+              toggleLabels={['Show Kie key', 'Hide Kie key']}
+              value={kieKeyInput}
+              onChange={(value) => {
+                setKieKeyInput(value);
+                setKieValidationError('');
+              }}
+              onEnter={() => void handleSave()}
+              placeholder="Kie API key"
+              visible={showKieKey}
+              onToggleVisible={() => setShowKieKey(!showKieKey)}
+              disabled={isValidating}
+            />
+            {kieValidationError && <FieldError message={kieValidationError} />}
+            <ConnectionStorageBadge provider="kie" apiKey={savedKieKey} />
+          </ProviderCard>
+
+          {/* fal.ai */}
+          <ProviderCard
+            provider="fal"
+            highlighted={focusProvider === 'fal'}
+            name="fal.ai"
+            connected={falConnected}
+            description="Image and video, billed to your own account. Checked through fal pricing, so nothing billable runs."
+            linkPrefix="Get a key at"
+            href="https://fal.ai/dashboard/keys"
+            urlLabel="fal.ai/dashboard/keys"
+            storage={<ConnectionStorageButton provider="fal" apiKey={savedFalKey} />}
+          >
+            <SecretInput
+              ariaLabel="fal API key"
+              toggleLabels={['Show fal key', 'Hide fal key']}
+              value={falKeyInput}
+              onChange={(value) => {
+                setFalKeyInput(value);
+                setFalValidationError('');
+              }}
+              onEnter={() => void handleSave()}
+              placeholder="fal API key"
+              visible={showFalKey}
+              onToggleVisible={() => setShowFalKey(!showFalKey)}
+              disabled={isValidating}
+            />
+            {falValidationError && <FieldError message={falValidationError} alert />}
+            <ConnectionStorageBadge provider="fal" apiKey={savedFalKey} />
+          </ProviderCard>
+
+          {/* Cloudflare Workers AI — two fields, so it takes the full
+              width on its own row and pairs them side by side. Ordered
+              after the one-field cards so their grid never breaks around
+              it and leaves a hole. */}
+          <ProviderCard
+            provider="cloudflare"
+            highlighted={focusProvider === 'cloudflare'}
+            name="Cloudflare"
+            connected={cfConnected}
+            description="Free text-to-image on Workers AI. Both fields save as you type."
+            linkPrefix="Create a token at"
+            href="https://dash.cloudflare.com/profile/api-tokens"
+            urlLabel="dash.cloudflare.com/profile/api-tokens"
+            className="sm:order-1 sm:col-span-2"
+            storage={<ConnectionStorageButton provider="cloudflare" apiKey={cfToken} accountId={cfAccountId} />}
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <label className="field-sublabel block" htmlFor="cf-account-id">
+                  Account ID
+                </label>
+                <input
+                  id="cf-account-id"
+                  value={cfAccountId}
+                  onChange={(e) => setCfAccountId(e.target.value.trim())}
+                  placeholder="32-character account ID"
+                  className="w-full"
+                />
               </div>
-              <button
-                type="button"
-                onClick={handleClose}
-                className="-mr-1 shrink-0 rounded-lg p-1.5 text-[var(--foreground-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]"
-                aria-label="Close"
-              >
-                <X size={18} />
-              </button>
-            </header>
-
-            <div className="dialog-scroll-region min-h-0 flex-1 overflow-y-auto px-3.5 py-3.5 sm:px-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                {/* Google Gemini */}
-                <ProviderCard
-                  provider="gemini"
-                  highlighted={focusProvider === 'gemini'}
-                  name="Google Gemini"
-                  connected={!!savedKey}
-                  description="Image and video, billed to your Google account."
-                  linkPrefix="Get a key at"
-                  href="https://aistudio.google.com/apikey"
-                  urlLabel="aistudio.google.com/apikey"
-                  storage={<ConnectionStorageButton provider="gemini" apiKey={savedKey} />}
-                >
-                  <SecretInput
-                    ariaLabel="Gemini API key"
-                    toggleLabels={['Show key', 'Hide key']}
-                    value={keyInput}
-                    onChange={(value) => {
-                      setKeyInput(value);
-                      setValidationError('');
-                    }}
-                    onEnter={() => void handleSave()}
-                    placeholder="AIzaSy…"
-                    visible={showKey}
-                    onToggleVisible={() => setShowKey(!showKey)}
-                    disabled={isValidating}
+              <div className="space-y-1.5">
+                <label className="field-sublabel block" htmlFor="cf-token">
+                  Workers AI API token
+                </label>
+                <div className="relative">
+                  <input
+                    id="cf-token"
+                    type={showCfToken ? 'text' : 'password'}
+                    value={cfToken}
+                    onChange={(e) => setCfToken(e.target.value.trim())}
+                    placeholder="Workers AI API token"
+                    className="w-full"
                   />
-                  {validationError && <FieldError message={validationError} />}
-                  <ConnectionStorageBadge provider="gemini" apiKey={savedKey} />
-                </ProviderCard>
-
-                {/* Kie.ai */}
-                <ProviderCard
-                  provider="kie"
-                  highlighted={focusProvider === 'kie'}
-                  name="Kie.ai"
-                  connected={kieConnected}
-                  description="Image and video, billed to your own account. Checked against your Kie credit balance."
-                  linkPrefix="Get a key at"
-                  href="https://kie.ai/"
-                  urlLabel="kie.ai"
-                  storage={<ConnectionStorageButton provider="kie" apiKey={savedKieKey} />}
-                >
-                  <SecretInput
-                    ariaLabel="Kie API key"
-                    toggleLabels={['Show Kie key', 'Hide Kie key']}
-                    value={kieKeyInput}
-                    onChange={(value) => {
-                      setKieKeyInput(value);
-                      setKieValidationError('');
-                    }}
-                    onEnter={() => void handleSave()}
-                    placeholder="Kie API key"
-                    visible={showKieKey}
-                    onToggleVisible={() => setShowKieKey(!showKieKey)}
-                    disabled={isValidating}
-                  />
-                  {kieValidationError && <FieldError message={kieValidationError} />}
-                  <ConnectionStorageBadge provider="kie" apiKey={savedKieKey} />
-                </ProviderCard>
-
-                {/* fal.ai */}
-                <ProviderCard
-                  provider="fal"
-                  highlighted={focusProvider === 'fal'}
-                  name="fal.ai"
-                  connected={falConnected}
-                  description="Image and video, billed to your own account. Checked through fal pricing, so nothing billable runs."
-                  linkPrefix="Get a key at"
-                  href="https://fal.ai/dashboard/keys"
-                  urlLabel="fal.ai/dashboard/keys"
-                  storage={<ConnectionStorageButton provider="fal" apiKey={savedFalKey} />}
-                >
-                  <SecretInput
-                    ariaLabel="fal API key"
-                    toggleLabels={['Show fal key', 'Hide fal key']}
-                    value={falKeyInput}
-                    onChange={(value) => {
-                      setFalKeyInput(value);
-                      setFalValidationError('');
-                    }}
-                    onEnter={() => void handleSave()}
-                    placeholder="fal API key"
-                    visible={showFalKey}
-                    onToggleVisible={() => setShowFalKey(!showFalKey)}
-                    disabled={isValidating}
-                  />
-                  {falValidationError && <FieldError message={falValidationError} alert />}
-                  <ConnectionStorageBadge provider="fal" apiKey={savedFalKey} />
-                </ProviderCard>
-
-                {/* Cloudflare Workers AI — two fields, so it takes the full
-                    width on its own row and pairs them side by side. Ordered
-                    after the one-field cards so their grid never breaks around
-                    it and leaves a hole. */}
-                <ProviderCard
-                  provider="cloudflare"
-                  highlighted={focusProvider === 'cloudflare'}
-                  name="Cloudflare"
-                  connected={cfConnected}
-                  description="Free text-to-image on Workers AI. Both fields save as you type."
-                  linkPrefix="Create a token at"
-                  href="https://dash.cloudflare.com/profile/api-tokens"
-                  urlLabel="dash.cloudflare.com/profile/api-tokens"
-                  className="sm:order-1 sm:col-span-2"
-                  storage={<ConnectionStorageButton provider="cloudflare" apiKey={cfToken} accountId={cfAccountId} />}
-                >
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <label className="field-sublabel block" htmlFor="cf-account-id">
-                        Account ID
-                      </label>
-                      <input
-                        id="cf-account-id"
-                        value={cfAccountId}
-                        onChange={(e) => setCfAccountId(e.target.value.trim())}
-                        placeholder="32-character account ID"
-                        className="w-full"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="field-sublabel block" htmlFor="cf-token">
-                        Workers AI API token
-                      </label>
-                      <div className="relative">
-                        <input
-                          id="cf-token"
-                          type={showCfToken ? 'text' : 'password'}
-                          value={cfToken}
-                          onChange={(e) => setCfToken(e.target.value.trim())}
-                          placeholder="Workers AI API token"
-                          className="w-full"
-                        />
-                        <button
-                          onClick={() => setShowCfToken(!showCfToken)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--foreground-muted)] transition-colors hover:text-[var(--foreground)]"
-                          type="button"
-                          aria-label={showCfToken ? 'Hide token' : 'Show token'}
-                        >
-                          {showCfToken ? <EyeOff size={18} /> : <Eye size={18} />}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  <ConnectionStorageBadge provider="cloudflare" apiKey={cfToken} />
-                </ProviderCard>
-
-                {/* The aggregators. These save as you type like Cloudflare
-                    rather than on Save & close: none of them publishes a
-                    validate-only endpoint, and the alternative — spending a
-                    generation to check a key — is not something to do behind
-                    someone's back. */}
-                {AGGREGATORS.map((aggregator) => (
-                  <ProviderCard
-                    key={aggregator.id}
-                    provider={aggregator.id}
-                    highlighted={aggregator.id === focusProvider}
-                    name={aggregator.name}
-                    connected={!!providerKeys[aggregator.id]}
-                    description={aggregator.description}
-                    linkPrefix="Get a key at"
-                    href={aggregator.href}
-                    urlLabel={aggregator.urlLabel}
-                    storage={<ConnectionStorageButton provider={aggregator.id} apiKey={providerKeys[aggregator.id]} />}
+                  <button
+                    onClick={() => setShowCfToken(!showCfToken)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--foreground-muted)] transition-colors hover:text-[var(--foreground)]"
+                    type="button"
+                    aria-label={showCfToken ? 'Hide token' : 'Show token'}
                   >
-                    <SecretInput
-                      ariaLabel={`${aggregator.name} API key`}
-                      toggleLabels={[`Show ${aggregator.name} key`, `Hide ${aggregator.name} key`]}
-                      value={providerKeys[aggregator.id]}
-                      onChange={(value) => setProviderApiKey(aggregator.id, value.trim())}
-                      onEnter={() => void handleSave()}
-                      placeholder={`${aggregator.name} API key`}
-                      visible={!!showProviderKey[aggregator.id]}
-                      onToggleVisible={() =>
-                        setShowProviderKey((current) => ({
-                          ...current,
-                          [aggregator.id]: !current[aggregator.id],
-                        }))
-                      }
-                      disabled={isValidating}
-                    />
-                    <ConnectionStorageBadge provider={aggregator.id} apiKey={providerKeys[aggregator.id]} />
-                  </ProviderCard>
-                ))}
-
-                {/* Last, on both column counts. Nothing here is a credential —
-                    it reports what the shared helper tier is doing — so it sits
-                    below every field rather than breaking up the run of them. */}
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 sm:order-2 sm:col-span-2">
-                  <MicroAiUsagePanel />
+                    {showCfToken ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
                 </div>
               </div>
             </div>
+            <ConnectionStorageBadge provider="cloudflare" apiKey={cfToken} />
+          </ProviderCard>
 
-            <footer className="dialog-safe-footer flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-[var(--border)] px-3.5 py-3 sm:px-4">
-              <p className="field-hint max-w-md">
-                {account
-                  ? 'Signed in, so your keys are kept on this device and encrypted in your account, where cloud jobs can use them.'
-                  : 'Credentials live in this browser’s local storage and go straight to each provider — never to our servers beyond proxying the request.'}
-              </p>
-              <button
-                onClick={handleSave}
+          {/* The aggregators. These save as you type like Cloudflare
+              rather than on Save & close: none of them publishes a
+              validate-only endpoint, and the alternative — spending a
+              generation to check a key — is not something to do behind
+              someone's back. */}
+          {AGGREGATORS.map((aggregator) => (
+            <ProviderCard
+              key={aggregator.id}
+              provider={aggregator.id}
+              highlighted={aggregator.id === focusProvider}
+              name={aggregator.name}
+              connected={!!providerKeys[aggregator.id]}
+              description={aggregator.description}
+              linkPrefix="Get a key at"
+              href={aggregator.href}
+              urlLabel={aggregator.urlLabel}
+              storage={<ConnectionStorageButton provider={aggregator.id} apiKey={providerKeys[aggregator.id]} />}
+            >
+              <SecretInput
+                ariaLabel={`${aggregator.name} API key`}
+                toggleLabels={[`Show ${aggregator.name} key`, `Hide ${aggregator.name} key`]}
+                value={providerKeys[aggregator.id]}
+                onChange={(value) => setProviderApiKey(aggregator.id, value.trim())}
+                onEnter={() => void handleSave()}
+                placeholder={`${aggregator.name} API key`}
+                visible={!!showProviderKey[aggregator.id]}
+                onToggleVisible={() =>
+                  setShowProviderKey((current) => ({
+                    ...current,
+                    [aggregator.id]: !current[aggregator.id],
+                  }))
+                }
                 disabled={isValidating}
-                className="btn-primary w-full sm:w-auto"
-              >
-                {isValidating ? (
-                  <>
-                    <Loader2 size={18} className="animate-spin" />
-                    Validating…
-                  </>
-                ) : (
-                  'Save & close'
-                )}
-              </button>
-            </footer>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-    </DialogPortal>
+              />
+              <ConnectionStorageBadge provider={aggregator.id} apiKey={providerKeys[aggregator.id]} />
+            </ProviderCard>
+          ))}
+
+          {/* Last, on both column counts. Nothing here is a credential —
+              it reports what the shared helper tier is doing — so it sits
+              below every field rather than breaking up the run of them. */}
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 sm:order-2 sm:col-span-2">
+            <MicroAiUsagePanel />
+          </div>
+        </div>
+      </ModalBody>
+
+      <footer className="dialog-safe-footer flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-[var(--border)] px-3.5 py-3 sm:px-4">
+        <p className="field-hint max-w-md">
+          {account
+            ? 'Signed in, so your keys are kept on this device and encrypted in your account, where cloud jobs can use them.'
+            : 'Credentials live in this browser’s local storage and go straight to each provider — never to our servers beyond proxying the request.'}
+        </p>
+        <button
+          onClick={handleSave}
+          disabled={isValidating}
+          className="btn-primary w-full sm:w-auto"
+        >
+          {isValidating ? (
+            <>
+              <Loader2 size={18} className="animate-spin" />
+              Validating…
+            </>
+          ) : (
+            'Save & close'
+          )}
+        </button>
+      </footer>
+    </ModalShell>
   );
 }
