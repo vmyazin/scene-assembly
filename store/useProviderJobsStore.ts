@@ -1,6 +1,8 @@
 // store/useProviderJobsStore.ts
 import { create } from 'zustand';
 
+import { upsertById } from './createJobStore';
+
 import type { ProviderId, ProviderMode, TaskState } from '@/lib/providers/types';
 
 export interface ProviderJob {
@@ -71,14 +73,7 @@ export const useProviderJobsStore = create<ProviderJobsState>((set) => ({
     set((state) => ({ jobs: [stamped, ...state.jobs] }));
     return stamped.id;
   },
-  upsertJob: (job) =>
-    set((state) => {
-      const index = state.jobs.findIndex((current) => current.id === job.id);
-      if (index === -1) return { jobs: [job, ...state.jobs] };
-      const jobs = [...state.jobs];
-      jobs[index] = job;
-      return { jobs };
-    }),
+  upsertJob: (job) => set((state) => ({ jobs: upsertById(state.jobs, job) })),
   patchJob: (id, patch) =>
     set((state) => ({
       jobs: state.jobs.map((job) =>
