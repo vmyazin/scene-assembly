@@ -37,7 +37,8 @@ const STROKES = Array.from({ length: COLUMNS * ROWS }, (_, index) => {
     x: CELL / 2 + column * CELL,
     y: CELL / 2 + row * CELL,
     angle: `${angle.toFixed(1)}deg`,
-    delay: `${(-(column * 0.19 + row * 0.31)).toFixed(2)}s`,
+    // Scaled with the 1.12s swing in globals.css so the wave keeps its shape at any speed.
+    delay: `${(-(column * 0.038 + row * 0.062)).toFixed(3)}s`,
   };
 });
 

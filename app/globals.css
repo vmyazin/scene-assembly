@@ -520,7 +520,7 @@ textarea::placeholder {
   stroke-width: 1.3;
   stroke-linecap: round;
   transform: rotate(var(--a));
-  animation: job-wave 5.6s ease-in-out infinite alternate;
+  animation: job-wave 1.12s ease-in-out infinite alternate;
 }
 
 @keyframes job-wave {

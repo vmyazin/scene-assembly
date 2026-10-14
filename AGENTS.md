@@ -117,8 +117,10 @@
   percentage, so it steps through `JOB_STATE_LABELS` with a travelling highlight and carries
   `aria-valuetext` with no `aria-valuenow`; a fabricated 43% would be the one thing on that card
   that is not true. The thumbnail well is `JobWaveField`: a 16 × 9 field of short strokes swinging out of
-  step, so it reads as a frame that is about to exist rather than a spinner, and stays slow
-  because the card sits in a wall of finished results (DESIGN.md's don't-compete rule). It is
+  step, so it reads as a frame that is about to exist rather than a spinner. It swings on a
+  1.12 s beat (sped up 5× on 2026-10-14 at the owner's request, from 5.6 s); the per-stroke
+  delays in `JobWaveField.tsx` scale with that beat, so change both together or the wave
+  loses its shape. It is
   SVG + CSS with nothing running per frame; under reduced motion it freezes on its resting
   angles, which is still a picture, and the bar still reports the stage.
 - **A completed result blocked by its download address** → first read
