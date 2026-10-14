@@ -1,3 +1,4 @@
+import type { ClipOrigin } from '../youtube/clip';
 // lib/account/contracts.ts
 /** Serializable contract shared by browser and Worker; never contains provider keys. */
 export type CloudProvider = 'gemini' | 'fal' | 'kie' | 'runware' | 'atlas' | 'comet' | 'piapi' | 'cloudflare' | 'pollinations' | 'local-test';
@@ -59,6 +60,8 @@ export interface CloudAsset {
   metadata: CloudJobRequest; jobId: string | null;
   /** Lifted out of stored metadata so `metadata` stays a job request. */
   draftId?: string;
+  /** A YouTube section saved at import; lifted out of stored metadata like `draftId`. */
+  origin?: ClipOrigin;
   /** Present only for overflow awaiting space in the permanent library. */
   expiresAt?: number;
   /** Absent for jobs started in the browser, and from Workers that predate agents. */

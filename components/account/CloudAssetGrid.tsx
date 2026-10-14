@@ -18,6 +18,7 @@ import { downloadAccountAsset } from '@/lib/account/download';
 import { knownAccountAssetFilenameBase } from '@/lib/account/asset-name';
 import { addAccountAssetAsReference } from '@/lib/account/reference';
 import { formatAccountBytes } from '@/lib/account/use-library';
+import { formatClock, watchUrl } from '@/lib/youtube/clip';
 import { saveCloudVideoToGallery } from '@/lib/timeline/import-cloud';
 import { useAccountStore } from '@/store/useAccountStore';
 import { useDraftStore } from '@/store/useDraftStore';
@@ -116,7 +117,7 @@ export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLi
               <img loading="lazy" src={`/api/account/assets/${asset.id}/content`} alt={asset.metadata.prompt||'Saved cloud image'} className="h-full w-full object-contain"/>:
             <VideoPlayer crossOrigin reveal="always" src={`/api/account/assets/${asset.id}/content`} label={asset.metadata.prompt||'Saved cloud video'} className="h-full w-full"/>}
         </div>
-        <div><p className={`line-clamp-2 font-medium text-[var(--foreground)] ${dense?'text-[0.8125rem] leading-snug':'text-sm'}`}>{asset.metadata.prompt||'Untitled result'}</p><p className={`mt-1 text-cyan-200 ${dense?'text-[0.625rem]':'text-xs'}`}>{asset.metadata.provider} · {asset.kind} · {formatAccountBytes(asset.bytes)}{asset.metadata.values.moderation === 'relaxed' ? ' · Relaxed' : ''}{asset.expiresAt?' · Temporary':''}{asset.startedBy?` · via ${asset.startedBy.name??'an agent'}`:''}</p></div>
+        <div><p className={`line-clamp-2 font-medium text-[var(--foreground)] ${dense?'text-[0.8125rem] leading-snug':'text-sm'}`}>{asset.metadata.prompt||'Untitled result'}</p><p className={`mt-1 text-cyan-200 ${dense?'text-[0.625rem]':'text-xs'}`}>{asset.origin?<a href={watchUrl(asset.origin)} target="_blank" rel="noreferrer noopener" className="underline-offset-2 hover:underline">From YouTube · {formatClock(asset.origin.startSeconds)}–{formatClock(asset.origin.endSeconds)}</a>:asset.metadata.provider} · {asset.kind} · {formatAccountBytes(asset.bytes)}{asset.metadata.values.moderation === 'relaxed' ? ' · Relaxed' : ''}{asset.expiresAt?' · Temporary':''}{asset.startedBy?` · via ${asset.startedBy.name??'an agent'}`:''}</p></div>
         <div className={`flex flex-wrap ${dense?'gap-1.5':'gap-2'}`}>
           {/* Shortened on the face, spelled out for assistive tech: the full
               phrase stays the accessible name, and it still contains the
@@ -127,7 +128,8 @@ export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLi
               download it and re-upload it through "Add files from your device". */}
           {asset.kind==='video'&&mode!=='pick-image'&&<button type="button" disabled={busy!==null} onClick={()=>void (onPickVideo ? run(asset,async()=>{const file=await videoFileFromAccount(asset,ownerId,editCapability);assertOwner();await onPickVideo(file);}) : addToTimeline(asset))} aria-label={dense?'Add to timeline':undefined} className="btn-secondary gap-1.5 px-2 py-1 text-xs">{busy===asset.id?<Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true"/>:<Film size={13} aria-hidden="true"/>}{onPickVideo?'Use video':dense?'Timeline':'Add to timeline'}</button>}
           {mode==='browse'&&<>
-            <button type="button" onClick={()=>restore(asset)} aria-label={dense?`Restore settings from ${asset.metadata.prompt||'cloud asset'}`:undefined} title={dense?'Restore settings':undefined} className={`btn-secondary py-1 text-xs ${dense?'gap-0 px-1.5':'gap-1.5 px-2'}`}><Wand2 size={13} aria-hidden="true"/>{!dense&&'Restore settings'}</button>
+            {/* A saved YouTube section has no generation settings to restore. */}
+            {!asset.origin&&<button type="button" onClick={()=>restore(asset)} aria-label={dense?`Restore settings from ${asset.metadata.prompt||'cloud asset'}`:undefined} title={dense?'Restore settings':undefined} className={`btn-secondary py-1 text-xs ${dense?'gap-0 px-1.5':'gap-1.5 px-2'}`}><Wand2 size={13} aria-hidden="true"/>{!dense&&'Restore settings'}</button>}
             <button type="button" disabled={busy!==null} onClick={()=>void run(asset,()=>downloadAccountAsset(asset))} aria-label={`Download ${asset.metadata.prompt||'cloud asset'}`} title="Download" className={`btn-secondary py-1 text-xs ${dense?'px-1.5':'px-2'}`}><Download size={13} aria-hidden="true"/></button>
             <button type="button" disabled={busy!==null} onClick={()=>setRemoving(asset)} aria-label={`Delete ${asset.metadata.prompt||'cloud asset'}`} title="Delete" className={`btn-secondary py-1 text-xs hover:text-red-300 ${dense?'px-1.5':'px-2'}`}><Trash2 size={13} aria-hidden="true"/></button>
             {asset.draftId && asset.kind==='video' && <FinalizeDraftButton inputMode={asset.metadata.inputMode} durationSeconds={seedanceDraftSeconds(asset.metadata.values)} busy={busy!==null} onApprove={async()=>{

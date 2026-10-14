@@ -41,6 +41,42 @@ during planning; the plan is `docs/claude/plans/2026-10-13-youtube-clip-source.m
 - **Preview Worker.** `wrangler.preview.jsonc` gets no container; there the route answers
   `source_refused` ("YouTube import is not available right now.").
 
+## Follow-up decision (2026-10-14): opt-in save to the library
+
+Overrides "never library assets" in the body. The purpose is reuse: import a section
+once and run many edits from it (people and agents) without re-importing, spending
+the hourly import limit or proxy bandwidth. Plan:
+`docs/claude/plans/2026-10-14-youtube-library-save.md`.
+
+- **Opt-in at import.** `importYouTubeClip` takes `saveToLibrary?: boolean`. The browser
+  sends it from a "Save to library" checkbox in the dialog, which is remembered per
+  browser. Agents send `add_reference({ youtube: { …, saveToLibrary: true } })`.
+  Unsaved imports behave exactly as before.
+- **Asset first, then the edit source.** When saving, the clip's bytes are written once as a
+  library asset (`job_id` NULL, charged to the account's library storage like a browser
+  import). The edit source is then made with the existing `copyAssetToUpload`, the same path
+  as picking a library clip. The response adds `assetId` and `savedToLibrary: true`.
+- **Library full is not an import failure.** If library storage cannot take the clip, the
+  import still stages a temporary source and answers `savedToLibrary: false` with
+  `libraryNotice: "Your library is full, so this clip was imported for this edit only."`.
+  The storage check runs before any bytes are written, using the size the importer reports.
+- **Metadata.** Stored metadata stays a job-request shape: provider `local-test`, model
+  `youtube-clip`, `mediaType: 'video'`, `inputMode: 'edit'`, `prompt` = the video title,
+  `values: {}`, `referenceIds: []`. It also carries `origin: { site: 'youtube', videoId,
+  startSeconds, endSeconds, title }`. `assetView` lifts `origin` to a top-level `CloudAsset.origin`,
+  as it does `draftId`. The asset counts as uploaded media (`isUploadedAsset`), so it stays out
+  of result panels.
+- **Title.** `clip.py` adds `title` to its success JSON (an additive field). The title is
+  third-party text: control characters are stripped and it is capped at 200 characters
+  before it is stored or shown. It is carried from the Durable Object in a URL-encoded
+  `x-clip-title` header.
+- **Library card.** A clip with `origin` shows its title, `From YouTube · m:ss.s–m:ss.s`
+  linking to the original at the start time, and Download named
+  `youtube-<videoId>-<start>s.mp4`. "Restore settings" is hidden. Delete works as for
+  any asset.
+- **Not in scope:** saving a clip after import, saving clips imported earlier, and the
+  timeline.
+
 ## Context
 
 Edit video (`docs/codex/specs/2026-09-11-edit-video.md`) restyles a source clip with

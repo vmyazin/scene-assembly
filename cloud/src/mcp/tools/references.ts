@@ -14,7 +14,7 @@ const STAGEABLE = STAGEABLE_INPUT_MIMES;
 export const addReference = defineTool({
   name: 'add_reference',
   title: 'Add a reference',
-  description: 'Stage a reference image, a reference video, reference audio, or a source video for edit mode, for generate. Pass exactly one of: url (an https link to a media file, which Scene Assembly downloads now); upload with the file\'s mimeType and exact byte size, to get a putUrl, then PUT the file there with that Content-Type within 15 minutes, for example: curl -T cat.png -H "Content-Type: image/png" "<putUrl>"; or youtube with a YouTube link and startSeconds/endSeconds (one decimal), which cuts that section into an MP4 source video for edit mode — add provider and modelId to check the length against that model. Each returns an uploadId for references, referenceVideos, referenceAudios or sourceVideo that lasts 24 hours (a YouTube section is passed as sourceVideo in edit mode). YouTube imports are limited to 10 per hour per account. A file already in the library needs no staging: pass { assetId } to generate. Images are PNG, JPEG, WebP or AVIF up to 20 MB. A reference video is MP4 or QuickTime up to 100 MB. An edit source may be MP4 or MOV up to 200 MB, or WebM up to 100 MB. WebM is an edit source only and is refused if passed in referenceVideos. Audio is MP3 or WAV up to 15 MB. A URL is typed from its bytes, so QuickTime from a link is refused and a WebM from a link can only be an edit source; pass upload with video/quicktime for a MOV.',
+  description: 'Stage a reference image, a reference video, reference audio, or a source video for edit mode, for generate. Pass exactly one of: url (an https link to a media file, which Scene Assembly downloads now); upload with the file\'s mimeType and exact byte size, to get a putUrl, then PUT the file there with that Content-Type within 15 minutes, for example: curl -T cat.png -H "Content-Type: image/png" "<putUrl>"; or youtube with a YouTube link and startSeconds/endSeconds (one decimal), which cuts that section into an MP4 source video for edit mode — add provider and modelId to check the length against that model, and saveToLibrary: true to also keep it in the library (the returned assetId can then be passed as sourceVideo { assetId } to any later generate, with no re-import). Each returns an uploadId for references, referenceVideos, referenceAudios or sourceVideo that lasts 24 hours (a YouTube section is passed as sourceVideo in edit mode). YouTube imports are limited to 10 per hour per account. A file already in the library needs no staging: pass { assetId } to generate. Images are PNG, JPEG, WebP or AVIF up to 20 MB. A reference video is MP4 or QuickTime up to 100 MB. An edit source may be MP4 or MOV up to 200 MB, or WebM up to 100 MB. WebM is an edit source only and is refused if passed in referenceVideos. Audio is MP3 or WAV up to 15 MB. A URL is typed from its bytes, so QuickTime from a link is refused and a WebM from a link can only be an edit source; pass upload with video/quicktime for a MOV.',
   kind: 'write',
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   input: z.object({
@@ -26,18 +26,20 @@ export const addReference = defineTool({
       endSeconds: z.number().positive(),
       provider: z.string().max(100).optional(),
       modelId: z.string().max(200).optional(),
+      saveToLibrary: z.boolean().optional(),
     }).optional(),
   }),
   async run(ctx, args) {
     if ([args.url, args.upload, args.youtube].filter(Boolean).length !== 1) throw new ToolError('invalid_field', 'Pass exactly one of url, upload or youtube.', { field: 'url' });
     const owner = ctx.agent.user_id;
     if (args.youtube) {
-      const { provider, modelId, ...range } = args.youtube;
+      const { provider, modelId, saveToLibrary, ...range } = args.youtube;
       if (Boolean(provider) !== Boolean(modelId)) throw new ToolError('invalid_field', 'Pass provider and modelId together, or neither.', { field: 'youtube.modelId' });
-      const clip = await importYouTubeClip(ctx.env, owner, { ...range, ...(provider && modelId ? { edit: { provider, modelId } } : {}) });
+      const clip = await importYouTubeClip(ctx.env, owner, { ...range, ...(provider && modelId ? { edit: { provider, modelId } } : {}), ...(saveToLibrary ? { saveToLibrary: true } : {}) });
+      const saved = clip.assetId ? ` Saved to the library as asset ${clip.assetId}; later edits can pass { "assetId": "${clip.assetId}" } as sourceVideo.` : clip.libraryNotice ? ` ${clip.libraryNotice}` : '';
       return {
         structured: { ...clip },
-        text: `Staged ${clip.durationSeconds}s (${clip.width}×${clip.height}) of YouTube video ${clip.source.videoId} as ${clip.uploadId}. Pass { "uploadId": "${clip.uploadId}" } as sourceVideo in edit mode.`,
+        text: `Staged ${clip.durationSeconds}s (${clip.width}×${clip.height}) of YouTube video ${clip.source.videoId} as ${clip.uploadId}. Pass { "uploadId": "${clip.uploadId}" } as sourceVideo in edit mode.${saved}`,
       };
     }
     if (args.url && parseYouTubeUrl(args.url)) throw new ToolError('invalid_field', 'That is a YouTube page, not a media file. Pass it as youtube: { url, startSeconds, endSeconds } instead.', { field: 'url' });

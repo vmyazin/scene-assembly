@@ -7,7 +7,7 @@ import { useAccessibleDialog } from '@/hooks/useAccessibleDialog';
 import { discardStagedSource } from '@/lib/account/staged-sources';
 import { importYouTubeClip } from '@/lib/account/youtube-clips';
 import { createClipPlayer, type ClipPlayer } from '@/lib/youtube/iframe-api';
-import { formatClock, importBounds, parseClock, parseYouTubeUrl, rangeProblem, roundTenth, type ClipSource } from '@/lib/youtube/clip';
+import { formatClock, importBounds, parseClock, parseYouTubeUrl, rangeProblem, roundTenth, type ImportedClipSource } from '@/lib/youtube/clip';
 import { useAccountStore } from '@/store/useAccountStore';
 
 export interface YouTubeClipTarget { provider: string; modelId: string; modelLabel: string }
@@ -16,9 +16,13 @@ const BUTTON = 'flex min-h-11 items-center justify-center gap-2 rounded-xl borde
 const FIELD = 'rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm';
 const ACCOUNT_CHANGED = 'Your account changed. Import the section again.';
 const TIME_FIELD = `${FIELD} min-h-11 w-28`;
+/** Per browser: whoever saves clips usually wants every import saved. */
+const SAVE_KEY = 'scene-assembly:youtube-save-to-library';
+function readSaveChoice(): boolean { try { return window.localStorage.getItem(SAVE_KEY) === '1'; } catch { return false; } }
+function writeSaveChoice(value: boolean) { try { window.localStorage.setItem(SAVE_KEY, value ? '1' : '0'); } catch { /* private mode: the choice lasts this visit */ } }
 
 export default function YouTubeClipDialog({ open, target, onClose, onImported }: {
-  open: boolean; target: YouTubeClipTarget; onClose: () => void; onImported: (file: File, source: ClipSource) => Promise<void>;
+  open: boolean; target: YouTubeClipTarget; onClose: () => void; onImported: (file: File, source: ImportedClipSource) => Promise<void>;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const playerHost = useRef<HTMLDivElement>(null);
@@ -32,6 +36,7 @@ export default function YouTubeClipDialog({ open, target, onClose, onImported }:
   const [looping, setLooping] = useState(false);
   const [phase, setPhase] = useState<'idle' | 'fetching' | 'preparing' | 'attaching'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [saveToLibrary, setSaveToLibrary] = useState(readSaveChoice);
 
   const link = parseYouTubeUrl(linkText);
   const videoId = link?.videoId;
@@ -115,7 +120,7 @@ export default function YouTubeClipDialog({ open, target, onClose, onImported }:
       if (state.epoch !== epoch && !attaching) { switched = true; abort.abort(); }
     });
     try {
-      const { file, source } = await importYouTubeClip({ url: linkText, startSeconds: from, endSeconds: to, provider: target.provider, modelId: target.modelId }, abort.signal, owner, () => setPhase('preparing'));
+      const { file, source } = await importYouTubeClip({ url: linkText, startSeconds: from, endSeconds: to, provider: target.provider, modelId: target.modelId, saveToLibrary }, abort.signal, owner, () => setPhase('preparing'));
       // A clip imported for one account never attaches after a switch to another.
       if (switched || useAccountStore.getState().epoch !== epoch) { discardStagedSource(file); setError(ACCOUNT_CHANGED); return; }
       attaching = true; setPhase('attaching');
@@ -161,6 +166,10 @@ export default function YouTubeClipDialog({ open, target, onClose, onImported }:
             <button type="button" className={BUTTON} disabled={busy || (!looping && Boolean(problem))} onClick={preview}>{looping ? <><Square size={16} /> Stop preview</> : <><Play size={16} /> Preview range</>}</button>
           </div>
         </>}
+        {link && <label className="flex min-h-11 items-center gap-2 text-sm">
+          <input type="checkbox" checked={saveToLibrary} disabled={busy} onChange={event => { setSaveToLibrary(event.target.checked); writeSaveChoice(event.target.checked); }} className="h-4 w-4 accent-[var(--neon-cyan)]" />
+          <span>Save to library <span className="text-[var(--foreground-muted)]">to reuse this clip for more edits</span></span>
+        </label>}
         <p aria-live="polite" className={`text-sm empty:hidden ${problem && toText ? 'text-red-300' : 'text-[var(--foreground-muted)]'}`}>
           {link ? `${length !== null ? `${length.toFixed(1)} s · ` : ''}${bounds ? `${target.modelLabel} takes a ${bounds.minSeconds}–${bounds.maxSeconds} s source` : problem}` : ''}
         </p>
@@ -174,7 +183,9 @@ export default function YouTubeClipDialog({ open, target, onClose, onImported }:
             {busy ? <><Loader2 size={16} className="animate-spin" /> {phase === 'fetching' ? 'Fetching section…' : 'Preparing clip…'}</> : 'Import clip'}
           </button>
         </div>
-        <p className="text-xs text-[var(--foreground-muted)]">Only this section is downloaded. It is kept for 24 hours as this edit&apos;s source and never added to your library.</p>
+        <p className="text-xs text-[var(--foreground-muted)]">{saveToLibrary
+          ? 'Only this section is downloaded. It is also saved to your library, where it counts against your storage.'
+          : 'Only this section is downloaded. It is kept for 24 hours as this edit\u2019s source.'}</p>
       </div>
     </div>
   )}</DialogPortal>;

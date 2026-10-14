@@ -214,6 +214,19 @@ describe('add_reference with youtube', () => {
     const resolved = await resolveReferences({ env, agent: { user_id: OWNER } } as never, [], { uploadId: staged.uploadId });
     expect(resolved.sourceVideoId).toBe(staged.uploadId);
   });
+  it('saves to the library on request, and the asset is a reusable edit source', async () => {
+    const { env } = agentEnv({ YOUTUBE_IMPORTER: fakeImporter(() => clipOk()).namespace });
+    const client = await connectAgent(env, await seedAgent(env));
+    const result = await client.callTool({ name: 'add_reference', arguments: { youtube: { ...youtube, saveToLibrary: true } } });
+    const staged = structured<{ uploadId: string; assetId: string; savedToLibrary: boolean }>(result);
+    expect(staged).toMatchObject({ savedToLibrary: true, assetId: expect.any(String) });
+    expect(JSON.stringify(result.content)).toContain(staged.assetId);
+    const listed = structured<{ assets: { id: string; origin?: { videoId: string } }[] }>(await client.callTool({ name: 'list_assets', arguments: {} }));
+    expect(listed.assets.find(asset => asset.id === staged.assetId)?.origin).toMatchObject({ videoId: 'aqz-KE-bpKQ' });
+    const resolved = await resolveReferences({ env, agent: { user_id: OWNER } } as never, [], { assetId: staged.assetId });
+    expect(resolved.sourceVideoId).toEqual(expect.any(String));
+    expect(resolved.sourceVideoId).not.toBe(staged.uploadId);
+  });
   it('points a YouTube link given as url at the youtube option', async () => {
     const { env } = agentEnv();
     const client = await connectAgent(env, await seedAgent(env));

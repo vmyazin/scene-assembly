@@ -90,8 +90,14 @@
   person reads must be the same check. The cut runs in a per-account Durable Object
   container (`YouTubeImporter`) because yt-dlp and ffmpeg need a real process; keep its
   logic in `importer-core.ts`, where it is testable without the Workers runtime. An
-  imported clip is a one-use temporary input (`lib/account/staged-sources.ts`), never a
-  library asset, because cleanup deletes an input once its jobs finish. Every
+  imported clip is a one-use temporary input (`lib/account/staged-sources.ts`), because
+  cleanup deletes an input once its jobs finish. Keeping it is opt-in (`saveToLibrary`):
+  the clip is written once as a library asset (`cloud/src/youtube/library.ts`, room
+  reserved before any byte is written so a full library falls back to temporary-only)
+  and the edit source is a `copyAssetToUpload` copy of it, exactly like picking a library
+  clip. Its asset metadata keeps the job-request shape (`local-test` / `youtube-clip`)
+  and `assetView` lifts `origin` out of it, because every library reader expects
+  `metadata` to be a job request. Every
   `new AccountError(` in that path stays on one line with a literal code, or
   `mcp-docs.test.ts` cannot check the guide.
 

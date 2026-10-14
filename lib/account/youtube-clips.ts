@@ -1,19 +1,19 @@
 import { accountRequest } from './client';
 import { discardUpload, stageSource } from './staged-sources';
-import type { ClipSource } from '@/lib/youtube/clip';
+import type { ClipSource, ImportedClipSource } from '@/lib/youtube/clip';
 
-export interface YouTubeClipInput { url: string; startSeconds: number; endSeconds: number; provider: string; modelId: string }
-interface ImportedClip { uploadId: string; bytes: number; expiresAt: number; previewUrl: string; source: ClipSource }
+export interface YouTubeClipInput { url: string; startSeconds: number; endSeconds: number; provider: string; modelId: string; saveToLibrary?: boolean }
+interface ImportedClip { uploadId: string; bytes: number; expiresAt: number; previewUrl: string; source: ClipSource; savedToLibrary?: boolean; assetId?: string; libraryNotice?: string }
 
 /** Cuts the section on the Worker, then fetches the finished clip once from the
  *  Worker origin (Vercel cannot relay it) so preview, probing and validation work on
  *  a File like any other source. The returned File is staged: submitting it skips the
  *  second upload. */
-export async function importYouTubeClip(input: YouTubeClipInput, signal: AbortSignal, owner: string, onImported?: () => void): Promise<{ file: File; source: ClipSource }> {
+export async function importYouTubeClip(input: YouTubeClipInput, signal: AbortSignal, owner: string, onImported?: () => void): Promise<{ file: File; source: ImportedClipSource }> {
   const clip = await accountRequest<ImportedClip>('youtube-clips', {
     method: 'POST', signal,
     headers: { 'Content-Type': 'application/json', 'X-Account-Id': owner },
-    body: JSON.stringify({ url: input.url, startSeconds: input.startSeconds, endSeconds: input.endSeconds, edit: { provider: input.provider, modelId: input.modelId } }),
+    body: JSON.stringify({ url: input.url, startSeconds: input.startSeconds, endSeconds: input.endSeconds, edit: { provider: input.provider, modelId: input.modelId }, ...(input.saveToLibrary ? { saveToLibrary: true } : {}) }),
   });
   onImported?.();
   let file: File;
@@ -27,5 +27,5 @@ export async function importYouTubeClip(input: YouTubeClipInput, signal: AbortSi
     throw error;
   }
   stageSource(file, { uploadId: clip.uploadId, owner, expiresAt: clip.expiresAt });
-  return { file, source: clip.source };
+  return { file, source: { ...clip.source, savedToLibrary: clip.savedToLibrary === true, ...(clip.libraryNotice ? { libraryNotice: clip.libraryNotice } : {}) } };
 }

@@ -12,6 +12,13 @@ describe('importYouTubeClip (browser)', () => {
     const { file } = await importYouTubeClip(input, new AbortController().signal, 'owner');
     expect(stagedSourceId(file, 'owner')).toBe('u1');
   });
+  it('sends saveToLibrary and reports whether the clip was saved', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ ...imported, savedToLibrary: false, libraryNotice: 'Your library is full, so this clip was imported for this edit only.' }, { status: 201 })).mockResolvedValueOnce(new Response('mp4'));
+    vi.stubGlobal('fetch', fetcher);
+    const { source } = await importYouTubeClip({ ...input, saveToLibrary: true }, new AbortController().signal, 'owner');
+    expect(JSON.parse(String((fetcher.mock.calls[0] as [string, RequestInit])[1].body))).toMatchObject({ saveToLibrary: true });
+    expect(source).toEqual({ videoId: 'aqz-KE-bpKQ', startSeconds: 62, endSeconds: 74.4, savedToLibrary: false, libraryNotice: 'Your library is full, so this clip was imported for this edit only.' });
+  });
   it('releases the Worker upload when the clip cannot be fetched', async () => {
     const fetcher = vi.fn().mockResolvedValueOnce(Response.json(imported, { status: 201 })).mockResolvedValueOnce(new Response(null, { status: 404 })).mockResolvedValue(Response.json({ ok: true }));
     vi.stubGlobal('fetch', fetcher);

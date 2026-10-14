@@ -47,6 +47,7 @@ export function warmAccountSlug(jobId: string, prompt: string): void {
 
 /** The full guest-shaped base, requesting the slug when nothing is cached yet. */
 export async function accountAssetFilenameBase(asset: CloudAsset): Promise<string> {
+  if (asset.origin) return clipFilenameBase(asset.origin);
   const prompt = asset.metadata.prompt ?? '';
   const slug = prompt.trim() ? await fetchSlug(cacheKey(asset), prompt) : null;
   return baseFor(asset, slug ?? undefined);
@@ -61,7 +62,13 @@ export function knownAccountAssetFilenameBase(asset: CloudAsset): string {
   return baseFor(asset, slugs.get(cacheKey(asset)));
 }
 
+/** A saved YouTube section is named after where it came from, as the browser names it at import. */
+function clipFilenameBase(origin: NonNullable<CloudAsset['origin']>): string {
+  return `youtube-${origin.videoId}-${Math.floor(origin.startSeconds)}s`;
+}
+
 function baseFor(asset: CloudAsset, slug: string | undefined): string {
+  if (asset.origin) return clipFilenameBase(asset.origin);
   return downloadFilenameBase({
     prompt: asset.metadata.prompt ?? '',
     mediaType: asset.kind,

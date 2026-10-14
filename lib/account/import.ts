@@ -1,6 +1,7 @@
 import type { CloudAsset, CloudJobRequest, CloudProvider } from './contracts';
 import type { GalleryRecord } from '@/lib/gallery/storage';
 import { LOCAL_PROVIDER } from '@/lib/timeline/import-local';
+import { YOUTUBE_CLIP_MODEL } from '@/lib/youtube/clip';
 import { useAccountStore } from '@/store/useAccountStore';
 
 export const MAX_ACCOUNT_IMPORT_BYTES = 1_000_000_000;
@@ -163,7 +164,8 @@ function normalizedValues(values: GalleryRecord['controlValues']): CloudJobReque
  * background job names its model `local-test`, so it never matches.
  */
 export function isUploadedAsset(asset: Pick<CloudAsset, 'metadata'>): boolean {
-  return asset.metadata.provider === 'local-test' && asset.metadata.modelId === LOCAL_PROVIDER;
+  // A saved YouTube section is uploaded media too, never a generation result.
+  return asset.metadata.provider === 'local-test' && (asset.metadata.modelId === LOCAL_PROVIDER || asset.metadata.modelId === YOUTUBE_CLIP_MODEL);
 }
 
 export function accountImportIntent(record: GalleryRecord & { blob: Blob }, clientImportId = defaultAccountImportId(record.id)): AccountImportIntent {

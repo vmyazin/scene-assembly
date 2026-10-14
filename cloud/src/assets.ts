@@ -1,5 +1,6 @@
 // cloud/src/assets.ts
 import type { CloudAsset, CloudJobRequest } from '../../lib/account/contracts';
+import { cleanTitle, type ClipOrigin } from '../../lib/youtube/clip';
 import { AccountError, type JobRow } from './jobs';
 import type { Env } from './security';
 import { AVAILABLE_CAPACITY, OVERFLOW_TTL_MS, promoteTemporaryAsset } from './retention';
@@ -18,11 +19,20 @@ export const isSupportedOutputMime = (mimeType:string) => /^(image\/(png|jpeg|we
 /** Uploads use the shared stageable list. Results stay on `isSupportedOutputMime`, which rejects audio and QuickTime. */
 export const isSupportedInputMime = isStageableInputMime;
 /** `draftId` is stored beside the request and lifted off so metadata stays a CloudJobRequest. */
+/** Only a well-formed origin reaches the browser: it is shown as text and as a link. */
+function clipOrigin(value: unknown): ClipOrigin | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const { site, videoId, startSeconds, endSeconds, title } = value as Record<string, unknown>;
+  if (site !== 'youtube' || typeof videoId !== 'string' || !/^[A-Za-z0-9_-]{11}$/.test(videoId) || typeof startSeconds !== 'number' || typeof endSeconds !== 'number') return undefined;
+  return { site, videoId, startSeconds, endSeconds, title: cleanTitle(title) };
+}
 export function assetView(row: AssetRow): CloudAsset {
-  const stored = JSON.parse(row.metadata_json) as CloudJobRequest & { draftId?: unknown };
+  const stored = JSON.parse(row.metadata_json) as CloudJobRequest & { draftId?: unknown; origin?: unknown };
   const draftId = typeof stored.draftId === 'string' && stored.draftId ? stored.draftId : undefined;
   if (draftId) delete stored.draftId;
-  return { id:row.id, jobId:row.job_id, kind:row.kind, mimeType:row.mime_type, bytes:row.bytes, createdAt:row.created_at, metadata:stored, ...(draftId ? { draftId } : {}), ...(row.expires_at?{expiresAt:row.expires_at}:{}), ...(row.agent_id?{startedBy:{agentId:row.agent_id,name:row.agent_name??null}}:{}) };
+  const origin = clipOrigin(stored.origin);
+  delete stored.origin;
+  return { id:row.id, jobId:row.job_id, kind:row.kind, mimeType:row.mime_type, bytes:row.bytes, createdAt:row.created_at, metadata:stored, ...(draftId ? { draftId } : {}), ...(origin ? { origin } : {}), ...(row.expires_at?{expiresAt:row.expires_at}:{}), ...(row.agent_id?{startedBy:{agentId:row.agent_id,name:row.agent_name??null}}:{}) };
 }
 export async function getAsset(env:Env,id:string,owner:string) { return env.DB.prepare('SELECT a.*,r.expires_at FROM account_assets a LEFT JOIN account_asset_retention r ON r.asset_id=a.id WHERE a.id = ? AND a.user_id = ? AND a.deleted = 0 AND (r.expires_at IS NULL OR r.expires_at>?)').bind(id,owner,Date.now()).first<AssetRow>(); }
 /** What a saved job produced, in the order it was written. */

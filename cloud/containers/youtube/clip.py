@@ -29,6 +29,12 @@ def done(**fields):
     sys.exit(0)
 
 
+def clean_title(value):
+    """The video title is third-party text: no control characters, one line, at most 200 characters."""
+    text = re.sub(r'[\x00-\x1f\x7f]', ' ', str(value or ''))
+    return re.sub(r'\s+', ' ', text).strip()[:200]
+
+
 def fail(code, detail='', reason=None):
     done(ok=False, code=code, detail=str(detail)[-500:], **({'reason': reason} if reason else {}))
 
@@ -140,7 +146,8 @@ def main():
         data = json.loads(probe.stdout)
         stream = data['streams'][0]
         done(ok=True, path=out, bytes=os.path.getsize(out), width=int(stream['width']),
-             height=int(stream['height']), duration=round(float(data['format']['duration']), 2))
+             height=int(stream['height']), duration=round(float(data['format']['duration']), 2),
+             title=clean_title(info.get('title')))
     except (KeyError, IndexError, ValueError) as error:
         fail('failed', f'unreadable output: {error}')
 

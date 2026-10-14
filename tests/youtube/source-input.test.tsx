@@ -21,6 +21,16 @@ describe('VideoSourceInput', () => {
     render(<VideoSourceInput capability={capability} disabled={false} onChange={() => {}}
       source={{ file, epoch: 0, width: 1280, height: 720, durationSeconds: 12.4, origin: { videoId: 'aqz-KE-bpKQ', startSeconds: 62, endSeconds: 74.4 } }} />);
     expect(screen.getByRole('link', { name: 'From YouTube · 1:02.0–1:14.4' })).toHaveAttribute('href', 'https://www.youtube.com/watch?v=aqz-KE-bpKQ&t=62s');
+    expect(screen.queryByText(/Saved to library/)).toBeNull();
+  });
+  it('says when the clip was also saved, and why a requested save did not happen', () => {
+    const { rerender } = render(<VideoSourceInput capability={capability} disabled={false} onChange={() => {}}
+      source={{ file, epoch: 0, width: 1280, height: 720, durationSeconds: 12.4, origin: { videoId: 'aqz-KE-bpKQ', startSeconds: 62, endSeconds: 74.4, savedToLibrary: true } }} />);
+    expect(screen.getByText(/Saved to library/)).toBeInTheDocument();
+    rerender(<VideoSourceInput capability={capability} disabled={false} onChange={() => {}}
+      source={{ file, epoch: 0, width: 1280, height: 720, durationSeconds: 12.4, origin: { videoId: 'aqz-KE-bpKQ', startSeconds: 62, endSeconds: 74.4, savedToLibrary: false, libraryNotice: 'Your library is full, so this clip was imported for this edit only.' } }} />);
+    expect(screen.queryByText(/· Saved to library/)).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent('Your library is full');
   });
   describe('releases a staged import it no longer uses', () => {
     const staged = (id: string): SourceVideo => {

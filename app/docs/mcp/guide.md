@@ -155,7 +155,8 @@ A different type or byte count is refused by the upload link itself with an HTTP
 ```
 
 - Times are seconds to one decimal place. With `provider` and `modelId`, the section must fit that model's edit source length (`list_models`); without them, 1–30 seconds.
-- Only that section is downloaded, at 720p or above, and saved as an MP4 for 24 hours. It is never added to the library.
+- Only that section is downloaded, at 720p or above, and staged as an MP4 for 24 hours.
+- Add `"saveToLibrary": true` to also keep it in your library. The response then has `assetId` and `savedToLibrary: true`; pass `{ "assetId": … }` as `sourceVideo` for any later edit instead of importing again. The saved clip counts against your library storage. If the library is full the import still succeeds for this edit, with `savedToLibrary: false` and a `libraryNotice` saying so. In `list_assets` a saved clip has `origin` (`site`, `videoId`, `startSeconds`, `endSeconds`, `title`).
 - The response gives the clip's `durationSeconds`, `width` and `height`; check them against the model before calling `generate`.
 - Private, members-only, age-restricted and live videos cannot be imported. An account can import 10 sections an hour, one at a time, shared with the browser.
 - The call returns when the clip is ready, usually within 40 seconds and up to about 2 minutes, so set your client's tool timeout to at least 130 seconds (many default to 60).

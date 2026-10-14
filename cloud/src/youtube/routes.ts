@@ -7,12 +7,14 @@ import { importYouTubeClip, type YouTubeImportInput } from './import';
 
 function parseBody(value: unknown): YouTubeImportInput | null {
   if (!value || typeof value !== 'object') return null;
-  const { url, startSeconds, endSeconds, edit } = value as Record<string, unknown>;
+  const { url, startSeconds, endSeconds, edit, saveToLibrary } = value as Record<string, unknown>;
   if (typeof url !== 'string' || url.length > 2048 || typeof startSeconds !== 'number' || typeof endSeconds !== 'number') return null;
-  if (edit === undefined) return { url, startSeconds, endSeconds };
+  if (saveToLibrary !== undefined && typeof saveToLibrary !== 'boolean') return null;
+  const save = saveToLibrary ? { saveToLibrary: true } : {};
+  if (edit === undefined) return { url, startSeconds, endSeconds, ...save };
   const { provider, modelId } = (edit ?? {}) as Record<string, unknown>;
   if (typeof provider !== 'string' || typeof modelId !== 'string' || provider.length > 100 || modelId.length > 200) return null;
-  return { url, startSeconds, endSeconds, edit: { provider, modelId } };
+  return { url, startSeconds, endSeconds, edit: { provider, modelId }, ...save };
 }
 
 /** POST /api/account/youtube-clips. Not under /imports: that path and its gateway

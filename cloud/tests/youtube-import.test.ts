@@ -147,3 +147,58 @@ describe('POST /api/account/youtube-clips', () => {
     }
   });
 });
+
+describe('saving an imported section to the library', () => {
+  const SAVE = { url: URL_, startSeconds: 62, endSeconds: 74.4, edit: SEEDANCE, saveToLibrary: true };
+
+  it('stores a library asset with its origin and stages a separate edit source copied from it', async () => {
+    const { env, db } = agentEnv({ YOUTUBE_IMPORTER: fakeImporter(() => clipOk()).namespace });
+    const clip = await importYouTubeClip(env, OWNER, SAVE);
+    expect(clip).toMatchObject({ savedToLibrary: true, assetId: expect.any(String), bytes: CLIP_BYTES.length });
+    expect(clip.uploadId).not.toBe(clip.assetId);
+    const asset = db.prepare('SELECT user_id, job_id, kind, mime_type, bytes, metadata_json FROM account_assets WHERE id=?').get(clip.assetId!) as Record<string, unknown>;
+    expect(asset).toMatchObject({ user_id: OWNER, job_id: null, kind: 'video', mime_type: 'video/mp4', bytes: CLIP_BYTES.length });
+    expect(JSON.parse(String(asset.metadata_json))).toMatchObject({
+      provider: 'local-test', modelId: 'youtube-clip', mediaType: 'video', prompt: 'Big Buck Bunny 60fps 4K',
+      origin: { site: 'youtube', videoId: 'aqz-KE-bpKQ', startSeconds: 62, endSeconds: 74.4, title: 'Big Buck Bunny 60fps 4K' },
+    });
+    expect(db.prepare('SELECT used_bytes, reserved_bytes FROM account_storage WHERE user_id=?').get(OWNER)).toEqual({ used_bytes: CLIP_BYTES.length, reserved_bytes: 0 });
+    expect(db.prepare('SELECT state, expected_bytes FROM account_uploads WHERE id=?').get(clip.uploadId)).toEqual({ state: 'ready', expected_bytes: CLIP_BYTES.length });
+  });
+
+  it('still imports for this edit, with a notice, when the library is full', async () => {
+    const { env, db } = agentEnv({ YOUTUBE_IMPORTER: fakeImporter(() => clipOk()).namespace });
+    db.prepare('INSERT OR REPLACE INTO account_storage (user_id, limit_bytes, used_bytes) VALUES (?, ?, ?)').run(OWNER, 4096, 3000);
+    const clip = await importYouTubeClip(env, OWNER, SAVE);
+    expect(clip).toMatchObject({ savedToLibrary: false, libraryNotice: 'Your library is full, so this clip was imported for this edit only.' });
+    expect(clip.assetId).toBeUndefined();
+    expect(db.prepare('SELECT COUNT(*) AS n FROM account_assets').get()).toEqual({ n: 0 });
+    expect(db.prepare('SELECT used_bytes, reserved_bytes FROM account_storage WHERE user_id=?').get(OWNER)).toEqual({ used_bytes: 3000, reserved_bytes: 0 });
+    expect(db.prepare('SELECT state FROM account_uploads WHERE id=?').get(clip.uploadId)).toEqual({ state: 'ready' });
+  });
+
+  it('saves nothing for a cut that fails its checks', async () => {
+    const { env, db } = agentEnv({ YOUTUBE_IMPORTER: fakeImporter(() => clipOk({ durationSeconds: 11 })).namespace });
+    await expect(importYouTubeClip(env, OWNER, SAVE)).rejects.toMatchObject({ code: 'source_refused' });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM account_assets').get()).toEqual({ n: 0 });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM account_uploads').get()).toEqual({ n: 0 });
+  });
+
+  it('lists the saved clip with its origin lifted out of the job-request metadata', async () => {
+    const { env } = agentEnv({ YOUTUBE_IMPORTER: fakeImporter(() => clipOk({ title: 'Line one\nline\u0007two' })).namespace });
+    const clip = await importYouTubeClip(env, OWNER, SAVE);
+    const listed = await (await accountCall(env, 'assets', 'GET', await signIn(env))).json() as { assets: { id: string; origin?: unknown; metadata: Record<string, unknown> }[] };
+    const asset = listed.assets.find(a => a.id === clip.assetId)!;
+    expect(asset.origin).toEqual({ site: 'youtube', videoId: 'aqz-KE-bpKQ', startSeconds: 62, endSeconds: 74.4, title: 'Line one line two' });
+    expect(asset.metadata).not.toHaveProperty('origin');
+  });
+
+  it('takes saveToLibrary through the browser route and refuses a non-boolean', async () => {
+    const { env } = agentEnv({ YOUTUBE_IMPORTER: fakeImporter(() => clipOk()).namespace });
+    const cookie = await signIn(env);
+    const saved = await accountCall(env, 'youtube-clips', 'POST', cookie, SAVE);
+    expect(saved.status).toBe(201);
+    expect(await saved.json()).toMatchObject({ savedToLibrary: true, assetId: expect.any(String), previewUrl: expect.any(String) });
+    expect((await accountCall(env, 'youtube-clips', 'POST', cookie, { ...SAVE, saveToLibrary: 'yes' })).status).toBe(400);
+  });
+});

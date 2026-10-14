@@ -249,6 +249,12 @@ describe('admit', () => {
 });
 
 describe('response protocol', () => {
+  it('carries a non-ASCII title through the header, cleaned of control characters', async () => {
+    const ok = await fromResponse(toResponse({ ok: true, body: new Blob(['MP4!']).stream(), bytes: 4, width: 1280, height: 720, durationSeconds: 9.5, title: 'Café\u0000 — 夜 ' }));
+    expect(ok).toMatchObject({ ok: true, title: 'Café — 夜' });
+    const bad = new Response('x', { status: 200, headers: { 'x-clip-bytes': '1', 'x-clip-title': '%E0%A4%A' } });
+    expect(await fromResponse(bad)).toMatchObject({ ok: true, title: '' });
+  });
   it('round-trips success and failure', async () => {
     const ok = await fromResponse(toResponse({ ok: true, body: new Blob(['MP4!']).stream(), bytes: 4, width: 720, height: 1280, durationSeconds: 9.5 }));
     expect(ok).toMatchObject({ ok: true, bytes: 4, width: 720, height: 1280, durationSeconds: 9.5 });

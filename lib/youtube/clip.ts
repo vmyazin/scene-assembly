@@ -14,6 +14,19 @@ const WATCH_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com'])
 
 export interface YouTubeLink { videoId: string; startSeconds?: number }
 export interface ClipSource { videoId: string; startSeconds: number; endSeconds: number }
+/** An imported section as the edit form holds it: where it came from, and whether it was
+ *  also saved to the library (with the reason when a requested save did not happen). */
+export interface ImportedClipSource extends ClipSource { savedToLibrary?: boolean; libraryNotice?: string }
+/** Where a saved library clip came from; stored with the asset and shown on its card. */
+export interface ClipOrigin extends ClipSource { site: 'youtube'; title: string }
+/** Model id stored on a saved clip's asset metadata; with provider `local-test` it marks
+ *  the asset as uploaded media rather than a generation result. */
+export const YOUTUBE_CLIP_MODEL = 'youtube-clip';
+
+/** A video title is third-party text: one line, no control characters, at most 200 characters. */
+export function cleanTitle(value: unknown): string {
+  return String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+}
 
 /** Only the 11-character id leaves this function, never the pasted text, because the
  *  importer builds a command line from it. */

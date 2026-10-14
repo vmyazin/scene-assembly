@@ -20,7 +20,7 @@ function open(onImported = vi.fn().mockResolvedValue(undefined), onClose = vi.fn
   return { onImported, onClose };
 }
 const link = (value: string) => fireEvent.change(screen.getByRole('textbox', { name: 'YouTube link' }), { target: { value } });
-beforeEach(() => { vi.clearAllMocks(); useAccountStore.getState().applySession(session); });
+beforeEach(() => { vi.clearAllMocks(); window.localStorage.clear(); useAccountStore.getState().applySession(session); });
 
 describe('YouTubeClipDialog', () => {
   it('explains a link it cannot use and keeps Import disabled', () => {
@@ -48,7 +48,7 @@ describe('YouTubeClipDialog', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'To' }), { target: { value: '1:14.4' } });
     fireEvent.click(screen.getByRole('button', { name: 'Import clip' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(importClip).toHaveBeenCalledWith({ url: 'https://youtu.be/aqz-KE-bpKQ?t=62', startSeconds: 62, endSeconds: 74.4, provider: 'runware', modelId: 'bytedance:seedance@2.5' }, expect.any(AbortSignal), 'owner', expect.any(Function));
+    expect(importClip).toHaveBeenCalledWith({ url: 'https://youtu.be/aqz-KE-bpKQ?t=62', startSeconds: 62, endSeconds: 74.4, provider: 'runware', modelId: 'bytedance:seedance@2.5', saveToLibrary: false }, expect.any(AbortSignal), 'owner', expect.any(Function));
     expect(onImported).toHaveBeenCalledWith(file, { videoId: 'aqz-KE-bpKQ', startSeconds: 62, endSeconds: 74.4 });
   });
   it('drops a clip that finishes after the account changed', async () => {
@@ -166,5 +166,20 @@ describe('YouTubeClipDialog', () => {
     expect(document.querySelector('[style*="left"]')).toBeNull();
     act(() => hooks.onStateChange?.(player));
     expect(document.querySelector('[style*="left"]')).not.toBeNull();
+  });
+  it('asks to save to the library when the box is ticked, and remembers the choice', async () => {
+    importClip.mockResolvedValue({ file, source: { videoId: 'aqz-KE-bpKQ', startSeconds: 62, endSeconds: 74.4, savedToLibrary: true } });
+    const { onImported, onClose } = open();
+    link('https://youtu.be/aqz-KE-bpKQ?t=62');
+    fireEvent.change(screen.getByRole('textbox', { name: 'To' }), { target: { value: '1:14.4' } });
+    const box = screen.getByRole('checkbox', { name: /Save to library/ });
+    expect(box).not.toBeChecked();
+    fireEvent.click(box);
+    expect(screen.getByText(/also saved to your library/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Import clip' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(importClip.mock.calls[0][0]).toMatchObject({ saveToLibrary: true });
+    expect(onImported).toHaveBeenCalledWith(file, expect.objectContaining({ savedToLibrary: true }));
+    expect(window.localStorage.getItem('scene-assembly:youtube-save-to-library')).toBe('1');
   });
 });

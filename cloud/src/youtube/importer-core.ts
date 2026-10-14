@@ -1,4 +1,4 @@
-import { YOUTUBE_IMPORTS_PER_HOUR, type ClipSource } from '../../../lib/youtube/clip';
+import { cleanTitle, YOUTUBE_IMPORTS_PER_HOUR, type ClipSource } from '../../../lib/youtube/clip';
 
 /** The slice of `ctx.container` the importer uses, so tests can hand it a fake. */
 export interface ClipProcess {
@@ -25,6 +25,8 @@ export type UnavailableReason = 'private' | 'members' | 'age' | 'live' | 'remove
 export interface ClipFailure { ok: false; code: ClipFailureCode; detail: string; reason?: UnavailableReason; retryAfterSeconds?: number }
 export interface ClipSuccess {
   ok: true; body: ReadableStream<Uint8Array>; bytes: number; width: number; height: number; durationSeconds: number;
+  /** The video's title, cleaned of control characters; empty when YouTube gave none. */
+  title: string;
   /** Importer-internal (toResponse ignores it): settles once the clip has been read out
    *  and the work dir removed, which is when the account's slot frees up. */
   settled?: Promise<void>;
@@ -143,7 +145,7 @@ export async function runClip(container: ClipContainer, request: ClipRequest, op
     const reason = REASONS.has(result.reason as UnavailableReason) ? result.reason as UnavailableReason : undefined;
     return { ok: false, code, detail: String(result.detail ?? ''), ...(reason ? { reason } : {}) };
   }
-  const { path, bytes, width, height, duration } = result;
+  const { path, bytes, width, height, duration, title } = result;
   if (path !== `${work}/clip.mp4` || ![bytes, width, height, duration].every(value => typeof value === 'number' && Number.isFinite(value))) {
     void cleanup();
     return { ok: false, code: 'failed', detail: 'The importer returned an unreadable result.' };
@@ -154,7 +156,7 @@ export async function runClip(container: ClipContainer, request: ClipRequest, op
   // Aborted while cat was starting: the stream would be truncated, so do not hand it out.
   if (options.signal.aborted) return aborted(options.signal);
   if (!file.stdout) return { ok: false, code: 'failed', detail: 'The clip could not be read back.' };
-  return { ok: true, settled, body: file.stdout, bytes: bytes as number, width: width as number, height: height as number, durationSeconds: duration as number };
+  return { ok: true, settled, body: file.stdout, bytes: bytes as number, width: width as number, height: height as number, durationSeconds: duration as number, title: cleanTitle(title) };
 }
 
 export async function handleImport(deps: ImporterDeps, body: unknown, signal: AbortSignal): Promise<ClipResult> {
@@ -198,13 +200,17 @@ export function toResponse(result: ClipResult): Response {
   return new Response(result.body, { status: 200, headers: {
     'content-type': 'video/mp4', 'x-clip-bytes': String(result.bytes), 'x-clip-width': String(result.width),
     'x-clip-height': String(result.height), 'x-clip-duration': String(result.durationSeconds),
+    // Headers are ASCII-only; titles are not.
+    'x-clip-title': encodeURIComponent(result.title),
   } });
 }
 
 export async function fromResponse(response: Response): Promise<ClipResult> {
   if (response.status === 200 && response.body) {
     const read = (name: string) => Number(response.headers.get(`x-clip-${name}`));
-    return { ok: true, body: response.body, bytes: read('bytes'), width: read('width'), height: read('height'), durationSeconds: read('duration') };
+    let title = '';
+    try { title = cleanTitle(decodeURIComponent(response.headers.get('x-clip-title') ?? '')); } catch { /* malformed escape: no title */ }
+    return { ok: true, body: response.body, bytes: read('bytes'), width: read('width'), height: read('height'), durationSeconds: read('duration'), title };
   }
   const failure = await response.json().catch(() => null) as Partial<ClipFailure> | null;
   return {

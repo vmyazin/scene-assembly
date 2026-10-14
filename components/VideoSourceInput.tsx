@@ -9,11 +9,11 @@ import VideoPlayer from './video/VideoPlayer';
 import { probeDimensions, type ProbedDimensions } from '@/lib/timeline/probe';
 import type { ProviderModel } from '@/lib/providers/types';
 import { editVideoMaxBytes, editVideoMimes, validateEditVideo, validateEditSource } from '@/lib/providers/video-edit';
-import { formatClock, watchUrl, type ClipSource } from '@/lib/youtube/clip';
+import { formatClock, watchUrl, type ImportedClipSource } from '@/lib/youtube/clip';
 import { discardStagedSource } from '@/lib/account/staged-sources';
 import { useAccountStore } from '@/store/useAccountStore';
 
-export interface SourceVideo extends ProbedDimensions { file: File; epoch: number; origin?: ClipSource }
+export interface SourceVideo extends ProbedDimensions { file: File; epoch: number; origin?: ImportedClipSource }
 export function SourceVideoPreview({file, label = 'Original video'}: {file: File; label?: string}) {
   const [url, setUrl] = useState('');
   useEffect(() => {
@@ -45,7 +45,7 @@ export default function VideoSourceInput({source, onChange, disabled, capability
     if (source && source.file !== next?.file) discardStagedSource(source.file);
     onChange(next);
   }
-  async function select(file: File, origin?: ClipSource) {
+  async function select(file: File, origin?: ImportedClipSource) {
     const turn = ++sequence.current;
     const epoch = useAccountStore.getState().epoch;
     setReading(true); setError(null);
@@ -66,7 +66,8 @@ export default function VideoSourceInput({source, onChange, disabled, capability
     <div><h3 className="display text-base font-semibold">Source video</h3><p className="mt-1 text-xs text-[var(--foreground-muted)]">{editVideoMimes(capability).map(mime => mime === 'video/mp4' ? 'MP4' : mime === 'video/quicktime' ? 'MOV' : mime === 'video/webm' ? 'WebM' : mime).join(', ')} · {capability.minSeconds ? `${capability.minSeconds}–${capability.maxSeconds}` : `Up to ${capability.maxSeconds}`} seconds · up to {Math.round(editVideoMaxBytes(capability) / 1_000_000)} MB{capability.sourceBounds ? ` · ${capability.sourceBounds.minEdge}–${capability.sourceBounds.maxEdge}px` : ''}. {capability.namesSource ? 'Reference this clip as @Video1.' : 'Describe how to change the source video.'}</p></div>
     {source && <><SourceVideoPreview file={source.file} /><p className="break-all text-xs text-[var(--foreground-muted)]">{source.origin
       ? <a href={watchUrl(source.origin)} target="_blank" rel="noreferrer noopener" className="underline-offset-2 hover:underline">From YouTube · {formatClock(source.origin.startSeconds)}–{formatClock(source.origin.endSeconds)}</a>
-      : source.file.name} · {source.durationSeconds.toFixed(1)}s · {source.width} × {source.height}</p></>}
+      : source.file.name} · {source.durationSeconds.toFixed(1)}s · {source.width} × {source.height}{source.origin?.savedToLibrary ? ' · Saved to library' : ''}</p>
+      {source.origin?.libraryNotice && <p role="status" className="text-xs text-[var(--foreground-muted)]">{source.origin.libraryNotice}</p>}</>}
     <input ref={input} type="file" aria-label="Upload source video" accept={editVideoMimes(capability).join(',')} className="sr-only" disabled={disabled || reading} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void select(file).catch(() => {}); }} />
     <div className="flex flex-wrap gap-2">
       <button type="button" disabled={disabled || reading} onClick={() => input.current?.click()} onDragOver={event => { if (!disabled && !reading && Array.from(event.dataTransfer.types).includes('Files')) event.preventDefault(); }} onDrop={event => { if (disabled || reading || !Array.from(event.dataTransfer.types).includes('Files')) return; event.preventDefault(); const files = Array.from(event.dataTransfer.files); if (files.length !== 1) setError('Choose one source video.'); else void select(files[0]).catch(() => {}); }} className="btn-secondary flex flex-1 items-center justify-center gap-2 border-dashed py-3">
