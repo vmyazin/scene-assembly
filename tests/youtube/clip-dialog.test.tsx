@@ -175,7 +175,7 @@ describe('YouTubeClipDialog', () => {
     const box = screen.getByRole('checkbox', { name: /Save to library/ });
     expect(box).not.toBeChecked();
     fireEvent.click(box);
-    expect(screen.getByText(/also saved to your library/)).toBeInTheDocument();
+    expect(screen.getByText(/and saved to your library/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Import clip' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(importClip.mock.calls[0][0]).toMatchObject({ saveToLibrary: true });
