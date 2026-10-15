@@ -53,7 +53,7 @@ describe('captureImageResult', () => {
     });
     expect(entries()[0]).toMatchObject({
       provider: 'gemini',
-      modelId: 'gemini-3-pro-image-preview',
+      modelId: 'gemini-nano-banana-2.1',
       kind: 'image',
       confidence: 'exact',
       source: 'usage-metadata',

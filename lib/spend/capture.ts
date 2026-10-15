@@ -71,6 +71,8 @@ export interface ImageResultCapture {
   falApiKey?: string;
   /** fal only: whether web search ran, which fal charges extra for. */
   webSearch?: boolean;
+  /** fal Nano Banana 2.1 `thinking_level`, when this run sent one. */
+  thinkingLevel?: string;
 }
 
 const GEMINI_MODEL = DEFAULT_GEMINI_MODEL_ID;
@@ -122,7 +124,12 @@ export function captureImageResult(args: ImageResultCapture): void {
             const figure = resolveFalRun({
               estimate,
               endpointId,
-              controls: { resolution: args.resolution, webSearch: args.webSearch },
+              controls: {
+                resolution: args.resolution,
+                webSearch: args.webSearch,
+                thinkingLevel: args.thinkingLevel,
+                inputImages: args.inputImages,
+              },
             });
             file(withFigure({ ...base, modelId }, figure));
           } catch {
@@ -172,6 +179,7 @@ export function captureFalJob(job: FalJob, apiKey: string): void {
               typeof controlValues.resolution === 'string' ? controlValues.resolution : undefined,
             audio: controlValues.generate_audio !== false,
             ...(durationSeconds !== undefined ? { durationSeconds } : {}),
+            thinkingLevel: typeof controlValues.thinking_level === 'string' ? controlValues.thinking_level : undefined,
           },
         });
         file(withFigure(base, figure));

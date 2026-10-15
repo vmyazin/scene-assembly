@@ -12,6 +12,14 @@ describe('agent model schema against the Worker validators', () => {
   it('describes every background provider', () => {
     expect(new Set(models.map(model => model.provider))).toEqual(new Set(CLOUD_PROVIDERS));
     expect(models.every(model => model.modes.length > 0)).toBe(true);
+    const deprecated = models.filter(model => model.deprecated).map(model => model.modelId).sort();
+    expect(deprecated).toEqual([
+      'gemini-3.1-flash-image',
+      'google/nano-banana-2/edit-developer',
+      'google/nano-banana-2/text-to-image-developer',
+      'nano-banana-2',
+    ]);
+    expect(models.find(model => model.modelId === 'nano-banana-2')?.label).toBe('Nano Banana 2');
   });
 
   // The drift guard: anything list_models offers must be something the Worker

@@ -503,8 +503,8 @@ function nanoBanana2Developer(tier: 'full' | 'lite'): ProviderModel[] {
     sizes: (lite ? ['1K'] : ['1K', '2K', '4K']).map((label) => ({ label, preset: label.toLowerCase() })),
   };
   const family = lite ? 'nano-banana-2-lite' : 'nano-banana-2';
-  const label = lite ? 'Nano Banana 2 Lite Developer' : 'Nano Banana 2 Developer (deprecated)';
-  const editLabel = lite ? 'Nano Banana 2 Lite Developer Edit' : 'Nano Banana 2 Developer Edit (deprecated)';
+  const label = lite ? 'Nano Banana 2 Lite Developer' : 'Nano Banana 2 Developer';
+  const editLabel = lite ? 'Nano Banana 2 Lite Developer Edit' : 'Nano Banana 2 Developer Edit';
   const code = lite ? 'nano-banana-2-lite-dev' : 'nano-banana-2-dev';
 
   return [
@@ -514,6 +514,7 @@ function nanoBanana2Developer(tier: 'full' | 'lite'): ProviderModel[] {
       label,
       fileCode: `${code}-t2i`,
       modes: ['text'],
+      ...(lite ? {} : { deprecated: true }),
       note: lite
         ? 'The cheapest image model here. 1K only — Lite publishes no larger size.'
         : 'Deprecated. Nano Banana 2.1 Developer replaces it. Still available, one price at every resolution.',
@@ -524,8 +525,11 @@ function nanoBanana2Developer(tier: 'full' | 'lite'): ProviderModel[] {
       label: editLabel,
       fileCode: `${code}-edit`,
       modes: ['image'],
+      ...(lite ? {} : { deprecated: true }),
       maxInputImages: 14,
-      note: 'Editing only — it needs at least one reference. Up to 14.',
+      note: lite
+        ? 'Editing only — it needs at least one reference. Up to 14.'
+        : 'Deprecated. Editing only — it needs at least one reference. Up to 14.',
     },
   ];
 }

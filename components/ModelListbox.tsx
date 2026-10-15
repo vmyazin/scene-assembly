@@ -8,6 +8,8 @@ export interface ModelListboxRow {
   id: string;
   label: string;
   cells: SpecCell[];
+  /** Drawn beside the name, outside the accessible name, so history labels stay stable. */
+  deprecated?: boolean;
 }
 
 export interface ModelListboxProps {
@@ -132,8 +134,15 @@ export default function ModelListbox({ label, accent, columns: allColumns, rows:
               onKeyDown={(event) => handleKeyDown(event, index)}
             >
               <span className="model-listbox-dot" aria-hidden="true" />
-              <span id={nameId} className="model-listbox-name">
-                {row.label}
+              <span className="model-listbox-name">
+                <span id={nameId} className="model-listbox-name-text">
+                  {row.label}
+                </span>
+                {row.deprecated ? (
+                  <span className="model-listbox-badge" aria-hidden="true">
+                    deprecated
+                  </span>
+                ) : null}
               </span>
               {row.cells.map((cell, cellIndex) => (
                 <span

@@ -56,8 +56,9 @@ describe('fal model catalog', () => {
     expect(FAL_IMAGE_MODELS.map((model) => model.id)).toEqual(['nano-banana-2.1', 'nano-banana-2']);
     expect(FAL_IMAGE_MODELS.map((model) => model.label)).toEqual([
       'Nano Banana 2.1',
-      'Nano Banana 2 (deprecated)',
+      'Nano Banana 2',
     ]);
+    expect(FAL_IMAGE_MODELS.map((model) => model.deprecated ?? false)).toEqual([false, true]);
     expect(FAL_VIDEO_MODELS.map((model) => model.id)).toEqual([
       'veo-3-1',
       'veo-3-1-fast',

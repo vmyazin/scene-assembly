@@ -826,6 +826,7 @@ export default function ProviderVideoWorkspace({
               rows={(matchingModels.length > 0 ? matchingModels : models).map((model) => ({
                 id: model.id,
                 label: model.label,
+                deprecated: model.deprecated,
                 cells: providerVideoSpecs(model, inputMode),
               }))}
               value={selectedModel?.id}

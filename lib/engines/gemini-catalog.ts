@@ -36,6 +36,12 @@ export interface GeminiImageModel {
   maxInputImages: number;
   /** The vendor's own one-line description, shown under the picker. */
   note: string;
+  /**
+   * Still runnable, but no longer the one to start from. The picker draws this
+   * as a badge. It stays off `label` so a job saved under the old name still
+   * reads that name.
+   */
+  deprecated?: boolean;
 }
 
 export const GEMINI_IMAGE_MODELS: GeminiImageModel[] = [
@@ -50,7 +56,8 @@ export const GEMINI_IMAGE_MODELS: GeminiImageModel[] = [
   },
   {
     id: 'gemini-3.1-flash-image',
-    label: 'Nano Banana 2 (deprecated)',
+    label: 'Nano Banana 2',
+    deprecated: true,
     fileCode: 'gemini-3_1-flash-image',
     sizes: ['1K', '2K', '4K'],
     supportsGoogleSearch: true,

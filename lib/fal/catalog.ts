@@ -206,7 +206,8 @@ const nanoBananaImageModel = (
   description: string,
   textEndpoint: string,
   editEndpoint: string,
-  fields: FalFieldDefinition[]
+  fields: FalFieldDefinition[],
+  deprecated?: boolean
 ): FalModelDefinition => ({
   id,
   label,
@@ -214,6 +215,7 @@ const nanoBananaImageModel = (
   provider: 'Google',
   description,
   mediaType: 'image',
+  ...(deprecated ? { deprecated: true } : {}),
   variants: [
     textVariant(id, textEndpoint, fields),
     imageVariant(id, editEndpoint, 'image_urls', fields, 14, true),
@@ -232,12 +234,13 @@ export const FAL_IMAGE_MODELS: FalModelDefinition[] = [
   ),
   nanoBananaImageModel(
     'nano-banana-2',
-    'Nano Banana 2 (deprecated)',
+    'Nano Banana 2',
     'nano-banana-2',
     'Deprecated. Nano Banana 2.1 replaces it. Still available: reasoning-guided image generation and multi-image editing with optional web grounding.',
     'fal-ai/nano-banana-2',
     'fal-ai/nano-banana-2/edit',
-    NANO_FIELDS
+    NANO_FIELDS,
+    true
   ),
 ];
 

@@ -51,6 +51,11 @@ export interface FalModelVariant {
 export interface FalModelDefinition {
   id: string;
   label: string;
+  /**
+   * Still runnable. The picker draws a badge; `label` stays the name a saved
+   * job and `list_models` already use.
+   */
+  deprecated?: boolean;
   /** Short code appended to download filenames — see FAL_FILE_CODES. */
   fileCode: string;
   provider: string;

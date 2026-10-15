@@ -63,6 +63,24 @@ describe('ModelListbox', () => {
     expect(screen.getByRole('option', { name: 'Nano Banana Pro' })).toHaveFocus();
   });
 
+  it('marks a deprecated model without changing its accessible name', () => {
+    render(
+      <ModelListbox
+        label="Model"
+        accent="image"
+        columns={columns}
+        rows={[{ ...rows[0], deprecated: true }]}
+        value="sora-2"
+        onChange={() => {}}
+      />
+    );
+    const option = screen.getByRole('option', { name: 'Sora 2' });
+    expect(option).toHaveAccessibleName('Sora 2');
+    const badge = option.querySelector('.model-listbox-badge');
+    expect(badge?.textContent).toBe('deprecated');
+    expect(badge).toHaveAttribute('aria-hidden', 'true');
+  });
+
   it('keeps one option in the tab order and paints the workspace accent', () => {
     const { container } = render(<Harness />);
     const tabbable = screen.getAllByRole('option').filter((option) => option.tabIndex === 0);

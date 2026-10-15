@@ -241,7 +241,7 @@ describe('GenerationInterface engine selection', () => {
     const rack = screen.getByRole('listbox', { name: 'Model' });
     expect(within(rack).getAllByRole('option').map((row) => row.textContent)).toEqual([
       expect.stringContaining('Nano Banana 2.1'),
-      expect.stringContaining('Nano Banana 2 (deprecated)'),
+      expect.stringContaining('Nano Banana 2'),
       expect.stringContaining('Gemini 3 Pro Image'),
       expect.stringContaining('Gemini 3.1 Flash Lite Image'),
     ]);
@@ -249,7 +249,7 @@ describe('GenerationInterface engine selection', () => {
     expect(within(rack).getByRole('option', { name: 'Gemini 3.1 Flash Lite Image' }).textContent).toContain('$0.034');
     expect(screen.getByText(/Est\. ≈ \$0\.134 \/ image · Gemini 3 Pro Image/)).toBeTruthy();
 
-    fireEvent.click(within(rack).getByRole('option', { name: 'Nano Banana 2 (deprecated)' }));
+    fireEvent.click(within(rack).getByRole('option', { name: 'Nano Banana 2' }));
 
     expect(useAppStore.getState().geminiImageModel).toBe('gemini-3.1-flash-image');
     // Persisted, or the choice is lost the moment the workspace is left: the
@@ -257,7 +257,8 @@ describe('GenerationInterface engine selection', () => {
     expect(useAppStore.persist.getOptions().partialize?.(useAppStore.getState())).toMatchObject({
       geminiImageModel: 'gemini-3.1-flash-image',
     });
-    expect(screen.getByText(/Est\. ≈ \$0\.067 \/ image · Nano Banana 2 \(deprecated\)/)).toBeTruthy();
+    expect(screen.getByText(/Est\. ≈ \$0\.067 \/ image · Nano Banana 2$/)).toBeTruthy();
+    expect(within(rack).getByRole('option', { name: 'Nano Banana 2' }).textContent).toContain('deprecated');
   });
 
   it('defaults Gemini to Nano Banana 2.1 and keeps the deprecated model selectable', () => {
@@ -266,7 +267,7 @@ describe('GenerationInterface engine selection', () => {
 
     const rack = screen.getByRole('listbox', { name: 'Model' });
     expect(within(rack).getByRole('option', { name: 'Nano Banana 2.1' }).getAttribute('aria-selected')).toBe('true');
-    expect(within(rack).getByRole('option', { name: 'Nano Banana 2 (deprecated)' })).toBeTruthy();
+    expect(within(rack).getByRole('option', { name: 'Nano Banana 2' })).toBeTruthy();
     expect(screen.getByText(/Gemini Nano Banana 2\.1/)).toBeTruthy();
     expect(screen.getByText(/Est\. ≈ \$0\.034 \/ image · Nano Banana 2\.1/)).toBeTruthy();
   });
@@ -917,17 +918,32 @@ describe('GenerationInterface fal image generation', () => {
 
     const rack = screen.getByRole('listbox', { name: 'Model' });
     expect(within(rack).getByRole('option', { name: 'Nano Banana 2.1' }).getAttribute('aria-selected')).toBe('true');
-    expect(within(rack).getByRole('option', { name: 'Nano Banana 2 (deprecated)' })).toBeTruthy();
+    expect(within(rack).getByRole('option', { name: 'Nano Banana 2' })).toBeTruthy();
     expect(screen.getByText(`Est. ≈ $${published!.costUsd.toFixed(3)} / image · Nano Banana 2.1`)).toBeTruthy();
     expect(screen.queryByText(/usage rates apply/)).toBeNull();
 
-    fireEvent.click(within(rack).getByRole('option', { name: 'Nano Banana 2 (deprecated)' }));
+    fireEvent.click(within(rack).getByRole('option', { name: 'Nano Banana 2' }));
     const deprecated = falPublishedCost('fal-ai/nano-banana-2', { resolution: '1K', webSearch: false });
     expect(useAppStore.getState().falImageModel).toBe('nano-banana-2');
     expect(useAppStore.persist.getOptions().partialize?.(useAppStore.getState())).toMatchObject({
       falImageModel: 'nano-banana-2',
     });
-    expect(screen.getByText(`Est. ≈ $${deprecated!.costUsd.toFixed(3)} / image · Nano Banana 2 (deprecated)`)).toBeTruthy();
+    expect(screen.getByText(`Est. ≈ $${deprecated!.costUsd.toFixed(3)} / image · Nano Banana 2`)).toBeTruthy();
+  });
+
+  it('prices high thinking at the level the form sends', () => {
+    useAppStore.setState({ falImageModel: 'nano-banana-2.1' });
+    renderInterface();
+    const thinking = screen.getByRole('combobox', { name: 'Thinking' });
+    expect(thinking).toHaveValue('medium');
+    fireEvent.change(thinking, { target: { value: 'high' } });
+    const high = falPublishedCost('google/nano-banana-2.1', {
+      resolution: '1K',
+      webSearch: false,
+      thinkingLevel: 'high',
+      inputImages: 0,
+    });
+    expect(screen.getByText(`Est. ≈ $${high!.costUsd.toFixed(3)} / image · Nano Banana 2.1`)).toBeTruthy();
   });
 
   it('rejects a remote image whose declared size exceeds 20 MiB', async () => {

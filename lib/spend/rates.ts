@@ -4,6 +4,7 @@
  * when; update a whole block from that page rather than one number in
  * isolation. Dependency-free so server routes and client code can both price.
  */
+import { DEFAULT_GEMINI_IMAGE_MODEL } from '../engines/gemini-catalog';
 
 /**
  * https://ai.google.dev/gemini-api/docs/pricing and
@@ -55,8 +56,12 @@ export const GEMINI_IMAGE_RATES: Record<string, GeminiImageRate> = {
   },
 };
 
-/** The model the studio ran before it had a picker, and the fallback for an unknown id. */
-export const DEFAULT_GEMINI_MODEL_ID = 'gemini-3-pro-image-preview';
+/**
+ * The model a run uses when the request names none, and the price for an id
+ * this table does not know. Aliased to the catalog default: `resolveGeminiImageModel`
+ * already runs that model, and a second literal here filed the 2.1 run at Pro's rate.
+ */
+export const DEFAULT_GEMINI_MODEL_ID = DEFAULT_GEMINI_IMAGE_MODEL;
 
 function geminiRate(modelId: string | undefined): GeminiImageRate {
   return GEMINI_IMAGE_RATES[modelId ?? ''] ?? GEMINI_IMAGE_RATES[DEFAULT_GEMINI_MODEL_ID];
@@ -158,6 +163,16 @@ export type FalRate =
       resolutionMultiplier: Record<string, number>;
       /** Added when the `enable_web_search` control is on. */
       webSearchUsd: number;
+      /**
+       * Per reference image, when the vendor bills input-image tokens on top of
+       * the short-prompt output price. Absent means references are included.
+       */
+      inputImageUsd?: number;
+      /**
+       * Added when `thinking_level` is `high`, keyed by resolution. Absent means
+       * thinking does not move the published figure.
+       */
+      highThinkingUsd?: Record<string, number>;
     }
   | {
       unit: 'second';
@@ -181,12 +196,23 @@ const NANO_BANANA_2_RATE: FalRate = {
   webSearchUsd: 0.015,
 };
 
-/** $0.040 / $0.059 / $0.134. Multipliers keep falPublishedCost exact at those three. */
+/**
+ * $0.040 / $0.059 / $0.134. Multipliers keep falPublishedCost exact at those three
+ * for a short prompt at minimal or medium thinking, which fal's 2026-10-07
+ * measurements billed the same. Each reference image is about 1,120 input
+ * tokens at the published $1.764/M. High thinking adds the gap up to those
+ * measured high totals ($0.0490 / $0.0732 / $0.1435), so a reservation at high
+ * sits on or above them.
+ * https://fal.ai/models/google/nano-banana-2.1/llms.txt — read 2026-10-15.
+ */
+const NANO_BANANA_21_INPUT_IMAGE_USD = (1120 * 1.764) / 1_000_000;
 const NANO_BANANA_21_RATE: FalRate = {
   unit: 'image',
   usd: 0.04,
   resolutionMultiplier: { '1K': 1, '2K': 1.475, '4K': 3.35 },
   webSearchUsd: 0,
+  inputImageUsd: NANO_BANANA_21_INPUT_IMAGE_USD,
+  highThinkingUsd: { '1K': 0.0094, '2K': 0.0142, '4K': 0.01 },
 };
 
 const perSecond = (
@@ -272,8 +298,17 @@ export const FAL_RATES: Record<string, FalRate> = {
   // https://fal.ai/models/minimax/h3-max-turbo/image-to-video — read 2026-10-15.
   // Promo rates ended that day. Regular prices: $0.025/s at 480P, $0.04/s at
   // 768P, $0.08/s at 1080P. One endpoint covers text, image and frames.
+  // fal bills output seconds, and the clip can run up to about 0.7 s longer
+  // than requested; falPublishedCost adds that overrun for this endpoint.
   'minimax/h3-max-turbo/image-to-video': seedanceRate({ '480P': 0.025, '768P': 0.04, '1080P': 0.08 }),
 };
+
+/**
+ * fal's H3 page: "The output can run up to about 0.7 s longer than requested."
+ * Callers pass the requested duration. A measured output length must not come
+ * through here, or the overrun would be added twice.
+ */
+const H3_OUTPUT_OVERRUN_SECONDS = 0.7;
 
 /** The run controls that move a fal price, read from a job's control values. */
 export interface FalRunControls {
@@ -281,6 +316,10 @@ export interface FalRunControls {
   audio?: boolean;
   durationSeconds?: number;
   webSearch?: boolean;
+  /** fal `thinking_level`. Only `high` moves the Nano Banana 2.1 figure. */
+  thinkingLevel?: string;
+  /** Reference images on a rate that bills them per input image. */
+  inputImages?: number;
 }
 
 export interface FalPublishedCost {
@@ -302,17 +341,29 @@ export function falPublishedCost(
   if (!rate) return null;
 
   if (rate.unit === 'image') {
-    const multiplier = rate.resolutionMultiplier[controls.resolution ?? '1K'];
+    const resolution = controls.resolution ?? '1K';
+    const multiplier = rate.resolutionMultiplier[resolution];
     if (multiplier === undefined) return null;
-    const costUsd = rate.usd * multiplier + (controls.webSearch ? rate.webSearchUsd : 0);
+    const images = controls.inputImages;
+    const imageUsd =
+      rate.inputImageUsd && Number.isFinite(images) && images !== undefined && images > 0
+        ? rate.inputImageUsd * images
+        : 0;
+    const thinkingUsd =
+      controls.thinkingLevel === 'high' ? rate.highThinkingUsd?.[resolution] ?? 0 : 0;
+    const costUsd = rate.usd * multiplier + (controls.webSearch ? rate.webSearchUsd : 0) + imageUsd + thinkingUsd;
     return { costUsd, unit: 'image', quantity: 1 };
   }
 
-  const duration = controls.durationSeconds;
-  const hasDuration = duration !== undefined && Number.isFinite(duration) && duration > 0;
+  const requested = controls.durationSeconds;
+  const hasDuration = requested !== undefined && Number.isFinite(requested) && requested > 0;
+  const duration =
+    hasDuration && endpointId === 'minimax/h3-max-turbo/image-to-video'
+      ? requested + H3_OUTPUT_OVERRUN_SECONDS
+      : requested;
 
   if (rate.unit === 'second') {
-    if (!hasDuration) return null;
+    if (!hasDuration || duration === undefined) return null;
     const price = rate.usdPerSecond[controls.resolution ?? '*'] ?? rate.usdPerSecond['*'];
     if (!price) return null;
     const perSecondUsd = controls.audio === false ? price.audioOff : price.audioOn;

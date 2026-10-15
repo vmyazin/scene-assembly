@@ -124,6 +124,23 @@ function draftedConfig(): GenerationConfig {
       ? (imageSize as GenerationConfig['imageSize'])
       : '1K',
     useGoogleSearch: false,
+    ...(remembered.thinking_level === 'minimal' || remembered.thinking_level === 'medium' || remembered.thinking_level === 'high'
+      ? { thinkingLevel: remembered.thinking_level }
+      : {}),
+  };
+}
+
+function falImageValues(
+  config: GenerationConfig,
+  thinkingLevel: string | undefined,
+  extra: Record<string, string | number | boolean>
+): Record<string, string | number | boolean> {
+  return {
+    aspect_ratio: config.aspectRatio ?? 'auto',
+    resolution: config.imageSize ?? '1K',
+    enable_web_search: Boolean(config.useGoogleSearch),
+    ...(thinkingLevel ? { thinking_level: thinkingLevel } : {}),
+    ...extra,
   };
 }
 
@@ -234,6 +251,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
     useDraftStore.getState().rememberControlValues({
       aspect_ratio: next.aspectRatio ?? DEFAULT_ASPECT_RATIO,
       resolution: next.imageSize ?? '1K',
+      ...(next.thinkingLevel ? { thinking_level: next.thinkingLevel } : {}),
     });
   };
 
@@ -326,6 +344,10 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
     () => FAL_IMAGE_MODELS.find((model) => model.id === falImageModel) ?? FAL_IMAGE_MODEL,
     [falImageModel]
   );
+  const falThinkingField = activeFalImageModel.variants[0]?.fields.find((field) => field.key === 'thinking_level');
+  const falThinkingLevel = falThinkingField
+    ? config.thinkingLevel ?? (typeof falThinkingField.defaultValue === 'string' ? falThinkingField.defaultValue : 'medium')
+    : undefined;
   // Aggregator prices are the vendors' published rates, carried on the catalog
   // entry — the units differ per provider, so they are shown as written rather
   // than folded into one estimate. The resolution control reads the same entry,
@@ -533,12 +555,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
             modelId: activeFalImageModel.id,
             prompt: finalPrompt,
             dataUrls: images.map((image) => image.dataUrl),
-            values: {
-              aspect_ratio: config.aspectRatio ?? 'auto',
-              resolution: config.imageSize ?? '1K',
-              enable_web_search: Boolean(config.useGoogleSearch),
-              ...relaxed.attach(),
-            },
+            values: falImageValues(config, falThinkingLevel, relaxed.attach()),
             signal: controller.signal,
           }, {});
 
@@ -659,6 +676,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
           galleryRecordId,
           falApiKey,
           webSearch: Boolean(config.useGoogleSearch),
+          thinkingLevel: falThinkingLevel,
         })
       );
     },
@@ -760,7 +778,12 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
       ? activeFalImageModel.variants.find(candidate => candidate.inputMode === 'image')
       : activeFalImageModel.variants.find(candidate => candidate.inputMode === 'text')
     )?.endpointId ?? '',
-    { resolution: selectedImageSize, webSearch: Boolean(config.useGoogleSearch) }
+    {
+      resolution: selectedImageSize,
+      webSearch: Boolean(config.useGoogleSearch),
+      ...(falThinkingLevel ? { thinkingLevel: falThinkingLevel } : {}),
+      inputImages: images.length,
+    }
   );
   const costLine =
     activeEngine.id === 'pollinations'
@@ -832,7 +855,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
       try {
         const cloudPrompt = featureImagePrompt(feature.id, prompt, references.length) || 'Edit this image while preserving its subject and composition.';
         const values: Record<string,string|number|boolean> = activeEngine.id === 'fal'
-          ? {aspect_ratio:config.aspectRatio ?? 'auto',resolution:config.imageSize ?? '1K',enable_web_search:Boolean(config.useGoogleSearch), ...relaxed.attach()}
+          ? falImageValues(config, falThinkingLevel, relaxed.attach())
           : activeProvider || activeEngine.id === 'pollinations'
             ? {aspectRatio:config.aspectRatio ?? DEFAULT_ASPECT_RATIO, ...(activeProvider === 'piapi' || providerImageSizes ? {resolution:selectedImageSize} : {}), ...relaxed.attach()}
             : activeEngine.id === 'cloudflare' ? {}
@@ -1034,6 +1057,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                     rows={geminiModels.map((model) => ({
                       id: model.id,
                       label: model.label,
+                      deprecated: model.deprecated,
                       cells: geminiImageSpecs(model),
                     }))}
                     value={activeGeminiModel.id}
@@ -1058,6 +1082,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                     rows={FAL_IMAGE_MODELS.map((model) => ({
                       id: model.id,
                       label: model.label,
+                      deprecated: model.deprecated,
                       cells: falImageSpecs(model),
                     }))}
                     value={activeFalImageModel.id}
@@ -1085,6 +1110,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                     rows={modelsFor(activeProvider, 'image').map((model) => ({
                       id: model.id,
                       label: model.label,
+                      deprecated: model.deprecated,
                       cells: providerImageSpecs(model),
                     }))}
                     value={activeProviderModel ?? undefined}
@@ -1229,6 +1255,30 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                           {APPROXIMATE_LEGEND}
                         </span>
                       )}
+                    </div>
+                    )}
+
+                    {activeEngine.id === 'fal' && falThinkingField && (
+                    <div>
+                      <label htmlFor="fal-thinking-level" className="block text-sm font-medium mb-2 text-[var(--foreground)]">
+                        Thinking
+                      </label>
+                      <select
+                        id="fal-thinking-level"
+                        value={falThinkingLevel}
+                        onChange={(e) => applyConfig({
+                          ...config,
+                          thinkingLevel: e.target.value as NonNullable<GenerationConfig['thinkingLevel']>,
+                        })}
+                        className="w-full"
+                      >
+                        {falThinkingField.options?.map((option) => (
+                          <option key={String(option.value)} value={String(option.value)}>{option.label}</option>
+                        ))}
+                      </select>
+                      <span className="mt-1.5 block text-xs text-[var(--foreground-subtle)]">
+                        Medium is fal’s default. High uses more thinking tokens.
+                      </span>
                     </div>
                     )}
 
