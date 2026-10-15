@@ -34,7 +34,6 @@ import {
   isRetryableFailure,
   useAutoRetry,
 } from '@/lib/providers/auto-retry';
-import ProviderLogo from '@/components/ProviderLogo';
 import StoredImagePicker from '@/components/StoredImagePicker';
 import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
 import ReferenceStack from '@/components/ReferenceStack';
@@ -81,6 +80,7 @@ import VideoPlayer from '@/components/video/VideoPlayer';
 import JobElapsed from '@/components/JobElapsed';
 import { fileAsDataUrl } from '@/lib/file-data-url';
 import { JobStatusPill } from '@/components/StatusPill';
+import WorkspaceHeader from '@/components/WorkspaceHeader';
 
 /**
  * Video for Runware, Atlas Cloud, and CometAPI, laid out the way the Kie and
@@ -897,39 +897,22 @@ export default function ProviderVideoWorkspace({
 
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-3.5 sm:space-y-4">
-      <section className="glass-card p-3.5 md:p-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <button type="button" onClick={onBack} className="btn-secondary shrink-0">
-              ← Back
-            </button>
-            <div className="min-w-0">
-              <div className="eyebrow mb-1 flex items-center gap-1.5">
-                <ProviderLogo provider={provider} size={13} /> {label}
-              </div>
-              <h2 className="display text-lg font-semibold text-[var(--foreground)] sm:text-xl">
-                {isEdit ? 'Edit video' : isFrames
-                  ? 'First & last frame to video'
-                  : isReference
-                    ? 'Character references'
-                    : `${inputMode === 'text' ? 'Text' : 'Image'} to video`}
-              </h2>
-            </div>
-          </div>
-          {/* One call to action per state: while the key is missing the callout
-              below owns it, so the header keeps only the connected-state status
-              button rather than repeating the same ask two rows apart. */}
-          {!needsKey && (
-            <button
-              type="button"
-              onClick={() => onOpenConnections(provider)}
-              className="btn-secondary shrink-0"
-            >
-              {label} key connected
-            </button>
-          )}
-        </div>
-      </section>
+      <WorkspaceHeader
+        provider={provider}
+        label={label}
+        title={
+          isEdit
+            ? 'Edit video'
+            : isFrames
+              ? 'First & last frame to video'
+              : isReference
+                ? 'Character references'
+                : `${inputMode === 'text' ? 'Text' : 'Image'} to video`
+        }
+        needsKey={needsKey}
+        onBack={onBack}
+        onOpenConnections={onOpenConnections}
+      />
 
       <ConnectionGate
         storage={cloudWorkspace.cloud ? 'account' : 'browser'}

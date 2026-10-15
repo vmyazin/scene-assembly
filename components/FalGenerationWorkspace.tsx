@@ -13,7 +13,6 @@ import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import PromptPanel from '@/components/PromptPanel';
 import SavedPromptsButton from '@/components/SavedPromptsButton';
 import ModelControls from '@/components/ModelControls';
-import ProviderLogo from '@/components/ProviderLogo';
 import StoredImagePicker from '@/components/StoredImagePicker';
 import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
 import ConnectionGate, { isGated } from '@/components/ConnectionGate';
@@ -63,6 +62,7 @@ import type { EngineId } from '@/lib/engines/registry';
 import VideoSourceInput, { type SourceVideo } from '@/components/VideoSourceInput';
 import VideoPlayer from '@/components/video/VideoPlayer';
 import { JobStatusPill } from '@/components/StatusPill';
+import WorkspaceHeader from '@/components/WorkspaceHeader';
 
 interface FalGenerationWorkspaceProps {
   inputMode: FalInputMode;
@@ -735,39 +735,14 @@ function FalGenerationWorkspaceSession({
 
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-3.5 sm:space-y-4">
-      <section className="glass-card p-3.5 md:p-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <button
-              type="button"
-              onClick={() => { abortSubmission(); onBack(); }}
-              className="btn-secondary shrink-0"
-            >
-              ← Back
-            </button>
-            <div className="min-w-0">
-              <p className="eyebrow mb-1 flex items-center gap-1.5">
-                <ProviderLogo provider="fal" size={13} /> fal.ai
-              </p>
-              <h2 className="display text-lg font-semibold sm:text-xl">
-                {modeTitles[inputMode]}
-              </h2>
-            </div>
-          </div>
-          {/* One call to action per state: while the key is missing the callout
-              below owns it, so the header keeps only the connected-state status
-              button rather than repeating the same ask two rows apart. */}
-          {!needsKey && (
-            <button
-              type="button"
-              onClick={() => onOpenConnections('fal')}
-              className="btn-secondary shrink-0"
-            >
-              fal.ai key connected
-            </button>
-          )}
-        </div>
-      </section>
+      <WorkspaceHeader
+        provider="fal"
+        label="fal.ai"
+        title={modeTitles[inputMode]}
+        needsKey={needsKey}
+        onBack={() => { abortSubmission(); onBack(); }}
+        onOpenConnections={onOpenConnections}
+      />
 
       <ConnectionGate
         storage={cloudWorkspace.cloud ? 'account' : 'browser'}

@@ -8,7 +8,6 @@ import CloudJobPanel from '@/components/account/CloudJobPanel';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Download, ImagePlus, Loader2, Search, Sparkles, Video } from 'lucide-react';
 import { toast } from 'sonner';
-import ProviderLogo from '@/components/ProviderLogo';
 import ReferenceStack from '@/components/ReferenceStack';
 import { useFileDrop } from '@/lib/drop/use-file-drop';
 import { requestExamplePrompt, requestPromptSlug } from '@/lib/micro-ai/browser';
@@ -60,6 +59,7 @@ import type { EngineId } from '@/lib/engines/registry';
 import VideoPlayer from '@/components/video/VideoPlayer';
 import JobElapsed from '@/components/JobElapsed';
 import { JobStatusPill } from '@/components/StatusPill';
+import WorkspaceHeader from '@/components/WorkspaceHeader';
 
 interface KieGenerationWorkspaceProps {
   mediaType: MediaType;
@@ -501,38 +501,15 @@ export default function KieGenerationWorkspace({
 
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-3.5 sm:space-y-4">
-      <section className="glass-card p-3.5 md:p-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <button type="button" onClick={onBack} className="btn-secondary shrink-0">
-              ← Back
-            </button>
-            <div className="min-w-0">
-              <div className="eyebrow mb-1 flex items-center gap-1.5">
-                <ProviderLogo provider="kie" size={13} /> Kie.ai
-              </div>
-              <h2 className="display text-lg font-semibold text-[var(--foreground)] sm:text-xl">
-                {title ?? titleFor(mediaType, inputMode)}
-              </h2>
-              {description && (
-                <p className="mt-1 max-w-2xl text-sm text-[var(--foreground-muted)]">{description}</p>
-              )}
-            </div>
-          </div>
-          {/* One call to action per state: while the key is missing the callout
-              below owns it, so the header keeps only the connected-state status
-              button rather than repeating the same ask two rows apart. */}
-          {!needsKey && (
-            <button
-              type="button"
-              onClick={() => onOpenConnections('kie')}
-              className="btn-secondary shrink-0"
-            >
-              Kie.ai key connected
-            </button>
-          )}
-        </div>
-      </section>
+      <WorkspaceHeader
+        provider="kie"
+        label="Kie.ai"
+        title={title ?? titleFor(mediaType, inputMode)}
+        description={description}
+        needsKey={needsKey}
+        onBack={onBack}
+        onOpenConnections={onOpenConnections}
+      />
 
       {engineSelector}
 
