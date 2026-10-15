@@ -6,7 +6,7 @@ import CloudExecutionNotice from '@/components/account/CloudExecutionNotice';
 import CloudJobPanel from '@/components/account/CloudJobPanel';
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ImagePlus, Loader2, Sparkles } from 'lucide-react';
+import { Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import ReferenceStack from '@/components/ReferenceStack';
 import { requestPromptSlug } from '@/lib/micro-ai/browser';
@@ -33,7 +33,6 @@ import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import PromptPanel from '@/components/PromptPanel';
 import SavedPromptsButton from '@/components/SavedPromptsButton';
 import ModelControls, { type ModelControlField } from '@/components/ModelControls';
-import StoredImagePicker from '@/components/StoredImagePicker';
 import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
 import ConnectionGate, { isGated } from '@/components/ConnectionGate';
 import SubmissionError from '@/components/SubmissionError';
@@ -51,6 +50,7 @@ import { useExamplePrompt } from '@/hooks/useExamplePrompt';
 import { ModelNote, ModelPickerCard } from '@/components/ModelPickerCard';
 import { VideoDownloadLink, VideoResultStage } from '@/components/VideoResult';
 import { useClaimSeedFrame, useReferenceIntake } from '@/hooks/useReferenceIntake';
+import { ReferencePicker } from '@/components/ReferencePicker';
 
 interface KieGenerationWorkspaceProps {
   mediaType: MediaType;
@@ -146,7 +146,6 @@ export default function KieGenerationWorkspace({
   // Latest submit, so a queued retry re-runs the button's own path with the
   // prompt and settings on screen now, not the ones from the failed render.
   const submitRef = useRef<() => void>(() => {});
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(true);
   const maxInputImages = variant.maxInputImages ?? 1;
   const matchingModels = models.filter((model) =>
@@ -455,37 +454,15 @@ export default function KieGenerationWorkspace({
                 <h3 className="display text-base font-semibold">Reference image{maxInputImages === 1 ? '' : 's'}</h3>
                 <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">Upload up to {maxInputImages}; files are forwarded to Kie only for this task. Pick a saved clip and its last frame is used.</p>
               </div>
-              <input
-                ref={fileInputRef}
-                type="file"
+              <ReferencePicker
                 accept="image/*,video/*"
                 multiple={maxInputImages > 1}
-                className="hidden"
-                onChange={(event) => {
-                  void addReferences(Array.from(event.target.files ?? []));
-                  event.target.value = '';
-                }}
+                accent="cyan"
+                idleLabel="Drop, upload, or paste an image or video"
+                referenceCount={references.length}
+                referenceLimit={maxInputImages}
+                intake={{ addFiles: addReferences, isReadingFrame, isFetching, isDragging, dropProps }}
               />
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  {...dropProps}
-                  className={`flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed py-3.5 text-sm transition-colors sm:flex-1 ${isDragging ? 'border-[var(--neon-cyan)] bg-[var(--neon-cyan)]/10 text-[var(--neon-cyan)]' : 'border-[var(--neon-cyan)]/30 text-[var(--foreground-muted)] hover:border-[var(--neon-cyan)] hover:bg-[var(--neon-cyan)]/5 hover:text-[var(--neon-cyan)]'}`}
-                >
-                  {isReadingFrame || isFetching ? <Loader2 className="animate-spin" size={28} /> : <ImagePlus size={28} />}
-                  {isReadingFrame
-                    ? 'Reading last frame…'
-                    : isFetching
-                      ? 'Fetching dropped image…'
-                      : isDragging
-                        ? 'Drop to use as a source'
-                        : 'Drop, upload, or paste an image or video'}
-                </button>
-                {references.length < maxInputImages && (
-                  <StoredImagePicker referenceLimit={maxInputImages} />
-                )}
-              </div>
               <ReferenceStack
                 layout="grid"
                 replaceLimit={maxInputImages}

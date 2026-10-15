@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Download, ImagePlus, Loader2, Sparkles, Video } from 'lucide-react';
+import { Download, Loader2, Sparkles, Video } from 'lucide-react';
 import { toast } from 'sonner';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import ConnectionGate, { isGated } from '@/components/ConnectionGate';
@@ -14,7 +14,6 @@ import PromptPanel from '@/components/PromptPanel';
 import SavedPromptsButton from '@/components/SavedPromptsButton';
 import ProviderLogo from '@/components/ProviderLogo';
 import ReferenceStack from '@/components/ReferenceStack';
-import StoredImagePicker from '@/components/StoredImagePicker';
 import SubmissionError from '@/components/SubmissionError';
 import VideoPlayer from '@/components/video/VideoPlayer';
 import { downloadFilenameBase } from '@/lib/download-name';
@@ -35,6 +34,7 @@ import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
 import type { EngineId } from '@/lib/engines/registry';
 import { fileAsDataUrl } from '@/lib/file-data-url';
 import { useClaimSeedFrame, useReferenceIntake } from '@/hooks/useReferenceIntake';
+import { ReferencePicker } from '@/components/ReferencePicker';
 
 interface GeminiVideoWorkspaceProps {
   inputMode: 'text' | 'image';
@@ -143,7 +143,6 @@ export default function GeminiVideoWorkspace({
   const [startedAt, setStartedAt] = useState<number | undefined>(undefined);
   const [clips, setClips] = useState<GeminiClip[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(true);
   const generateRef = useRef<() => void>(() => {});
   const runTokenRef = useRef(0);
@@ -388,37 +387,16 @@ export default function GeminiVideoWorkspace({
               Upload one still; files are forwarded to Gemini only for this task. Pick a saved clip and its last frame is used.
             </p>
           </div>
-          <input
-            ref={fileInputRef}
-            type="file"
+          <ReferencePicker
             accept="image/*,video/*"
-            aria-label="Reference image file"
-            className="hidden"
-            onChange={(event) => {
-              void addReferences(Array.from(event.target.files ?? []));
-              event.target.value = '';
-            }}
+            multiple={false}
+            inputLabel="Reference image file"
+            accent="purple"
+            idleLabel="Drop, upload, or paste an image or video"
+            referenceCount={references.length}
+            referenceLimit={MAX_INPUT_IMAGES}
+            intake={{ addFiles: addReferences, isReadingFrame, isFetching, isDragging, dropProps }}
           />
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              {...dropProps}
-              className={`flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed py-3.5 text-sm transition-colors sm:flex-1 ${isDragging ? 'border-[var(--neon-purple)] bg-[var(--neon-purple)]/10 text-[var(--neon-purple)]' : 'border-[var(--neon-purple)]/30 text-[var(--foreground-muted)] hover:border-[var(--neon-purple)] hover:bg-[var(--neon-purple)]/5 hover:text-[var(--neon-purple)]'}`}
-            >
-              {isReadingFrame || isFetching ? <Loader2 className="animate-spin" size={28} /> : <ImagePlus size={28} />}
-              {isReadingFrame
-                ? 'Reading last frame…'
-                : isFetching
-                  ? 'Fetching dropped image…'
-                  : isDragging
-                    ? 'Drop to use as a source'
-                    : 'Drop, upload, or paste an image or video'}
-            </button>
-            {references.length < MAX_INPUT_IMAGES && (
-              <StoredImagePicker referenceLimit={MAX_INPUT_IMAGES} />
-            )}
-          </div>
           <ReferenceStack
             layout="grid"
             replaceLimit={MAX_INPUT_IMAGES}

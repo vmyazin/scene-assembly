@@ -3,7 +3,7 @@
 // components/ProviderVideoWorkspace.tsx
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpDown, ImagePlus, Loader2, Sparkles } from 'lucide-react';
+import { Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCloudWorkspace } from '@/lib/account/useCloudWorkspace';
 import CloudExecutionNotice from '@/components/account/CloudExecutionNotice';
@@ -30,7 +30,6 @@ import { classifyFailure, refusalPresentation } from '@/lib/moderation/classify'
 import { inspectPrompt } from '@/lib/moderation/floors';
 import { useRelaxedFilter } from '@/lib/moderation/use-relaxed-filter';
 import { AUTO_RETRY_DELAY_SECONDS, isRetryableFailure, useAutoRetry } from '@/lib/providers/auto-retry';
-import StoredImagePicker from '@/components/StoredImagePicker';
 import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
 import ReferenceStack from '@/components/ReferenceStack';
 import { candidatesFromSizes, useAutoAspect } from '@/lib/draft/aspect-match';
@@ -67,6 +66,7 @@ import { useExamplePrompt } from '@/hooks/useExamplePrompt';
 import { ModelNote, ModelPickerCard } from '@/components/ModelPickerCard';
 import { VideoDownloadLink, VideoResultStage } from '@/components/VideoResult';
 import { useClaimSeedFrame, useReferenceIntake } from '@/hooks/useReferenceIntake';
+import { ReferencePicker, SwapFramesButton } from '@/components/ReferencePicker';
 
 /**
  * Video for Runware, Atlas Cloud, and CometAPI, laid out the way the Kie and
@@ -342,7 +342,6 @@ export default function ProviderVideoWorkspace({
   // prompt and settings on screen now, not the ones from the failed render.
   const submitRef = useRef<() => void>(() => {});
   const [isDownloading, setIsDownloading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(true);
   const isFrames = inputMode === 'frames';
   const describeSources = useMemo(() => {
@@ -863,44 +862,16 @@ export default function ProviderVideoWorkspace({
                       : `Upload up to ${maxInputImages}; files are forwarded to ${label} only for this task. Pick a saved clip and its last frame is used.`}
                 </p>
               </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept={imageReferencesOnly ? 'image/*' : 'image/*,video/*'}
-                multiple={maxInputImages > 1}
-                className="hidden"
-                onChange={(event) => {
-                  void addReferences(Array.from(event.target.files ?? []));
-                  event.target.value = '';
-                }}
-              />
               {!isPickerFull && (
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    {...dropProps}
-                    className={`flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed py-3.5 text-sm transition-colors sm:flex-1 ${isDragging ? 'border-[var(--neon-purple)] bg-[var(--neon-purple)]/10 text-[var(--neon-purple)]' : 'border-[var(--neon-purple)]/30 text-[var(--foreground-muted)] hover:border-[var(--neon-purple)] hover:bg-[var(--neon-purple)]/5 hover:text-[var(--neon-purple)]'}`}
-                  >
-                    {isReadingFrame || isFetching ? (
-                      <Loader2 className="animate-spin" size={28} />
-                    ) : (
-                      <ImagePlus size={28} />
-                    )}
-                    {isReadingFrame
-                      ? 'Reading last frame…'
-                      : isFetching
-                        ? 'Fetching dropped image…'
-                        : isDragging
-                          ? 'Drop to use as a source'
-                          : imageReferencesOnly
-                            ? 'Drop, upload, or paste reference images'
-                            : 'Drop, upload, or paste an image or video'}
-                  </button>
-                  {references.length < maxInputImages && (
-                    <StoredImagePicker referenceLimit={maxInputImages} />
-                  )}
-                </div>
+                <ReferencePicker
+                  accept={imageReferencesOnly ? 'image/*' : 'image/*,video/*'}
+                  multiple={maxInputImages > 1}
+                  accent="purple"
+                  idleLabel={imageReferencesOnly ? 'Drop, upload, or paste reference images' : 'Drop, upload, or paste an image or video'}
+                  referenceCount={references.length}
+                  referenceLimit={maxInputImages}
+                  intake={{ addFiles: addReferences, isReadingFrame, isFetching, isDragging, dropProps }}
+                />
               )}
               <ReferenceStack
                 layout="grid"
@@ -924,18 +895,7 @@ export default function ProviderVideoWorkspace({
                 }))}
                 onRemove={removeReference}
               />
-              {/* Which image opens the clip and which closes it is the whole of
-                  this mode, and picking them in the wrong order is a two-file
-                  re-upload without this. */}
-              {isFrames && references.length === 2 && (
-                <button
-                  type="button"
-                  onClick={() => useDraftStore.getState().reorderReference(0, 1)}
-                  className="btn-secondary w-full"
-                >
-                  <ArrowUpDown size={15} /> Swap first and last
-                </button>
-              )}
+              {isFrames && references.length === 2 && <SwapFramesButton />}
             </section>
           )}
 

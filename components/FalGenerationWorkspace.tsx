@@ -6,14 +6,13 @@ import CloudExecutionNotice from '@/components/account/CloudExecutionNotice';
 import CloudJobPanel from '@/components/account/CloudJobPanel';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpDown, Download, ImagePlus, Loader2, Sparkles, Video } from 'lucide-react';
+import { Download, Loader2, Sparkles, Video } from 'lucide-react';
 
 import LastFrameActions from '@/components/LastFrameActions';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import PromptPanel from '@/components/PromptPanel';
 import SavedPromptsButton from '@/components/SavedPromptsButton';
 import ModelControls from '@/components/ModelControls';
-import StoredImagePicker from '@/components/StoredImagePicker';
 import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
 import ConnectionGate, { isGated } from '@/components/ConnectionGate';
 import SubmissionError from '@/components/SubmissionError';
@@ -53,6 +52,7 @@ import { GenExampleButton, PromptHeader } from '@/components/PromptHeader';
 import { useExamplePrompt } from '@/hooks/useExamplePrompt';
 import { ModelNote, ModelPickerCard } from '@/components/ModelPickerCard';
 import { useClaimSeedFrame, useReferenceIntake } from '@/hooks/useReferenceIntake';
+import { ReferencePicker, SwapFramesButton } from '@/components/ReferencePicker';
 
 interface FalGenerationWorkspaceProps {
   inputMode: FalInputMode;
@@ -323,7 +323,6 @@ function FalGenerationWorkspaceSession({
   const submitRef = useRef<() => void>(() => {});
   const [cancellingIds, setCancellingIds] = useState<Set<string>>(() => new Set());
   const [cancelErrors, setCancelErrors] = useState<Record<string, string>>({});
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const submissionRef = useRef<SubmissionOperation | null>(null);
   const cancellingRef = useRef(new Set<string>());
   const mountedRef = useRef(true);
@@ -725,41 +724,18 @@ function FalGenerationWorkspaceSession({
                     : 'This video flow accepts exactly one image. Pick a saved clip instead and its last frame is used.'}
                 </p>
               </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple={isFramesMode || isEdit}
-                accept={isEdit ? 'image/png,image/jpeg,image/webp,image/avif' : 'image/png,image/jpeg,image/webp,image/avif,video/*'}
-                aria-label={isEdit ? 'Reference image file' : isFramesMode ? 'Frame image file' : 'Reference image file'}
-                className="hidden"
-                onChange={(event) => {
-                  void addReferences(Array.from(event.target.files ?? []));
-                  event.target.value = '';
-                }}
-              />
               {!isPickerFull && (
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    {...dropProps}
-                    className={`flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed py-3.5 text-sm transition-colors sm:flex-1 ${isDragging ? 'border-[var(--neon-cyan)] bg-[var(--neon-cyan)]/10 text-[var(--neon-cyan)]' : 'border-[var(--neon-cyan)]/30 text-[var(--foreground-muted)]'}`}
-                  >
-                    {isReadingFrame || isFetching ? <Loader2 className="animate-spin" size={28} /> : <ImagePlus size={28} />}
-                    {isReadingFrame
-                      ? 'Reading last frame…'
-                      : isFetching
-                        ? 'Fetching dropped image…'
-                        : isDragging
-                          ? (isEdit ? 'Drop to add a reference' : 'Drop to use as a source')
-                          : isEdit
-                            ? 'Choose an image'
-                            : pickerLabel}
-                  </button>
-                  {references.length < maxInputImages && (
-                    <StoredImagePicker referenceLimit={maxInputImages} />
-                  )}
-                </div>
+                <ReferencePicker
+                  accept={isEdit ? 'image/png,image/jpeg,image/webp,image/avif' : 'image/png,image/jpeg,image/webp,image/avif,video/*'}
+                  multiple={isFramesMode || isEdit}
+                  inputLabel={isFramesMode ? 'Frame image file' : 'Reference image file'}
+                  accent="cyan"
+                  idleLabel={isEdit ? 'Choose an image' : pickerLabel}
+                  draggingLabel={isEdit ? 'Drop to add a reference' : 'Drop to use as a source'}
+                  referenceCount={references.length}
+                  referenceLimit={maxInputImages}
+                  intake={{ addFiles: addReferences, isReadingFrame, isFetching, isDragging, dropProps }}
+                />
               )}
               <ReferenceStack
                 layout="stack"
@@ -776,15 +752,7 @@ function FalGenerationWorkspaceSession({
                 }))}
                 onRemove={removeReference}
               />
-              {isFramesMode && references.length === 2 && (
-                <button
-                  type="button"
-                  onClick={() => useDraftStore.getState().reorderReference(0, 1)}
-                  className="btn-secondary w-full"
-                >
-                  <ArrowUpDown size={15} /> Swap first and last
-                </button>
-              )}
+              {isFramesMode && references.length === 2 && <SwapFramesButton />}
             </section>
           )}
 
