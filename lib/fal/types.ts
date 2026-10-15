@@ -43,6 +43,8 @@ export interface FalModelVariant {
    * the Worker use for Runware and Comet.
    */
   edit?: VideoEditCapability;
+  /** Vendor prompt ceiling. The queue route may be stricter still. */
+  maxPromptLength?: number;
   fields: FalFieldDefinition[];
 }
 

@@ -173,6 +173,7 @@ describe('the shared table is the one the request uses', () => {
     // Nano Banana 2 publishes no pixel pair for a tier, so the control shows
     // none rather than inventing one to put beside the ratio.
     expect(imageDimensions('atlas', 'google/nano-banana-2/text-to-image-developer', '9:16')).toBeNull();
+    expect(imageDimensions('atlas', 'google/nano-banana-2.1-developer/text-to-image', '9:16')).toBeNull();
     expect(imageDimensions('atlas', 'google/nano-banana-2-lite/edit-developer', '1:1')).toBeNull();
   });
 

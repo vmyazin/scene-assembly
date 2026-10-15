@@ -1,3 +1,4 @@
+// lib/fal/browser.ts
 import type {
   FalInputMode,
   FalMediaType,
@@ -5,6 +6,7 @@ import type {
   FalTaskState,
   FalValue,
 } from './types';
+import { FAL_IMAGE_MODEL } from '@/lib/fal/catalog';
 import { RouteError } from '@/lib/providers/route-error';
 import { FAL_JOB_TIMEOUT_MS, isFalJobTerminal, nextFalPollDelay } from './queue';
 
@@ -56,6 +58,8 @@ type FalImageRunnerArgs = {
   prompt: string;
   dataUrls: string[];
   values: Record<string, FalValue>;
+  /** Catalog id. Omitted runs use the default image model. */
+  modelId?: string;
   signal?: AbortSignal;
 };
 
@@ -445,7 +449,7 @@ export async function runFalImage(
     const inputMode: FalInputMode = uploadUrls.length > 0 ? 'image' : 'text';
     const selection = {
       apiKey: args.apiKey,
-      modelId: 'nano-banana-2',
+      modelId: args.modelId ?? FAL_IMAGE_MODEL.id,
       mediaType: 'image' as const,
       inputMode,
     };

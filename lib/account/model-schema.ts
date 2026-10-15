@@ -12,7 +12,7 @@
  */
 import type { CloudJobRequest, CloudProvider } from './contracts';
 import { SINGLE_IMAGE_MODELS, SINGLE_IMAGE_MODEL_LABELS } from './models';
-import { FAL_IMAGE_MODEL, FAL_VIDEO_MODELS } from '../fal/catalog';
+import { FAL_IMAGE_MODELS, FAL_VIDEO_MODELS } from '../fal/catalog';
 import { KIE_MODELS } from '../kie/catalog';
 import { findModel, PROVIDER_MODELS, resolveVideoInput } from '../providers/catalog';
 import { isSeedanceDraftSize } from '../providers/seedance-draft';
@@ -92,7 +92,7 @@ function fromDefinition(field: {
 }
 
 function falModels(): ModelDescriptor[] {
-  return [FAL_IMAGE_MODEL, ...FAL_VIDEO_MODELS].map(model => ({
+  return [...FAL_IMAGE_MODELS, ...FAL_VIDEO_MODELS].map(model => ({
     provider: 'fal', modelId: model.id, label: model.label, mediaType: model.mediaType, note: model.description,
     modes: model.variants.map(variant => {
       const edit = variant.inputMode === 'edit' ? variant.edit : undefined;

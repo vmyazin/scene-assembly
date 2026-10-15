@@ -73,6 +73,37 @@ describe('atlas cloud', () => {
       return JSON.parse(fetchMock.mock.calls[0][1].body as string);
     }
 
+    it('sends Nano Banana 2.1 Developer references as reference_images', async () => {
+      const body = await submitImage({
+        apiKey: 'at-key',
+        model: 'google/nano-banana-2.1-developer/edit',
+        prompt: 'a lighthouse',
+        aspectRatio: '16:9',
+        resolution: '2K',
+        images: ['https://cdn.atlas/ref.png'],
+      });
+
+      expect(body).toMatchObject({
+        model: 'google/nano-banana-2.1-developer/edit',
+        prompt: 'a lighthouse',
+        aspect_ratio: '16:9',
+        resolution: '2k',
+        reference_images: ['https://cdn.atlas/ref.png'],
+      });
+      expect(body.images).toBeUndefined();
+      expect(body.size).toBeUndefined();
+
+      const text = await submitImage({
+        apiKey: 'at-key',
+        model: 'google/nano-banana-2.1-developer/text-to-image',
+        prompt: 'a lighthouse',
+        resolution: '4K',
+      });
+      expect(text.resolution).toBe('4k');
+      expect(text.images).toBeUndefined();
+      expect(text.reference_images).toBeUndefined();
+    });
+
     it('sends Nano Banana 2 a ratio and a lowercase tier, and no size at all', async () => {
       const body = await submitImage({
         apiKey: 'at-key',

@@ -60,7 +60,7 @@ describe('account execution and isolation',()=>{
     fireEvent.change(screen.getByRole('textbox',{name:'Prompt'}),{target:{value:'Account image request'}});
     fireEvent.click(screen.getByRole('button',{name:/Generate Image/i}));
     await waitFor(()=>expect(submit).toHaveBeenCalledTimes(1));
-    expect(submit.mock.calls[0][1]).toMatchObject({provider:'gemini',modelId:'gemini-3-pro-image-preview',prompt:'Account image request',mediaType:'image'});
+    expect(submit.mock.calls[0][1]).toMatchObject({provider:'gemini',modelId:'gemini-nano-banana-2.1',prompt:'Account image request',mediaType:'image'});
     expect(submit.mock.calls[0][1]).not.toHaveProperty('apiKey');
   });
   it('says what the press will cost, at the settings on screen',async()=>{

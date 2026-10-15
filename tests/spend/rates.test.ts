@@ -1,7 +1,7 @@
 // tests/spend/rates.test.ts
 import { describe, expect, it } from 'vitest';
 
-import { FAL_IMAGE_MODEL, FAL_VIDEO_MODELS } from '@/lib/fal/catalog';
+import { FAL_IMAGE_MODELS, FAL_VIDEO_MODELS } from '@/lib/fal/catalog';
 import { GEMINI_IMAGE_MODELS } from '@/lib/engines/gemini-catalog';
 import {
   FAL_RATES,
@@ -16,6 +16,7 @@ import {
 describe('Gemini image rates', () => {
   const PRO = 'gemini-3-pro-image-preview';
   const FLASH = 'gemini-3.1-flash-image';
+  const BANANA = 'gemini-nano-banana-2.1';
   const LITE = 'gemini-3.1-flash-lite-image';
 
   it('prices output tokens at each model\u2019s published rate', () => {
@@ -23,6 +24,9 @@ describe('Gemini image rates', () => {
     expect(geminiTokenCost(PRO, 0, 2000)).toBeCloseTo(0.24, 6);
     expect(geminiTokenCost(FLASH, 0, 1120)).toBeCloseTo(0.0672, 6);
     expect(geminiTokenCost(LITE, 0, 1120)).toBeCloseTo(0.0336, 6);
+    expect(geminiTokenCost(BANANA, 0, 1120)).toBeCloseTo(0.0336, 6);
+    expect(geminiTokenCost(BANANA, 0, 1680)).toBeCloseTo(0.0504, 6);
+    expect(geminiTokenCost(BANANA, 0, 3780)).toBeCloseTo(0.1134, 6);
   });
 
   it('adds input tokens at the input rate', () => {
@@ -39,6 +43,9 @@ describe('Gemini image rates', () => {
     expect(geminiResolutionCost(FLASH, '2K', 0)).toBeCloseTo(0.101, 3);
     expect(geminiResolutionCost(FLASH, '4K', 0)).toBeCloseTo(0.151, 3);
     expect(geminiResolutionCost(LITE, '1K', 0)).toBeCloseTo(0.0336, 4);
+    expect(geminiResolutionCost(BANANA, '1K', 0)).toBeCloseTo(0.0336, 4);
+    expect(geminiResolutionCost(BANANA, '2K', 0)).toBeCloseTo(0.0504, 4);
+    expect(geminiResolutionCost(BANANA, '4K', 0)).toBeCloseTo(0.1134, 4);
   });
 
   it('adds each reference image, and answers Pro for an unknown model', () => {
@@ -55,6 +62,8 @@ describe('Gemini image rates', () => {
   it('covers every catalogued model, and labels the picker rows', () => {
     expect(GEMINI_IMAGE_MODELS.filter((model) => !GEMINI_IMAGE_RATES[model.id])).toEqual([]);
     // Three places, the same rounding every fal row uses: $0.0336 reads $0.034.
+    expect(geminiRateLabel(BANANA)).toBe('$0.034\u20130.113 / image');
+    expect(geminiRateLabel(BANANA, '4K')).toBe('$0.113 / image');
     expect(geminiRateLabel(LITE)).toBe('$0.034 / image');
     expect(geminiRateLabel(FLASH)).toBe('$0.067\u20130.151 / image');
     expect(geminiRateLabel(FLASH, '4K')).toBe('$0.151 / image');
@@ -72,7 +81,7 @@ describe('Gemini image rates', () => {
 
 describe('fal published rates', () => {
   it('covers every endpoint the fal catalog can submit to', () => {
-    const endpoints = [FAL_IMAGE_MODEL, ...FAL_VIDEO_MODELS].flatMap((model) =>
+    const endpoints = [...FAL_IMAGE_MODELS, ...FAL_VIDEO_MODELS].flatMap((model) =>
       model.variants.map((variant) => variant.endpointId)
     );
     expect(endpoints.filter((endpointId) => !FAL_RATES[endpointId])).toEqual([]);
@@ -88,6 +97,18 @@ describe('fal published rates', () => {
     expect(
       falPublishedCost('fal-ai/nano-banana-2', { resolution: '2K', webSearch: true })?.costUsd
     ).toBeCloseTo(0.135, 6);
+    expect(falPublishedCost('google/nano-banana-2.1', { resolution: '1K' })?.costUsd).toBeCloseTo(0.04, 6);
+    expect(falPublishedCost('google/nano-banana-2.1', { resolution: '2K' })?.costUsd).toBeCloseTo(0.059, 6);
+    expect(falPublishedCost('google/nano-banana-2.1/edit', { resolution: '4K' })?.costUsd).toBeCloseTo(0.134, 6);
+    expect(falPublishedCost('google/nano-banana-2.1', { resolution: '1K', webSearch: true })?.costUsd).toBeCloseTo(0.04, 6);
+  });
+
+  it('prices MiniMax H3 Max Turbo at the regular per-second rates', () => {
+    const endpoint = 'minimax/h3-max-turbo/image-to-video';
+    expect(falPublishedCost(endpoint, { resolution: '480P', durationSeconds: 1 })?.costUsd).toBeCloseTo(0.025, 6);
+    expect(falPublishedCost(endpoint, { resolution: '768P', durationSeconds: 5 })?.costUsd).toBeCloseTo(0.2, 6);
+    expect(falPublishedCost(endpoint, { resolution: '1080P', durationSeconds: 1 })?.costUsd).toBeCloseTo(0.08, 6);
+    expect(falPublishedCost(endpoint, { resolution: '720p', durationSeconds: 5 })).toBeNull();
   });
 
   it('prices Veo per second, with audio and 4K charged more', () => {

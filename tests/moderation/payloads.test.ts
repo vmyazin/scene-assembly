@@ -39,6 +39,22 @@ describe('provider payloads', () => {
         values: {},
       })
     );
+
+    const banana = fal('nano-banana-2.1', 'image', 'text');
+    const bananaStandard = buildFalInput(banana, { prompt, uploadUrls: [], values: {} });
+    expect(bananaStandard).not.toHaveProperty('safety_tolerance');
+    expect(buildFalInput(banana, { prompt, uploadUrls: [], values: { moderation: 'relaxed' } })).toEqual({
+      ...bananaStandard,
+      safety_tolerance: '6',
+    });
+    const bananaEdit = fal('nano-banana-2.1', 'image', 'image');
+    expect(
+      buildFalInput(bananaEdit, {
+        prompt,
+        uploadUrls: ['https://files.example/ref.png'],
+        values: { moderation: 'relaxed' },
+      })
+    ).not.toHaveProperty('safety_tolerance');
   });
 
   it('sets safety_tolerance 6 on fal Veo 3.1 and Fast, and the Wan checker only on Relaxed', () => {

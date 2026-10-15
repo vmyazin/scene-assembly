@@ -7,10 +7,11 @@
 
 /**
  * https://ai.google.dev/gemini-api/docs/pricing and
- * https://ai.google.dev/gemini-api/docs/image-generation — the three Gemini
- * image models, read 2026-09-09. One block per model, keyed by the id the API
- * takes, because the three differ by a factor of four at the same resolution
- * and a ledger that priced them alike would be quietly wrong.
+ * https://ai.google.dev/gemini-api/docs/image-generation — the Gemini image
+ * models, read 2026-10-15 for Nano Banana 2.1 and 2026-09-09 for the rest.
+ * One block per model, keyed by the id the API takes, because they differ by
+ * a factor of four at the same resolution and a ledger that priced them alike
+ * would be quietly wrong.
  *
  * The token counts are Google's own per-resolution figures, so the published
  * per-image prices fall out of the arithmetic rather than being pasted beside
@@ -36,6 +37,16 @@ export const GEMINI_IMAGE_RATES: Record<string, GeminiImageRate> = {
     inputUsdPerMillionTokens: 0.5,
     outputUsdPerMillionTokens: 60,
     outputTokensByResolution: { '1K': 1120, '2K': 1680, '4K': 2520 },
+  },
+  // https://ai.google.dev/gemini-api/docs/pricing — gemini-nano-banana-2.1,
+  // read 2026-10-15. Image output is $30/M tokens: 1120 at 1K ($0.0336),
+  // 1680 at 2K ($0.0504), 3780 at 4K ($0.113). The image-generation size table
+  // still lists 2520 tokens at 4K, which would be $0.076 and contradicts the
+  // pricing page's own $0.113 figure, so the pricing page wins.
+  'gemini-nano-banana-2.1': {
+    inputUsdPerMillionTokens: 1.5,
+    outputUsdPerMillionTokens: 30,
+    outputTokensByResolution: { '1K': 1120, '2K': 1680, '4K': 3780 },
   },
   'gemini-3.1-flash-lite-image': {
     inputUsdPerMillionTokens: 0.25,
@@ -170,6 +181,14 @@ const NANO_BANANA_2_RATE: FalRate = {
   webSearchUsd: 0.015,
 };
 
+/** $0.040 / $0.059 / $0.134. Multipliers keep falPublishedCost exact at those three. */
+const NANO_BANANA_21_RATE: FalRate = {
+  unit: 'image',
+  usd: 0.04,
+  resolutionMultiplier: { '1K': 1, '2K': 1.475, '4K': 3.35 },
+  webSearchUsd: 0,
+};
+
 const perSecond = (
   usdPerSecond: Record<string, { audioOff: number; audioOn: number }>
 ): FalRate => ({ unit: 'second', usdPerSecond });
@@ -210,6 +229,12 @@ const klingRate = (audioOff: number, audioOn: number): FalRate =>
 export const FAL_RATES: Record<string, FalRate> = {
   'fal-ai/nano-banana-2': NANO_BANANA_2_RATE,
   'fal-ai/nano-banana-2/edit': NANO_BANANA_2_RATE,
+  // https://fal.ai/models/google/nano-banana-2.1 — token rates, read 2026-10-15.
+  // Canonical short-prompt text-to-image figures: $0.040 at 1K, $0.059 at 2K,
+  // $0.134 at 4K. Web search has no separate fee. Edits add input-image tokens
+  // on top of this output price; the edit endpoint uses the same baseline.
+  'google/nano-banana-2.1': NANO_BANANA_21_RATE,
+  'google/nano-banana-2.1/edit': NANO_BANANA_21_RATE,
 
   'fal-ai/veo3.1': veoRate([0.2, 0.4], [0.4, 0.6]),
   'fal-ai/veo3.1/image-to-video': veoRate([0.2, 0.4], [0.4, 0.6]),
@@ -243,6 +268,11 @@ export const FAL_RATES: Record<string, FalRate> = {
 
   'fal-ai/wan/v2.7/text-to-video': seedanceRate({ '720p': 0.1, '1080p': 0.15 }),
   'fal-ai/wan/v2.7/image-to-video': seedanceRate({ '720p': 0.1, '1080p': 0.15 }),
+
+  // https://fal.ai/models/minimax/h3-max-turbo/image-to-video — read 2026-10-15.
+  // Promo rates ended that day. Regular prices: $0.025/s at 480P, $0.04/s at
+  // 768P, $0.08/s at 1080P. One endpoint covers text, image and frames.
+  'minimax/h3-max-turbo/image-to-video': seedanceRate({ '480P': 0.025, '768P': 0.04, '1080P': 0.08 }),
 };
 
 /** The run controls that move a fal price, read from a job's control values. */

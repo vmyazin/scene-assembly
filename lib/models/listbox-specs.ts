@@ -315,6 +315,19 @@ function fieldCells(specs: FieldSpecs): SpecCell[] {
   ];
 }
 
+/** fal image rows: From · Refs · Edit, the same questions the aggregator image rack asks. */
+export function falImageSpecs(model: FalModelDefinition): SpecCell[] {
+  const textRoute = model.variants.find((variant) => variant.inputMode === 'text');
+  const editRoute = model.variants.find((variant) => variant.inputMode === 'image');
+  const rate = textRoute ? falRateLabel(textRoute.endpointId) : null;
+  const from = rate ? rate.replace(/^(\$[\d.]+)[–-]\$?[\d.]+/, '$1').replace(/\s*\/\s*/g, '/') : undefined;
+  return [
+    from ? text(from) : DASH,
+    editRoute?.maxInputImages === undefined ? DASH : text(String(editRoute.maxInputImages)),
+    { kind: 'mark', on: Boolean(editRoute), label: 'Takes a reference image' },
+  ];
+}
+
 /** fal video rows: Max · Up to · Shapes · From, for the variant this mode submits to. */
 export function falVideoSpecs(model: FalModelDefinition, inputMode: FalInputMode): SpecCell[] {
   const variant = resolveFalVariant(model.id, 'video', inputMode);

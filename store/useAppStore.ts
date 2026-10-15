@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type { EngineId } from '@/lib/engines/registry';
 import { DEFAULT_GEMINI_IMAGE_MODEL } from '@/lib/engines/gemini-catalog';
+import { FAL_IMAGE_MODEL } from '@/lib/fal/catalog';
 import { DEFAULT_GEMINI_VIDEO_MODEL } from '@/lib/engines/gemini-video-catalog';
 import type { ImageFormatPreference } from '@/lib/image/policy';
 import { DEFAULT_MODELS } from '@/lib/providers/catalog';
@@ -56,6 +57,8 @@ interface AppState {
   falApiKey: string;
   videoEngine: VideoEngineId;
   falVideoModel: string;
+  /** Which fal image model runs (persisted). Nano Banana 2.1 is the default. */
+  falImageModel: string;
   /**
    * Aggregator providers (Runware, Atlas Cloud, CometAPI). One key each, plus
    * the model chosen per media kind — their catalogs are large enough that the
@@ -125,6 +128,7 @@ interface AppState {
   setFalApiKey: (key: string) => void;
   setVideoEngine: (engine: VideoEngineId) => void;
   setFalVideoModel: (modelId: string) => void;
+  setFalImageModel: (modelId: string) => void;
   setProviderApiKey: (provider: ProviderId, key: string) => void;
   setProviderModel: (provider: ProviderId, kind: 'image' | 'video', modelId: string) => void;
   setImageFormat: (preference: ImageFormatPreference) => void;
@@ -187,6 +191,7 @@ export const useAppStore = create<AppState>()(
       falApiKey: '',
       videoEngine: 'kie',
       falVideoModel: 'veo-3-1-fast',
+      falImageModel: FAL_IMAGE_MODEL.id,
       runwareApiKey: '',
       runwareImageModel: DEFAULT_MODELS.runware.image,
       runwareVideoModel: DEFAULT_MODELS.runware.video,
@@ -218,6 +223,7 @@ export const useAppStore = create<AppState>()(
       setFalApiKey: (key) => set({ falApiKey: key }),
       setVideoEngine: (engine) => set({ videoEngine: engine }),
       setFalVideoModel: (modelId) => set({ falVideoModel: modelId }),
+      setFalImageModel: (modelId) => set({ falImageModel: modelId }),
       setProviderApiKey: (provider, key) => set({ [KEY_FIELDS[provider]]: key } as Partial<AppState>),
       setProviderModel: (provider, kind, modelId) =>
         set({ [MODEL_FIELDS[provider][kind]]: modelId } as Partial<AppState>),
@@ -303,6 +309,7 @@ export const useAppStore = create<AppState>()(
         falApiKey: s.falApiKey,
         videoEngine: s.videoEngine,
         falVideoModel: s.falVideoModel,
+        falImageModel: s.falImageModel,
         runwareApiKey: s.runwareApiKey,
         runwareImageModel: s.runwareImageModel,
         runwareVideoModel: s.runwareVideoModel,
