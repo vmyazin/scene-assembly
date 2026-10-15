@@ -29,35 +29,21 @@ import { trackGenerationResult, trackGenerationSubmitted, trackQueuedTerminal } 
 import { classifyFailure, refusalPresentation } from '@/lib/moderation/classify';
 import { inspectPrompt } from '@/lib/moderation/floors';
 import { useRelaxedFilter } from '@/lib/moderation/use-relaxed-filter';
-import {
-  AUTO_RETRY_DELAY_SECONDS,
-  isRetryableFailure,
-  useAutoRetry,
-} from '@/lib/providers/auto-retry';
+import { AUTO_RETRY_DELAY_SECONDS, isRetryableFailure, useAutoRetry } from '@/lib/providers/auto-retry';
 import StoredImagePicker from '@/components/StoredImagePicker';
 import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
 import ReferenceStack from '@/components/ReferenceStack';
 import { candidatesFromSizes, useAutoAspect } from '@/lib/draft/aspect-match';
-import {
-  APPROXIMATE_LEGEND,
-  hasApproximateSize,
-  sizeDimensions,
-  withDimensions,
-} from '@/lib/providers/output-size';
+import { APPROXIMATE_LEGEND, hasApproximateSize, sizeDimensions, withDimensions } from '@/lib/providers/output-size';
 import { resolveCatalogRate } from '@/lib/spend/resolve';
 import { carryOverValues } from '@/lib/draft/carry-over';
-import { useFileDrop } from '@/lib/drop/use-file-drop';
 import { recordFinishedJob } from '@/lib/gallery/record-job';
 import FinalizeDraftButton from '@/components/FinalizeDraftButton';
 import { runGuestFinalize } from '@/lib/providers/guest-finalize';
 import { isSeedanceDraftSize, seedanceDraftSeconds, seedanceDraftSizeLabel } from '@/lib/providers/seedance-draft';
 import { playGenerationChime } from '@/lib/notify/chime';
 import { captureProviderJob } from '@/lib/spend/capture';
-import {
-  downloadRemoteMedia,
-  extensionForMedia,
-  isDownloadableMediaUrl,
-} from '@/lib/media-download';
+import { downloadRemoteMedia, extensionForMedia, isDownloadableMediaUrl } from '@/lib/media-download';
 import { downloadFilenameBase } from '@/lib/download-name';
 import { requestPromptSlug } from '@/lib/micro-ai/browser';
 import { getProviderVideoStatus, pollDelayMs, releaseRunwareMedia, submitProviderVideo } from '@/lib/providers/browser';
@@ -68,14 +54,11 @@ import { PROVIDER_VIDEO_COLUMNS, providerVideoSpecs } from '@/lib/models/listbox
 import { frameSlotLabel } from '@/lib/providers/frames';
 import type { ProviderId, ProviderMode, ProviderModel } from '@/lib/providers/types';
 import type { EngineId } from '@/lib/engines/registry';
-import { FRAME_EXTRACTION_ERROR, isVideoFile, lastFrameAsImageFile } from '@/lib/video-frame';
+import { isVideoFile } from '@/lib/video-frame';
 import { useAppStore } from '@/store/useAppStore';
-import { prepareReferences } from '@/lib/draft/ingest';
-import { keepUploadedImages } from '@/lib/gallery/keep-upload';
 import { useDraftStore } from '@/store/useDraftStore';
 import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
 import { useProviderJobsStore, type ProviderJob } from '@/store/useProviderJobsStore';
-import { useSeedFrameStore } from '@/store/useSeedFrameStore';
 import { fileAsDataUrl } from '@/lib/file-data-url';
 import { JobStatusPill } from '@/components/StatusPill';
 import WorkspaceHeader from '@/components/WorkspaceHeader';
@@ -83,6 +66,7 @@ import { GenExampleButton, PromptHeader } from '@/components/PromptHeader';
 import { useExamplePrompt } from '@/hooks/useExamplePrompt';
 import { ModelNote, ModelPickerCard } from '@/components/ModelPickerCard';
 import { VideoDownloadLink, VideoResultStage } from '@/components/VideoResult';
+import { useClaimSeedFrame, useReferenceIntake } from '@/hooks/useReferenceIntake';
 
 /**
  * Video for Runware, Atlas Cloud, and CometAPI, laid out the way the Kie and
@@ -229,7 +213,6 @@ export default function ProviderVideoWorkspace({
 }: ProviderVideoWorkspaceProps) {
   const cloudWorkspace = useCloudWorkspace(provider);
   const geminiApiKey = useAppStore((state) => state.apiKey);
-  const imageFormat = useAppStore((state) => state.imageFormat);
   const runwareApiKey = useAppStore((state) => state.runwareApiKey);
   const atlasApiKey = useAppStore((state) => state.atlasApiKey);
   const piapiApiKey = useAppStore((state) => state.piapiApiKey);
@@ -359,10 +342,7 @@ export default function ProviderVideoWorkspace({
   // prompt and settings on screen now, not the ones from the failed render.
   const submitRef = useRef<() => void>(() => {});
   const [isDownloading, setIsDownloading] = useState(false);
-  const [isReadingFrame, setIsReadingFrame] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // Latest addReferences, so the paste listener attaches once instead of per render.
-  const addReferencesRef = useRef<(files: File[]) => Promise<void>>(async () => {});
   const mountedRef = useRef(true);
   const isFrames = inputMode === 'frames';
   const describeSources = useMemo(() => {
@@ -408,22 +388,6 @@ export default function ProviderVideoWorkspace({
   );
   const resultUrl = latestJob?.state === 'success' ? latestJob.urls[0] : undefined;
 
-  // Claim a frame handed over by "Continue from last frame".
-  useEffect(() => {
-    if (inputMode === 'text' || isReference || isEdit) return;
-    const seed = useSeedFrameStore.getState().takeSeedFrame();
-    if (!seed) return;
-    const draft = useDraftStore.getState();
-    draft.clearReferences();
-    draft.addReferences(
-      [{ file: seed.file, sourceLabel: `Last frame of ${seed.sourceLabel.replace(/-/g, ' ')}` }],
-      1
-    );
-    if (!draft.prompt) {
-      draft.setPrompt(`Continue the scene from ${seed.sourceLabel.replace(/-/g, ' ')}.`);
-    }
-  }, [inputMode, isReference, isEdit]);
-
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -435,22 +399,6 @@ export default function ProviderVideoWorkspace({
   useEffect(() => {
     useDraftStore.getState().limitReferences(maxInputImages);
   }, [maxInputImages]);
-
-  useEffect(() => {
-    if (inputMode === 'text') return;
-
-    const onPaste = (event: ClipboardEvent) => {
-      const pastedFiles = Array.from(event.clipboardData?.files ?? []).filter(
-        (file) => file.type.startsWith('image/') || isVideoFile(file)
-      );
-      if (pastedFiles.length === 0) return;
-      event.preventDefault();
-      void addReferencesRef.current(pastedFiles);
-    };
-
-    document.addEventListener('paste', onPaste);
-    return () => document.removeEventListener('paste', onPaste);
-  }, [inputMode]);
 
   const updateValues = (key: string, value: string | number | boolean) => {
     const next = { ...values, [key]: value };
@@ -492,66 +440,22 @@ export default function ProviderVideoWorkspace({
     if (value !== values.size) updateValues('size', value);
   }, typeof values.size === 'string' ? values.size : undefined);
 
-  const addReferences = async (files: File[]) => {
-    const usable = files.filter((file) =>
-      imageReferencesOnly ? file.type.startsWith('image/') : file.type.startsWith('image/') || isVideoFile(file)
-    );
-    if (usable.length === 0) {
-      setError(
-        isReference
-          ? 'Choose an image for this character reference.'
-          : 'Choose an image, or a video to continue from its last frame.'
-      );
-      return;
-    }
-    if (references.length + usable.length > maxInputImages) {
-      setError(
-        isReference
-          ? `Add up to ${maxInputImages} character views for this generation.`
-          : `This model accepts up to ${maxInputImages} reference image${maxInputImages === 1 ? '' : 's'}.`
-      );
-      return;
-    }
-
-    setError(null);
-    const hasVideo = usable.some(isVideoFile);
-    if (hasVideo) setIsReadingFrame(true);
-    try {
-      // A picked video stands in for its final frame, so a clip saved earlier
-      // can seed the next one without a round trip through a provider.
-      const prepared = await Promise.all(
-        usable.map(async (file) =>
-          isVideoFile(file)
-            ? { file: await lastFrameAsImageFile(file), sourceLabel: `Last frame of ${file.name}` }
-            : { file, sourceLabel: undefined }
-        )
-      );
-      // Re-encoded before any provider sees it: nano banana returns PNG, which
-      // is both the largest upload and the format providers handle worst.
-      const converted = await prepareReferences(prepared, imageFormat);
-      if (!mountedRef.current) return;
-      useDraftStore.getState().addReferences(converted, maxInputImages);
-      // Kept for next time, in this browser and in the cloud library when
-      // there is an account to hold it. Deliberately not awaited: the
-      // reference is already in the draft, and storing it must not delay the
-      // press that follows.
-      void keepUploadedImages(converted);
-    } catch {
-      if (mountedRef.current) setError(FRAME_EXTRACTION_ERROR);
-    } finally {
-      if (mountedRef.current && hasVideo) setIsReadingFrame(false);
-    }
-  };
-
-  useEffect(() => {
-    addReferencesRef.current = addReferences;
-  });
-
   const isPickerFull = references.length >= maxInputImages;
-  const { isDragging, isFetching, dropProps } = useFileDrop({
-    onFiles: (files) => addReferencesRef.current(files),
+  useClaimSeedFrame(inputMode !== 'text' && !isReference && !isEdit, 1, inputMode);
+  const { addFiles: addReferences, isReadingFrame, isDragging, isFetching, dropProps } = useReferenceIntake({
+    referenceCount: references.length,
+    maxImages: maxInputImages,
+    accept: (file) =>
+      imageReferencesOnly ? file.type.startsWith('image/') : file.type.startsWith('image/') || isVideoFile(file),
+    unusableMessage: isReference
+      ? 'Choose an image for this character reference.'
+      : 'Choose an image, or a video to continue from its last frame.',
+    tooManyMessage: isReference
+      ? `Add up to ${maxInputImages} character views for this generation.`
+      : `This model accepts up to ${maxInputImages} reference image${maxInputImages === 1 ? '' : 's'}.`,
+    pasteEnabled: inputMode !== 'text',
+    dropDisabled: isPickerFull,
     onError: setError,
-    disabled: isPickerFull,
   });
 
   const removeReference = (index: number) => {

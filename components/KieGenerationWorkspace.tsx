@@ -9,7 +9,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ImagePlus, Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import ReferenceStack from '@/components/ReferenceStack';
-import { useFileDrop } from '@/lib/drop/use-file-drop';
 import { requestPromptSlug } from '@/lib/micro-ai/browser';
 import { fetchKieCredits, submitKieJob, uploadKieFiles } from '@/lib/kie/browser';
 import { defaultKieValues, modelsForKieMode, resolveKieVariant, validateKieInput } from '@/lib/kie/catalog';
@@ -17,24 +16,17 @@ import ModelListbox from '@/components/ModelListbox';
 import { KIE_IMAGE_COLUMNS, KIE_VIDEO_COLUMNS, kieImageSpecs, kieVideoSpecs } from '@/lib/models/listbox-specs';
 import { currentKieTime, isKieJobTerminal } from '@/lib/kie/queue';
 import type { KieFieldDefinition, KieInputMode, KieJob, MediaType } from '@/lib/kie/types';
-import {
-  downloadRemoteMedia,
-  extensionForMedia,
-  isDownloadableMediaUrl,
-} from '@/lib/media-download';
+import { downloadRemoteMedia, extensionForMedia, isDownloadableMediaUrl } from '@/lib/media-download';
 import { downloadFilenameBase } from '@/lib/download-name';
 import { downloadImageResult, IMAGE_DOWNLOAD_ERROR } from '@/lib/results/download-image';
 import { useImageResultFeed } from '@/lib/results/image-feed';
 import { useAppStore } from '@/store/useAppStore';
 import { useKieJobsStore } from '@/store/useKieJobsStore';
-import { useSeedFrameStore } from '@/store/useSeedFrameStore';
-import { prepareReferences } from '@/lib/draft/ingest';
-import { keepUploadedImages } from '@/lib/gallery/keep-upload';
 import { useDraftStore } from '@/store/useDraftStore';
 import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
 import { candidatesFromValues, useAutoAspect } from '@/lib/draft/aspect-match';
 import { carryOverValues } from '@/lib/draft/carry-over';
-import { FRAME_EXTRACTION_ERROR, isVideoFile, lastFrameAsImageFile } from '@/lib/video-frame';
+import { isVideoFile } from '@/lib/video-frame';
 import LastFrameActions from '@/components/LastFrameActions';
 import ResultStack, { type ResultStackItem } from '@/components/ResultStack';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
@@ -50,11 +42,7 @@ import { trackGenerationResult, trackGenerationSubmitted } from '@/lib/analytics
 import { classifyFailure, refusalPresentation } from '@/lib/moderation/classify';
 import { inspectPrompt } from '@/lib/moderation/floors';
 import { useRelaxedFilter } from '@/lib/moderation/use-relaxed-filter';
-import {
-  AUTO_RETRY_DELAY_SECONDS,
-  isRetryableFailure,
-  useAutoRetry,
-} from '@/lib/providers/auto-retry';
+import { AUTO_RETRY_DELAY_SECONDS, isRetryableFailure, useAutoRetry } from '@/lib/providers/auto-retry';
 import type { EngineId } from '@/lib/engines/registry';
 import { JobStatusPill } from '@/components/StatusPill';
 import WorkspaceHeader from '@/components/WorkspaceHeader';
@@ -62,6 +50,7 @@ import { GenExampleButton, PromptHeader } from '@/components/PromptHeader';
 import { useExamplePrompt } from '@/hooks/useExamplePrompt';
 import { ModelNote, ModelPickerCard } from '@/components/ModelPickerCard';
 import { VideoDownloadLink, VideoResultStage } from '@/components/VideoResult';
+import { useClaimSeedFrame, useReferenceIntake } from '@/hooks/useReferenceIntake';
 
 interface KieGenerationWorkspaceProps {
   mediaType: MediaType;
@@ -153,14 +142,11 @@ export default function KieGenerationWorkspace({
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const [isReadingFrame, setIsReadingFrame] = useState(false);
   const autoRetry = useAutoRetry();
   // Latest submit, so a queued retry re-runs the button's own path with the
   // prompt and settings on screen now, not the ones from the failed render.
   const submitRef = useRef<() => void>(() => {});
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // Latest addReferences, so the paste listener attaches once instead of per render.
-  const addReferencesRef = useRef<(files: File[]) => Promise<void>>(async () => {});
   const mountedRef = useRef(true);
   const maxInputImages = variant.maxInputImages ?? 1;
   const matchingModels = models.filter((model) =>
@@ -180,22 +166,6 @@ export default function KieGenerationWorkspace({
   const resolvedExampleFeatureId =
     exampleFeatureId ?? (mediaType === 'video' ? `${inputMode}-to-video` : 'text-to-image');
 
-  // Claim a frame handed over by "Continue from last frame".
-  useEffect(() => {
-    if (inputMode !== 'image') return;
-    const seed = useSeedFrameStore.getState().takeSeedFrame();
-    if (!seed) return;
-    const draft = useDraftStore.getState();
-    draft.clearReferences();
-    draft.addReferences(
-      [{ file: seed.file, sourceLabel: `Last frame of ${seed.sourceLabel.replace(/-/g, ' ')}` }],
-      1
-    );
-    if (!draft.prompt) {
-      draft.setPrompt(`Continue the scene from ${seed.sourceLabel.replace(/-/g, ' ')}.`);
-    }
-  }, [inputMode]);
-
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -213,22 +183,6 @@ export default function KieGenerationWorkspace({
     const draft = useDraftStore.getState();
     if (initialPrompt && !draft.prompt) draft.setPrompt(initialPrompt);
   }, [initialPrompt]);
-
-  useEffect(() => {
-    if (inputMode !== 'image') return;
-
-    const onPaste = (event: ClipboardEvent) => {
-      const pastedFiles = Array.from(event.clipboardData?.files ?? []).filter(
-        (file) => file.type.startsWith('image/') || isVideoFile(file)
-      );
-      if (pastedFiles.length === 0) return;
-      event.preventDefault();
-      void addReferencesRef.current(pastedFiles);
-    };
-
-    document.addEventListener('paste', onPaste);
-    return () => document.removeEventListener('paste', onPaste);
-  }, [inputMode]);
 
   const updateValues = (key: string, value: string | number | boolean) => {
     setValuesByVariant((current) => ({
@@ -258,53 +212,14 @@ export default function KieGenerationWorkspace({
     setter(modelId);
   };
 
-  const addReferences = async (files: File[]) => {
-    const usable = files.filter((file) => file.type.startsWith('image/') || isVideoFile(file));
-    if (usable.length === 0) {
-      setError('Choose an image, or a video to continue from its last frame.');
-      return;
-    }
-    if (references.length + usable.length > maxInputImages) {
-      setError(`This model accepts up to ${maxInputImages} reference image${maxInputImages === 1 ? '' : 's'}.`);
-      return;
-    }
-
-    setError(null);
-    const hasVideo = usable.some(isVideoFile);
-    if (hasVideo) setIsReadingFrame(true);
-    try {
-      // A picked video stands in for its final frame, so a clip saved earlier
-      // can seed the next one without a round trip through a provider.
-      const prepared = await Promise.all(
-        usable.map(async (file) =>
-          isVideoFile(file)
-            ? { file: await lastFrameAsImageFile(file), sourceLabel: `Last frame of ${file.name}` }
-            : { file, sourceLabel: undefined }
-        )
-      );
-      // Re-encoded before any provider sees it: nano banana returns PNG, which
-      // is both the largest upload and the format providers handle worst.
-      const converted = await prepareReferences(prepared, imageFormat);
-      if (!mountedRef.current) return;
-      useDraftStore.getState().addReferences(converted, maxInputImages);
-      // Kept for next time, in this browser and in the cloud library when
-      // there is an account to hold it. Deliberately not awaited: the
-      // reference is already in the draft, and storing it must not delay the
-      // press that follows.
-      void keepUploadedImages(converted);
-    } catch {
-      if (mountedRef.current) setError(FRAME_EXTRACTION_ERROR);
-    } finally {
-      if (mountedRef.current && hasVideo) setIsReadingFrame(false);
-    }
-  };
-
-  useEffect(() => {
-    addReferencesRef.current = addReferences;
-  });
-
-  const { isDragging, isFetching, dropProps } = useFileDrop({
-    onFiles: (files) => addReferencesRef.current(files),
+  useClaimSeedFrame(inputMode === 'image', 1, inputMode);
+  const { addFiles: addReferences, isReadingFrame, isDragging, isFetching, dropProps } = useReferenceIntake({
+    referenceCount: references.length,
+    maxImages: maxInputImages,
+    accept: (file) => file.type.startsWith('image/') || isVideoFile(file),
+    unusableMessage: 'Choose an image, or a video to continue from its last frame.',
+    tooManyMessage: `This model accepts up to ${maxInputImages} reference image${maxInputImages === 1 ? '' : 's'}.`,
+    pasteEnabled: inputMode === 'image',
     onError: setError,
   });
 

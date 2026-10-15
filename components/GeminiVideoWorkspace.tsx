@@ -17,23 +17,9 @@ import ReferenceStack from '@/components/ReferenceStack';
 import StoredImagePicker from '@/components/StoredImagePicker';
 import SubmissionError from '@/components/SubmissionError';
 import VideoPlayer from '@/components/video/VideoPlayer';
-import { prepareReferences } from '@/lib/draft/ingest';
 import { downloadFilenameBase } from '@/lib/download-name';
-import { useFileDrop } from '@/lib/drop/use-file-drop';
-import {
-  GEMINI_VIDEO_TIMEOUT_MS,
-  geminiDownloadVideo,
-  geminiGenerateVideo,
-  geminiPollVideoOperation,
-  geminiVideoWait,
-} from '@/lib/engines/gemini';
-import {
-  GEMINI_VIDEO_MODELS,
-  geminiVideoDuration,
-  geminiVideoDurationOptions,
-  type GeminiVideoModel,
-} from '@/lib/engines/gemini-video-catalog';
-import { keepUploadedImages } from '@/lib/gallery/keep-upload';
+import { GEMINI_VIDEO_TIMEOUT_MS, geminiDownloadVideo, geminiGenerateVideo, geminiPollVideoOperation, geminiVideoWait } from '@/lib/engines/gemini';
+import { GEMINI_VIDEO_MODELS, geminiVideoDuration, geminiVideoDurationOptions, type GeminiVideoModel } from '@/lib/engines/gemini-video-catalog';
 import { extensionForMedia } from '@/lib/media-download';
 import { requestPromptSlug } from '@/lib/micro-ai/browser';
 import { playGenerationChime } from '@/lib/notify/chime';
@@ -41,14 +27,14 @@ import { useAutoRetry } from '@/lib/providers/auto-retry';
 import { routeStatus } from '@/lib/providers/route-error';
 import { captureGeminiVideo } from '@/lib/spend/capture';
 import { geminiVideoCost, geminiVideoRateLabel } from '@/lib/spend/rates';
-import { FRAME_EXTRACTION_ERROR, isVideoFile, lastFrameAsImageFile } from '@/lib/video-frame';
+import { isVideoFile } from '@/lib/video-frame';
 import { useAppStore } from '@/store/useAppStore';
 import { useDraftStore } from '@/store/useDraftStore';
 import { useGalleryStore } from '@/store/useGalleryStore';
 import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
-import { useSeedFrameStore } from '@/store/useSeedFrameStore';
 import type { EngineId } from '@/lib/engines/registry';
 import { fileAsDataUrl } from '@/lib/file-data-url';
+import { useClaimSeedFrame, useReferenceIntake } from '@/hooks/useReferenceIntake';
 
 interface GeminiVideoWorkspaceProps {
   inputMode: 'text' | 'image';
@@ -145,7 +131,6 @@ export default function GeminiVideoWorkspace({
 }: GeminiVideoWorkspaceProps) {
   const apiKey = useAppStore((state) => state.apiKey);
   const geminiVideoModel = useAppStore((state) => state.geminiVideoModel);
-  const imageFormat = useAppStore((state) => state.imageFormat);
   const prompt = useDraftStore((state) => state.prompt);
   const setPrompt = useDraftStore((state) => state.setPrompt);
   const references = useDraftStore((state) => state.references);
@@ -154,13 +139,11 @@ export default function GeminiVideoWorkspace({
   const [duration, setDuration] = useState<4 | 6 | 8>(8);
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16'>('16:9');
   const [error, setError] = useState<string | null>(null);
-  const [isReadingFrame, setIsReadingFrame] = useState(false);
   const [phase, setPhase] = useState<'start' | 'poll' | 'download' | null>(null);
   const [startedAt, setStartedAt] = useState<number | undefined>(undefined);
   const [clips, setClips] = useState<GeminiClip[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const addReferencesRef = useRef<(files: File[]) => Promise<void>>(async () => {});
   const mountedRef = useRef(true);
   const generateRef = useRef<() => void>(() => {});
   const runTokenRef = useRef(0);
@@ -181,23 +164,6 @@ export default function GeminiVideoWorkspace({
     useDraftStore.getState().enterPromptScope('video');
   }, []);
 
-  // Claim a frame handed over by "Continue from last frame". Switching into
-  // image-to-video remounts this workspace, which is why the seed lives in a store.
-  useEffect(() => {
-    if (!isImageMode) return;
-    const seed = useSeedFrameStore.getState().takeSeedFrame();
-    if (!seed) return;
-    const draft = useDraftStore.getState();
-    draft.clearReferences();
-    draft.addReferences(
-      [{ file: seed.file, sourceLabel: `Last frame of ${seed.sourceLabel.replace(/-/g, ' ')}` }],
-      MAX_INPUT_IMAGES
-    );
-    if (!draft.prompt) {
-      draft.setPrompt(`Continue the scene from ${seed.sourceLabel.replace(/-/g, ' ')}.`);
-    }
-  }, [isImageMode]);
-
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -210,61 +176,16 @@ export default function GeminiVideoWorkspace({
     useDraftStore.getState().limitReferences(MAX_INPUT_IMAGES);
   }, []);
 
-  useEffect(() => {
-    if (!isImageMode) return;
-
-    const onPaste = (event: ClipboardEvent) => {
-      const pastedFiles = Array.from(event.clipboardData?.files ?? []).filter(
-        (file) => file.type.startsWith('image/') || isVideoFile(file)
-      );
-      if (pastedFiles.length === 0) return;
-      event.preventDefault();
-      void addReferencesRef.current(pastedFiles);
-    };
-
-    document.addEventListener('paste', onPaste);
-    return () => document.removeEventListener('paste', onPaste);
-  }, [isImageMode]);
-
-  const addReferences = async (files: File[]) => {
-    const usable = files.filter((file) => file.type.startsWith('image/') || isVideoFile(file));
-    if (usable.length === 0) {
-      setError('Choose an image, or a video to continue from its last frame.');
-      return;
-    }
-    if (references.length + usable.length > MAX_INPUT_IMAGES) {
-      setError('This model accepts up to 1 reference image.');
-      return;
-    }
-
-    setError(null);
-    const hasVideo = usable.some(isVideoFile);
-    if (hasVideo) setIsReadingFrame(true);
-    try {
-      const prepared = await Promise.all(
-        usable.map(async (file) =>
-          isVideoFile(file)
-            ? { file: await lastFrameAsImageFile(file), sourceLabel: `Last frame of ${file.name}` }
-            : { file, sourceLabel: undefined }
-        )
-      );
-      const converted = await prepareReferences(prepared, imageFormat);
-      if (!mountedRef.current) return;
-      useDraftStore.getState().addReferences(converted, MAX_INPUT_IMAGES);
-      void keepUploadedImages(converted);
-    } catch {
-      if (mountedRef.current) setError(FRAME_EXTRACTION_ERROR);
-    } finally {
-      if (mountedRef.current && hasVideo) setIsReadingFrame(false);
-    }
-  };
-
-  useEffect(() => {
-    addReferencesRef.current = addReferences;
-  });
-
-  const { isDragging, isFetching, dropProps } = useFileDrop({
-    onFiles: (files) => addReferencesRef.current(files),
+  // Switching into image-to-video remounts this workspace, which is why the
+  // seed lives in a store.
+  useClaimSeedFrame(isImageMode, MAX_INPUT_IMAGES, String(isImageMode));
+  const { addFiles: addReferences, isReadingFrame, isDragging, isFetching, dropProps } = useReferenceIntake({
+    referenceCount: references.length,
+    maxImages: MAX_INPUT_IMAGES,
+    accept: (file) => file.type.startsWith('image/') || isVideoFile(file),
+    unusableMessage: 'Choose an image, or a video to continue from its last frame.',
+    tooManyMessage: 'This model accepts up to 1 reference image.',
+    pasteEnabled: isImageMode,
     onError: setError,
   });
 

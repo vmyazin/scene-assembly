@@ -27,29 +27,15 @@ import ReferenceStack from '@/components/ReferenceStack';
 import { requestPromptSlug } from '@/lib/micro-ai/browser';
 import { validateEditSource, validateEditVideo } from '@/lib/providers/video-edit';
 import { cancelFalJob, submitFalJob, uploadFalFiles } from '@/lib/fal/browser';
-import {
-  buildFalInput,
-  defaultFalValues,
-  falModelLabel,
-  modelsForFalMode,
-  resolveFalVariant,
-  validateFalInput,
-} from '@/lib/fal/catalog';
-import { useFileDrop } from '@/lib/drop/use-file-drop';
+import { buildFalInput, defaultFalValues, falModelLabel, modelsForFalMode, resolveFalVariant, validateFalInput } from '@/lib/fal/catalog';
 import { isFalJobTerminal } from '@/lib/fal/queue';
 import type { FalFieldDefinition, FalInputMode, FalJob, FalTaskState, FalValue } from '@/lib/fal/types';
-import {
-  downloadRemoteMedia,
-  extensionForMedia,
-} from '@/lib/media-download';
+import { downloadRemoteMedia, extensionForMedia } from '@/lib/media-download';
 import { downloadFilenameBase } from '@/lib/download-name';
 import { useAccountStore } from '@/store/useAccountStore';
 import { useAppStore } from '@/store/useAppStore';
 import { useFalJobsStore } from '@/store/useFalJobsStore';
-import { useSeedFrameStore } from '@/store/useSeedFrameStore';
 import { frameSlotLabel } from '@/lib/providers/frames';
-import { prepareReferences } from '@/lib/draft/ingest';
-import { keepUploadedImages } from '@/lib/gallery/keep-upload';
 import { useDraftStore } from '@/store/useDraftStore';
 import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
 import { candidatesFromValues, useAutoAspect } from '@/lib/draft/aspect-match';
@@ -57,7 +43,7 @@ import ModelListbox from '@/components/ModelListbox';
 import { FAL_VIDEO_COLUMNS, falVideoSpecs } from '@/lib/models/listbox-specs';
 import FalRunCost from '@/components/FalRunCost';
 import { carryOverValues } from '@/lib/draft/carry-over';
-import { FRAME_EXTRACTION_ERROR, isVideoFile, lastFrameAsImageFile } from '@/lib/video-frame';
+import { isVideoFile } from '@/lib/video-frame';
 import type { EngineId } from '@/lib/engines/registry';
 import VideoSourceInput, { type SourceVideo } from '@/components/VideoSourceInput';
 import VideoPlayer from '@/components/video/VideoPlayer';
@@ -66,6 +52,7 @@ import WorkspaceHeader from '@/components/WorkspaceHeader';
 import { GenExampleButton, PromptHeader } from '@/components/PromptHeader';
 import { useExamplePrompt } from '@/hooks/useExamplePrompt';
 import { ModelNote, ModelPickerCard } from '@/components/ModelPickerCard';
+import { useClaimSeedFrame, useReferenceIntake } from '@/hooks/useReferenceIntake';
 
 interface FalGenerationWorkspaceProps {
   inputMode: FalInputMode;
@@ -285,7 +272,6 @@ function FalGenerationWorkspaceSession({
   onContinueFromFrame,
 }: FalGenerationWorkspaceProps) {
   const apiKey = useAppStore((state) => state.falApiKey);
-  const imageFormat = useAppStore((state) => state.imageFormat);
   const geminiApiKey = useAppStore((state) => state.apiKey);
   const falVideoModel = useAppStore((state) => state.falVideoModel);
   const setFalVideoModel = useAppStore((state) => state.setFalVideoModel);
@@ -330,7 +316,6 @@ function FalGenerationWorkspaceSession({
   const [selectedSource, setSelectedSource] = useState<SourceVideo | null>(null);
   const source = selectedSource?.epoch === epoch ? selectedSource : null;
   const [error, setError] = useState<string | null>(null);
-  const [isReadingFrame, setIsReadingFrame] = useState(false);
   const [submittingVariantId, setSubmittingVariantId] = useState<string | null>(null);
   const autoRetry = useAutoRetry();
   // Latest submit, so a queued retry re-runs the button's own path — validation,
@@ -358,23 +343,6 @@ function FalGenerationWorkspaceSession({
   );
   const videoJobs = jobs.filter((job) => job.mediaType === 'video');
   const isSubmitting = submittingVariantId === variant.id;
-
-  // Claim a frame handed over by "Continue from last frame". Runs on mount
-  // because switching into image mode remounts this session.
-  useEffect(() => {
-    if (inputMode !== 'image') return;
-    const seed = useSeedFrameStore.getState().takeSeedFrame();
-    if (!seed) return;
-    const draft = useDraftStore.getState();
-    draft.clearReferences();
-    draft.addReferences(
-      [{ file: seed.file, sourceLabel: `Last frame of ${seed.sourceLabel.replace(/-/g, ' ')}` }],
-      1
-    );
-    if (!draft.prompt) {
-      draft.setPrompt(`Continue the scene from ${seed.sourceLabel.replace(/-/g, ' ')}.`);
-    }
-  }, [inputMode]);
 
   useEffect(() => {
     return () => {
@@ -448,61 +416,26 @@ function FalGenerationWorkspaceSession({
     setFalVideoModel(modelId);
   };
 
-  const addReferences = async (files: File[]) => {
-    const usable = files.filter((file) => {
+  const isPickerFull = (isFramesMode || isEdit) && references.length >= maxInputImages;
+  // Runs on mount because switching into image mode remounts this session.
+  useClaimSeedFrame(inputMode === 'image', 1, inputMode);
+  const { addFiles: addReferences, isReadingFrame, isDragging, isFetching, dropProps } = useReferenceIntake({
+    referenceCount: references.length,
+    maxImages: maxInputImages,
+    accept: (file) => {
       const image = allowedImageMimeTypes.has(file.type.toLowerCase());
       return isEdit ? image : image || isVideoFile(file);
-    });
-    if (usable.length !== files.length || usable.length === 0) {
-      setError(isEdit
-        ? 'Choose a PNG, JPEG, WebP, or AVIF image.'
-        : 'Choose a PNG, JPEG, WebP, or AVIF image, or a video to continue from its last frame.');
-      return;
-    }
-    if (references.length + usable.length > maxInputImages) {
-      setError(
-        isFramesMode
-          ? 'This flow takes exactly two frames. Remove one before choosing another.'
-          : `This fal model accepts up to ${maxInputImages} reference image${maxInputImages === 1 ? '' : 's'}.`
-      );
-      return;
-    }
-
-    setError(null);
-    const hasVideo = usable.some(isVideoFile);
-    if (hasVideo) setIsReadingFrame(true);
-    try {
-      // A picked video stands in for its final frame, so a clip saved earlier
-      // can seed the next one without a round trip through a provider.
-      const prepared = await Promise.all(
-        usable.map(async (file) =>
-          isVideoFile(file)
-            ? { file: await lastFrameAsImageFile(file), sourceLabel: `Last frame of ${file.name}` }
-            : { file, sourceLabel: undefined }
-        )
-      );
-      // Re-encoded before any provider sees it: nano banana returns PNG, which
-      // is both the largest upload and the format providers handle worst.
-      const converted = await prepareReferences(prepared, imageFormat);
-      if (!mountedRef.current) return;
-      useDraftStore.getState().addReferences(converted, maxInputImages);
-      // Kept for next time, in this browser and in the cloud library when
-      // there is an account to hold it. Deliberately not awaited: the
-      // reference is already in the draft, and storing it must not delay the
-      // press that follows.
-      void keepUploadedImages(converted);
-    } catch {
-      if (mountedRef.current) setError(FRAME_EXTRACTION_ERROR);
-    } finally {
-      if (mountedRef.current && hasVideo) setIsReadingFrame(false);
-    }
-  };
-
-  const isPickerFull = (isFramesMode || isEdit) && references.length >= maxInputImages;
-  const { isDragging, isFetching, dropProps } = useFileDrop({
-    onFiles: (files) => addReferences(files),
+    },
+    rejectAnyUnusable: true,
+    unusableMessage: isEdit
+      ? 'Choose a PNG, JPEG, WebP, or AVIF image.'
+      : 'Choose a PNG, JPEG, WebP, or AVIF image, or a video to continue from its last frame.',
+    tooManyMessage: isFramesMode
+      ? 'This flow takes exactly two frames. Remove one before choosing another.'
+      : `This fal model accepts up to ${maxInputImages} reference image${maxInputImages === 1 ? '' : 's'}.`,
+    pasteEnabled: inputMode !== 'text' && (!isEdit || maxInputImages > 0) && !isPickerFull,
+    dropDisabled: isPickerFull,
     onError: setError,
-    disabled: isPickerFull,
   });
 
   const removeReference = (index: number) => {
