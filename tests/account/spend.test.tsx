@@ -63,6 +63,25 @@ describe('account spend', () => {
     expect(useSpendStore.getState().entries.map((item) => item.id)).toEqual(['guest']);
   });
 
+  it('shows the range selector in the same paint as the first account rows', async () => {
+    // A MutationObserver callback runs straight after a commit, before React's
+    // passive effects. Reporting "has records" from one of those left a frame
+    // with rows on screen and no range control, which is where the test above
+    // used to fail under load.
+    vi.mocked(accountRequest).mockResolvedValue({ accountId: 'owner-1', entries: [entry('cloud', 'Cloud record')], nextCursor: null });
+    const rangeWithFirstRows = new Promise<boolean>((done) => {
+      const observer = new MutationObserver(() => {
+        if (!document.body.textContent?.includes('Cloud record')) return;
+        observer.disconnect();
+        done(screen.queryByRole('radiogroup', { name: 'Range' }) !== null);
+      });
+      observer.observe(document.body, { subtree: true, childList: true, characterData: true });
+    });
+    render(<SpendPage />);
+
+    expect(await rangeWithFirstRows).toBe(true);
+  });
+
   it('hides the range selector until something has been recorded', async () => {
     useAccountStore.getState().applySession({ account: null, googleEnabled: true, localSignIn: false, providers: [], connections: [] });
     useSpendStore.setState({ entries: [], hasHydrated: true });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 
 import SpendReport from '@/components/spend/SpendReport';
 import { useAccountSpend } from '@/lib/account/use-spend';
@@ -21,7 +21,10 @@ export default function AccountSpend({ ownerId, range, now, onClearRequest, onEm
   const summary = useAccountSpendTotals(ownerId, rangeStart(range, now));
   const refreshSummary = summary.refresh;
   const empty = spend.entries.length === 0;
-  useEffect(() => { onEmptyChange?.(empty); }, [empty, onEmptyChange]);
+  // A layout effect, so the page's range controls arrive in the same paint as
+  // the rows: from a passive effect they popped in a frame later, and anything
+  // reading the page between the two saw records with no range to filter them.
+  useLayoutEffect(() => { onEmptyChange?.(empty); }, [empty, onEmptyChange]);
 
   // A background poll that brings in a new run changes the newest row; re-total
   // then, but not on the first page landing, which the totals read already raced.
