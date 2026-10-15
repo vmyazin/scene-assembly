@@ -1,10 +1,10 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FALLBACK_TRACK_WIDTH, MAX_ZOOM } from '../../lib/timeline/scale';
 import { useGalleryStore } from '../../store/useGalleryStore';
 import { useTimelineStore } from '../../store/useTimelineStore';
-import { renderWorkspace, setupTimelineTest, video } from './helpers';
+import { mockPendingAcquire, renderWorkspace, setupTimelineTest, video } from './helpers';
 
 /**
  * Zoom is the track's second scale gesture (trimming is the first), and every
@@ -178,5 +178,48 @@ describe('a zoom holds the picture still', () => {
     pinch(-200, 0);
 
     expect(element.scrollLeft).toBe(0);
+  });
+
+  it('anchors on the layout on screen even before React has run its effects', async () => {
+    // Clips that finish loading late render on React's own scheduler, which
+    // commits the DOM and runs passive effects in a later task. A pinch in
+    // between used to read the layout from before the clips were timed and
+    // scroll to 0. A MutationObserver callback runs in exactly that gap.
+    const first = mockPendingAcquire();
+    const second = mockPendingAcquire();
+    useTimelineStore.getState().clear();
+    useTimelineStore.getState().addClip('r1');
+    useTimelineStore.getState().addClip('r1');
+    renderWorkspace();
+    const element = scroller();
+    Object.defineProperty(element, 'clientWidth', { value: 600, configurable: true });
+    await waitFor(() => expect(first.signal() && second.signal()).toBeTruthy());
+
+    const actEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    actEnvironment.IS_REACT_ACT_ENVIRONMENT = false;
+    try {
+      const scrolled = new Promise<number>((done) => {
+        const observer = new MutationObserver(() => {
+          if (screen.queryAllByText('0:04').length < 2) return;
+          observer.disconnect();
+          element.dispatchEvent(
+            new WheelEvent('wheel', { deltaY: -200, ctrlKey: true, clientX: 300, bubbles: true, cancelable: true })
+          );
+          setTimeout(() => done(element.scrollLeft), 50);
+        });
+        observer.observe(document.body, { subtree: true, childList: true, characterData: true });
+      });
+      const ready = {
+        status: 'ready',
+        blob: new Blob(['v']),
+        dimensions: { width: 1920, height: 1080, durationSeconds: 4 },
+        durable: true,
+      } as const;
+      first.resolve(ready);
+      second.resolve(ready);
+      expect(await scrolled).toBeGreaterThan(0);
+    } finally {
+      actEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+    }
   });
 });

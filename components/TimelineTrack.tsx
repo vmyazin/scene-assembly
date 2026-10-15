@@ -494,6 +494,10 @@ export default function TimelineTrack({
   // has to ask the layout that is *currently* on screen where its anchor is,
   // and a listener re-attached on every layout change would drop a pinch in
   // flight the moment it started changing the layout.
+  // Written in a layout effect, in the same commit that puts the layout on
+  // screen: React does not flush passive effects before a wheel event, so a
+  // pinch arriving between the two anchored on the layout before — all clips
+  // untimed, every x at time 0 — and threw the track back to its start.
   const layoutRef = useRef<TrackLayout | null>(null);
   const { zoom, zoomed, zoomBy, reset: resetZoom, anchorRef } = useTrackZoom({
     scrollRef,
@@ -518,7 +522,7 @@ export default function TimelineTrack({
       ),
     [clips, clipStates, availableWidth, zoom]
   );
-  useEffect(() => {
+  useLayoutEffect(() => {
     layoutRef.current = layout;
   });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 
 import { MIN_ZOOM, clampZoom } from '@/lib/timeline/scale';
@@ -71,12 +71,14 @@ export function useTrackZoom({ scrollRef, timeAtContentX }: TrackZoomOptions): T
 
   // Read inside native listeners that are attached once; without these they
   // would close over the zoom, and the layout reader, from the render that
-  // attached them. Written in an effect rather than during render because a
-  // ref must not be touched while rendering — the same latest-ref pattern
-  // `TimelinePreview` uses for its transport.
+  // attached them. Written in a layout effect rather than during render,
+  // because a ref must not be touched while rendering, and rather than in a
+  // passive effect, because a wheel event is not one React flushes passive
+  // effects for: a pinch step landing between a commit and those effects
+  // would compound from the zoom before it.
   const zoomRef = useRef(zoom);
   const timeAtRef = useRef(timeAtContentX);
-  useEffect(() => {
+  useLayoutEffect(() => {
     zoomRef.current = zoom;
     timeAtRef.current = timeAtContentX;
   });
