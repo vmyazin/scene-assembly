@@ -75,6 +75,30 @@ it('sends Aleph a data URI and hides reference images', async () => {
   expect(uploadRunwareVideo).not.toHaveBeenCalled();
 });
 
+it('explains that Aleph takes no character images and will not submit @Image prompts', async () => {
+  useAppStore.setState({ cometApiKey: 'comet-key', cometVideoModel: 'aleph2' });
+  render(<ProviderVideoWorkspace provider="comet" label="CometAPI" inputMode="edit" onBack={() => {}} onOpenConnections={() => {}} />);
+  expect(screen.getByRole('heading', { name: 'Character images' })).toBeInTheDocument();
+  expect(screen.getByText(/cannot take character or reference images/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Replace character' }));
+  const prompt = screen.getByRole('textbox') as HTMLTextAreaElement;
+  expect(prompt.value).toMatch(/^Replace the main person with a woman/);
+  expect(prompt.value).not.toMatch(/@(Image|Video)/);
+  fireEvent.change(prompt, { target: { value: 'Edit @Video: the person on the left becomes @Image1.' } });
+  fireEvent.change(screen.getByLabelText('Upload source video'), { target: { files: [new File(['clip'], 'source.mp4', { type: 'video/mp4' })] } });
+  await screen.findByText(/source.mp4/);
+  fireEvent.click(screen.getByRole('button', { name: /Generate edit/ }));
+  expect(await screen.findByText(/@Image references point to nothing/)).toBeInTheDocument();
+  expect(submitProviderVideo).not.toHaveBeenCalled();
+});
+
+it('keeps @Image shortcuts for edit models that take images', () => {
+  render(<ProviderVideoWorkspace provider="runware" label="Runware" inputMode="edit" onBack={() => {}} onOpenConnections={() => {}} />);
+  expect(screen.queryByRole('heading', { name: 'Character images' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Replace character' }));
+  expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toContain('@Image1');
+});
+
 it('does not carry Seedance Draft onto P-Video-Edit', () => {
   render(<ProviderVideoWorkspace provider="runware" label="Runware" inputMode="edit" onBack={()=>{}} onOpenConnections={()=>{}}/>);
   fireEvent.click(screen.getByRole('checkbox', { name: 'Draft' }));

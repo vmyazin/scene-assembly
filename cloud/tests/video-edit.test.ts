@@ -150,6 +150,7 @@ it('refuses an Aleph source the provider would reject, and posts the local clip 
     referenceIds: [], sourceVideoId, values,
   });
   expect(() => validateRequest(env, { ...aleph('source'), prompt: 'x'.repeat(1001) })).toThrow(/1000/);
+  expect(() => validateRequest(env, { ...aleph('source'), prompt: 'Swap in @Image1' })).toThrow(/cannot receive images/);
   expect(() => validateRequest(env, aleph('source', { aspectRatio: '5:4' }))).toThrow();
   expect(validateRequest(env, aleph('source', { aspectRatio: '16:9' })).values).toEqual({ aspectRatio: '16:9' });
   const long = await stageClip(31, 1280, 720);

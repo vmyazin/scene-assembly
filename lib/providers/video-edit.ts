@@ -40,6 +40,31 @@ export const EDIT_PROMPTS = {
   Restyle: 'Edit @Video1: restyle the clip as a clay animation. Preserve the subjects, composition, movement, camera, and timing.',
 };
 
+/**
+ * Shortcuts in the vocabulary the model reads. A model that takes no images
+ * (Aleph 2) gets a written character and no tokens, because `@Image1` would
+ * name a file it never receives and `@Video1` is not in its vocabulary.
+ */
+export function editPromptShortcuts(capability?: Pick<VideoEditCapability, 'maxImages' | 'promptSyntax'>): [string, string][] {
+  return Object.entries(EDIT_PROMPTS).map(([label, text]) => {
+    if (capability?.maxImages === 0) {
+      const written = label === 'Replace character'
+        ? 'Edit @Video1: replace the main person with a woman in her thirties with short red hair and a yellow raincoat. Keep their movement, timing, camera framing, and background unchanged.'
+        : text;
+      return [label, written.replace(/^Edit @Video1: (\w)/, (_, first: string) => first.toUpperCase())];
+    }
+    if (capability?.promptSyntax === 'image-index') return [label, text.replace('@Video1', 'the source video').replace(/@Image(\d+)/g, 'image $1')];
+    return [label, text];
+  });
+}
+
+/** `@Image1` on a model with no image input would run a paid edit against nothing. */
+export function editPromptImageTokenError(capability: Pick<VideoEditCapability, 'maxImages'>, prompt: string): string | undefined {
+  if (capability.maxImages === 0 && /@Image\d/i.test(prompt)) {
+    return 'This model cannot receive images, so @Image references point to nothing. Describe the character in words, or choose an edit model that takes reference images.';
+  }
+}
+
 /** Validate only model-owned settings; fixed-output models must not receive stale resolution. */
 export function editSettingsError(capability: VideoEditCapability, values: Record<string, unknown>): string | undefined {
   const allowed = [

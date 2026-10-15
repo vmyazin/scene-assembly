@@ -1,6 +1,6 @@
 // cloud/src/provider-adapters/aggregators.ts
 import { referenceClipCountError, referenceClipSetError, referenceClipsFor } from '../../../lib/providers/reference-clips';
-import { editSettingsError, isRunwayEditProtocol } from '../../../lib/providers/video-edit';
+import { editPromptImageTokenError, editSettingsError, isRunwayEditProtocol } from '../../../lib/providers/video-edit';
 import { isSeedance25, isSeedanceDraftSize, isSeedanceFinalizeValues, seedanceFinalizeValuesError } from '../../../lib/providers/seedance-draft';
 import { piapiCreateImage, piapiCreateVideo, piapiPollTask } from '../../../lib/providers/piapi';
 import { findModel, resolveDuration, resolveSize, resolveVideoInput } from '../../../lib/providers/catalog';
@@ -59,6 +59,8 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
     if (!model.videoEdit || !r.sourceVideoId) return invalid('Choose a source video to edit.');
     if (count > model.videoEdit.maxImages) return invalid(`Add up to ${model.videoEdit.maxImages} replacement images.`);
     if (model.videoEdit.maxPromptLength && r.prompt.length > model.videoEdit.maxPromptLength) return invalid(`This model's prompt is at most ${model.videoEdit.maxPromptLength} characters.`);
+    const imageTokenError = editPromptImageTokenError(model.videoEdit, r.prompt);
+    if (imageTokenError) return invalid(imageTokenError);
     const settingsError = editSettingsError(model.videoEdit, r.values);
     if (settingsError) return invalid(settingsError);
     return;

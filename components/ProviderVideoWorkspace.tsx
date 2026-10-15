@@ -12,7 +12,7 @@ import CloudJobPanel from '@/components/account/CloudJobPanel';
 import VideoSourceInput, { type SourceVideo } from '@/components/VideoSourceInput';
 import { useAccountStore } from '@/store/useAccountStore';
 import { ALEPH_DATA_URI_MAX, alephDataUriLength, isAlephVideoUri } from '@/lib/providers/comet';
-import { EDIT_PROMPTS, isRunwayEditProtocol, validateEditSource } from '@/lib/providers/video-edit';
+import { editPromptImageTokenError, editPromptShortcuts, isRunwayEditProtocol, validateEditSource } from '@/lib/providers/video-edit';
 import { uploadRunwareMedia, uploadRunwareVideo } from '@/lib/providers/upload-video';
 import ReferenceClipTray, { type AttachedReferenceClip } from '@/components/ReferenceClipTray';
 import { clipToken, fileWithReferenceClipType, referenceClipSetError, referenceClipsFor } from '@/lib/providers/reference-clips';
@@ -607,6 +607,8 @@ export default function ProviderVideoWorkspace({
       return;
     }
     if (isEdit && !source) { setError('Choose a source video to edit.'); return; }
+    const imageTokenError = isEdit && selectedModel.videoEdit ? editPromptImageTokenError(selectedModel.videoEdit, prompt) : undefined;
+    if (imageTokenError) { setError(imageTokenError); return; }
     if (isReference && references.length === 0) {
       const clipsStandIn = clipVideos.length > 0 || (clipAudios.length > 0 && Boolean(clipCapability && !clipCapability.audioRequiresVisual));
       if (!clipsStandIn) {
@@ -844,6 +846,14 @@ export default function ProviderVideoWorkspace({
 
           {isEdit && <VideoSourceInput capability={selectedModel!.videoEdit!} source={source} onChange={setSelectedSource} disabled={isSubmitting}
             youtube={cloudWorkspace.cloud ? {provider, modelId: selectedModel!.id, modelLabel: selectedModel!.label} : undefined} />}
+          {isEdit && maxInputImages === 0 && (
+            <section className="glass-card space-y-1 p-3.5 md:p-4">
+              <h3 className="display text-base font-semibold">Character images</h3>
+              <p className="text-xs text-[var(--foreground-muted)]">
+                {selectedModel?.label} cannot take character or reference images. Describe the new look in the prompt. To swap in a character from a photo, use Seedance 2.5 on Runware or Kling O1 or O3 on fal.
+              </p>
+            </section>
+          )}
           {inputMode !== 'text' && maxInputImages > 0 && (
             <section className="glass-card space-y-3 p-3.5 md:p-4">
               <div>
@@ -971,7 +981,7 @@ export default function ProviderVideoWorkspace({
             {describeError && (
               <p role="alert" className="text-xs text-red-300">{describeError}</p>
             )}
-            {isEdit && <div className="flex flex-wrap gap-2">{Object.entries(EDIT_PROMPTS).map(([label, text]) => <button key={label} type="button" className="btn-secondary" onClick={() => setPrompt(selectedModel?.videoEdit?.promptSyntax === 'image-index' ? text.replace('@Video1', 'the source video').replace(/@Image(\d+)/g, 'image $1') : text)}>{label}</button>)}</div>}
+            {isEdit && <div className="flex flex-wrap gap-2">{editPromptShortcuts(selectedModel?.videoEdit).map(([label, text]) => <button key={label} type="button" className="btn-secondary" onClick={() => setPrompt(text)}>{label}</button>)}</div>}
             <AutoExpandingPrompt
               id="provider-video-prompt"
               value={prompt}

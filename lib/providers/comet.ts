@@ -127,7 +127,9 @@ function alephVideoUri(value: string | undefined): string {
 
 export async function cometCreateVideo(request: VideoRequest): Promise<{ taskId: string }> {
   if (request.model === 'aleph2' && request.inputMode === 'edit') {
-    const prompt = request.prompt.trim();
+    // Runway reads no media tokens: the clip is `videoUri`, and there is no image field to name.
+    if (/@Image\d/i.test(request.prompt)) throw new ProviderError('Aleph 2 cannot receive images, so @Image references point to nothing. Describe the character in words.', 400, 'comet');
+    const prompt = request.prompt.trim().replace(/@Video\d*\b/gi, 'the source video');
     if (prompt.length > 1000) throw new ProviderError('Aleph 2 prompts are at most 1,000 characters.', 400, 'comet');
     const body: Record<string, string> = { model: 'aleph2', videoUri: alephVideoUri(request.sourceVideo) };
     if (prompt) body.promptText = prompt;

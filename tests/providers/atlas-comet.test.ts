@@ -538,6 +538,17 @@ describe('cometapi', () => {
     });
   });
 
+  it('names the Aleph source in words and refuses @Image references it cannot receive', async () => {
+    const fetchMock = mockFetchSequence([{ payload: { id: 'task-aleph' } }]);
+    const videoUri = 'data:video/mp4;base64,AAAA';
+    await cometCreateVideo({ apiKey: 'cm-key', model: 'aleph2', prompt: 'Edit @Video1: restyle @video as clay', inputMode: 'edit', sourceVideo: videoUri });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).promptText).toBe('Edit the source video: restyle the source video as clay');
+    await expect(cometCreateVideo({
+      apiKey: 'cm-key', model: 'aleph2', prompt: 'Replace the person with @Image1', inputMode: 'edit', sourceVideo: videoUri,
+    })).rejects.toThrow(/cannot receive images/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('refuses an Aleph source that is neither a short https URL nor a 5 MB data URI', async () => {
     await expect(cometCreateVideo({
       apiKey: 'cm-key', model: 'aleph2', prompt: 'Edit', inputMode: 'edit', sourceVideo: 'http://insecure.example/clip.mp4',
