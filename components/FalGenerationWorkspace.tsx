@@ -6,7 +6,7 @@ import CloudExecutionNotice from '@/components/account/CloudExecutionNotice';
 import CloudJobPanel from '@/components/account/CloudJobPanel';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpDown, Download, ImagePlus, Loader2, Search, Sparkles, Video } from 'lucide-react';
+import { ArrowUpDown, Download, ImagePlus, Loader2, Sparkles, Video } from 'lucide-react';
 
 import LastFrameActions from '@/components/LastFrameActions';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
@@ -65,6 +65,7 @@ import { JobStatusPill } from '@/components/StatusPill';
 import WorkspaceHeader from '@/components/WorkspaceHeader';
 import { GenExampleButton, PromptHeader } from '@/components/PromptHeader';
 import { useExamplePrompt } from '@/hooks/useExamplePrompt';
+import { ModelNote, ModelPickerCard } from '@/components/ModelPickerCard';
 
 interface FalGenerationWorkspaceProps {
   inputMode: FalInputMode;
@@ -747,23 +748,7 @@ function FalGenerationWorkspaceSession({
       <GenerationWorkspaceLayout
         setup={
           <>
-          <section className="glass-card space-y-3 p-3.5 md:p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="display text-base font-semibold">Model</h3>
-              </div>
-              <div className="flex w-44 max-w-[52%] items-center gap-2">
-                <Search aria-hidden="true" size={14} className="shrink-0 text-[var(--foreground-subtle)]" />
-                <input
-                  type="search"
-                  aria-label="Search fal video models"
-                  value={modelSearch}
-                  onChange={(event) => setModelSearch(event.target.value)}
-                  placeholder="Find a model"
-                  className="min-w-0 flex-1"
-                />
-              </div>
-            </div>
+          <ModelPickerCard searchLabel="Search fal video models" search={modelSearch} onSearch={setModelSearch}>
             {/* The rate rides along in its own column, as the aggregator
                 pickers' does. Without it this list named Veo 3.1 and Kling 3
                 Pro and nothing else, and staying inside a budget meant leaving
@@ -785,11 +770,9 @@ function FalGenerationWorkspaceSession({
             {matchingModels.length === 0 ? (
               <p role="status" className="text-sm text-[var(--foreground-muted)]">No fal video models match your search.</p>
             ) : (
-              <p className="text-sm text-[var(--foreground-muted)]">
-                <span className="font-medium text-[var(--foreground)]">{selectedModel.label}:</span> {selectedModel.description}
-              </p>
+              <ModelNote label={selectedModel.label}>{selectedModel.description}</ModelNote>
             )}
-          </section>
+          </ModelPickerCard>
 
           {isEdit && variant.edit && (
             <VideoSourceInput capability={variant.edit} source={source} onChange={setSelectedSource} disabled={isSubmitting} />

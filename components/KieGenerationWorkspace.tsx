@@ -6,7 +6,7 @@ import CloudExecutionNotice from '@/components/account/CloudExecutionNotice';
 import CloudJobPanel from '@/components/account/CloudJobPanel';
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Download, ImagePlus, Loader2, Search, Sparkles, Video } from 'lucide-react';
+import { Download, ImagePlus, Loader2, Sparkles, Video } from 'lucide-react';
 import { toast } from 'sonner';
 import ReferenceStack from '@/components/ReferenceStack';
 import { useFileDrop } from '@/lib/drop/use-file-drop';
@@ -62,6 +62,7 @@ import { JobStatusPill } from '@/components/StatusPill';
 import WorkspaceHeader from '@/components/WorkspaceHeader';
 import { GenExampleButton, PromptHeader } from '@/components/PromptHeader';
 import { useExamplePrompt } from '@/hooks/useExamplePrompt';
+import { ModelNote, ModelPickerCard } from '@/components/ModelPickerCard';
 
 interface KieGenerationWorkspaceProps {
   mediaType: MediaType;
@@ -518,40 +519,21 @@ export default function KieGenerationWorkspace({
       <GenerationWorkspaceLayout
         setup={
           <>
-          <section className="glass-card space-y-3 p-3.5 md:p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="display text-base font-semibold">Model</h3>
-              </div>
-              <div className="flex w-40 max-w-[48%] items-center gap-2">
-                <Search className="pointer-events-none shrink-0 text-[var(--foreground-subtle)]" size={14} />
-                <input
-                  aria-label="Search compatible models"
-                  value={modelSearch}
-                  onChange={(event) => setModelSearch(event.target.value)}
-                  placeholder="Find a model"
-                  className="min-w-0 flex-1"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <ModelListbox
-                label="Model"
-                accent={mediaType}
-                columns={mediaType === 'video' ? KIE_VIDEO_COLUMNS : KIE_IMAGE_COLUMNS}
-                rows={(matchingModels.length > 0 ? matchingModels : models).map((model) => ({
-                  id: model.id,
-                  label: model.label,
-                  cells: mediaType === 'video' ? kieVideoSpecs(model, inputMode) : kieImageSpecs(model, inputMode),
-                }))}
-                value={selectedModel.id}
-                onChange={setModel}
-              />
-              <p className="px-0.5 text-sm leading-relaxed text-[var(--foreground-muted)]">
-                <span className="font-medium text-[var(--foreground)]">{selectedModel.label}:</span> {selectedModel.description}
-              </p>
-            </div>
-          </section>
+          <ModelPickerCard searchLabel="Search compatible models" search={modelSearch} onSearch={setModelSearch}>
+            <ModelListbox
+              label="Model"
+              accent={mediaType}
+              columns={mediaType === 'video' ? KIE_VIDEO_COLUMNS : KIE_IMAGE_COLUMNS}
+              rows={(matchingModels.length > 0 ? matchingModels : models).map((model) => ({
+                id: model.id,
+                label: model.label,
+                cells: mediaType === 'video' ? kieVideoSpecs(model, inputMode) : kieImageSpecs(model, inputMode),
+              }))}
+              value={selectedModel.id}
+              onChange={setModel}
+            />
+            <ModelNote label={selectedModel.label}>{selectedModel.description}</ModelNote>
+          </ModelPickerCard>
 
           {inputMode === 'image' && (
             <section className="glass-card space-y-3 p-3.5 md:p-4">

@@ -3,7 +3,7 @@
 // components/ProviderVideoWorkspace.tsx
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpDown, Download, ImagePlus, Loader2, Search, Sparkles, Video } from 'lucide-react';
+import { ArrowUpDown, Download, ImagePlus, Loader2, Sparkles, Video } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCloudWorkspace } from '@/lib/account/useCloudWorkspace';
 import CloudExecutionNotice from '@/components/account/CloudExecutionNotice';
@@ -83,6 +83,7 @@ import { JobStatusPill } from '@/components/StatusPill';
 import WorkspaceHeader from '@/components/WorkspaceHeader';
 import { GenExampleButton, PromptHeader } from '@/components/PromptHeader';
 import { useExamplePrompt } from '@/hooks/useExamplePrompt';
+import { ModelNote, ModelPickerCard } from '@/components/ModelPickerCard';
 
 /**
  * Video for Runware, Atlas Cloud, and CometAPI, laid out the way the Kie and
@@ -915,48 +916,29 @@ export default function ProviderVideoWorkspace({
       <GenerationWorkspaceLayout
         setup={
           <>
-          <section className="glass-card space-y-3 p-3.5 md:p-4">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="display text-base font-semibold">Model</h3>
-              <div className="flex w-40 max-w-[48%] items-center gap-2">
-                <Search
-                  className="pointer-events-none shrink-0 text-[var(--foreground-subtle)]"
-                  size={14}
-                />
-                <input
-                  aria-label="Search compatible models"
-                  value={modelSearch}
-                  onChange={(event) => setModelSearch(event.target.value)}
-                  placeholder="Find a model"
-                  className="min-w-0 flex-1"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <ModelListbox
-                label="Model"
-                accent="video"
-                columns={PROVIDER_VIDEO_COLUMNS}
-                rows={(matchingModels.length > 0 ? matchingModels : models).map((model) => ({
-                  id: model.id,
-                  label: model.label,
-                  cells: providerVideoSpecs(model, inputMode),
-                }))}
-                value={selectedModel?.id}
-                onChange={(id) => {
-                  setError(null);
-                  setProviderModel(provider, 'video', id);
-                }}
-              />
-              {selectedModel && (
-                <p className="px-0.5 text-sm leading-relaxed text-[var(--foreground-muted)]">
-                  <span className="font-medium text-[var(--foreground)]">{selectedModel.label}:</span>{' '}
-                  {isEdit ? selectedModel.videoEdit?.note ?? 'Edit the source clip with optional reference images. Duration and aspect ratio follow the source; changes are guided by your prompt.' : selectedModel.note ??
-                    `Billed to your ${label} account at ${selectedModel.price && selectedModel.price !== 'metered' ? selectedModel.price : 'the vendor’s rates'}.`}
-                </p>
-              )}
-            </div>
-          </section>
+          <ModelPickerCard searchLabel="Search compatible models" search={modelSearch} onSearch={setModelSearch}>
+            <ModelListbox
+              label="Model"
+              accent="video"
+              columns={PROVIDER_VIDEO_COLUMNS}
+              rows={(matchingModels.length > 0 ? matchingModels : models).map((model) => ({
+                id: model.id,
+                label: model.label,
+                cells: providerVideoSpecs(model, inputMode),
+              }))}
+              value={selectedModel?.id}
+              onChange={(id) => {
+                setError(null);
+                setProviderModel(provider, 'video', id);
+              }}
+            />
+            {selectedModel && (
+              <ModelNote label={selectedModel.label}>
+                {isEdit ? selectedModel.videoEdit?.note ?? 'Edit the source clip with optional reference images. Duration and aspect ratio follow the source; changes are guided by your prompt.' : selectedModel.note ??
+                  `Billed to your ${label} account at ${selectedModel.price && selectedModel.price !== 'metered' ? selectedModel.price : 'the vendor’s rates'}.`}
+              </ModelNote>
+            )}
+          </ModelPickerCard>
 
           {isEdit && <VideoSourceInput capability={selectedModel!.videoEdit!} source={source} onChange={setSelectedSource} disabled={isSubmitting}
             youtube={cloudWorkspace.cloud ? {provider, modelId: selectedModel!.id, modelLabel: selectedModel!.label} : undefined} />}
