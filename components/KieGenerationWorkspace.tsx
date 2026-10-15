@@ -10,7 +10,7 @@ import { Download, ImagePlus, Loader2, Search, Sparkles, Video } from 'lucide-re
 import { toast } from 'sonner';
 import ReferenceStack from '@/components/ReferenceStack';
 import { useFileDrop } from '@/lib/drop/use-file-drop';
-import { requestExamplePrompt, requestPromptSlug } from '@/lib/micro-ai/browser';
+import { requestPromptSlug } from '@/lib/micro-ai/browser';
 import { fetchKieCredits, submitKieJob, uploadKieFiles } from '@/lib/kie/browser';
 import { defaultKieValues, modelsForKieMode, resolveKieVariant, validateKieInput } from '@/lib/kie/catalog';
 import ModelListbox from '@/components/ModelListbox';
@@ -60,6 +60,8 @@ import VideoPlayer from '@/components/video/VideoPlayer';
 import JobElapsed from '@/components/JobElapsed';
 import { JobStatusPill } from '@/components/StatusPill';
 import WorkspaceHeader from '@/components/WorkspaceHeader';
+import { GenExampleButton, PromptHeader } from '@/components/PromptHeader';
+import { useExamplePrompt } from '@/hooks/useExamplePrompt';
 
 interface KieGenerationWorkspaceProps {
   mediaType: MediaType;
@@ -149,7 +151,6 @@ export default function KieGenerationWorkspace({
   const [modelSearch, setModelSearch] = useState('');
 
   const [error, setError] = useState<string | null>(null);
-  const [isGeneratingExample, setIsGeneratingExample] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [isReadingFrame, setIsReadingFrame] = useState(false);
@@ -312,23 +313,16 @@ export default function KieGenerationWorkspace({
     if (reference) useDraftStore.getState().removeReference(reference.id);
   };
 
-  // Served by the shared micro-AI tier when the deployment has one, otherwise by
-  // the user's own Gemini key; the route says which when neither is available.
-  const generateExample = async () => {
-    setIsGeneratingExample(true);
-    setError(null);
-    try {
-      setPrompt(await requestExamplePrompt(resolvedExampleFeatureId, geminiApiKey));
-    } catch (exampleError) {
-      const message = exampleError instanceof Error
-        ? exampleError.message
-        : 'Could not generate an example prompt.';
+  const example = useExamplePrompt({
+    featureId: resolvedExampleFeatureId,
+    apiKey: geminiApiKey,
+    onStart: () => setError(null),
+    onPrompt: setPrompt,
+    onError: (message) => {
       setError(message);
       toast.error(message);
-    } finally {
-      setIsGeneratingExample(false);
-    }
-  };
+    },
+  });
 
   // Ask flash-lite for a short evocative filename slug and pin it to the job, so
   // the download is named after the prompt rather than the provider's task ID.
@@ -630,22 +624,10 @@ export default function KieGenerationWorkspace({
         }
         prompt={
           <PromptPanel paused={gated} hasPrompt={prompt.trim().length > 0}>
-            <div className="flex items-center justify-between gap-3">
-              <label htmlFor="kie-prompt" className="display block text-base font-semibold">Prompt</label>
-              <div className="flex items-center gap-1.5">
-                <SavedPromptsButton />
-                <button
-                  type="button"
-                  onClick={() => void generateExample()}
-                  disabled={isGeneratingExample}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--brand-accent)]/30 bg-[var(--brand-accent)]/10 px-2.5 py-1.5 text-xs font-medium text-[var(--brand-accent)] transition-colors hover:text-[var(--neon-cyan)] disabled:cursor-not-allowed disabled:opacity-60"
-                  title="Generate an example prompt with the shared fast model, or your own Gemini key"
-                >
-                  {isGeneratingExample ? <Loader2 className="animate-spin" size={14} /> : <Sparkles size={14} />}
-                  {isGeneratingExample ? 'Thinking…' : 'Gen Example'}
-                </button>
-              </div>
-            </div>
+            <PromptHeader htmlFor="kie-prompt">
+              <SavedPromptsButton />
+              <GenExampleButton busy={example.generating} onClick={() => void example.generate()} />
+            </PromptHeader>
             <AutoExpandingPrompt
               id="kie-prompt"
               value={prompt}

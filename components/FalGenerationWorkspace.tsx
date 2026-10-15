@@ -24,7 +24,7 @@ import { inspectPrompt } from '@/lib/moderation/floors';
 import { useRelaxedFilter } from '@/lib/moderation/use-relaxed-filter';
 import { isRetryableFailure, useAutoRetry } from '@/lib/providers/auto-retry';
 import ReferenceStack from '@/components/ReferenceStack';
-import { requestExamplePrompt, requestPromptSlug } from '@/lib/micro-ai/browser';
+import { requestPromptSlug } from '@/lib/micro-ai/browser';
 import { validateEditSource, validateEditVideo } from '@/lib/providers/video-edit';
 import { cancelFalJob, submitFalJob, uploadFalFiles } from '@/lib/fal/browser';
 import {
@@ -63,6 +63,8 @@ import VideoSourceInput, { type SourceVideo } from '@/components/VideoSourceInpu
 import VideoPlayer from '@/components/video/VideoPlayer';
 import { JobStatusPill } from '@/components/StatusPill';
 import WorkspaceHeader from '@/components/WorkspaceHeader';
+import { GenExampleButton, PromptHeader } from '@/components/PromptHeader';
+import { useExamplePrompt } from '@/hooks/useExamplePrompt';
 
 interface FalGenerationWorkspaceProps {
   inputMode: FalInputMode;
@@ -327,7 +329,6 @@ function FalGenerationWorkspaceSession({
   const [selectedSource, setSelectedSource] = useState<SourceVideo | null>(null);
   const source = selectedSource?.epoch === epoch ? selectedSource : null;
   const [error, setError] = useState<string | null>(null);
-  const [isGeneratingExample, setIsGeneratingExample] = useState(false);
   const [isReadingFrame, setIsReadingFrame] = useState(false);
   const [submittingVariantId, setSubmittingVariantId] = useState<string | null>(null);
   const autoRetry = useAutoRetry();
@@ -508,22 +509,13 @@ function FalGenerationWorkspaceSession({
     if (reference) useDraftStore.getState().removeReference(reference.id);
   };
 
-  const generateExample = async () => {
-    setIsGeneratingExample(true);
-    setError(null);
-    try {
-      setPrompt(await requestExamplePrompt(`${inputMode}-to-video`, geminiApiKey));
-    } catch (exampleError) {
-      if (!mountedRef.current) return;
-      setError(
-        exampleError instanceof Error
-          ? exampleError.message
-          : 'Could not generate an example prompt.'
-      );
-    } finally {
-      if (mountedRef.current) setIsGeneratingExample(false);
-    }
-  };
+  const example = useExamplePrompt({
+    featureId: `${inputMode}-to-video`,
+    apiKey: geminiApiKey,
+    onStart: () => setError(null),
+    onPrompt: setPrompt,
+    onError: setError,
+  });
 
   // Ask flash-lite for a short evocative filename slug and pin it to the job, so
   // the download is named after the prompt rather than the fal request ID.
@@ -899,22 +891,10 @@ function FalGenerationWorkspaceSession({
         }
         prompt={
           <PromptPanel paused={gated} hasPrompt={prompt.trim().length > 0}>
-            <div className="flex items-center justify-between gap-3">
-              <label htmlFor="fal-video-prompt" className="display block text-base font-semibold">Prompt</label>
-              <div className="flex items-center gap-1.5">
-                <SavedPromptsButton />
-                <button
-                  type="button"
-                  onClick={() => void generateExample()}
-                  disabled={isGeneratingExample}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--brand-accent)]/30 bg-[var(--brand-accent)]/10 px-2.5 py-1.5 text-xs font-medium text-[var(--brand-accent)] transition-colors hover:text-[var(--neon-cyan)] disabled:cursor-not-allowed disabled:opacity-60"
-                  title="Generate an example prompt with the shared fast model, or your own Gemini key"
-                >
-                  {isGeneratingExample ? <Loader2 className="animate-spin" size={14} /> : <Sparkles size={14} />}
-                  {isGeneratingExample ? 'Thinking…' : 'Gen Example'}
-                </button>
-              </div>
-            </div>
+            <PromptHeader htmlFor="fal-video-prompt">
+              <SavedPromptsButton />
+              <GenExampleButton busy={example.generating} onClick={() => void example.generate()} />
+            </PromptHeader>
             <AutoExpandingPrompt
               id="fal-video-prompt"
               aria-required="true"

@@ -59,7 +59,7 @@ import {
   isDownloadableMediaUrl,
 } from '@/lib/media-download';
 import { downloadFilenameBase } from '@/lib/download-name';
-import { requestExamplePrompt, requestPromptSlug } from '@/lib/micro-ai/browser';
+import { requestPromptSlug } from '@/lib/micro-ai/browser';
 import { getProviderVideoStatus, pollDelayMs, releaseRunwareMedia, submitProviderVideo } from '@/lib/providers/browser';
 import { followProviderVideo } from '@/lib/providers/follow-video';
 import { findModel, modelsFor } from '@/lib/providers/catalog';
@@ -81,6 +81,8 @@ import JobElapsed from '@/components/JobElapsed';
 import { fileAsDataUrl } from '@/lib/file-data-url';
 import { JobStatusPill } from '@/components/StatusPill';
 import WorkspaceHeader from '@/components/WorkspaceHeader';
+import { GenExampleButton, PromptHeader } from '@/components/PromptHeader';
+import { useExamplePrompt } from '@/hooks/useExamplePrompt';
 
 /**
  * Video for Runware, Atlas Cloud, and CometAPI, laid out the way the Kie and
@@ -349,7 +351,6 @@ export default function ProviderVideoWorkspace({
   const [modelSearch, setModelSearch] = useState('');
 
   const [error, setError] = useState<string | null>(null);
-  const [isGeneratingExample, setIsGeneratingExample] = useState(false);
   const [isDescribing, setIsDescribing] = useState(false);
   const [describeError, setDescribeError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -558,27 +559,16 @@ export default function ProviderVideoWorkspace({
     if (reference) useDraftStore.getState().removeReference(reference.id);
   };
 
-  // Served by the shared micro-AI tier when the deployment has one, otherwise by
-  // the user's own Gemini key; the route says which when neither is available.
-  const generateExample = async () => {
-    setIsGeneratingExample(true);
-    setError(null);
-    try {
-      setPrompt(
-        await requestExamplePrompt(
-          inputMode === 'text' ? 'text-to-video' : 'image-to-video',
-          geminiApiKey
-        )
-      );
-    } catch (exampleError) {
-      const message =
-        exampleError instanceof Error ? exampleError.message : 'Could not generate an example prompt.';
+  const example = useExamplePrompt({
+    featureId: inputMode === 'text' ? 'text-to-video' : 'image-to-video',
+    apiKey: geminiApiKey,
+    onStart: () => setError(null),
+    onPrompt: setPrompt,
+    onError: (message) => {
       setError(message);
       toast.error(message);
-    } finally {
-      setIsGeneratingExample(false);
-    }
-  };
+    },
+  });
 
   // Ask flash-lite for a short evocative filename slug and pin it to the job, so
   // the download is named after the prompt rather than the provider's task ID.
@@ -1102,49 +1092,37 @@ export default function ProviderVideoWorkspace({
         }
         prompt={
           <PromptPanel paused={gated} hasPrompt={prompt.trim().length > 0}>
-              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-              <label htmlFor="provider-video-prompt" className="display block text-base font-semibold">
-                Prompt
-              </label>
-              <div className="flex flex-wrap items-center justify-end gap-1.5">
-                <SavedPromptsButton />
-                <DescribeSourceButton
-                  sources={describeSources}
-                  apiKey={geminiApiKey}
-                  prompt={prompt}
-                  disabled={isGeneratingExample}
-                  onPrompt={(next) => {
-                    setDescribeError(null);
-                    setPrompt(next);
-                  }}
-                  onError={(message) => {
-                    setDescribeError(message);
-                    toast.error(message);
-                  }}
-                  onNotice={(message) => {
-                    toast.message(message);
-                  }}
-                  onBusyChange={(busy) => {
-                    setIsDescribing(busy);
-                    if (busy) setDescribeError(null);
-                  }}
+            <PromptHeader htmlFor="provider-video-prompt">
+              <SavedPromptsButton />
+              <DescribeSourceButton
+                sources={describeSources}
+                apiKey={geminiApiKey}
+                prompt={prompt}
+                disabled={example.generating}
+                onPrompt={(next) => {
+                  setDescribeError(null);
+                  setPrompt(next);
+                }}
+                onError={(message) => {
+                  setDescribeError(message);
+                  toast.error(message);
+                }}
+                onNotice={(message) => {
+                  toast.message(message);
+                }}
+                onBusyChange={(busy) => {
+                  setIsDescribing(busy);
+                  if (busy) setDescribeError(null);
+                }}
+              />
+              {!isEdit && (
+                <GenExampleButton
+                  busy={example.generating}
+                  disabled={isDescribing}
+                  onClick={() => void example.generate()}
                 />
-                {!isEdit && <button
-                  type="button"
-                  onClick={() => void generateExample()}
-                  disabled={isGeneratingExample || isDescribing}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--brand-accent)]/30 bg-[var(--brand-accent)]/10 px-2.5 py-1.5 text-xs font-medium text-[var(--brand-accent)] transition-colors hover:text-[var(--neon-cyan)] disabled:cursor-not-allowed disabled:opacity-60"
-                  title="Generate an example prompt with the shared fast model, or your own Gemini key"
-                >
-                  {isGeneratingExample ? (
-                    <Loader2 className="animate-spin" size={14} />
-                  ) : (
-                    <Sparkles size={14} />
-                  )}
-                  {isGeneratingExample ? 'Thinking…' : 'Gen Example'}
-                </button>}
-              </div>
-            </div>
+              )}
+            </PromptHeader>
             {describeError && (
               <p role="alert" className="text-xs text-red-300">{describeError}</p>
             )}

@@ -87,9 +87,9 @@ import {
   Loader2,
   ImagePlus,
   Info,
-  Sparkles,
 } from 'lucide-react';
 import { fileAsDataUrl } from '@/lib/file-data-url';
+import { GenExampleButton } from '@/components/PromptHeader';
 
 interface GenerationInterfaceProps {
   feature: Feature;
@@ -1324,23 +1324,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
               <div className="flex items-center gap-1.5">
                 <SavedPromptsButton className="px-2 py-1" />
                 {feature.examplePrompt && (
-                  <button
-                    onClick={handleUseExample}
-                    disabled={exampleMutation.isPending}
-                    className="text-xs text-[var(--brand-accent)] hover:text-[var(--neon-cyan)] disabled:opacity-60 flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--brand-accent)]/10 border border-[var(--brand-accent)]/30 transition-colors"
-                  >
-                    {exampleMutation.isPending ? (
-                      <>
-                        <Loader2 size={14} className="animate-spin" />
-                        Thinking…
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles size={14} />
-                        Gen Example
-                      </>
-                    )}
-                  </button>
+                  <GenExampleButton busy={exampleMutation.isPending} onClick={handleUseExample} />
                 )}
 
                 {/* Reveal the exact instruction Gemini is given */}
