@@ -3,7 +3,7 @@
 // components/ProviderVideoWorkspace.tsx
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpDown, Download, ImagePlus, Loader2, Sparkles, Video } from 'lucide-react';
+import { ArrowUpDown, ImagePlus, Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCloudWorkspace } from '@/lib/account/useCloudWorkspace';
 import CloudExecutionNotice from '@/components/account/CloudExecutionNotice';
@@ -76,14 +76,13 @@ import { useDraftStore } from '@/store/useDraftStore';
 import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
 import { useProviderJobsStore, type ProviderJob } from '@/store/useProviderJobsStore';
 import { useSeedFrameStore } from '@/store/useSeedFrameStore';
-import VideoPlayer from '@/components/video/VideoPlayer';
-import JobElapsed from '@/components/JobElapsed';
 import { fileAsDataUrl } from '@/lib/file-data-url';
 import { JobStatusPill } from '@/components/StatusPill';
 import WorkspaceHeader from '@/components/WorkspaceHeader';
 import { GenExampleButton, PromptHeader } from '@/components/PromptHeader';
 import { useExamplePrompt } from '@/hooks/useExamplePrompt';
 import { ModelNote, ModelPickerCard } from '@/components/ModelPickerCard';
+import { VideoDownloadLink, VideoResultStage } from '@/components/VideoResult';
 
 /**
  * Video for Runware, Atlas Cloud, and CometAPI, laid out the way the Kie and
@@ -1190,55 +1189,31 @@ export default function ProviderVideoWorkspace({
               />
             )}
           </div>
-          <div className="flex min-h-[300px] flex-1 items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--background-elevated)]/70">
-            {resultUrl ? (
-              <VideoPlayer
-                src={resultUrl}
-                label="Generated video"
-                className="h-full max-h-[520px] w-full"
-              />
-            ) : latestJob && !isTerminal(latestJob.state) ? (
-              <div className="space-y-3 p-5 text-center">
-                <Loader2 className="mx-auto animate-spin text-[var(--neon-purple)]" size={34} />
-                <p className="text-sm text-[var(--foreground-muted)]">
-                  {label} is working on your video.{' '}
-                  {/* From the job's `createdAt`, so it counts the queue too and
-                      survives a reload — the wait a person actually feels. */}
-                  <JobElapsed startedAt={latestJob.createdAt} className="text-[var(--foreground)]" />
-                </p>
-                {typeof latestJob.progress === 'number' && (
-                  <p className="font-mono text-xs text-[var(--neon-purple)]">
-                    {Math.round(latestJob.progress * 100)}%
-                  </p>
-                )}
-              </div>
-            ) : latestJob?.state === 'error' ? (
-              <p className="max-w-sm p-5 text-center text-sm text-red-300">
-                {latestJob.error || `${label} could not complete this task. It was not resubmitted.`}
-                {latestJob.taskId && <span className="mt-2 block break-all font-mono text-xs">Provider task: {latestJob.taskId}</span>}
-              </p>
-            ) : (
-              <div className="p-5 text-center text-[var(--foreground-muted)]">
-                <Video className="mx-auto mb-3 opacity-35" size={46} />
-                <p>Your generated video will appear here.</p>
-              </div>
-            )}
-          </div>
+          <VideoResultStage
+            resultUrl={resultUrl}
+            accent="purple"
+            working={
+              latestJob && !isTerminal(latestJob.state)
+                ? { label: `${label} is working on your video.`, startedAt: latestJob.createdAt, progress: latestJob.progress }
+                : undefined
+            }
+            error={
+              latestJob?.state === 'error' ? (
+                <>
+                  {latestJob.error || `${label} could not complete this task. It was not resubmitted.`}
+                  {latestJob.taskId && <span className="mt-2 block break-all font-mono text-xs">Provider task: {latestJob.taskId}</span>}
+                </>
+              ) : undefined
+            }
+          />
           {resultUrl && latestJob && (
-            <a
+            <VideoDownloadLink
               href={resultUrl}
-              download={`${filenameBase}.${extensionForMedia('video')}`}
-              onClick={(event) => {
-                // Results are served cross-origin, where the download attribute is
-                // ignored — fetch the bytes so the semantic name survives.
-                event.preventDefault();
-                void downloadResult();
-              }}
-              className="btn-secondary w-full"
-            >
-              {isDownloading ? <Loader2 className="animate-spin" size={18} /> : <Download size={18} />}
-              {isDownloading ? 'Preparing download…' : 'Download video'}
-            </a>
+              filename={`${filenameBase}.${extensionForMedia('video')}`}
+              busy={isDownloading}
+              label="Download video"
+              onDownload={() => void downloadResult()}
+            />
           )}
           {resultUrl && latestJob?.draftId && (
             <FinalizeDraftButton

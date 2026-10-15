@@ -6,7 +6,7 @@ import CloudExecutionNotice from '@/components/account/CloudExecutionNotice';
 import CloudJobPanel from '@/components/account/CloudJobPanel';
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Download, ImagePlus, Loader2, Sparkles, Video } from 'lucide-react';
+import { ImagePlus, Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import ReferenceStack from '@/components/ReferenceStack';
 import { useFileDrop } from '@/lib/drop/use-file-drop';
@@ -56,13 +56,12 @@ import {
   useAutoRetry,
 } from '@/lib/providers/auto-retry';
 import type { EngineId } from '@/lib/engines/registry';
-import VideoPlayer from '@/components/video/VideoPlayer';
-import JobElapsed from '@/components/JobElapsed';
 import { JobStatusPill } from '@/components/StatusPill';
 import WorkspaceHeader from '@/components/WorkspaceHeader';
 import { GenExampleButton, PromptHeader } from '@/components/PromptHeader';
 import { useExamplePrompt } from '@/hooks/useExamplePrompt';
 import { ModelNote, ModelPickerCard } from '@/components/ModelPickerCard';
+import { VideoDownloadLink, VideoResultStage } from '@/components/VideoResult';
 
 interface KieGenerationWorkspaceProps {
   mediaType: MediaType;
@@ -665,42 +664,24 @@ export default function KieGenerationWorkspace({
           </div>
           {mediaType === 'video' ? (
             <>
-              <div className="flex min-h-[300px] flex-1 items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--background-elevated)]/70">
-                {resultUrl ? (
-                  <VideoPlayer src={resultUrl} label="Generated video" className="h-full max-h-[520px] w-full" />
-                ) : latestJob && !isKieJobTerminal(latestJob.state) ? (
-                  <div className="space-y-3 p-5 text-center">
-                    <Loader2 className="mx-auto animate-spin text-[var(--neon-cyan)]" size={34} />
-                    <p className="text-sm text-[var(--foreground-muted)]">
-                      Kie is working on your {mediaType}.{' '}
-                      <JobElapsed startedAt={latestJob.createdAt} className="text-[var(--foreground)]" />
-                    </p>
-                    {typeof latestJob.progress === 'number' && <p className="font-mono text-xs text-[var(--neon-cyan)]">{Math.round(latestJob.progress * 100)}%</p>}
-                  </div>
-                ) : latestJob?.state === 'fail' ? (
-                  <p className="max-w-sm p-5 text-center text-sm text-red-300">{latestJob.error || 'Kie could not complete this task. It was not resubmitted.'}</p>
-                ) : (
-                  <div className="p-5 text-center text-[var(--foreground-muted)]">
-                    <Video className="mx-auto mb-3 opacity-35" size={46} />
-                    <p>Your generated {mediaType} will appear here.</p>
-                  </div>
-                )}
-              </div>
+              <VideoResultStage
+                resultUrl={resultUrl}
+                accent="cyan"
+                working={
+                  latestJob && !isKieJobTerminal(latestJob.state)
+                    ? { label: `Kie is working on your ${mediaType}.`, startedAt: latestJob.createdAt, progress: latestJob.progress }
+                    : undefined
+                }
+                error={latestJob?.state === 'fail' ? latestJob.error || 'Kie could not complete this task. It was not resubmitted.' : undefined}
+              />
               {resultUrl && latestJob && (
-                <a
+                <VideoDownloadLink
                   href={resultUrl}
-                  download={`${filenameBase}.${extensionForMedia(mediaType)}`}
-                  onClick={(event) => {
-                    // Kie serves results cross-origin, where the download attribute is
-                    // ignored — fetch the bytes so the semantic name survives.
-                    event.preventDefault();
-                    void downloadResult();
-                  }}
-                  className="btn-secondary w-full"
-                >
-                  {downloadingId ? <Loader2 className="animate-spin" size={18} /> : <Download size={18} />}
-                  {downloadingId ? 'Preparing download…' : `Download ${mediaType}`}
-                </a>
+                  filename={`${filenameBase}.${extensionForMedia(mediaType)}`}
+                  busy={Boolean(downloadingId)}
+                  label={`Download ${mediaType}`}
+                  onDownload={() => void downloadResult()}
+                />
               )}
               {resultUrl && latestJob && (
                 <LastFrameActions
