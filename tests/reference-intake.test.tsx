@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useReferenceIntake } from '@/hooks/useReferenceIntake';
 import { useDraftStore } from '@/store/useDraftStore';
 
-vi.mock('@/lib/draft/ingest', () => ({ prepareReferences: vi.fn(async (entries: unknown) => entries) }));
+const prepareReferences = vi.hoisted(() => vi.fn(async (entries: unknown) => entries));
+vi.mock('@/lib/draft/ingest', () => ({ prepareReferences }));
 vi.mock('@/lib/gallery/keep-upload', () => ({ keepUploadedImages: vi.fn(async () => undefined) }));
 
 const png = (name: string) => new File(['x'], name, { type: 'image/png' });
@@ -73,5 +74,29 @@ describe('useReferenceIntake', () => {
     setup({ pasteEnabled: true });
     await act(async () => paste());
     expect(add).toHaveBeenCalledTimes(1);
+  });
+
+  it('judges a size limit on the re-encoded file, not the original', async () => {
+    const big = new File([new Uint8Array(30)], 'big.png', { type: 'image/png' });
+    const small = new File([new Uint8Array(10)], 'big.jpg', { type: 'image/jpeg' });
+    const checkPrepared = (prepared: { file: File }[]) => (prepared.some((entry) => entry.file.size > 20) ? 'Too large' : null);
+
+    prepareReferences.mockImplementationOnce(async () => [{ file: small }]);
+    const shrinks = setup({ checkPrepared });
+    await act(() => shrinks.result.current.addFiles([big]));
+    expect(shrinks.onError).not.toHaveBeenCalledWith('Too large');
+    expect(add).toHaveBeenCalledWith([{ file: small }], 2);
+
+    prepareReferences.mockImplementationOnce(async () => [{ file: big }]);
+    const stays = setup({ checkPrepared });
+    await act(() => stays.result.current.addFiles([big]));
+    expect(stays.onError).toHaveBeenCalledWith('Too large');
+    expect(add).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a picker closed without a choice as nothing, not a refusal', async () => {
+    const { result, onError } = setup();
+    await act(() => result.current.addFiles([]));
+    expect(onError).not.toHaveBeenCalled();
   });
 });

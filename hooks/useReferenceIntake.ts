@@ -8,7 +8,7 @@ import { useFileDrop } from '@/lib/drop/use-file-drop';
 import { keepUploadedImages } from '@/lib/gallery/keep-upload';
 import { FRAME_EXTRACTION_ERROR, isVideoFile, lastFrameAsImageFile } from '@/lib/video-frame';
 import { useAppStore } from '@/store/useAppStore';
-import { useDraftStore } from '@/store/useDraftStore';
+import { useDraftStore, type DraftReferenceInput } from '@/store/useDraftStore';
 import { useSeedFrameStore } from '@/store/useSeedFrameStore';
 
 /**
@@ -28,6 +28,7 @@ export function useReferenceIntake({
   tooManyMessage,
   pasteEnabled,
   dropDisabled = false,
+  checkPrepared,
   onError,
 }: {
   /** References already in the draft. */
@@ -43,6 +44,12 @@ export function useReferenceIntake({
   pasteEnabled: boolean;
   /** Stop taking drops, e.g. once a fixed number of slots is full. */
   dropDisabled?: boolean;
+  /**
+   * A refusal judged on what will actually be sent. Size limits belong here,
+   * after re-encoding, never on the original file: the conversion is what
+   * decides the payload, and gating first refused images it would have shrunk.
+   */
+  checkPrepared?: (prepared: DraftReferenceInput[]) => string | null;
   onError: (message: string | null) => void;
 }) {
   const imageFormat = useAppStore((state) => state.imageFormat);
@@ -61,6 +68,8 @@ export function useReferenceIntake({
   }, [maxImages]);
 
   const addFiles = async (files: File[]) => {
+    // A picker closed without a choice hands over nothing; that is not a refusal.
+    if (files.length === 0) return;
     const usable = files.filter(accept);
     if (usable.length === 0 || (rejectAnyUnusable && usable.length !== files.length)) {
       onError(unusableMessage);
@@ -86,6 +95,11 @@ export function useReferenceIntake({
       // is both the largest upload and the format providers handle worst.
       const converted = await prepareReferences(prepared, imageFormat);
       if (!mountedRef.current) return;
+      const refusal = checkPrepared?.(converted);
+      if (refusal) {
+        onError(refusal);
+        return;
+      }
       useDraftStore.getState().addReferences(converted, maxImages);
       // Kept for next time, in this browser and in the cloud library when
       // there is an account to hold it. Deliberately not awaited: the

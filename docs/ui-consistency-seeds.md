@@ -48,10 +48,6 @@ rg -n '^\.[a-z]' app/globals.css
 | `components/VideoResult.tsx` `VideoResultStage`, `VideoDownloadLink` | the latest clip's stage and its name-keeping download |
 | `hooks/useReferenceIntake.ts` `useReferenceIntake`, `useClaimSeedFrame`; `components/ReferencePicker.tsx` | reference images from picker, drop and paste, and the "Continue from last frame" handoff |
 
-The image workspace (`GenerationInterface`) still has its own reference intake: it checks
-fal's size limit before `prepareReferences`, which AGENTS.md says must come after. Move it
-onto `useReferenceIntake` with that check after preparing.
-
 Not yet on `ModalShell`: `YouTubeClipDialog` (a `glass-card` panel with no motion) and
 `RelaxedConsentDialog` (`z-[80]`, no blur, not a phone sheet). Moving them changes how
 they look, so it is a deliberate alignment, not a refactor.

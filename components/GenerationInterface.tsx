@@ -1,7 +1,7 @@
 // components/GenerationInterface.tsx
 'use client';
 
-import { useState, useRef, useEffect, useCallback, useId, useMemo } from 'react';
+import { useState, useRef, useEffect, useId, useMemo } from 'react';
 import { useCloudWorkspace } from '@/lib/account/useCloudWorkspace';
 import { SINGLE_IMAGE_MODELS } from '@/lib/account/models';
 import { featureImagePrompt } from '@/lib/image/feature-prompt';
@@ -12,14 +12,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Feature, GenerationConfig } from '@/types';
-import { useFileDrop } from '@/lib/drop/use-file-drop';
 import { metaForFeature, slugify } from '@/lib/example-prompts';
 import { falPublishedCost, geminiResolutionCost } from '@/lib/spend/rates';
-import {
-  geminiImageSize,
-  geminiModelsForFeature,
-  resolveGeminiImageModel,
-} from '@/lib/engines/gemini-catalog';
+import { geminiImageSize, geminiModelsForFeature, resolveGeminiImageModel } from '@/lib/engines/gemini-catalog';
 import { requestExamplePrompt, requestPromptSlug } from '@/lib/micro-ai/browser';
 import { extensionForMimeType } from '@/lib/media-download';
 import { downloadImageResult, IMAGE_DOWNLOAD_ERROR } from '@/lib/results/download-image';
@@ -37,32 +32,16 @@ import SavedPromptsButton from '@/components/SavedPromptsButton';
 import { useAppStore } from '@/store/useAppStore';
 import { modelsFor, resolveModel } from '@/lib/providers/catalog';
 import ModelListbox from '@/components/ModelListbox';
-import {
-  GEMINI_IMAGE_COLUMNS,
-  PROVIDER_IMAGE_COLUMNS,
-  geminiImageSpecs,
-  providerImageSpecs,
-} from '@/lib/models/listbox-specs';
+import { GEMINI_IMAGE_COLUMNS, PROVIDER_IMAGE_COLUMNS, geminiImageSpecs, providerImageSpecs } from '@/lib/models/listbox-specs';
 import type { ProviderId } from '@/lib/providers/types';
-import { prepareReferences } from '@/lib/draft/ingest';
-import { keepUploadedImages } from '@/lib/gallery/keep-upload';
 import { useDraftStore } from '@/store/useDraftStore';
 import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
 import { useGalleryStore } from '@/store/useGalleryStore';
 import { resultBlob } from '@/lib/gallery/capture';
 import { candidatesFromValues, useAutoAspect } from '@/lib/draft/aspect-match';
-import {
-  APPROXIMATE_LEGEND,
-  imageDimensions,
-  isApproximateLabel,
-  withDimensions,
-} from '@/lib/providers/output-size';
+import { APPROXIMATE_LEGEND, imageDimensions, isApproximateLabel, withDimensions } from '@/lib/providers/output-size';
 import { isValueCompatible, type CarryOverField } from '@/lib/draft/carry-over';
-import {
-  enginesForFeature,
-  type EngineId,
-  type EngineMeta,
-} from '@/lib/engines/registry';
+import { enginesForFeature, type EngineId, type EngineMeta } from '@/lib/engines/registry';
 import KieGenerationWorkspace from '@/components/KieGenerationWorkspace';
 import SegmentedToggleGroup from '@/components/SegmentedToggleGroup';
 import StoredImagePicker from '@/components/StoredImagePicker';
@@ -75,21 +54,13 @@ import { useRelaxedFilter } from '@/lib/moderation/use-relaxed-filter';
 import { playGenerationChime } from '@/lib/notify/chime';
 import ResultStack, { type ResultStackItem } from '@/components/ResultStack';
 import RetryCountdown from '@/components/RetryCountdown';
-import {
-  AUTO_RETRY_DELAY_SECONDS,
-  isRetryableFailure,
-  useAutoRetry,
-} from '@/lib/providers/auto-retry';
+import { AUTO_RETRY_DELAY_SECONDS, isRetryableFailure, useAutoRetry } from '@/lib/providers/auto-retry';
 import { RouteError, routeStatus } from '@/lib/providers/route-error';
 import ReferenceStack from '@/components/ReferenceStack';
-import {
-  Wand2,
-  Loader2,
-  ImagePlus,
-  Info,
-} from 'lucide-react';
+import { Wand2, Loader2, ImagePlus, Info } from 'lucide-react';
 import { fileAsDataUrl } from '@/lib/file-data-url';
 import { GenExampleButton } from '@/components/PromptHeader';
+import { useReferenceIntake } from '@/hooks/useReferenceIntake';
 
 interface GenerationInterfaceProps {
   feature: Feature;
@@ -174,6 +145,12 @@ function falDisplayedFailure(caught: unknown, apiKey: string, offered: boolean):
   return raw;
 }
 const MAX_FAL_REFERENCE_BYTES = 20 * 1024 * 1024;
+
+/**
+ * At module scope because the purity lint reads the component body as render
+ * scope and rejects a `Date.now()` there, even inside a mutation callback.
+ */
+const now = () => Date.now();
 
 class LocalFalCancellation extends Error {
   constructor() {
@@ -386,26 +363,19 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
    * publish (Gemini, fal, Kie, PiAPI, Cloudflare) keep the plain label rather
    * than being shown a number this app invented.
    */
-  const aspectRatioOptions = useMemo(
-    () =>
-      ASPECT_RATIO_OPTIONS.map((option) => ({
-        value: option.value,
-        label: withDimensions(
-          option.label,
-          imageDimensions(activeEngineId, activeProviderModel ?? undefined, option.value)
-        ),
-      })),
-    [activeEngineId, activeProviderModel]
-  );
-  const aspectRatioApproximates = useMemo(
-    () =>
-      ASPECT_RATIO_OPTIONS.some((option) =>
-        isApproximateLabel(
-          option.label,
-          imageDimensions(activeEngineId, activeProviderModel ?? undefined, option.value)
-        )
-      ),
-    [activeEngineId, activeProviderModel]
+  // Ten options and a table lookup: cheap enough to derive each render.
+  const aspectRatioOptions = ASPECT_RATIO_OPTIONS.map((option) => ({
+    value: option.value,
+    label: withDimensions(
+      option.label,
+      imageDimensions(activeEngineId, activeProviderModel ?? undefined, option.value)
+    ),
+  }));
+  const aspectRatioApproximates = ASPECT_RATIO_OPTIONS.some((option) =>
+    isApproximateLabel(
+      option.label,
+      imageDimensions(activeEngineId, activeProviderModel ?? undefined, option.value)
+    )
   );
 
   const cloudWorkspace = useCloudWorkspace(activeEngine.id);
@@ -466,46 +436,25 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
     if (slug) setFilenameSlug(slug);
   };
 
-  const addImageFiles = useCallback(async (files: File[]) => {
-    const imageFiles = files.filter((file) => file.type.startsWith('image/'));
-    if (imageFiles.length === 0) {
-      // Silence was fine when only the picker (accept="image/*") fed this, but a drop can
-      // arrive carrying anything at all, and a dead zone reads as a broken one.
-      if (files.length > 0) setError('Drop an image file, or an image dragged from a web page.');
-      return;
-    }
-
-    const maxImages = feature.maxImages || 1;
-
-    if (references.length + imageFiles.length > maxImages) {
-      setError(`Maximum ${maxImages} images allowed`);
-      return;
-    }
-
-    if (activeEngine.id === 'fal') {
-      const oversizedIndex = imageFiles.findIndex(
-        (file) => file.size > MAX_FAL_REFERENCE_BYTES
-      );
-      if (oversizedIndex !== -1) {
-        setError(`Reference image ${oversizedIndex + 1} is larger than 20 MiB.`);
-        return;
-      }
-    }
-
-    // Re-encoded before any provider sees it: nano banana returns PNG, which is
-    // both the largest upload and the format providers handle worst.
-    const prepared = await prepareReferences(
-      imageFiles.map((file) => ({ file })),
-      imageFormat
-    );
-    if (!mountedRef.current) return;
-    useDraftStore.getState().addReferences(prepared, maxImages);
-    // Kept for next time, in this browser and in the cloud library when there
-    // is an account to hold it. Not awaited: the reference is already in the
-    // draft, and storing it must not delay the press that follows.
-    void keepUploadedImages(prepared);
-    setError(null);
-  }, [activeEngine.id, feature.maxImages, imageFormat, references.length]);
+  const maxImages = feature.maxImages || 1;
+  const { addFiles: addImageFiles, isDragging, isFetching, dropProps } = useReferenceIntake({
+    referenceCount: references.length,
+    maxImages,
+    accept: (file) => file.type.startsWith('image/'),
+    // A drop can carry anything at all, and a dead zone reads as a broken one.
+    unusableMessage: 'Drop an image file, or an image dragged from a web page.',
+    tooManyMessage: `Maximum ${maxImages} images allowed`,
+    pasteEnabled: feature.requiresImage,
+    dropDisabled: !feature.requiresImage,
+    // fal refuses a reference over 20 MiB. Judged on the re-encoded file, which
+    // is what gets sent: checking the original refused images it would shrink.
+    checkPrepared: (prepared) => {
+      if (activeEngine.id !== 'fal') return null;
+      const oversized = prepared.findIndex((entry) => entry.file.size > MAX_FAL_REFERENCE_BYTES);
+      return oversized === -1 ? null : `Reference image ${oversized + 1} is larger than 20 MiB.`;
+    },
+    onError: setError,
+  });
 
   // Gemini and fal both want data URLs; the draft holds the Files, so they are
   // re-read whenever the reference list changes.
@@ -528,40 +477,10 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
     };
   }, [references]);
 
-  // A feature accepting fewer images must not inherit more than it can send.
-  useEffect(() => {
-    useDraftStore.getState().limitReferences(feature.maxImages || 1);
-  }, [feature.maxImages]);
-
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     void addImageFiles(Array.from(e.target.files || []));
     e.target.value = '';
   };
-
-  useEffect(() => {
-    if (!feature.requiresImage) return;
-
-    const handlePaste = (event: ClipboardEvent) => {
-      const imageFiles = Array.from(event.clipboardData?.items || [])
-        .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
-        .map((item) => item.getAsFile())
-        .filter((file): file is File => file !== null);
-
-      if (imageFiles.length === 0) return;
-
-      event.preventDefault();
-      void addImageFiles(imageFiles);
-    };
-
-    document.addEventListener('paste', handlePaste);
-    return () => document.removeEventListener('paste', handlePaste);
-  }, [addImageFiles, feature.requiresImage]);
-
-  const { isDragging, isFetching, dropProps } = useFileDrop({
-    onFiles: addImageFiles,
-    onError: setError,
-    disabled: !feature.requiresImage,
-  });
 
   const removeImage = (index: number) => {
     const reference = references[index];
@@ -585,7 +504,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
 
   const generateMutation = useMutation({
     onMutate: () => {
-      startedAtRef.current = Date.now();
+      startedAtRef.current = now();
     },
     mutationFn: async (): Promise<{ dataUrl: string; ext: string; mimeType: string; usage?: EngineUsage; cost?: number }> => {
       const finalPrompt = featureImagePrompt(feature.id, prompt, images.length);
