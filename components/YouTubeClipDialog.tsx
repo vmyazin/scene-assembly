@@ -2,8 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { Crosshair, Loader2, Play, Square, X } from 'lucide-react';
-import DialogPortal from '@/components/DialogPortal';
-import { useAccessibleDialog } from '@/hooks/useAccessibleDialog';
+import { ModalShell } from '@/components/ModalShell';
 import { discardStagedSource } from '@/lib/account/staged-sources';
 import { importYouTubeClip } from '@/lib/account/youtube-clips';
 import { QUICK_LENGTHS, readClipDialogSettings, writeClipDialogSettings } from '@/lib/youtube/dialog-settings';
@@ -19,7 +18,6 @@ const ACCOUNT_CHANGED = 'Your account changed. Import the section again.';
 export default function YouTubeClipDialog({ open, target, onClose, onImported }: {
   open: boolean; target: YouTubeClipTarget; onClose: () => void; onImported: (file: File, source: ImportedClipSource) => Promise<void>;
 }) {
-  const panelRef = useRef<HTMLDivElement>(null);
   const playerHost = useRef<HTMLDivElement>(null);
   const player = useRef<ClipPlayer | null>(null);
   const controller = useRef<AbortController | null>(null);
@@ -50,7 +48,6 @@ export default function YouTubeClipDialog({ open, target, onClose, onImported }:
   const busy = phase !== 'idle';
   // Closing never cancels a running import; "Cancel import" is the only way.
   const close = () => { if (!busy) onClose(); };
-  useAccessibleDialog({ open, onClose: close, dialogRef: panelRef });
   useEffect(() => () => controller.current?.abort(), []);
 
   // Each opening starts without the last attempt's error, progress or preview loop.
@@ -171,62 +168,58 @@ export default function YouTubeClipDialog({ open, target, onClose, onImported }:
       </div>
     </div>;
   };
-  return <DialogPortal>{open && (
-    // A bottom sheet on phones, sized to its content; a centred card from `sm` up.
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 backdrop-blur-md sm:items-center sm:p-4" onClick={close}>
-      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={event => event.stopPropagation()}
-        className="glass-card flex max-h-[100dvh] w-full max-w-2xl flex-col gap-3 overflow-y-auto p-3 sm:max-h-[90vh] sm:gap-4 sm:p-4 md:p-5">
-        <div className="flex items-center justify-between gap-3">
-          <h2 id={titleId} className="display text-base font-semibold sm:text-lg">Import a section from YouTube</h2>
-          <button type="button" aria-label="Close" onClick={close} disabled={busy} className="-mr-2 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-[var(--foreground-muted)] enabled:hover:text-[var(--foreground)] disabled:opacity-50"><X size={18} /></button>
-        </div>
-        <input aria-label="YouTube link" value={linkText} onChange={event => changeLink(event.target.value)} disabled={busy} inputMode="url" placeholder="Paste a YouTube link" className="w-full" />
-        {linkText.trim() && !link && <p role="alert" className="text-sm text-red-300">Paste a YouTube video or Shorts link.</p>}
-        {link && <>
-          <div ref={playerHost} data-testid="youtube-player" className="aspect-video w-full overflow-hidden rounded-xl bg-black [&_iframe]:h-full [&_iframe]:w-full" />
-          <div className="flex items-center gap-2">
-            <div className="relative h-1.5 flex-1 rounded-full bg-[var(--border)]" aria-hidden="true">
-              {duration && from !== undefined && to !== undefined && to > from && <div className="absolute inset-y-0 rounded-full bg-[var(--neon-cyan)]" style={{ left: percent(from), width: `calc(${percent(to)} - ${percent(from)})` }} />}
-            </div>
-            <button type="button" aria-label={looping ? 'Stop preview' : 'Preview range'} className={`${BUTTON} min-w-[44px] px-3`} disabled={busy || (!looping && Boolean(problem))} onClick={preview}>
-              {looping ? <Square size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}<span className="hidden sm:inline">{looping ? 'Stop preview' : 'Preview range'}</span>
-            </button>
-          </div>
-        </>}
-        <p aria-live="polite" className={`-mt-1 text-xs empty:hidden sm:text-sm ${problem && toText ? 'text-red-300' : 'text-[var(--foreground-muted)]'}`}>
-          {link ? `${length !== null ? `${length.toFixed(1)} s · ` : ''}${bounds ? `${target.modelLabel} takes a ${bounds.minSeconds}–${bounds.maxSeconds} s source` : problem}` : ''}
-        </p>
-        {link && <div className="flex flex-wrap items-end gap-2 sm:gap-3">
-          {timeField('from')}{timeField('to')}
-          <div role="group" aria-label="Section length" className="flex basis-full gap-1.5 sm:basis-auto">
-            {QUICK_LENGTHS.map(seconds => {
-              const why = lengthProblem(seconds), chosen = length === seconds;
-              return <button key={seconds} type="button" aria-label={`Make the section ${seconds} seconds`} aria-pressed={chosen} title={why ?? undefined}
-                disabled={busy || Boolean(why)} onClick={() => pickLength(seconds)}
-                className={`flex min-h-[44px] min-w-[44px] flex-1 items-center justify-center rounded-xl border px-3 text-sm font-medium transition-colors disabled:opacity-40 sm:flex-none ${chosen ? 'border-[var(--neon-cyan)]/70 bg-[var(--neon-cyan)]/15 text-[var(--foreground)]' : 'border-[var(--border)] text-[var(--foreground-muted)] enabled:hover:border-[var(--neon-cyan)]/50 enabled:hover:text-[var(--foreground)]'}`}>
-                {seconds} s
-              </button>;
-            })}
-          </div>
-        </div>}
-        {link && <label className="flex min-h-[44px] items-center gap-2 text-sm">
-          <input type="checkbox" checked={saveToLibrary} disabled={busy} onChange={event => setSaveToLibrary(event.target.checked)} className="h-4 w-4 accent-[var(--neon-cyan)]" />
-          <span>Save to library <span className="hidden sm:inline">to reuse this clip for more edits</span></span>
-        </label>}
-        <p role="status" className="sr-only">{phase === 'fetching' ? 'Fetching section…' : busy ? 'Preparing clip…' : ''}</p>
-        {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
-        <p className="text-xs text-[var(--foreground-muted)]">{saveToLibrary
-          ? 'Only this section is downloaded, and saved to your library.'
-          : 'Only this section is downloaded, kept 24 hours for this edit.'}</p>
-        <div className="flex gap-2 sm:justify-end">
-          {phase === 'attaching' ? null : busy
-            ? <button type="button" className={BUTTON} onClick={() => controller.current?.abort()}>Cancel import</button>
-            : <button type="button" className={BUTTON} onClick={close}>Close</button>}
-          <button type="button" className={`${BUTTON} flex-1 text-[var(--foreground)] sm:flex-none`} disabled={!link || Boolean(problem) || busy} onClick={() => void submit()}>
-            {busy ? <><Loader2 size={16} className="animate-spin" /> {phase === 'fetching' ? 'Fetching section…' : 'Preparing clip…'}</> : 'Import clip'}
-          </button>
-        </div>
-      </div>
+  // A bottom sheet on phones, sized to its content; a centred card from `sm` up.
+  return <ModalShell open={open} onClose={close} labelledBy={titleId}
+    className="flex w-full max-w-2xl flex-col gap-3 overflow-y-auto p-3 sm:max-h-[90vh] sm:gap-4 sm:p-4 md:p-5">
+    <div className="flex items-center justify-between gap-3">
+      <h2 id={titleId} className="display text-base font-semibold sm:text-lg">Import a section from YouTube</h2>
+      <button type="button" aria-label="Close" onClick={close} disabled={busy} className="-mr-2 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-[var(--foreground-muted)] enabled:hover:text-[var(--foreground)] disabled:opacity-50"><X size={18} /></button>
     </div>
-  )}</DialogPortal>;
+    <input aria-label="YouTube link" value={linkText} onChange={event => changeLink(event.target.value)} disabled={busy} inputMode="url" placeholder="Paste a YouTube link" className="w-full" />
+    {linkText.trim() && !link && <p role="alert" className="text-sm text-red-300">Paste a YouTube video or Shorts link.</p>}
+    {link && <>
+      <div ref={playerHost} data-testid="youtube-player" className="aspect-video w-full overflow-hidden rounded-xl bg-black [&_iframe]:h-full [&_iframe]:w-full" />
+      <div className="flex items-center gap-2">
+        <div className="relative h-1.5 flex-1 rounded-full bg-[var(--border)]" aria-hidden="true">
+          {duration && from !== undefined && to !== undefined && to > from && <div className="absolute inset-y-0 rounded-full bg-[var(--neon-cyan)]" style={{ left: percent(from), width: `calc(${percent(to)} - ${percent(from)})` }} />}
+        </div>
+        <button type="button" aria-label={looping ? 'Stop preview' : 'Preview range'} className={`${BUTTON} min-w-[44px] px-3`} disabled={busy || (!looping && Boolean(problem))} onClick={preview}>
+          {looping ? <Square size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}<span className="hidden sm:inline">{looping ? 'Stop preview' : 'Preview range'}</span>
+        </button>
+      </div>
+    </>}
+    <p aria-live="polite" className={`-mt-1 text-xs empty:hidden sm:text-sm ${problem && toText ? 'text-red-300' : 'text-[var(--foreground-muted)]'}`}>
+      {link ? `${length !== null ? `${length.toFixed(1)} s · ` : ''}${bounds ? `${target.modelLabel} takes a ${bounds.minSeconds}–${bounds.maxSeconds} s source` : problem}` : ''}
+    </p>
+    {link && <div className="flex flex-wrap items-end gap-2 sm:gap-3">
+      {timeField('from')}{timeField('to')}
+      <div role="group" aria-label="Section length" className="flex basis-full gap-1.5 sm:basis-auto">
+        {QUICK_LENGTHS.map(seconds => {
+          const why = lengthProblem(seconds), chosen = length === seconds;
+          return <button key={seconds} type="button" aria-label={`Make the section ${seconds} seconds`} aria-pressed={chosen} title={why ?? undefined}
+            disabled={busy || Boolean(why)} onClick={() => pickLength(seconds)}
+            className={`flex min-h-[44px] min-w-[44px] flex-1 items-center justify-center rounded-xl border px-3 text-sm font-medium transition-colors disabled:opacity-40 sm:flex-none ${chosen ? 'border-[var(--neon-cyan)]/70 bg-[var(--neon-cyan)]/15 text-[var(--foreground)]' : 'border-[var(--border)] text-[var(--foreground-muted)] enabled:hover:border-[var(--neon-cyan)]/50 enabled:hover:text-[var(--foreground)]'}`}>
+            {seconds} s
+          </button>;
+        })}
+      </div>
+    </div>}
+    {link && <label className="flex min-h-[44px] items-center gap-2 text-sm">
+      <input type="checkbox" checked={saveToLibrary} disabled={busy} onChange={event => setSaveToLibrary(event.target.checked)} className="h-4 w-4 accent-[var(--neon-cyan)]" />
+      <span>Save to library <span className="hidden sm:inline">to reuse this clip for more edits</span></span>
+    </label>}
+    <p role="status" className="sr-only">{phase === 'fetching' ? 'Fetching section…' : busy ? 'Preparing clip…' : ''}</p>
+    {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
+    <p className="text-xs text-[var(--foreground-muted)]">{saveToLibrary
+      ? 'Only this section is downloaded, and saved to your library.'
+      : 'Only this section is downloaded, kept 24 hours for this edit.'}</p>
+    <div className="flex gap-2 sm:justify-end">
+      {phase === 'attaching' ? null : busy
+        ? <button type="button" className={BUTTON} onClick={() => controller.current?.abort()}>Cancel import</button>
+        : <button type="button" className={BUTTON} onClick={close}>Close</button>}
+      <button type="button" className={`${BUTTON} flex-1 text-[var(--foreground)] sm:flex-none`} disabled={!link || Boolean(problem) || busy} onClick={() => void submit()}>
+        {busy ? <><Loader2 size={16} className="animate-spin" /> {phase === 'fetching' ? 'Fetching section…' : 'Preparing clip…'}</> : 'Import clip'}
+      </button>
+    </div>
+  </ModalShell>;
 }

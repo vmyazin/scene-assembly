@@ -1,6 +1,6 @@
 // tests/moderation/relaxed-filter-ui.test.tsx
 // tests/moderation/relaxed-filter-ui.test.tsx
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -91,7 +91,8 @@ describe('Relaxed filter control', () => {
 
     await user.click(screen.getByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: 'Turn on' }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    // The dialog plays its exit animation before it leaves the page.
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(screen.getByTestId('level')).toHaveTextContent('relaxed');
     expect(useAppStore.getState().relaxedConsents[GUEST_CONSENT_KEY]?.ageConfirmed).toBe(true);
     expect(useAppStore.getState().relaxedConsents[GUEST_CONSENT_KEY]?.policyVersion).toBe(1);

@@ -48,10 +48,6 @@ rg -n '^\.[a-z]' app/globals.css
 | `components/VideoResult.tsx` `VideoResultStage`, `VideoDownloadLink` | the latest clip's stage and its name-keeping download |
 | `hooks/useReferenceIntake.ts` `useReferenceIntake`, `useClaimSeedFrame`; `components/ReferencePicker.tsx` | reference images from picker, drop and paste, and the "Continue from last frame" handoff |
 
-Not yet on `ModalShell`: `YouTubeClipDialog` (a `glass-card` panel with no motion) and
-`RelaxedConsentDialog` (`z-[80]`, no blur, not a phone sheet). Moving them changes how
-they look, so it is a deliberate alignment, not a refactor.
-
 Two downloads still free their object URL after a 10 s delay instead of at once
 (`GeminiVideoWorkspace` `downloadBlob`, `lib/account/download.ts`). No reason is recorded;
 settle that before moving them onto `saveBlobAs`.
