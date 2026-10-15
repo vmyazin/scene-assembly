@@ -42,6 +42,15 @@ rg -n '^\.[a-z]' app/globals.css
 | `components/StatusPill.tsx` `StatusPill`, `JobStatusPill`, `STATUS_TONE_CLASSES` | state chips ("Connected", "Done · 0:42") and any success / warning / danger / neutral tint |
 | `lib/media/use-object-url.ts` `useObjectUrl`, `useObjectUrls` | object URLs for previews; never create one in a `useMemo` (StrictMode leaves it revoked) |
 | `lib/jobs/use-queued-job-polling.ts`, `store/createJobStore.ts` | a provider whose jobs are polled until terminal |
+| `components/WorkspaceHeader.tsx` | a provider workspace's back / engine / title / connected-key row |
+| `components/PromptHeader.tsx` `PromptHeader`, `GenExampleButton`; `hooks/useExamplePrompt.ts` | the prompt panel's title row and its example-prompt button |
+| `components/ModelPickerCard.tsx` `ModelPickerCard`, `ModelNote` | a "Model" card with search; filtering stays with the caller |
+| `components/VideoResult.tsx` `VideoResultStage`, `VideoDownloadLink` | the latest clip's stage and its name-keeping download |
+| `hooks/useReferenceIntake.ts` `useReferenceIntake`, `useClaimSeedFrame`; `components/ReferencePicker.tsx` | reference images from picker, drop and paste, and the "Continue from last frame" handoff |
+
+The image workspace (`GenerationInterface`) still has its own reference intake: it checks
+fal's size limit before `prepareReferences`, which AGENTS.md says must come after. Move it
+onto `useReferenceIntake` with that check after preparing.
 
 Not yet on `ModalShell`: `YouTubeClipDialog` (a `glass-card` panel with no motion) and
 `RelaxedConsentDialog` (`z-[80]`, no blur, not a phone sheet). Moving them changes how
