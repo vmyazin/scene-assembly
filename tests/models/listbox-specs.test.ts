@@ -5,6 +5,7 @@ import { findModel } from '@/lib/providers/catalog';
 import { FAL_IMAGE_MODELS, FAL_VIDEO_MODELS } from '@/lib/fal/catalog';
 import { GEMINI_IMAGE_MODELS } from '@/lib/engines/gemini-catalog';
 import { KIE_MODELS } from '@/lib/kie/catalog';
+import { falRateLabel } from '@/lib/spend/rates';
 import {
   compactPrice,
   falImageSpecs,
@@ -75,9 +76,9 @@ describe('listbox spec derivation', () => {
 
   it('reads fal and Kie columns off their control fields', () => {
     const wan = FAL_VIDEO_MODELS.find((model) => model.id === 'wan-2-7')!;
-    const [length, tier, shapes, from] = falVideoSpecs(wan, 'text').map(textOf);
+    const [length, tier, shapes, run] = falVideoSpecs(wan, 'text').map(textOf);
     expect([length, tier, shapes]).toEqual(['15s', '1080p', ['16:9', '1:1', '9:16']]);
-    expect(from).toMatch(/^\$[\d.]+\/s$/);
+    expect(run).toMatch(/^~\$\d+\.\d{2}$/);
 
     const kling = KIE_MODELS.find((model) => model.id === 'kling-3-0')!;
     expect(kieVideoSpecs(kling, 'text').map(textOf)).toEqual(['10s', '1080p', ['21:9', '16:9', '3:2', '4:3', '1:1', '3:4', '2:3', '9:16']]);
@@ -104,12 +105,24 @@ describe('listbox spec derivation', () => {
     expect(rateStartLabel(null)).toBeUndefined();
   });
 
+  it('prices fal video rows per run, the way the Generate button does', () => {
+    const veo = FAL_VIDEO_MODELS.find((model) => model.id === 'veo-3-1')!;
+    const lite = FAL_VIDEO_MODELS.find((model) => model.id === 'veo-3-1-lite')!;
+    // Defaults: 8s, 720p, audio on. The old cell read "$0.2/s" for this $3.20 run.
+    expect(falVideoSpecs(veo, 'image').map(textOf).at(-1)).toBe('~$3.20');
+    expect(falVideoSpecs(lite, 'image').map(textOf).at(-1)).toBe('~$0.40');
+    // The draft's remembered controls move the figure with the button.
+    expect(falVideoSpecs(veo, 'image', { generate_audio: false }).map(textOf).at(-1)).toBe('~$1.60');
+    expect(falVideoSpecs(lite, 'image', { generate_audio: false, resolution: '1080p' }).map(textOf).at(-1)).toBe('~$0.40');
+  });
+
   it('feeds Gemini and fal From cells from the same rate start', () => {
     const gemini = GEMINI_IMAGE_MODELS.find((model) => model.id === 'gemini-nano-banana-2.1')!;
     const fal = FAL_IMAGE_MODELS.find((model) => model.id === 'nano-banana-2.1')!;
     const h3 = FAL_VIDEO_MODELS.find((model) => model.id === 'h3-max-turbo')!;
     expect(geminiImageSpecs(gemini).map(textOf)[0]).toBe('$0.034/image');
     expect(falImageSpecs(fal).map(textOf)[0]).toBe('$0.04/image');
-    expect(falVideoSpecs(h3, 'image').map(textOf).at(-1)).toBe('$0.025/s');
+    // Its run is priced (above); the rate start still feeds the shared helper.
+    expect(rateStartLabel(falRateLabel(h3.variants.find((variant) => variant.inputMode === 'image')!.endpointId))).toBe('$0.025/s');
   });
 });

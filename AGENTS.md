@@ -60,6 +60,20 @@
 - **Results when switching models** → first read `docs/codex/specs/2026-10-01-shared-model-results.md`. Keep the existing shared image feed; scope video results by provider and input mode, never by the selected model or most recent edit submission, because selection configures the next run and must not hide existing outputs. Read result labels and filenames from the producing job.
 - **Video direction selection** → first read `docs/codex/specs/2026-10-02-compact-video-directions.md`. Use `VideoDirectionSelector` for the larger bordered direction tiles and delayed image/details preview, and `ProviderSelector` for compact provider choices so direction carries the visual emphasis; keep capabilities and selection in `VideoWorkspace`: all directions remain visible, incompatible engines are disabled, and selecting a direction resolves a compatible engine because engine choice must never silently change the requested direction. Hover must never change a selection.
 
+- **Placing a clip on the timeline from outside it** (a result card, a library grid) →
+  `placeClipOnTimeline` in `lib/timeline/place-clip.ts`, never `addClip` plus a bare toast.
+  There is one timeline, so an add always joins the edit already there; the helper says
+  which clip number it became, warns when the clip's shape differs from a set frame, and
+  offers Undo. A bare "Added to the timeline" let a landscape clip land in a portrait edit
+  unnoticed (UX audit H5, 2026-10-15). The timeline workspace's own rail keeps `addClip`,
+  since the clip is placed in view there.
+
+- **A result's reference action in a mode with no reference slot** (text-to-image, search
+  grounding) → pass `onEditImage` down `GenerationInterface` → `ResultStack`/`CloudJobPanel`/
+  `KieGenerationWorkspace` → `ResultActions`, which then offers "Edit this image" and opens
+  AI Image Editing with the result as its one source. "Use as reference" there filled a
+  tray nobody could see and toasted success (UX audit H4).
+
 - **Generate button placement** → first read `docs/codex/specs/2026-09-11-generate-under-prompt.md`. Use `GenerationWorkspaceLayout`’s `actions` slot for the button, cost, progress, execution notice and submission/retry feedback, because the shared prompt → actions → results order keeps submission next to the text being edited at every screen width. Setup holds only model, media and controls.
 
 - **Describe a selected source into the prompt** → `lib/describe-source/` and

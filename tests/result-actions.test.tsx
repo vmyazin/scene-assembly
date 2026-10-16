@@ -53,6 +53,23 @@ describe('ResultActions', () => {
     expect(useSeedFrameStore.getState().seed?.file.name).toBe('rooftop.png');
   });
 
+  it('turns the reference action into an edit handoff where no reference slot is shown', async () => {
+    // Text-to-image has no tray: "Added as a reference" there confirmed
+    // something the user could not see. The handoff opens editing instead,
+    // with the result as the one source, displacing a stale leftover.
+    useDraftStore.getState().addReferences([{ file: new File(['old'], 'old.png', { type: 'image/png' }), sourceLabel: 'Old' }], 8);
+    const onEditImage = vi.fn();
+    render(<ResultActions kind="image" src="https://fixture.test/a.png" filenameBase="rooftop" onEditImage={onEditImage} />);
+
+    expect(screen.queryByRole('button', { name: 'Use as reference' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit this image' }));
+
+    await waitFor(() => expect(onEditImage).toHaveBeenCalled());
+    const references = useDraftStore.getState().references;
+    expect(references).toHaveLength(1);
+    expect(references[0].sourceLabel).toBe('From rooftop');
+  });
+
   it('withdraws an action whose destination the host cannot reach', () => {
     // Not a disabled button: a panel with nowhere to send a first frame should
     // not advertise the action at all.

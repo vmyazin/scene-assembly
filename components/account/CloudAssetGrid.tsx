@@ -21,7 +21,7 @@ import { formatClock, watchUrl } from '@/lib/youtube/clip';
 import { saveCloudVideoToGallery } from '@/lib/timeline/import-cloud';
 import { useAccountStore } from '@/store/useAccountStore';
 import { useDraftStore } from '@/store/useDraftStore';
-import { useTimelineStore } from '@/store/useTimelineStore';
+import { placeClipOnTimeline } from '@/lib/timeline/place-clip';
 import VideoPlayer from '@/components/video/VideoPlayer';
 import { libraryGridClass } from './library-grid';
 import TemporaryAssetNotice from './TemporaryAssetNotice';
@@ -91,7 +91,7 @@ export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLi
    * placement that has no acquisition state, on mount as well as on change, so
    * a clip added while the timeline is closed is already resolved when it opens.
    */
-  function addToTimeline(asset:CloudAsset){return run(asset,async()=>{const recordId=await saveCloudVideoToGallery(asset,ownerId);assertOwner();useTimelineStore.getState().addClip(recordId);toast.success('Added to the timeline');onAddedToTimeline?.();});}
+  function addToTimeline(asset:CloudAsset){return run(asset,async()=>{const recordId=await saveCloudVideoToGallery(asset,ownerId);assertOwner();await placeClipOnTimeline(recordId);onAddedToTimeline?.();});}
   function restore(asset:CloudAsset){
     if(useAccountStore.getState().session?.account?.id!==ownerId)return;
     const draft=useDraftStore.getState();draft.setPrompt(asset.metadata.prompt);draft.rememberControlValues(asset.metadata.values);

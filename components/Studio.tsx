@@ -93,6 +93,14 @@ export default function Studio() {
     void setVideoMode('image');
   };
   /**
+   * Send a finished image on to editing. The image travels through the draft's
+   * references; this only opens the mode that shows them.
+   */
+  const startEditingFromResult = () => {
+    void setWorkspace(null);
+    void setFeatureId('image-editing');
+  };
+  /**
    * A workspace missing a key opens the connections dialog focused on its own
    * provider. The dialog itself belongs to `StudioHeader` now, so the request
    * travels through the store rather than down through props.
@@ -206,6 +214,7 @@ export default function Studio() {
                 onBack={clearFeature}
                 onOpenConnections={openConnections}
                 onUseAsFirstFrame={startVideoFromFirstFrame}
+                onEditImage={startEditingFromResult}
               />
             </motion.div>
           )}

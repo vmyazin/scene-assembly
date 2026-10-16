@@ -71,6 +71,8 @@ interface KieGenerationWorkspaceProps {
   onContinueFromFrame?: () => void;
   /** Switch to image-to-video, seeded with a finished image result. */
   onUseAsFirstFrame?: () => void;
+  /** Open image editing with a finished result; for modes without references. */
+  onEditImage?: () => void;
 }
 
 type KieModelControlField = Omit<KieFieldDefinition, 'type'> & {
@@ -99,6 +101,7 @@ export default function KieGenerationWorkspace({
   engineSelector,
   onContinueFromFrame,
   onUseAsFirstFrame,
+  onEditImage,
 }: KieGenerationWorkspaceProps) {
   const geminiApiKey = useAppStore((state) => state.apiKey);
   const imageFormat = useAppStore((state) => state.imageFormat);
@@ -662,6 +665,7 @@ export default function KieGenerationWorkspace({
                 downloadingId={downloadingId}
                 downloadLabel={`Download ${mediaType}`}
                 onUseAsFirstFrame={onUseAsFirstFrame}
+                onEditImage={onEditImage}
                 emptyState={
                   <div className="p-5 text-center text-[var(--foreground-muted)]">
                     <Sparkles className="mx-auto mb-3 opacity-35" size={46} />
