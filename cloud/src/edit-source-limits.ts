@@ -16,7 +16,7 @@ import { readContainerVideo } from '../../lib/media/container-duration';
 import { FAL_VIDEO_MODELS } from '../../lib/fal/catalog';
 import { findModel } from '../../lib/providers/catalog';
 import type { ProviderId } from '../../lib/providers/types';
-import { editDurationMessage, editPromptLengthError, editVideoMaxBytes, frameAnchorTimingError, framePinsFor, pricesEditFromSourceDuration, validateEditSource, type VideoEditCapability } from '../../lib/providers/video-edit';
+import { editDurationMessage, editPromptLengthError, editSourceMaxSeconds, editVideoMaxBytes, frameAnchorTimingError, framePinsFor, pricesEditFromSourceDuration, validateEditSource, type VideoEditCapability } from '../../lib/providers/video-edit';
 import { AccountError } from './jobs';
 import { objectByteSize, readObjectRange } from './object-bytes';
 import type { Env } from './security';
@@ -72,7 +72,8 @@ export async function assertEditSourceLimits(env: Env, owner: string, request: C
     throw new AccountError('The source clip\'s length and frame size could not be read, so this edit was not reserved. Use an MP4 or MOV with a duration and a video track in the file.', 400, 'invalid_references');
   }
   const min = limits.minSeconds ?? 0;
-  if (duration !== null && (duration <= 0 || duration < min || (limits.maxSeconds !== undefined && duration > limits.maxSeconds))) {
+  const max = editSourceMaxSeconds(limits);
+  if (duration !== null && (duration <= 0 || duration < min || duration > max)) {
     throw new AccountError(`Choose a readable clip ${editDurationMessage(limits)}.`, 400, 'invalid_references');
   }
   const pricedFromFile = pricesFromMeasuredLength(request, limits);

@@ -230,6 +230,8 @@ it('submits Kling O1 with reference images and no invented duration or price inp
   const image = await upload('owner', 'image/png');
   const unread = await upload();
   expect(() => validateRequest(env, { ...runwareEdit('klingai:kling@o1', 'source'), prompt: 'A' })).toThrow(/at least 2/);
+  const long = await stageClip(60, 1280, 720);
+  await expect(acceptJob(env, 'owner', 'kling-o1-long-token', validateRequest(env, runwareEdit('klingai:kling@o1', long)))).rejects.toThrow(/up to 30/);
   const job = await acceptJob(env, 'owner', 'kling-o1-ok-token', validateRequest(env, runwareEdit('klingai:kling@o1', unread, { keepOriginalSound: false }, [image])));
   expect(JSON.parse(job.request_json).values.sourceDurationSeconds).toBeUndefined();
   const fetch = vi.fn().mockResolvedValue(Response.json({ data: [{}] }));

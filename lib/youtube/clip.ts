@@ -2,6 +2,7 @@
 import { PROVIDER_MODELS, findModel } from '../providers/catalog';
 import type { ProviderId, ProviderModel } from '../providers/types';
 import { FAL_VIDEO_MODELS } from '../fal/catalog';
+import { editSourceMaxSeconds } from '../providers/video-edit';
 
 /** Imports per account per rolling hour, shared by the browser and every agent, so
  *  connecting more agents does not raise the proxy bill. */
@@ -89,9 +90,9 @@ export function importBounds(edit?: { provider: string; modelId: string }): Impo
       ? FAL_VIDEO_MODELS.find(model => model.id === edit.modelId)?.variants.find(variant => variant.inputMode === 'edit')?.edit
       : Object.hasOwn(PROVIDER_MODELS, edit.provider) ? findModel(edit.provider as ProviderId, edit.modelId)?.videoEdit : undefined;
     if (!capability) return null;
-    // No published ceiling stays unbounded for this model. It must not widen the
-    // fallback range below, which is the widest ceiling a page actually states.
-    return { minSeconds: Math.max(MIN_SECTION_SECONDS, capability.minSeconds ?? 0), maxSeconds: capability.maxSeconds ?? Number.POSITIVE_INFINITY, capability };
+    // A page with no ceiling still stops at the app maximum. Leaving it open
+    // let a one-hour section through, and the importer only checks end > start.
+    return { minSeconds: Math.max(MIN_SECTION_SECONDS, capability.minSeconds ?? 0), maxSeconds: editSourceMaxSeconds(capability), capability };
   }
   const all = [
     ...Object.values(PROVIDER_MODELS).flat().flatMap(model => model.videoEdit ? [model.videoEdit] : []),

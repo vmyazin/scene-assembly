@@ -2,6 +2,18 @@
 import type { ProviderModel } from './types';
 /** Application bounds for the first editing release, not vendor storage quotas. */
 export const MAX_EDIT_VIDEO_BYTES = 100_000_000;
+/**
+ * Widest source length a catalog edit page publishes (Aleph and Seedance, 30s).
+ * A model whose page states no ceiling still stops here. Otherwise a YouTube
+ * import only checks that the section fits the video, and the picker skips
+ * auto-trim, so an hour-long clip is re-encoded until the 120s timeout.
+ */
+export const APP_EDIT_SOURCE_MAX_SECONDS = 30;
+
+/** The vendor ceiling, or the app ceiling when the page publishes none. */
+export function editSourceMaxSeconds(capability: Pick<VideoEditCapability, 'maxSeconds'>): number {
+  return capability.maxSeconds ?? APP_EDIT_SOURCE_MAX_SECONDS;
+}
 /** Largest source a catalog model currently publishes (Kling O1/O3 on fal). */
 export const MAX_EDIT_VIDEO_UPLOAD_BYTES = 200_000_000;
 export const EDIT_VIDEO_MIMES = ['video/mp4', 'video/quicktime', 'video/webm'] as const;
@@ -69,11 +81,10 @@ export function editPromptImageTokenError(capability: Pick<VideoEditCapability, 
 
 /** The sentence after "Choose a readable clip ". Seedance stays "between 4 and 30 seconds long". */
 export function editDurationMessage(capability: Pick<VideoEditCapability, 'minSeconds' | 'maxSeconds'>): string {
-  const { minSeconds: min, maxSeconds: max } = capability;
-  if (min !== undefined && max !== undefined) return `between ${min} and ${max} seconds long`;
-  if (max !== undefined) return `up to ${max} seconds long`;
-  if (min !== undefined) return `at least ${min} seconds long`;
-  return 'with a readable duration';
+  const min = capability.minSeconds;
+  const max = editSourceMaxSeconds(capability);
+  if (min !== undefined) return `between ${min} and ${max} seconds long`;
+  return `up to ${max} seconds long`;
 }
 
 /** 0.4 → 1:2.5 and 2.5 → 2.5:1, so Seedance's existing sentence stays intact. */
@@ -83,7 +94,7 @@ function ratioPhrase(ratio: number): string {
     const text = Number.isInteger(inverse) ? String(inverse) : inverse.toFixed(1);
     return `1:${text}`;
   }
-  return `${Number.isInteger(ratio) ? String(ratio) : String(ratio)}:1`;
+  return `${String(ratio)}:1`;
 }
 
 export function editPromptLengthError(capability: Pick<VideoEditCapability, 'minPromptLength' | 'maxPromptLength'>, prompt: string): string | undefined {
@@ -97,8 +108,10 @@ export type FramePin = { frame: (typeof FRAME_VALUES)[number] } | { timestamp: n
 function timestampPin(token: string, capability: VideoEditCapability): { timestamp: number } | string {
   const spec = capability.frameAnchors!.timestamp;
   const raw = token.slice(2);
-  if (!/^\d+(?:\.\d+)?$/.test(raw)) return 'A timestamp is a number of seconds, like t:1.25.';
-  const seconds = Math.round(Number(raw) * 100) / 100;
+  // Two decimal places is the schema's 0.01 precision. Rounding first would
+  // make the step check below unreachable and would move t:1.257 to 1.26.
+  if (!/^\d+(?:\.\d{1,2})?$/.test(raw)) return 'A timestamp is a number of seconds with at most two decimal places, like t:1.25.';
+  const seconds = Number(raw);
   if (!Number.isFinite(seconds) || seconds < spec.min || seconds > spec.max) return `A timestamp must be between ${spec.min} and ${spec.max} seconds.`;
   const steps = (seconds - spec.min) / spec.step;
   if (Math.abs(steps - Math.round(steps)) > 1e-3) return `A timestamp moves in steps of ${spec.step} seconds.`;
@@ -160,12 +173,11 @@ export function pricesEditFromSourceDuration(provider: string, capability?: Vide
   return provider !== 'runware';
 }
 
-/** The source-card sentence. Models with no published ceiling must not say "Up to undefined". */
+/** The source-card sentence. A missing vendor ceiling uses the app maximum, so the card never says "undefined". */
 export function editSourceSummary(capability: VideoEditCapability): string {
   const mimes = editVideoMimes(capability).map((mime) => mime === 'video/mp4' ? 'MP4' : mime === 'video/quicktime' ? 'MOV' : mime === 'video/webm' ? 'WebM' : mime).join(', ');
-  const seconds = capability.maxSeconds === undefined
-    ? (capability.minSeconds !== undefined ? `At least ${capability.minSeconds} seconds` : 'Length follows the source')
-    : capability.minSeconds !== undefined ? `${capability.minSeconds}–${capability.maxSeconds} seconds` : `Up to ${capability.maxSeconds} seconds`;
+  const max = editSourceMaxSeconds(capability);
+  const seconds = capability.minSeconds !== undefined ? `${capability.minSeconds}–${max} seconds` : `Up to ${max} seconds`;
   const bounds = capability.sourceBounds;
   const pixels = bounds?.minEdge !== undefined && bounds.maxEdge !== undefined
     ? ` · ${bounds.minEdge}–${bounds.maxEdge}px`
@@ -205,7 +217,7 @@ export function editSettingsError(capability: VideoEditCapability, values: Recor
 export function validateEditSource(source: {durationSeconds: number; width: number; height: number}, capability: VideoEditCapability): void {
   const {durationSeconds: duration, width, height} = source;
   const min = capability.minSeconds ?? 0;
-  const overMax = capability.maxSeconds !== undefined && duration > capability.maxSeconds;
+  const overMax = duration > editSourceMaxSeconds(capability);
   if (!Number.isFinite(duration) || duration <= 0 || duration < min || overMax || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) throw new Error(`Choose a readable clip ${editDurationMessage(capability)}.`);
   const bounds = capability.sourceBounds;
   if (!bounds) return;

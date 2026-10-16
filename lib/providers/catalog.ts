@@ -32,7 +32,9 @@ import type {
  * https://runware.ai/docs/models/klingai-video-o1-pro and
  * https://runware.ai/docs/models/klingai-video-o1-standard.
  * inputs.video publishes no duration or pixel ceiling ("dimensions and duration
- * match the input video"). referenceImages is at most 4 once a video is set.
+ * match the input video"). The app still stops at 30 seconds, the widest
+ * published edit ceiling, so an import or upload cannot run unbounded.
+ * referenceImages is at most 4 once a video is set.
  * The per-second edit price is not on the page: the headline is "from", the
  * tables are text/image/reference-to-video, and the video-edit examples omit
  * duration. No rate is stored.
@@ -46,7 +48,7 @@ const KLING_O1_EDIT: NonNullable<ProviderModel['videoEdit']> = {
   transport: 'kling-reference',
   plainReferences: true,
   outputLabel: 'source',
-  note: 'Edits the source clip in place. Duration and frame follow that clip; the page publishes no separate length or pixel cap, and no duration control is sent. Up to 4 reference images. Keep original sound is sent with the clip. The per-second edit price is not published.',
+  note: 'Edits the source clip in place. The page publishes no duration or pixel cap, and no duration control is sent. This app stops at 30 seconds and trims a longer upload. Up to 4 reference images. Keep original sound is sent with the clip. The per-second edit price is not published.',
 };
 
 const RUNWARE_MODELS: ProviderModel[] = [

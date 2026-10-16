@@ -14,11 +14,13 @@ export type FrameAnchorChoice = (typeof CHOICES)[number]['value'];
 
 /** Where one reference image lands in the source clip. Automatic leaves the pin off the request. */
 export default function FrameAnchorControl({
-  index, choice, timestamp, onChange, disabled,
+  index, choice, timestamp, limits, onChange, disabled,
 }: {
   index: number;
   choice: FrameAnchorChoice;
   timestamp: string;
+  /** Catalog bounds for the timestamp field, so a second model does not inherit Aleph's 0–30. */
+  limits: { min: number; max: number; step: number };
   onChange: (next: { choice: FrameAnchorChoice; timestamp: string }) => void;
   disabled?: boolean;
 }) {
@@ -43,9 +45,9 @@ export default function FrameAnchorControl({
           <input
             aria-label={`Timestamp for image ${index + 1}`}
             type="number"
-            min={0}
-            max={30}
-            step={0.01}
+            min={limits.min}
+            max={limits.max}
+            step={limits.step}
             className="w-full"
             disabled={disabled}
             value={timestamp}

@@ -124,7 +124,8 @@ it('offers Keep original sound on Kling O1 and no duration control', () => {
   render(<ProviderVideoWorkspace provider="runware" label="Runware" inputMode="edit" onBack={() => {}} onOpenConnections={() => {}} />);
   expect(screen.getByRole('checkbox', { name: 'Keep original sound' })).toBeChecked();
   expect(screen.queryByRole('spinbutton', { name: /Duration/ })).toBeNull();
-  expect(screen.getByText(/Length follows the source/)).toBeInTheDocument();
+  expect(screen.getByText(/Up to 30 seconds/)).toBeInTheDocument();
+  expect(screen.getByText(/trimmed automatically/)).toBeInTheDocument();
   expect(screen.getByText(/price is not published/)).toBeInTheDocument();
 });
 
@@ -214,6 +215,18 @@ it.each(['browser', 'account'] as const)('keeps the edit result when switching m
   }
 });
 
+it('trims a Kling O1 upload at the app ceiling', async () => {
+  const capability = findModel('runware', 'klingai:kling@o1')!.videoEdit!;
+  vi.mocked(probeDimensions).mockResolvedValueOnce({ width: 1280, height: 720, durationSeconds: 90 });
+  render(<VideoSourceInput capability={capability} source={null} onChange={vi.fn()} disabled={false} />);
+  fireEvent.change(screen.getByLabelText('Upload source video'), { target: { files: [new File(['clip'], 'long.mp4', { type: 'video/mp4' })] } });
+  await waitFor(() => expect(trimVideoToLimit).toHaveBeenCalledWith(
+    expect.any(File),
+    expect.objectContaining({ durationSeconds: 90 }),
+    30,
+    expect.any(Object),
+  ));
+});
 it('accepts a trimmed source and revalidates the resulting bytes', async () => {
   const capability = {...findModel('runware', 'bytedance:seedance@2.5')!.videoEdit!, maxSeconds:10.05};
   vi.mocked(probeDimensions).mockResolvedValueOnce({width:1280,height:720,durationSeconds:10.08});

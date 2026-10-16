@@ -948,6 +948,7 @@ export default function ProviderVideoWorkspace({
                       index={index}
                       choice={anchorById[reference.id]?.choice ?? 'auto'}
                       timestamp={anchorById[reference.id]?.timestamp ?? ''}
+                      limits={selectedModel!.videoEdit!.frameAnchors!.timestamp}
                       disabled={isSubmitting}
                       onChange={(next) => setAnchorById((current) => ({ ...current, [reference.id]: next }))}
                     />
