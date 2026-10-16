@@ -346,6 +346,7 @@ describe('GenerationInterface fal image generation', () => {
       cfToken: 'cf_token',
       kieApiKey: 'kie_test_key',
       falApiKey: 'fal_id:fal_secret',
+      falImageModel: 'nano-banana-2.1',
     });
   });
 
@@ -401,7 +402,7 @@ describe('GenerationInterface fal image generation', () => {
       if (feature.id !== 'style-transfer') {
         fireEvent.change(screen.getByRole('textbox'), { target: { value: prompt } });
       }
-      fireEvent.change(screen.getByRole('combobox'), {
+      fireEvent.change(screen.getByRole('combobox', { name: 'Aspect Ratio' }), {
         target: { value: '3:4' },
       });
       fireEvent.click(screen.getByRole('radio', { name: '2K' }));
@@ -418,12 +419,14 @@ describe('GenerationInterface fal image generation', () => {
       expect(mockedRunFalImage).toHaveBeenCalledWith(
         expect.objectContaining({
           apiKey: 'fal_id:fal_secret',
+          modelId: 'nano-banana-2.1',
           prompt: expectedPrompt,
           dataUrls: expectedDataUrls,
           values: {
             aspect_ratio: '3:4',
             resolution: '2K',
             enable_web_search: feature.id === 'search-grounding',
+            thinking_level: 'medium',
           },
           signal: expect.any(AbortSignal),
         }),
@@ -455,12 +458,14 @@ describe('GenerationInterface fal image generation', () => {
     expect(mockedRunFalImage).toHaveBeenCalledWith(
       expect.objectContaining({
         apiKey: 'fal_id:fal_secret',
+        modelId: 'nano-banana-2.1',
         prompt: 'A bright editorial still life',
         dataUrls: [],
         values: {
           aspect_ratio: '1:1',
           resolution: '2K',
           enable_web_search: true,
+          thinking_level: 'medium',
         },
         signal: expect.any(AbortSignal),
       }),
@@ -613,7 +618,7 @@ describe('GenerationInterface fal image generation', () => {
     }));
     expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(link.href).toBe('blob:download-image');
-    expect(link.download).toBe(`glowing-canyon-nano-banana-2.${extension}`);
+    expect(link.download).toBe(`glowing-canyon-nano-banana-2_1.${extension}`);
     expect(link.download).not.toContain('fal_id:fal_secret');
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:download-image');
   });
@@ -1054,7 +1059,7 @@ describe('GenerationInterface fal image generation', () => {
 
     await waitFor(() => expect(clickSpy).toHaveBeenCalledTimes(1));
     const link = clickSpy.mock.instances[0] as HTMLAnchorElement;
-    expect(link.download).toBe('verified-mime-nano-banana-2.webp');
+    expect(link.download).toBe('verified-mime-nano-banana-2_1.webp');
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     expect(revokeObjectURL).toHaveBeenCalledTimes(1);
   });

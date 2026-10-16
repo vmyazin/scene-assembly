@@ -305,10 +305,20 @@ export const FAL_RATES: Record<string, FalRate> = {
 
 /**
  * fal's H3 page: "The output can run up to about 0.7 s longer than requested."
- * Callers pass the requested duration. A measured output length must not come
- * through here, or the overrun would be added twice.
+ * Keyed by endpoint so the published table and fal's live estimate price the
+ * same overrun.
  */
-const H3_OUTPUT_OVERRUN_SECONDS = 0.7;
+const FAL_OUTPUT_OVERRUN_SECONDS: Record<string, number> = {
+  'minimax/h3-max-turbo/image-to-video': 0.7,
+};
+
+/**
+ * The seconds fal bills for a requested duration. Pass the requested length,
+ * never a measured one, or the overrun is added twice.
+ */
+export function falBilledSeconds(endpointId: string, requestedSeconds: number): number {
+  return requestedSeconds + (FAL_OUTPUT_OVERRUN_SECONDS[endpointId] ?? 0);
+}
 
 /** The run controls that move a fal price, read from a job's control values. */
 export interface FalRunControls {
@@ -357,10 +367,7 @@ export function falPublishedCost(
 
   const requested = controls.durationSeconds;
   const hasDuration = requested !== undefined && Number.isFinite(requested) && requested > 0;
-  const duration =
-    hasDuration && endpointId === 'minimax/h3-max-turbo/image-to-video'
-      ? requested + H3_OUTPUT_OVERRUN_SECONDS
-      : requested;
+  const duration = hasDuration ? falBilledSeconds(endpointId, requested) : requested;
 
   if (rate.unit === 'second') {
     if (!hasDuration || duration === undefined) return null;

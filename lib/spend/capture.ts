@@ -19,7 +19,7 @@ import type { ProviderJob } from '@/store/useProviderJobsStore';
 import { useSpendStore } from '@/store/useSpendStore';
 
 import { excerpt, type SpendEntry } from './ledger';
-import { DEFAULT_GEMINI_MODEL_ID } from './rates';
+import { DEFAULT_GEMINI_MODEL_ID, falBilledSeconds } from './rates';
 import {
   kieSharers,
   resolveCatalogRate,
@@ -165,11 +165,15 @@ export function captureFalJob(job: FalJob, apiKey: string): void {
         const controlValues = job.controlValues ?? {};
         const durationSeconds = falDurationSeconds(controlValues);
         // A rejection here is the same answer as a null estimate: fall through
-        // to the published table rather than filing an unknown.
+        // to the published table rather than filing an unknown. fal's estimate
+        // multiplies by the seconds it is given, so it gets the billed length
+        // (H3 overruns the request); the table below adds that itself.
         const estimate = await estimateFalJobCost({
           apiKey,
           endpointId,
-          ...(durationSeconds !== undefined ? { durationSeconds } : {}),
+          ...(durationSeconds !== undefined
+            ? { durationSeconds: falBilledSeconds(endpointId, durationSeconds) }
+            : {}),
         }).catch(() => null);
         const figure = resolveFalRun({
           estimate,
