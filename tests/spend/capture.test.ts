@@ -223,6 +223,38 @@ describe('captureProviderJob', () => {
     expect(entries()[0].costUsd).toBeCloseTo(0.242, 6);
   });
 
+  it('keeps a reported Runware cost ahead of the measured edit estimate', () => {
+    captureProviderJob('runware', {
+      ...job, id: 'aleph-billed', modelId: 'runway:aleph@2.0', inputMode: 'edit',
+      controlValues: { sourceDurationSeconds: 6 },
+    }, { taskId: 'x', state: 'success', urls: job.urls, cost: 1.7 });
+    expect(entries().find(entry => entry.id === 'runware-aleph-billed')).toMatchObject({ costUsd: 1.7, confidence: 'exact' });
+  });
+
+  it('leaves a measured edit unknown when the source length was not stored', () => {
+    captureProviderJob('runware', {
+      ...job, id: 'aleph-open', modelId: 'runway:aleph@2.0', inputMode: 'edit',
+      controlValues: {},
+    }, { taskId: 'x', state: 'success', urls: job.urls });
+    expect(entries().find(entry => entry.id === 'runware-aleph-open')).toMatchObject({ costUsd: null, confidence: 'unknown' });
+  });
+
+  it('leaves Kling O1 unknown even when a source length is stored', () => {
+    captureProviderJob('runware', {
+      ...job, id: 'o1-open', modelId: 'klingai:kling@o1', inputMode: 'edit',
+      controlValues: { sourceDurationSeconds: 6 },
+    }, { taskId: 'x', state: 'success', urls: job.urls });
+    expect(entries().find(entry => entry.id === 'runware-o1-open')).toMatchObject({ costUsd: null, confidence: 'unknown' });
+  });
+
+  it('prices a Runware edit from the measured source when the response omits cost', () => {
+    captureProviderJob('runware', {
+      ...job, id: 'aleph-measured', modelId: 'runway:aleph@2.0', inputMode: 'edit',
+      controlValues: { sourceDurationSeconds: 6 },
+    }, { taskId: 'x', state: 'success', urls: job.urls });
+    expect(entries().find(entry => entry.id === 'runware-aleph-measured')?.costUsd).toBeCloseTo(1.68, 6);
+  });
+
   it('floors an Aleph edit at $0.448 and prices a longer clip from the source length', () => {
     captureProviderJob('comet', {
       ...job, provider: 'comet', modelId: 'aleph2', inputMode: 'edit',

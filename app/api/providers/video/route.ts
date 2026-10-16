@@ -1,6 +1,6 @@
 // app/api/providers/video/route.ts
 import { cometPollRunway, isAlephVideoUri } from '@/lib/providers/comet';
-import { editSettingsError, isRunwayEditProtocol } from '@/lib/providers/video-edit';
+import { editHasControl, editPromptLengthError, editSettingsError, frameAnchorTimingError, framePinsFor, isRunwayEditProtocol } from '@/lib/providers/video-edit';
 import { referenceClipCountError, referenceClipSetError, referenceClipsFor } from '@/lib/providers/reference-clips';
 import { SEEDANCE_25_MODEL, isSeedanceDraftSize } from '@/lib/providers/seedance-draft';
 import { runwareDeleteMedia } from '@/lib/providers/runware';
@@ -188,10 +188,29 @@ export async function POST(request: NextRequest) {
     const lockedShape = body.durationSeconds !== undefined || body.width !== undefined || body.height !== undefined || (body.aspectRatio !== undefined && !capability.aspectRatios?.length);
     if (lockedShape) return NextResponse.json({success: false, error: 'Edits inherit source duration and aspect ratio.'}, {status: 400});
     const size = capability.sizes.find(size => size.label === body.size);
-    const settingsError = editSettingsError(capability, {size: body.size, draft: body.draft, audio: body.audio, resolution: body.resolution, aspectRatio: body.aspectRatio});
-    if (settingsError || images.length > capability.maxImages) return NextResponse.json({success: false, error: settingsError ?? `Add up to ${capability.maxImages} replacement images.`}, {status: 400});
+    const settingsError = editSettingsError(capability, {
+      size: body.size, draft: body.draft, audio: body.audio, resolution: body.resolution, aspectRatio: body.aspectRatio,
+      ...(body.frameAnchors !== undefined ? { frameAnchors: body.frameAnchors } : {}),
+      ...(body.keepOriginalSound !== undefined ? { keepOriginalSound: body.keepOriginalSound } : {}),
+      ...(body.sourceDurationSeconds !== undefined ? { sourceDurationSeconds: body.sourceDurationSeconds } : {}),
+    });
+    const pins = framePinsFor(typeof body.frameAnchors === 'string' ? body.frameAnchors : undefined, images.length, capability);
+    const pinError = typeof pins === 'string' ? pins : undefined;
+    const timingError = Array.isArray(pins) ? frameAnchorTimingError(pins, typeof body.sourceDurationSeconds === 'number' ? body.sourceDurationSeconds : undefined) : undefined;
+    const promptError = editPromptLengthError(capability, prompt);
+    if (settingsError || pinError || timingError || promptError || images.length > capability.maxImages) return NextResponse.json({success: false, error: settingsError ?? pinError ?? timingError ?? promptError ?? `Add up to ${capability.maxImages} replacement images.`}, {status: 400});
     try {
-      const {taskId} = await adapter.createVideo({apiKey, model, prompt, inputMode, sourceVideo, images, resolution: size?.preset, ...(typeof body.aspectRatio === 'string' ? {aspectRatio: body.aspectRatio} : {}), ...(capability.draftRate || (model === SEEDANCE_25_MODEL && body.draft === true) ? {draft: body.draft === true} : {}), ...(moderation === 'relaxed' ? {moderation} : {})});
+      const {taskId} = await adapter.createVideo({
+        apiKey, model, prompt, inputMode, sourceVideo, images,
+        resolution: capability.outputResolution ?? size?.preset,
+        ...(capability.outputResolution ? { outputResolution: capability.outputResolution } : {}),
+        ...(capability.transport ? { editTransport: capability.transport } : {}),
+        ...(capability.transport === 'frame-anchors' && Array.isArray(pins) ? { framePins: pins } : {}),
+        ...(editHasControl(capability, 'keepOriginalSound') ? { keepOriginalSound: body.keepOriginalSound !== false } : {}),
+        ...(typeof body.aspectRatio === 'string' ? { aspectRatio: body.aspectRatio } : {}),
+        ...(capability.draftRate || (model === SEEDANCE_25_MODEL && body.draft === true) ? { draft: body.draft === true } : {}),
+        ...(moderation === 'relaxed' ? { moderation } : {}),
+      });
       return NextResponse.json({success: true, taskId});
     } catch (error) { return failure(error, 'Could not start this video edit.'); }
   }

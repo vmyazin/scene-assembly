@@ -1,8 +1,8 @@
 // tests/components/edit-reference-tray.test.tsx
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import EditReferenceTray from '@/components/EditReferenceTray';
-import { emptyEditReferenceDraft } from '@/lib/providers/edit-references';
+import { emptyEditReferenceDraft, type EditReferenceDraft } from '@/lib/providers/edit-references';
 import type { EditReferenceSpec } from '@/lib/providers/types';
 
 afterEach(cleanup);
@@ -49,5 +49,33 @@ describe('EditReferenceTray', () => {
     const input = screen.getByLabelText('Add audio');
     fireEvent.change(input, { target: { files: [new File(['x'], 'clip.ogg', { type: 'audio/ogg' })] } });
     expect(screen.getByRole('alert')).toHaveTextContent(/MP3 or WAV/);
+  });
+
+  it('pins each image from the catalog timestamp bounds', () => {
+    vi.stubGlobal('URL', { createObjectURL: () => 'blob:coat', revokeObjectURL: () => undefined });
+    const spec: EditReferenceSpec = { images: { max: 5, wire: 'images' } };
+    const draft: EditReferenceDraft = {
+      ...emptyEditReferenceDraft(),
+      images: [{ id: 'coat', file: new File(['png'], 'coat.png', { type: 'image/png' }), previewUrl: 'blob:coat' }],
+    };
+    const onAnchorChange = vi.fn();
+    render(
+      <EditReferenceTray
+        spec={spec}
+        draft={draft}
+        onChange={() => undefined}
+        fileCap={5}
+        promptSyntax="image-index"
+        frameAnchorLimits={{ min: 0, max: 30, step: 0.01 }}
+        anchors={{ coat: { choice: 'timestamp', timestamp: '1.25' } }}
+        onAnchorChange={onAnchorChange}
+      />,
+    );
+    expect(screen.getByText(/Pin each image/)).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Anchor for image 1' }), { target: { value: 'first' } });
+    expect(onAnchorChange).toHaveBeenCalledWith('coat', { choice: 'first', timestamp: '1.25' });
+    expect(screen.getByRole('spinbutton', { name: 'Timestamp for image 1' })).toHaveAttribute('max', '30');
+    expect(screen.getByRole('spinbutton', { name: 'Timestamp for image 1' })).toHaveAttribute('step', '0.01');
+    vi.unstubAllGlobals();
   });
 });

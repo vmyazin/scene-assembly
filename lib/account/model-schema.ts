@@ -117,7 +117,7 @@ function falModels(): ModelDescriptor[] {
         mode: variant.inputMode,
         fields: [
           ...variant.fields.map(fromDefinition),
-          ...(edit?.rate?.per === 'second' ? [sourceDurationField(edit.minSeconds, edit.maxSeconds, false)] : []),
+          ...(edit?.rate?.per === 'second' && edit.maxSeconds !== undefined ? [sourceDurationField(edit.minSeconds, edit.maxSeconds, false)] : []),
         ],
         references: variant.inputMode === 'text' ? NO_REFERENCES
           : variant.inputMode === 'frames' ? { min: 2, max: 2 }
@@ -235,7 +235,7 @@ function aggregatorModes(provider: ProviderId, model: ProviderModel): ModeDescri
             ...(control.min !== undefined ? { min: control.min } : {}),
             ...(control.max !== undefined ? { max: control.max } : {}),
           })),
-          ...(edit.draftPreview || edit.rate?.per === 'second' ? [sourceDurationField(edit.minSeconds, edit.maxSeconds, Boolean(edit.draftPreview))] : []),
+          ...(edit.maxSeconds !== undefined && (edit.draftPreview || edit.rate?.per === 'second' || edit.measureForPrice) ? [sourceDurationField(edit.minSeconds, edit.maxSeconds, Boolean(edit.draftPreview))] : []),
         ],
       });
       continue;

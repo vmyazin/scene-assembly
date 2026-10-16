@@ -15,6 +15,7 @@ import {
   resolveCatalogRate,
   resolveFalRun,
   resolveGemini,
+  resolveMeasuredRunwareEdit,
   resolveRunware,
   unknownFigure,
   type SpendFigure,
@@ -70,6 +71,8 @@ export function buildAccountSpendEntry(args: BuildAccountSpendEntryArgs): Accoun
     if (resolved.costUsd === null) {
       const catalog = seedanceCatalogFigure(request);
       if (catalog && catalog.costUsd !== null) return { ...base, ...catalog };
+      const measured = resolveMeasuredRunwareEdit(findModel('runware', request.modelId), request.values.sourceDurationSeconds);
+      if (measured) return { ...base, ...measured };
     }
     const figure = resolved.costUsd === null
       ? withNote(resolved, 'Runware did not include billing cost in the persisted response.')

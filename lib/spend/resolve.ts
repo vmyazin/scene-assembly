@@ -78,6 +78,18 @@ export function resolveGeminiVideo(args: {
   };
 }
 
+/**
+ * Catalog estimate for a Runware edit that publishes a per-second rate and
+ * asks to be priced from the measured source. A missing cost stays unknown
+ * until that length is on the request. P-Video-Edit and Seedance do not set
+ * the flag, so a missing Runware cost there is unchanged.
+ */
+export function resolveMeasuredRunwareEdit(model: ProviderModel | undefined, sourceDurationSeconds: unknown): SpendFigure | null {
+  if (!model?.videoEdit?.measureForPrice || typeof sourceDurationSeconds !== 'number') return null;
+  const priced = resolveCatalogRate(model, sourceDurationSeconds, 1, { inputMode: 'edit' });
+  return priced.costUsd === null ? null : priced;
+}
+
 export function resolveRunware(cost: number | undefined): SpendFigure {
   if (typeof cost !== 'number' || !Number.isFinite(cost) || cost < 0) {
     return unknownFigure('response');

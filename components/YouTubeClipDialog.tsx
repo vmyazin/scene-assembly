@@ -1,3 +1,4 @@
+// components/YouTubeClipDialog.tsx
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
@@ -100,7 +101,9 @@ export default function YouTubeClipDialog({ open, target, onClose, onImported }:
   function lengthProblem(seconds: number): string | null {
     if (from === undefined) return 'Set From first.';
     if (!bounds) return 'This model cannot edit a source video.';
-    if (seconds < bounds.minSeconds || seconds > bounds.maxSeconds) return `${target.modelLabel} takes a ${bounds.minSeconds}–${bounds.maxSeconds} s source.`;
+    if (!Number.isFinite(bounds.maxSeconds)) {
+      if (seconds < bounds.minSeconds) return `${target.modelLabel} publishes no maximum source length. A section is at least ${bounds.minSeconds} s.`;
+    } else if (seconds < bounds.minSeconds || seconds > bounds.maxSeconds) return `${target.modelLabel} takes a ${bounds.minSeconds}–${bounds.maxSeconds} s source.`;
     if (duration && from + seconds > duration + 1) return 'That runs past the end of the video.';
     return null;
   }
@@ -189,7 +192,7 @@ export default function YouTubeClipDialog({ open, target, onClose, onImported }:
       </div>
     </>}
     <p aria-live="polite" className={`-mt-1 text-xs empty:hidden sm:text-sm ${problem && toText ? 'text-red-300' : 'text-[var(--foreground-muted)]'}`}>
-      {link ? `${length !== null ? `${length.toFixed(1)} s · ` : ''}${bounds ? `${target.modelLabel} takes a ${bounds.minSeconds}–${bounds.maxSeconds} s source` : problem}` : ''}
+      {link ? `${length !== null ? `${length.toFixed(1)} s · ` : ''}${bounds ? (Number.isFinite(bounds.maxSeconds) ? `${target.modelLabel} takes a ${bounds.minSeconds}–${bounds.maxSeconds} s source` : `${target.modelLabel} publishes no maximum source length. A section is at least ${bounds.minSeconds} s.`) : problem}` : ''}
     </p>
     {link && <div className="flex flex-wrap items-end gap-2 sm:gap-3">
       {timeField('from')}{timeField('to')}

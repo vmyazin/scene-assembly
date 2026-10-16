@@ -60,6 +60,12 @@ export interface EditControl {
   min?: number;
   max?: number;
   maxLength?: number;
+  /**
+   * `tray` means the reference tray edits this value. Model controls do not
+   * draw it: a per-image pin is not a scalar widget. The key still feeds the
+   * settings allow-list and the agent schema.
+   */
+  surface?: 'tray';
 }
 
 export interface ProviderVideoInputCapability {
@@ -189,13 +195,22 @@ export interface ProviderModel {
   draftPreview?: boolean;
   videoEdit?: {
     sizes: ProviderSize[];
-    /** Absent when the vendor has not published a price. The ledger stays unknown. */
+    /**
+     * Published arithmetic. Absent when the vendor page does not state a rate
+     * for this edit — an example cost with no duration is not a rate, and the
+     * ledger stays unknown.
+     */
     rate?: ProviderRate;
     maxImages: number;
     draftRate?: ProviderRate;
     /** Same draft preview as `draftPreview`, for edit mode. */
     draftPreview?: boolean;
-    maxSeconds: number; minSeconds?: number;
+    /**
+     * Published source-length ceiling. Absent when the page does not state one;
+     * the picker must not invent a cap.
+     */
+    maxSeconds?: number;
+    minSeconds?: number;
     /** Vendor file cap. Absent means the application cap in `video-edit.ts`. */
     maxBytes?: number;
     /** Source MIME types this model accepts. Absent means MP4, MOV and WebM. */
@@ -207,11 +222,20 @@ export interface ProviderModel {
      * clip the vendor will reject never reserves.
      */
     requireMeasurement?: boolean;
-    sourceBounds?: { minEdge: number; maxEdge: number; minPixels?: number; minRatio?: number; maxRatio?: number };
+    sourceBounds?: {
+      minEdge?: number;
+      maxEdge?: number;
+      minPixels?: number;
+      maxPixels?: number;
+      minRatio?: number;
+      maxRatio?: number;
+    };
     /** Optional output shape. Aleph 2 letterboxes to `targetAspectRatio`. */
     aspectRatios?: string[];
     /** Vendor prompt cap, when it is tighter than the shared 20,000. */
     maxPromptLength?: number;
+    /** Vendor prompt floor, when a one-character prompt would be rejected. */
+    minPromptLength?: number;
     /**
      * Submit and poll protocol. `runway` is Comet's `/runwayml/v1/video_to_video`
      * and `/runwayml/v1/tasks/{id}`. Absent means the provider's ordinary video route.
@@ -225,6 +249,26 @@ export interface ProviderModel {
      * invent `@Video1` for it.
      */
     namesSource?: boolean;
+    /**
+     * Runware edit body. `frame-anchors` is inputs.frameImages.
+     * `kling-reference` is inputs.referenceImages plus optional keepOriginalSound.
+     * Absent stays the Seedance / P-Video path.
+     */
+    transport?: 'frame-anchors' | 'kling-reference';
+    /** Pins for `transport: 'frame-anchors'`. `frame` and `timestamp` are mutually exclusive. */
+    frameAnchors?: {
+      frames: readonly ('first' | 'last' | '0' | '-1')[];
+      timestamp: { min: number; max: number; step: number };
+    };
+    /** Fixed preset sent with the source. Kling Omni 4K's edit example sends `4k`. */
+    outputResolution?: string;
+    /** The prompt does not name images with @Image. Seedance still does. */
+    plainReferences?: boolean;
+    /**
+     * Estimate from the measured source length before reserve. A Runware cost
+     * on the finished task still replaces that estimate.
+     */
+    measureForPrice?: boolean;
     note?: string;
     /** Structured references. The flat `maxImages` tray stays when this is absent. */
     references?: EditReferenceSpec;
@@ -327,8 +371,20 @@ export interface VideoRequest {
   inputField?: VideoInputField;
   /** See ImageRequest. No video route in v1 is relaxable; the field is ignored there. */
   moderation?: ModerationLevel;
-  /** Atlas Kling `keep_original_sound`. Omitted means the vendor default, which is on. */
+  /**
+   * One pin per image for a frame-anchor edit. `null` sends the image unpinned
+   * so the vendor places it. Absent means every image is unpinned.
+   */
+  framePins?: Array<{ frame: 'first' | 'last' | '0' | '-1' } | { timestamp: number } | null>;
+  /** Catalog transport. Absent keeps the Seedance / P-Video edit body. */
+  editTransport?: 'frame-anchors' | 'kling-reference';
+  /**
+   * Vendor keep-original-sound. Omitted means the vendor default, which is on.
+   * A Runware edit that lists the control still sends the boolean.
+   */
   keepOriginalSound?: boolean;
+  /** Fixed output preset from the catalog, not a control the caller picks. */
+  outputResolution?: string;
   /** Atlas Wan output length. `0` and omitted both mean “match the source”. */
   outputDuration?: number;
   /** Measured source length. Wan sends `duration` only when the output is shorter. */

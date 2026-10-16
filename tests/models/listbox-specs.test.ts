@@ -54,6 +54,10 @@ describe('listbox spec derivation', () => {
   it('prints P-Video-Edit From at the four-digit draft promo, not a rounded sticker', () => {
     const cells = providerVideoSpecs(findModel('runware', 'prunaai:p-video@edit')!, 'edit').map(textOf);
     expect(cells).toEqual(['15s', '848px', 'source', '$0.0188/s']);
+    expect(providerVideoSpecs(findModel('runware', 'runway:aleph@2.0')!, 'edit').map(textOf)).toEqual(['30s', '1080p', 'source', '$0.28/s']);
+    expect(providerVideoSpecs(findModel('runware', 'klingai:kling@o1')!, 'edit').map(textOf)).toEqual(['—', 'source', 'source', 'price unknown']);
+    expect(providerVideoSpecs(findModel('runware', 'klingai:kling@o1-standard')!, 'edit').map(textOf)).toEqual(['—', 'source', 'source', 'price unknown']);
+    expect(providerVideoSpecs(findModel('runware', 'klingai:kling-video@o3-4k')!, 'edit').map(textOf)).toEqual(['15.5s', '4K', 'source', '$0.42/s']);
   });
 
   it('says "fixed" for a video model with no seconds control', () => {

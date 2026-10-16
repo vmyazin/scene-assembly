@@ -10,6 +10,7 @@ import {
   type EditStill,
 } from '@/lib/providers/edit-references';
 import { referenceClipFileError, referenceClipProbeError } from '@/lib/providers/reference-clips';
+import FrameAnchorControl, { type FrameAnchorChoice } from '@/components/FrameAnchorControl';
 import type { EditReferenceSpec, VideoPromptSyntax } from '@/lib/providers/types';
 
 const IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp';
@@ -22,6 +23,14 @@ export interface EditReferenceTrayProps {
   /** A Luma edit uses the model's keyframe max. Other background jobs stop at 16. */
   fileCap: number;
   promptSyntax?: VideoPromptSyntax;
+  /**
+   * Catalog timestamp bounds for a frame-anchor edit. Present only when each
+   * image can be pinned. Anchors are keyed by still id so a removal cannot
+   * slide a pin onto the next image.
+   */
+  frameAnchorLimits?: { min: number; max: number; step: number };
+  anchors?: Record<string, { choice: FrameAnchorChoice; timestamp: string }>;
+  onAnchorChange?: (id: string, next: { choice: FrameAnchorChoice; timestamp: string }) => void;
 }
 
 function stillFrom(file: File): EditStill {
@@ -68,7 +77,7 @@ function Thumb({ still, label, onRemove, disabled }: { still: EditStill; label: 
   );
 }
 
-export default function EditReferenceTray({ spec, draft, onChange, disabled, fileCap, promptSyntax }: EditReferenceTrayProps) {
+export default function EditReferenceTray({ spec, draft, onChange, disabled, fileCap, promptSyntax, frameAnchorLimits, anchors, onAnchorChange }: EditReferenceTrayProps) {
   const imageInput = useRef<HTMLInputElement>(null);
   const alive = useRef(true);
   const audioRequest = useRef(0);
@@ -110,6 +119,24 @@ export default function EditReferenceTray({ spec, draft, onChange, disabled, fil
                 event.target.value = '';
               }} />
             </label>
+          )}
+          {frameAnchorLimits && draft.images.length > 0 && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <p className="text-xs text-[var(--foreground-muted)] sm:col-span-2">
+                Pin each image to a frame or a time in the source. Automatic lets the model place it.
+              </p>
+              {draft.images.map((still, index) => (
+                <FrameAnchorControl
+                  key={still.id}
+                  index={index}
+                  choice={anchors?.[still.id]?.choice ?? 'auto'}
+                  timestamp={anchors?.[still.id]?.timestamp ?? ''}
+                  limits={frameAnchorLimits}
+                  disabled={disabled}
+                  onChange={(next) => onAnchorChange?.(still.id, next)}
+                />
+              ))}
+            </div>
           )}
         </div>
       )}
