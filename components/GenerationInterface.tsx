@@ -41,7 +41,7 @@ import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
 import { useGalleryStore } from '@/store/useGalleryStore';
 import { resultBlob } from '@/lib/gallery/capture';
 import { candidatesFromValues, useAutoAspect } from '@/lib/draft/aspect-match';
-import { APPROXIMATE_LEGEND, imageDimensions, isApproximateLabel, withDimensions } from '@/lib/providers/output-size';
+import { APPROXIMATE_LEGEND, imageDimensions, isApproximateLabel, withDimensions, pollinationsFreeDimensions } from '@/lib/providers/output-size';
 import { isValueCompatible, type CarryOverField } from '@/lib/draft/carry-over';
 import { enginesForFeature, type EngineId, type EngineMeta } from '@/lib/engines/registry';
 import KieGenerationWorkspace from '@/components/KieGenerationWorkspace';
@@ -403,22 +403,23 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
    * publish (Gemini, fal, Kie, PiAPI, Cloudflare) keep the plain label rather
    * than being shown a number this app invented.
    */
+  const cloudWorkspace = useCloudWorkspace(activeEngine.id);
+  // In the browser Pollinations runs keyless, and its free tier renders smaller
+  // than requested (see `pollinationsFreeDimensions`), so the labels name what
+  // comes back rather than what was asked for.
+  const pollinationsFree = activeEngineId === 'pollinations' && !cloudWorkspace.cloud;
+  const optionDimensions = (ratio: string) =>
+    pollinationsFree
+      ? pollinationsFreeDimensions(ratio)
+      : imageDimensions(activeEngineId, activeProviderModel ?? undefined, ratio);
   // Ten options and a table lookup: cheap enough to derive each render.
   const aspectRatioOptions = ASPECT_RATIO_OPTIONS.map((option) => ({
     value: option.value,
-    label: withDimensions(
-      option.label,
-      imageDimensions(activeEngineId, activeProviderModel ?? undefined, option.value)
-    ),
+    label: withDimensions(option.label, optionDimensions(option.value)),
   }));
   const aspectRatioApproximates = ASPECT_RATIO_OPTIONS.some((option) =>
-    isApproximateLabel(
-      option.label,
-      imageDimensions(activeEngineId, activeProviderModel ?? undefined, option.value)
-    )
+    isApproximateLabel(option.label, optionDimensions(option.value))
   );
-
-  const cloudWorkspace = useCloudWorkspace(activeEngine.id);
   const cloudModelId = activeProviderModel ?? (activeEngine.id === 'fal' ? activeFalImageModel.id : activeEngine.id === 'gemini' ? activeGeminiModel.id : activeEngine.id === 'cloudflare' || activeEngine.id === 'pollinations' ? SINGLE_IMAGE_MODELS[activeEngine.id] : activeEngine.id);
   const relaxed = useRelaxedFilter({
     workspaceKey: 'image',
@@ -1307,6 +1308,11 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                           className="mt-1.5 block text-xs text-[var(--foreground-subtle)]"
                         >
                           {APPROXIMATE_LEGEND}
+                        </span>
+                      )}
+                      {pollinationsFree && (
+                        <span className="mt-1.5 block text-xs text-[var(--foreground-subtle)]">
+                          The free tier returns about 0.6 MP (768 × 768 for a square) and adds a small pollinations.ai mark.
                         </span>
                       )}
                     </div>

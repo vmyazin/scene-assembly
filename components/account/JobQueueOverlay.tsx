@@ -59,6 +59,7 @@ export default function JobQueueOverlay() {
       >
         <Link
           href="/account#jobs"
+          onClick={showJobsInPlace}
           className="flex items-center gap-2 rounded-full border border-amber-300/30 bg-[var(--surface-overlay)] px-3 py-1.5 text-xs text-amber-200 shadow-lg transition-colors hover:border-amber-300/60 hover:text-amber-100"
         >
           <TriangleAlert size={13} aria-hidden="true" />
@@ -182,4 +183,18 @@ function Destination({ href, onClick, say, children }: { href: string; onClick?:
       <span className="sr-only">— {say}</span>
     </Link>
   );
+}
+
+/**
+ * Already on /account, a click on the count has to say so itself. Next's Link
+ * writes `/account#jobs` with `history.pushState`, which fires no `hashchange`,
+ * and the same page does not remount — so the console never heard the request,
+ * and a second click did not even change the URL (UX audit M8). The console
+ * listens for `hashchange`; this raises one.
+ */
+function showJobsInPlace(event: React.MouseEvent<HTMLAnchorElement>) {
+  if (window.location.pathname !== '/account') return;
+  event.preventDefault();
+  window.history.replaceState(window.history.state, '', '/account#jobs');
+  window.dispatchEvent(new HashChangeEvent('hashchange'));
 }

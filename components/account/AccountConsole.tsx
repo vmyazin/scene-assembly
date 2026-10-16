@@ -101,7 +101,16 @@ export default function AccountConsole({
   useEffect(() => {
     const read = () => {
       const { jobs, assetId } = readHash();
-      if (jobs) { setFilter('attention'); return; }
+      if (jobs) {
+        setFilter('attention');
+        // After the filter's render, so the list it scrolls to is the jobs one.
+        // Without it the pill could switch a filter far above the reader's view.
+        requestAnimationFrame(() => {
+          const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+          document.getElementById('jobs')?.scrollIntoView?.({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
+        });
+        return;
+      }
       if (!assetId) return;
       // The asset lives in the grid, so a console left on the jobs tab has to
       // move back to it or the highlight would point at a panel that is not on

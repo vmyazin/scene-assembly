@@ -142,4 +142,23 @@ describe('job queue overlay',()=>{
     expect(screen.getAllByText('Video, Seedance 2.0 Mini')).toHaveLength(5);
     expect(screen.getByText('+2 more')).toBeInTheDocument();
   });
+
+  it('raises hashchange itself when the count is clicked on the account page (M8)',()=>{
+    // Next's Link pushes the URL without a hashchange, and the console only
+    // switches to its jobs on one, so on /account the click did nothing.
+    window.history.pushState({},'','/account');
+    const heard=vi.fn();window.addEventListener('hashchange',heard);
+    try{
+      show([job('a','needs_attention',{errorCode:'storage_full'})]);
+      const link=screen.getByRole('link',{name:'1 job needs attention'});
+      const notPrevented=fireEvent.click(link);
+      expect(notPrevented).toBe(false);
+      expect(window.location.hash).toBe('#jobs');
+      expect(heard).toHaveBeenCalledTimes(1);
+    }finally{
+      window.removeEventListener('hashchange',heard);
+      window.history.pushState({},'','/');
+    }
+  });
 });
+

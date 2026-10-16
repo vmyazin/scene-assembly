@@ -1489,15 +1489,18 @@ describe('what the image aspect control promises for the active engine', () => {
     expect(screen.getByRole('combobox', { name: 'Aspect Ratio' })).toHaveAccessibleDescription(LEGEND);
   });
 
-  it('leaves Pollinations unmarked, because its table really is those ratios', () => {
+  it('names what keyless Pollinations really returns, and why (M6)', () => {
+    // The browser calls the anonymous endpoint, which renders at most 768²
+    // pixels at the requested ratio: 1024 × 1024 came back 768 × 768.
     useAppStore.setState({ engine: 'pollinations' });
     renderInterface();
 
-    expect(optionsOf()).toContain('9:16 (Story/Reels) · 720 × 1280');
-    expect(optionsOf()).toContain('16:9 (YouTube Thumbnail) · 1280 × 720');
-    expect(optionsOf()).toContain('3:2 (Classic Photo) · 1080 × 720');
-    // 1280 × 548 is 0.1% off 21:9 — a rounding, and the only one it has.
-    expect(optionsOf()).toContain('≈21:9 (Ultra Wide) · 1280 × 548');
+    expect(optionsOf()).toContain('1:1 (Square - Instagram Post) · 768 × 768');
+    expect(optionsOf()).toContain('9:16 (Story/Reels) · 576 × 1024');
+    expect(optionsOf()).toContain('16:9 (YouTube Thumbnail) · 1024 × 576');
+    expect(optionsOf()).toContain('≈3:2 (Classic Photo) · 941 × 627');
+    expect(optionsOf().find((label) => label.includes('21:9'))).toMatch(/1174 × 503$/);
+    expect(screen.getByText(/free tier returns about 0\.6 MP/)).toBeInTheDocument();
   });
 
   it('says what Seedream substitutes rather than calling a 16:9 frame nearly 21:9', () => {

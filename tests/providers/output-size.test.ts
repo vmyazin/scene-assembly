@@ -13,8 +13,7 @@ import {
   ratioDrift,
   shapeName,
   sizeDimensions,
-  withDimensions,
-} from '@/lib/providers/output-size';
+  withDimensions, pollinationsFreeDimensions } from '@/lib/providers/output-size';
 import { modelsFor } from '@/lib/providers/catalog';
 import { runwareGenerateImage } from '@/lib/providers/runware';
 import { atlasCreateImage } from '@/lib/providers/atlas';
@@ -206,3 +205,19 @@ describe('the shared table is the one the request uses', () => {
     }
   });
 });
+
+/** M6: the anonymous endpoint returned 768×768 for 1024×1024 and 576×1024 for 720×1280. */
+describe('pollinationsFreeDimensions', () => {
+  it('matches the sizes the free tier was measured returning', () => {
+    expect(pollinationsFreeDimensions('1:1')).toEqual([768, 768]);
+    expect(pollinationsFreeDimensions('9:16')).toEqual([576, 1024]);
+    expect(pollinationsFreeDimensions('16:9')).toEqual([1024, 576]);
+  });
+
+  it('keeps the ratio and stays within the pixel cap', () => {
+    const [width, height] = pollinationsFreeDimensions('4:3');
+    expect(width * height).toBeLessThanOrEqual(768 * 768 * 1.02);
+    expect(width / height).toBeCloseTo(4 / 3, 1);
+  });
+});
+

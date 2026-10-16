@@ -48,23 +48,30 @@ export default function CloudJobCardGrid({
   columns = 4,
   busy = false,
   onCancel,
+  inOwnForm = false,
 }: {
   jobs: CloudJobView[];
   columns?: 1 | 2 | 4;
   busy?: boolean;
   onCancel?: (id: string) => void;
+  /**
+   * The grid sits in the studio form these jobs belong to (the result rail,
+   * which shows only its own form's jobs), so "Open the studio form" would
+   * link to the page already on screen (UX audit L2).
+   */
+  inOwnForm?: boolean;
 }) {
   if (!jobs.length) return null;
   return (
     <ul className={libraryGridClass(columns)}>
       {jobs.map(job => (
-        <CloudJobCard key={job.id} job={job} busy={busy} onCancel={onCancel} />
+        <CloudJobCard key={job.id} job={job} busy={busy} onCancel={onCancel} inOwnForm={inOwnForm} />
       ))}
     </ul>
   );
 }
 
-function CloudJobCard({ job, busy, onCancel }: { job: CloudJobView; busy: boolean; onCancel?: (id: string) => void }) {
+function CloudJobCard({ job, busy, onCancel, inOwnForm }: { job: CloudJobView; busy: boolean; onCancel?: (id: string) => void; inOwnForm: boolean }) {
   const stage = STAGES[job.state as keyof typeof STAGES] ?? STAGES.running;
   const label = JOB_STATE_LABELS[job.state];
   const tone = JOB_STATE_TONES[job.state];
@@ -72,7 +79,7 @@ function CloudJobCard({ job, busy, onCancel }: { job: CloudJobView; busy: boolea
   const Mark = job.request.mediaType === 'video' ? Film : ImageIcon;
   // Where this job's own spinner lives. Same answer the queue overlay gives, so
   // a card and a row clicked a minute apart land in the same place.
-  const location = studioLocationForJob(job.request);
+  const location = inOwnForm ? null : studioLocationForJob(job.request);
   return (
     <li className="space-y-2.5 rounded-xl border border-sky-300/30 bg-[var(--background-elevated)]/80 p-2.5">
       {/* The well stands in for the thumbnail that does not exist yet, at the

@@ -313,7 +313,12 @@ export default function GalleryGrid({
                   <Film size={13} /> {onPickVideo ? 'Use video' : 'Add to timeline'}
                 </button>
               ) : (
-                <>
+                <div className="flex w-full items-start gap-1.5">
+                {/* Labelled actions wrap among themselves; download and delete
+                    hold the first row's right edge as a pair. In one shared
+                    wrapping row the trash button fell onto a line of its own
+                    (UX audit L3). */}
+                <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
                   {!stored && record.sourceUrl && (
                     <button
                       type="button"
@@ -382,6 +387,8 @@ export default function GalleryGrid({
                       }}
                     />
                   )}
+                </div>
+                <div className="flex shrink-0 gap-1.5">
                   <button
                     type="button"
                     onClick={() => void download(record)}
@@ -398,7 +405,8 @@ export default function GalleryGrid({
                   >
                     <Trash2 size={13} />
                   </button>
-                </>
+                </div>
+                </div>
               )}
             </div>
           </li>

@@ -319,6 +319,26 @@ export const isLumaUni = (model: string) => model.startsWith('luma/uni-');
  * parameter because it is not the same everywhere: an image with no ratio is
  * square, while Comet's video route lands on landscape.
  */
+/**
+ * Pixels Pollinations' anonymous endpoint (the one the browser calls, with no
+ * key) actually returns: at most 768² of them, ratio kept. Measured 2026-10-16:
+ * 1024×1024 came back 768×768 and 720×1280 came back 576×1024, with a
+ * pollinations.ai mark despite `nologo=true` (UX audit M6). The request still
+ * asks for the full size, in case the free tier lifts the cap.
+ */
+export const POLLINATIONS_FREE_MAX_PIXELS = 768 * 768;
+
+/**
+ * What the free tier renders for a ratio. Whole pixels, not a coarser grid:
+ * the measured sizes land on whole pixels anyway, and snapping to 8 bent 3:2
+ * into 944 × 624, which the label would then have to call "nearly 3:2".
+ */
+export function pollinationsFreeDimensions(aspectRatio: string | undefined): Dimensions {
+  const [width, height] = ratioDimensions(POLLINATIONS_IMAGE_DIMENSIONS, aspectRatio);
+  const scale = Math.min(1, Math.sqrt(POLLINATIONS_FREE_MAX_PIXELS / (width * height)));
+  return [Math.round(width * scale), Math.round(height * scale)];
+}
+
 export function ratioDimensions(
   table: Record<string, Dimensions>,
   aspectRatio: string | undefined,

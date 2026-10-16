@@ -77,4 +77,19 @@ describe('the account page as the queue card sees it', () => {
     );
     expect(screen.queryByText('Tracking stopped')).toBeNull();
   });
+
+  it('switches to the jobs when told while already on the page (M8)', async () => {
+    render(<AccountPage />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^All/ })).toHaveAttribute('aria-pressed', 'true')
+    );
+
+    window.history.replaceState(null, '', '#jobs');
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Needs attention/ })).toHaveAttribute('aria-pressed', 'true')
+    );
+  });
 });
+

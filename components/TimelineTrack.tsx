@@ -218,6 +218,7 @@ function TrackBlock({
   onRemove,
   onRepaired,
   onAdd,
+  onSeekAt,
 }: {
   clip: TimelineClip;
   record: GalleryRecord | undefined;
@@ -230,6 +231,8 @@ function TrackBlock({
   onRemove: (clipId: string) => void;
   onRepaired: (recordId: string) => void;
   onAdd: (recordId: string, atIndex?: number) => void;
+  /** Move the playhead to this screen x. A plain click on the block body. */
+  onSeekAt: (clientX: number) => void;
 }) {
   const [draggedOver, setDraggedOver] = useState(false);
   // While a trim handle is held, the block must not be draggable at all —
@@ -305,6 +308,14 @@ function TrackBlock({
       role="listitem"
       aria-label={reorderHint(index + 1, total, titleOf(record))}
       onKeyDown={handleReorderKeys}
+      // A plain click puts the playhead where it landed (UX audit L5: clicking
+      // a clip used to do nothing visible). A finished drag fires no click, so
+      // reordering is unaffected; trim handles and the block's own buttons keep
+      // their clicks.
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest?.('[data-trim-handle], button, a, input, select')) return;
+        onSeekAt(event.clientX);
+      }}
       draggable={!trimming}
       onDragStart={(event) => {
         // A drag that began on a trim handle is a trim, not a reorder.
@@ -558,6 +569,18 @@ export default function TimelineTrack({
     }
   }, [playheadX, playing]);
 
+  // The ruler and the clip row share one left edge, so a click anywhere on the
+  // row maps through the ruler's rect to the same time the ruler would give.
+  const rulerRef = useRef<HTMLDivElement>(null);
+  const seekAtClientX = useCallback(
+    (clientX: number) => {
+      const rect = rulerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      usePlayheadStore.getState().seek(xToTime(layout, clientX - rect.left));
+    },
+    [layout]
+  );
+
   const scrubFromPointer = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       const rect = event.currentTarget.getBoundingClientRect();
@@ -660,10 +683,11 @@ export default function TimelineTrack({
           className={`relative ${fill ? 'flex h-full flex-col' : ''}`}
           style={{ width: layout.width, minWidth: '100%' }}
         >
-          {/* The ruler is the scrub surface: clicking a clip must stay a
-              selection/reorder gesture, so time lives up here — the same split
-              the desktop editors use. */}
+          {/* The ruler is the scrub surface for dragging through time. A plain
+              click on a clip also seeks (see TrackBlock), but dragging a clip
+              stays a reorder, so scrubbing lives up here. */}
           <div
+            ref={rulerRef}
             data-testid="track-ruler"
             onPointerDown={(event) => {
               scrubbingRef.current = true;
@@ -715,6 +739,7 @@ export default function TimelineTrack({
                   onRemove={onRemove}
                   onRepaired={onRepaired}
                   onAdd={onAdd}
+                  onSeekAt={seekAtClientX}
                 />
               ))}
             </div>

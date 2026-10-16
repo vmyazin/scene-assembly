@@ -98,7 +98,7 @@ export default function CloudJobPanel({provider,mediaType,inputMode,onContinueFr
     {/* A running job is the result arriving, so it is drawn as the card it will
         become, one to a row in this narrow rail. Only what waits on a person or
         has stopped stays a row of text. */}
-    {active&&<CloudJobCardGrid jobs={jobs.filter(isActiveJob)} columns={1} busy={busy} onCancel={id=>void changeJob(id,'cancel')}/>}
+    {active&&<CloudJobCardGrid jobs={jobs.filter(isActiveJob)} columns={1} busy={busy} inOwnForm onCancel={id=>void changeJob(id,'cancel')}/>}
     <CloudJobList jobs={jobs.filter(job=>isListedJob(job)&&!isActiveJob(job))} busy={busy} onResume={id=>void changeJob(id,'resume')} onCancel={id=>void changeJob(id,'cancel')} onDismiss={id=>{const job=jobs.find(entry=>entry.id===id);if(job)void clearJobs([job]);}} onClear={targets=>void clearJobs(targets)} />
     <TemporaryAssetNotice assets={assets} />
     {/* While a job runs, its card above is the pending state. The result stack's own

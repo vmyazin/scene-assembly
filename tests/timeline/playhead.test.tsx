@@ -40,6 +40,15 @@ describe('the shared playhead', () => {
     expect(screen.getByText('0:02 / 0:08')).toBeInTheDocument();
   });
 
+  it('a plain click on a clip moves the playhead to that point (L5)', async () => {
+    await addEightSecondClip();
+    const block = within(screen.getByRole('list', { name: 'Timeline clips' })).getAllByRole('listitem')[0];
+
+    fireEvent.click(block, { clientX: 3 * PPS });
+
+    expect(usePlayheadStore.getState().time).toBeCloseTo(3);
+  });
+
   it('keeps scrubbing while the pointer drags along the ruler', async () => {
     await addEightSecondClip();
     const ruler = screen.getByTestId('track-ruler');
