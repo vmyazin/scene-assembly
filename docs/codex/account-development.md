@@ -178,6 +178,10 @@ without another provider call. Permanent assets have no automatic expiry.
 The account spend ledger is stored in D1 and remains separate from the browser
 ledger. Both use the canonical resolvers in `lib/spend/resolve.ts`; figures stay
 exact, estimated, or unknown when trustworthy rate/usage data is unavailable.
+The Spend page shows an all-time total through `useAccountSpendTotals` and
+`/api/account/spend/totals`, matching the studio footer independently of the
+selected report range and loaded ledger pages. Deleting or clearing records
+refreshes both totals; guests total their browser ledger.
 The Spend page also reads current provider billing from Kie, Runware, and Atlas.
 Guest reads use the device's keys through a first-party proxy; signed-in reads
 decrypt saved connections only in the account Worker. These balances are never

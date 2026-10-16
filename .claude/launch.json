@@ -392,6 +392,13 @@
         "(cd cloud && WRANGLER_SEND_METRICS=false node node_modules/wrangler/bin/wrangler.js dev --local --port 8897 --define __LOCAL_DEV__:true --enable-containers) & ACCOUNT_WORKER_ORIGIN=http://127.0.0.1:8897 node node_modules/next/dist/bin/next dev --port 3197; wait"
       ],
       "port": 3197
+    },
+    {
+      "name": "Spend footer total smoke test",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "ACCOUNT_WORKER_PORT=8983 DEV_FAKE_GENERATION=1 npm run dev -- --port 3283",
+      "cwd": "${workspaceFolder}"
     }
   ],
   "version": "0.0.1"

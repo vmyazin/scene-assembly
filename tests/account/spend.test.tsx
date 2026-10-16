@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import AccountSpend from '@/components/spend/AccountSpend';
 import SpendPage from '@/app/spend/page';
 import { accountRequest } from '@/lib/account/client';
 import type { SpendEntry } from '@/lib/spend/ledger';
@@ -49,6 +50,37 @@ describe('account spend', () => {
     useSpendStore.setState({ entries: [entry('guest', 'Browser record')], hasHydrated: true });
     useAppStore.setState({ kieApiKey: '', hasHydrated: true });
     owner();
+  });
+
+  it('shows all-time spend independently of the range and loaded ledger page', async () => {
+    vi.mocked(accountRequest).mockImplementation(async (path) => {
+      if (path === 'spend') return { accountId: 'owner-1', entries: [entry('cloud', 'Newest')], nextCursor: 'older' };
+      const costUsd = path === 'spend/totals' ? 125 : 12;
+      return { accountId: 'owner-1', totals: { costUsd, runs: 100, exactUsd: costUsd, estimatedUsd: 0, unknownRuns: 0 } };
+    });
+    render(<AccountSpend ownerId="owner-1" range="month" now={Date.now()} onClearRequest={vi.fn()} />);
+
+    expect(await within(screen.getByRole('region', { name: 'All-time spend' })).findByText('$125.00')).toBeInTheDocument();
+    expect(await screen.findByText('Newest')).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Summary' })).getByText('$12.00')).toBeInTheDocument();
+    expect(accountRequest).toHaveBeenCalledWith('spend/totals', expect.objectContaining({ headers: { 'X-Account-Id': 'owner-1' } }));
+  });
+
+  it('does not substitute loaded rows when the all-time endpoint fails and can retry', async () => {
+    let failed = true;
+    vi.mocked(accountRequest).mockImplementation(async (path) => {
+      if (path === 'spend') return { accountId: 'owner-1', entries: [entry('cloud', 'Newest')], nextCursor: 'older' };
+      if (path === 'spend/totals' && failed) throw new Error('Unavailable');
+      return { accountId: 'owner-1', totals: { costUsd: 125, runs: 100, exactUsd: 125, estimatedUsd: 0, unknownRuns: 0 } };
+    });
+    render(<AccountSpend ownerId="owner-1" range="month" now={Date.now()} onClearRequest={vi.fn()} />);
+
+    const total = within(screen.getByRole('region', { name: 'All-time spend' }));
+    expect(await total.findByText('Total spend is temporarily unavailable.')).toBeInTheDocument();
+    expect(total.getByText('—')).toBeInTheDocument();
+    failed = false;
+    fireEvent.click(total.getByRole('button', { name: 'Retry total' }));
+    expect(await total.findByText('$125.00')).toBeInTheDocument();
   });
 
   it('shows only the signed-in account ledger without a source toggle', async () => {

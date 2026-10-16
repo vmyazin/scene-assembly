@@ -8,6 +8,7 @@ import SpendDailyChart from '@/components/spend/SpendDailyChart';
 import SpendEmptyPreview from '@/components/spend/SpendEmptyPreview';
 import SpendLedger from '@/components/spend/SpendLedger';
 import SpendSummary from '@/components/spend/SpendSummary';
+import { formatUsdTotal } from '@/lib/spend/format';
 import { providerLabel, type SpendEntry, type SpendProvider } from '@/lib/spend/ledger';
 import { byDay, byModel, byProvider, inRange, toCsv, totals, type SpendRange, type SpendTotals } from '@/lib/spend/rollup';
 import { saveBlobAs } from '@/lib/save-file';
@@ -17,6 +18,10 @@ interface SpendReportProps {
   entries: SpendEntry[];
   /** Range totals computed elsewhere; null while pending. Omitted, the summary sums `entries`. */
   summaryTotals?: SpendTotals | null;
+  /** All-time account total from the same endpoint as the footer, independent of the report range. */
+  allTimeTotals?: SpendTotals | null;
+  allTimeError?: string | null;
+  onRetryAllTime?: () => void;
   range: SpendRange;
   now: number;
   loading?: boolean;
@@ -33,6 +38,9 @@ export default function SpendReport({
   source,
   entries,
   summaryTotals,
+  allTimeTotals,
+  allTimeError,
+  onRetryAllTime,
   range,
   now,
   loading = false,
@@ -55,12 +63,21 @@ export default function SpendReport({
     saveBlobAs(blob, `scene-assembly-spend-${cloud ? 'cloud' : 'browser'}-${range}.csv`);
   };
 
-  if (loading && entries.length === 0) {
-    return <div className="flex items-center justify-center py-16"><div className="loading-spinner" /></div>;
-  }
+  const lifetime = allTimeTotals === undefined ? (loading ? null : totals(entries)) : allTimeTotals;
 
   return (
     <>
+      <section aria-label="All-time spend" className="glass-card p-3.5 md:p-4">
+        <dl>
+          <dt className="field-label">All-time spend</dt>
+          <dd className="display mt-1 text-2xl">{lifetime ? formatUsdTotal(lifetime.costUsd) : '—'}</dd>
+        </dl>
+        <p className="field-hint mt-1">
+          {allTimeError ? 'Total spend is temporarily unavailable.' : !lifetime ? 'Totalling…' : cloud ? 'Across all account runs, in every date range.' : 'Across all runs recorded in this browser.'}
+          {lifetime && lifetime.unknownRuns > 0 && ` ${lifetime.unknownRuns} run${lifetime.unknownRuns === 1 ? '' : 's'} unpriced.`}
+        </p>
+        {allTimeError && onRetryAllTime && <button type="button" onClick={onRetryAllTime} className="btn-secondary mt-3">Retry total</button>}
+      </section>
       {error && (
         <div role="alert" className="glass-card p-4 text-sm">
           <p className="text-[var(--foreground)]">{error}</p>
@@ -68,7 +85,9 @@ export default function SpendReport({
         </div>
       )}
 
-      {scoped.length === 0 ? (
+      {loading && entries.length === 0 ? (
+        <div className="flex items-center justify-center py-16"><div className="loading-spinner" /></div>
+      ) : scoped.length === 0 ? (
         <>
           <section className="glass-card p-6 text-center">
             <p className="text-[var(--foreground)]">{entries.length === 0 ? 'Nothing recorded yet.' : 'Nothing recorded yet for this range.'}</p>

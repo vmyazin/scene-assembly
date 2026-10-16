@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 
 import SpendReport from '@/components/spend/SpendReport';
 import { useAccountSpend } from '@/lib/account/use-spend';
@@ -19,7 +19,13 @@ export default function AccountSpend({ ownerId, range, now, onClearRequest, onEm
   // The summary tiles come from the Worker, which totals the whole range in one
   // request; the rows below still page in fifty at a time.
   const summary = useAccountSpendTotals(ownerId, rangeStart(range, now));
-  const refreshSummary = summary.refresh;
+  const allTime = useAccountSpendTotals(ownerId);
+  const refreshRange = summary.refresh;
+  const refreshAllTime = allTime.refresh;
+  const refreshSummary = useCallback(() => {
+    refreshRange();
+    refreshAllTime();
+  }, [refreshRange, refreshAllTime]);
   const empty = spend.entries.length === 0;
   // A layout effect, so the page's range controls arrive in the same paint as
   // the rows: from a passive effect they popped in a frame later, and anything
@@ -43,6 +49,9 @@ export default function AccountSpend({ ownerId, range, now, onClearRequest, onEm
       // until (or if) the Worker's figure is unavailable. With rows still
       // unloaded, a local sum would be the under-count this replaces.
       summaryTotals={summary.totals ?? (spend.hasOlder ? null : undefined)}
+      allTimeTotals={allTime.totals}
+      allTimeError={allTime.error}
+      onRetryAllTime={allTime.refresh}
       range={range}
       now={now}
       loading={spend.loading}
