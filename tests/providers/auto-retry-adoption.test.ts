@@ -6,26 +6,45 @@ import { describe, expect, it } from 'vitest';
  * same way — all models, all providers. A workspace that grows its own retry,
  * or none at all, is the drift this guard catches.
  */
-const workspaceFiles = [
-  'components/GenerationInterface.tsx',
+const read = (file: string) => readFileSync(`${process.cwd()}/${file}`, 'utf8');
+
+/** Workspaces whose button and error live in the shared `GenerateActions`. */
+const sharedActionWorkspaces = [
   'components/FalGenerationWorkspace.tsx',
   'components/KieGenerationWorkspace.tsx',
   'components/ProviderVideoWorkspace.tsx',
 ] as const;
 
-describe('shared automatic retry adoption', () => {
-  for (const file of workspaceFiles) {
-    it(`${file} retries through the shared countdown`, () => {
-      const source = readFileSync(`${process.cwd()}/${file}`, 'utf8');
+function expectSharedRetryGate(source: string) {
+  expect(source).toMatch(/from '@\/lib\/providers\/auto-retry'/);
+  expect(source.match(/useAutoRetry\(\)/g)).toHaveLength(1);
+  // Scheduled only behind the retryable-failure gate, never on every failure.
+  expect(source).toMatch(/isRetryableFailure\([^)]*\)\s*(&&|\))/);
+}
 
-      expect(source).toMatch(/from '@\/lib\/providers\/auto-retry'/);
-      expect(source.match(/useAutoRetry\(\)/g)).toHaveLength(1);
-      // Scheduled only behind the retryable-failure gate, never on every failure.
-      expect(source).toMatch(/isRetryableFailure\([^)]*\)\s*(&&|\))/);
-      // The budget starts over on a deliberate press and on a run that worked.
-      expect(source.match(/autoRetry\.reset\(\)/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
-      // And the countdown is always cancellable.
-      expect(source).toMatch(/onCancel(Retry)?=\{autoRetry\.cancel\}/);
+describe('shared automatic retry adoption', () => {
+  it('GenerationInterface retries through the shared countdown', () => {
+    const source = read('components/GenerationInterface.tsx');
+    expectSharedRetryGate(source);
+    // The budget starts over on a deliberate press and on a run that worked.
+    expect(source.match(/autoRetry\.reset\(\)/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    // And the countdown is always cancellable.
+    expect(source).toMatch(/onCancel(Retry)?=\{autoRetry\.cancel\}/);
+  });
+
+  for (const file of sharedActionWorkspaces) {
+    it(`${file} retries through the shared countdown and GenerateActions`, () => {
+      const source = read(file);
+      expectSharedRetryGate(source);
+      // A run that worked hands back the budget; the press itself is GenerateActions'.
+      expect(source.match(/autoRetry\.reset\(\)/g)?.length ?? 0).toBeGreaterThanOrEqual(1);
+      expect(source).toMatch(/<GenerateActions[\s\S]*?autoRetry=\{autoRetry\}/);
     });
   }
+
+  it('GenerateActions resets the budget on a press and keeps the countdown cancellable', () => {
+    const source = read('components/GenerateActions.tsx');
+    expect(source).toMatch(/onClick=\{\(\) => \{[\s\S]*?autoRetry\.reset\(\);[\s\S]*?onSubmit\(\);/);
+    expect(source).toMatch(/onCancelRetry=\{autoRetry\.cancel\}/);
+  });
 });

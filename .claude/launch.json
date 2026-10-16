@@ -450,6 +450,12 @@
       "runtimeExecutable": "env",
       "runtimeArgs": ["ACCOUNT_WORKER_PORT=8923", "DEV_FAKE_GENERATION=1", "npm", "run", "dev", "--", "--port", "3323"],
       "port": 3323
+    },
+    {
+      "name": "Unified provider workspaces smoke test",
+      "runtimeExecutable": "env",
+      "runtimeArgs": ["ACCOUNT_WORKER_PORT=8927", "npm", "run", "dev", "--", "--port", "3327"],
+      "port": 3327
     }
   ],
   "version": "0.0.1"

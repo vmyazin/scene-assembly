@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Download, Loader2, Video } from 'lucide-react';
 
 import JobElapsed from '@/components/JobElapsed';
+import LastFrameActions from '@/components/LastFrameActions';
 import VideoPlayer from '@/components/video/VideoPlayer';
 
 const ACCENT = {
@@ -88,5 +89,37 @@ export function VideoDownloadLink({
       {busy ? <Loader2 className="animate-spin" size={18} /> : <Download size={18} />}
       {busy ? 'Preparing download…' : label}
     </a>
+  );
+}
+
+/**
+ * What a finished clip offers under its stage: the download, anything the
+ * provider adds (a draft's Finalize), then "Continue from last frame".
+ */
+export function FinishedVideoActions({
+  url,
+  filenameBase,
+  extension,
+  busy,
+  label = 'Download video',
+  onDownload,
+  onContinueFromFrame,
+  children,
+}: {
+  url: string;
+  filenameBase: string;
+  extension: string;
+  busy: boolean;
+  label?: string;
+  onDownload: () => void;
+  onContinueFromFrame?: () => void;
+  children?: ReactNode;
+}) {
+  return (
+    <>
+      <VideoDownloadLink href={url} filename={`${filenameBase}.${extension}`} busy={busy} label={label} onDownload={onDownload} />
+      {children}
+      <LastFrameActions videoUrl={url} filenameBase={filenameBase} onContinue={onContinueFromFrame} />
+    </>
   );
 }

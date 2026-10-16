@@ -2,34 +2,32 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCloudWorkspace } from '@/lib/account/useCloudWorkspace';
-import CloudExecutionNotice from '@/components/account/CloudExecutionNotice';
 import CloudJobPanel from '@/components/account/CloudJobPanel';
 
-import EditReferenceTray, { emptyEditReferenceDraft } from '@/components/EditReferenceTray';
+import EditReferenceTray from '@/components/EditReferenceTray';
 import VideoSourceInput, { type SourceVideo } from '@/components/VideoSourceInput';
 import { useAccountStore } from '@/store/useAccountStore';
 import { ALEPH_DATA_URI_MAX, alephDataUriLength, isAlephVideoUri } from '@/lib/providers/comet';
-import { CLOUD_EDIT_REFERENCE_CAP, editPromptMode, packEditReferences, releaseEditReferenceDraft, type EditReferencePlan } from '@/lib/providers/edit-references';
+import { CLOUD_EDIT_REFERENCE_CAP, editPromptMode, packEditReferences, type EditReferencePlan } from '@/lib/providers/edit-references';
 import { editHasControl, editPromptImageTokenError, editPromptLengthError, editPromptShortcuts, frameAnchorTimingError, framePinsFor, isRunwayEditProtocol, validateEditSource } from '@/lib/providers/video-edit';
 import type { FrameAnchorChoice } from '@/components/FrameAnchorControl';
 import { uploadRunwareMedia, uploadRunwareVideo } from '@/lib/providers/upload-video';
 import ReferenceClipTray, { type AttachedReferenceClip } from '@/components/ReferenceClipTray';
 import { clipToken, fileWithReferenceClipType, referenceClipSetError, referenceClipsFor } from '@/lib/providers/reference-clips';
-import LastFrameActions from '@/components/LastFrameActions';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import PromptPanel from '@/components/PromptPanel';
 import SavedPromptsButton from '@/components/SavedPromptsButton';
 import DescribeSourceButton from '@/components/DescribeSourceButton';
-import ModelControls, { type ModelControlField } from '@/components/ModelControls';
+import type { ModelControlField } from '@/components/ModelControls';
 import AspectMismatchNote from '@/components/AspectMismatchNote';
 import ConnectionGate, { isGated } from '@/components/ConnectionGate';
-import SubmissionError from '@/components/SubmissionError';
-import RelaxedFilterControl from '@/components/RelaxedFilterControl';
+import GenerateActions from '@/components/GenerateActions';
+import ResultPanel from '@/components/ResultPanel';
+import { ModelControlsCard, WorkspaceCard } from '@/components/WorkspaceCard';
 import { trackGenerationResult, trackGenerationSubmitted, trackQueuedTerminal } from '@/lib/analytics/generation-result';
-import { classifyFailure, refusalPresentation } from '@/lib/moderation/classify';
+import { classifyFailure } from '@/lib/moderation/classify';
 import { inspectPrompt } from '@/lib/moderation/floors';
 import { useRelaxedFilter } from '@/lib/moderation/use-relaxed-filter';
 import { AUTO_RETRY_DELAY_SECONDS, isRetryableFailure, useAutoRetry } from '@/lib/providers/auto-retry';
@@ -38,7 +36,6 @@ import ReferenceStack from '@/components/ReferenceStack';
 import { candidatesFromSizes, useAutoAspect } from '@/lib/draft/aspect-match';
 import { APPROXIMATE_LEGEND, hasApproximateSize, sizeDimensions, withDimensions } from '@/lib/providers/output-size';
 import { resolveCatalogRate } from '@/lib/spend/resolve';
-import { carryOverValues } from '@/lib/draft/carry-over';
 import { recordFinishedJob } from '@/lib/gallery/record-job';
 import FinalizeDraftButton from '@/components/FinalizeDraftButton';
 import { runGuestFinalize } from '@/lib/providers/guest-finalize';
@@ -59,15 +56,17 @@ import type { EngineId } from '@/lib/engines/registry';
 import { isVideoFile } from '@/lib/video-frame';
 import { useAppStore } from '@/store/useAppStore';
 import { useDraftStore } from '@/store/useDraftStore';
+import { useEditReferenceDraft } from '@/hooks/useEditReferenceDraft';
+import { useModelControlValues } from '@/hooks/useModelControlValues';
+import { removeReferenceAt, useMountedRef, usePromptScope, useReferenceLimit } from '@/hooks/useWorkspaceLifecycle';
 import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
 import { useProviderJobsStore, type ProviderJob } from '@/store/useProviderJobsStore';
 import { fileAsDataUrl } from '@/lib/file-data-url';
-import { JobStatusPill } from '@/components/StatusPill';
 import WorkspaceHeader from '@/components/WorkspaceHeader';
 import { GenExampleButton, PromptHeader } from '@/components/PromptHeader';
 import { useExamplePrompt } from '@/hooks/useExamplePrompt';
 import { ModelNote, ModelPickerCard } from '@/components/ModelPickerCard';
-import { VideoDownloadLink, VideoResultStage } from '@/components/VideoResult';
+import { FinishedVideoActions, VideoResultStage } from '@/components/VideoResult';
 import { useClaimSeedFrame, useReferenceIntake } from '@/hooks/useReferenceIntake';
 import { ReferencePicker, SwapFramesButton } from '@/components/ReferencePicker';
 
@@ -277,18 +276,7 @@ export default function ProviderVideoWorkspace({
   const epoch = useAccountStore(state => state.epoch);
   const [selectedSource, setSelectedSource] = useState<SourceVideo | null>(null);
   const [anchorById, setAnchorById] = useState<Record<string, { choice: FrameAnchorChoice; timestamp: string }>>({});
-  const [editDraft, setEditDraft] = useState(emptyEditReferenceDraft);
-  const [editDraftModel, setEditDraftModel] = useState(selectedModel?.id);
-  const editDraftRef = useRef(editDraft);
-  if (editDraftModel !== selectedModel?.id) {
-    releaseEditReferenceDraft(editDraft);
-    setEditDraftModel(selectedModel?.id);
-    setEditDraft(emptyEditReferenceDraft());
-  }
-  useEffect(() => {
-    editDraftRef.current = editDraft;
-  }, [editDraft]);
-  useEffect(() => () => releaseEditReferenceDraft(editDraftRef.current), []);
+  const [editDraft, setEditDraft] = useEditReferenceDraft(selectedModel?.id);
   const editSpec = isEdit ? selectedModel?.videoEdit?.references : undefined;
   const source = selectedSource?.epoch === epoch ? selectedSource : null;
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -318,20 +306,9 @@ export default function ProviderVideoWorkspace({
 
   const prompt = useDraftStore((state) => state.prompt);
   const setPrompt = useDraftStore((state) => state.setPrompt);
-
-  // Claims the prompt field for this kind of work, dropping a prompt written
-  // for the other kind. Declared ahead of every other mount effect here so a
-  // stale prompt cannot outlive this line and block what those effects set.
-  useEffect(() => {
-    useDraftStore.getState().enterPromptScope('video');
-  }, []);
+  usePromptScope('video');
   const references = useDraftStore((state) => state.references);
-  const controlValues = useDraftStore((state) => state.controlValues);
-  const [valuesByModel, setValuesByModel] = useState<
-    Record<string, Record<string, string | number | boolean>>
-  >({});
-  const storedValues =
-    valuesByModel[modelKey] ?? carryOverValues(fields, defaultValuesFor(fields), controlValues);
+  const { values: storedValues, update } = useModelControlValues(modelKey, fields, defaultValuesFor(fields));
   const seedancePreview = Boolean(isEdit ? selectedModel?.videoEdit?.draftPreview : selectedModel?.draftPreview);
   const draftSizeLabel = seedanceDraftSizeLabel(
     isEdit ? selectedModel?.videoEdit?.sizes : selectedModel?.sizes,
@@ -372,7 +349,7 @@ export default function ProviderVideoWorkspace({
   // prompt and settings on screen now, not the ones from the failed render.
   const submitRef = useRef<() => void>(() => {});
   const [isDownloading, setIsDownloading] = useState(false);
-  const mountedRef = useRef(true);
+  const mountedRef = useMountedRef();
   const isFrames = inputMode === 'frames';
   const describeSources = useMemo(() => {
     // Text mode submits no media. A reference left in the draft from Image
@@ -417,17 +394,7 @@ export default function ProviderVideoWorkspace({
   );
   const resultUrl = latestJob?.state === 'success' ? latestJob.urls[0] : undefined;
 
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  // A stricter model must not keep more references than it accepts.
-  useEffect(() => {
-    useDraftStore.getState().limitReferences(maxInputImages);
-  }, [maxInputImages]);
+  useReferenceLimit(maxInputImages);
 
   const updateValues = (key: string, value: string | number | boolean) => {
     const next = { ...values, [key]: value };
@@ -435,9 +402,8 @@ export default function ProviderVideoWorkspace({
       const label = seedanceDraftSizeLabel(isEdit ? selectedModel?.videoEdit?.sizes : selectedModel?.sizes, typeof next.size === 'string' ? next.size : undefined);
       if (label) next.size = label;
     }
-    setValuesByModel((current) => ({ ...current, [modelKey]: next }));
     // Remembered globally so the next model inherits whatever it can express.
-    useDraftStore.getState().rememberControlValues(key === 'draftPreview' && next.size !== values.size ? { draftPreview: value, size: next.size } : { [key]: value });
+    update(next, key === 'draftPreview' && next.size !== values.size ? { draftPreview: value, size: next.size } : { [key]: value });
   };
 
   // Adding a reference (or the first frame) snaps "Output size" to the entry
@@ -492,11 +458,6 @@ export default function ProviderVideoWorkspace({
     dropDisabled: isPickerFull,
     onError: setError,
   });
-
-  const removeReference = (index: number) => {
-    const reference = references[index];
-    if (reference) useDraftStore.getState().removeReference(reference.id);
-  };
 
   const example = useExamplePrompt({
     featureId: inputMode === 'text' ? 'text-to-video' : 'image-to-video',
@@ -868,16 +829,6 @@ export default function ProviderVideoWorkspace({
     submitRef.current = () => void submit();
   });
 
-  const refusal = error
-    ? refusalPresentation(error, {
-        providerLabel: label,
-        modelLabel: selectedModel?.label ?? provider,
-        level: relaxed.effective,
-        route: { provider, modelId: selectedModel?.id ?? '' },
-        hasReferences: references.length > 0 || Boolean(source) || clipVideos.length > 0 || clipAudios.length > 0,
-      })
-    : null;
-
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-3.5 sm:space-y-4">
       <WorkspaceHeader
@@ -950,31 +901,24 @@ export default function ProviderVideoWorkspace({
             />
           )}
           {isEdit && maxInputImages === 0 && !editSpec && (
-            <section className="glass-card space-y-1 p-3.5 md:p-4">
-              <h3 className="display text-base font-semibold">Character images</h3>
-              <p className="text-xs text-[var(--foreground-muted)]">
-                {selectedModel?.label} cannot take character or reference images. Describe the new look in the prompt. To swap in a character from a photo, use Seedance 2.5 on Runware or Kling O1 or O3 on fal.
-              </p>
-            </section>
+            <WorkspaceCard
+              title="Character images"
+              description={`${selectedModel?.label} cannot take character or reference images. Describe the new look in the prompt. To swap in a character from a photo, use Seedance 2.5 on Runware or Kling O1 or O3 on fal.`}
+            />
           )}
           {inputMode !== 'text' && maxInputImages > 0 && !editSpec && (
-            <section className="glass-card space-y-3 p-3.5 md:p-4">
-              <div>
-                <h3 className="display text-base font-semibold">
-                  {isEdit ? 'Replacement images (optional)' : isFrames
-                    ? 'First and last frame'
-                    : isReference
-                      ? 'Add character views'
-                      : `Reference image${maxInputImages === 1 ? '' : 's'}`}
-                </h3>
-                <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">
-                  {isEdit ? `Add up to ${maxInputImages} character, product, or setting images to guide the edit. Address images as ${selectedModel?.videoEdit?.promptSyntax === 'image-index' || selectedModel?.videoEdit?.plainReferences ? 'image 1, image 2' : '@Image1, @Image2'}, and so on.` : isFrames
-                    ? 'Two images, in order: the frame the clip opens on, then the one it ends on. The model builds the motion between them.'
-                    : isReference
-                      ? `Add up to ${maxInputImages} front, three-quarter, or profile views. Their order becomes ${referenceToken(0)}, ${referenceToken(1)}, and so on in your prompt.`
-                      : `Upload up to ${maxInputImages}; files are forwarded to ${label} only for this task. Pick a saved clip and its last frame is used.`}
-                </p>
-              </div>
+            <WorkspaceCard
+              title={isEdit ? 'Replacement images (optional)' : isFrames
+                ? 'First and last frame'
+                : isReference
+                  ? 'Add character views'
+                  : `Reference image${maxInputImages === 1 ? '' : 's'}`}
+              description={isEdit ? `Add up to ${maxInputImages} character, product, or setting images to guide the edit. Address images as ${selectedModel?.videoEdit?.promptSyntax === 'image-index' || selectedModel?.videoEdit?.plainReferences ? 'image 1, image 2' : '@Image1, @Image2'}, and so on.` : isFrames
+                ? 'Two images, in order: the frame the clip opens on, then the one it ends on. The model builds the motion between them.'
+                : isReference
+                  ? `Add up to ${maxInputImages} front, three-quarter, or profile views. Their order becomes ${referenceToken(0)}, ${referenceToken(1)}, and so on in your prompt.`
+                  : `Upload up to ${maxInputImages}; files are forwarded to ${label} only for this task. Pick a saved clip and its last frame is used.`}
+            >
               {!isPickerFull && (
                 <ReferencePicker
                   accept={imageReferencesOnly ? 'image/*' : 'image/*,video/*'}
@@ -1006,10 +950,10 @@ export default function ProviderVideoWorkspace({
                       : `Remove reference ${index + 1}`,
                   sourceLabel: reference.sourceLabel,
                 }))}
-                onRemove={removeReference}
+                onRemove={removeReferenceAt}
               />
               {isFrames && references.length === 2 && <SwapFramesButton />}
-            </section>
+            </WorkspaceCard>
           )}
 
           {clipCapability && (
@@ -1028,24 +972,16 @@ export default function ProviderVideoWorkspace({
           )}
 
           {(fields.length > 0 || relaxed.offered) && (
-            <section className="glass-card space-y-3 p-3.5 md:p-4">
-              <div>
-                <h3 className="display text-base font-semibold">Model controls</h3>
-                <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">
-                  {isEdit ? 'Duration and aspect ratio match the source video.' : `Only the lengths and sizes ${selectedModel?.label} publishes are offered.`}
-                </p>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <ModelControls
-                  namespace={`provider-${modelKey}`}
-                  fields={shownFields}
-                  values={values}
-                  onChange={updateValues}
-                />
-                <RelaxedFilterControl filter={relaxed} />
-              </div>
+            <ModelControlsCard
+              description={isEdit ? 'Duration and aspect ratio match the source video.' : `Only the lengths and sizes ${selectedModel?.label} publishes are offered.`}
+              namespace={`provider-${modelKey}`}
+              fields={shownFields}
+              values={values}
+              onChange={updateValues}
+              relaxed={relaxed}
+            >
               <AspectMismatchNote reference={isEdit ? undefined : references[0]} candidates={sizeCandidates} current={values.size} />
-            </section>
+            </ModelControlsCard>
           )}
           </>
         }
@@ -1108,78 +1044,42 @@ export default function ProviderVideoWorkspace({
           </PromptPanel>
         }
         actions={
-          <>
-            <button
-              type="button"
-              onClick={() => {
-                // A deliberate press is a fresh start: it drops any queued attempt
-                // and hands back the full retry budget.
-                autoRetry.reset();
-                void submit();
-              }}
-              disabled={isSubmitting || cloudWorkspace.checking}
-              // A disabled control has to carry its own reason: the guard above
-              // can only be reached programmatically, so for a pointer this
-              // button going dead is the whole of the explanation on offer.
-              title={cloudWorkspace.checking ? 'Still checking your account.' : undefined}
-              className="btn-primary w-full"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="animate-spin" size={21} /> {uploadProgress !== null ? `Uploading ${uploadKind === 'audio' ? 'reference audio' : uploadKind === 'video' ? 'reference video' : 'source'}… ${uploadProgress}%` : 'Starting…'}
-                </>
-              ) : (
-                <>
-                  <Sparkles size={21} /> {cloudWorkspace.cloud && cloudWorkspace.fakeGeneration ? 'Run simulation · test video only' : isEdit ? 'Generate edit' : 'Generate video'}
-                  {!(cloudWorkspace.cloud && cloudWorkspace.fakeGeneration) && estimate.costUsd !== null && (
-                    <span className="font-normal opacity-80">{` · ~$${estimate.costUsd.toFixed(2)}`}</span>
-                  )}
-                </>
-              )}
-            </button>
-            <CloudExecutionNotice workspace={cloudWorkspace} />
-            {error && (
-              <SubmissionError
-                message={refusal?.message ?? error}
-                retry={autoRetry.pending}
-                onCancelRetry={autoRetry.cancel}
-                offerTryRelaxed={Boolean(refusal?.offerTryRelaxed && relaxed.offered)}
-                onTryRelaxed={() => relaxed.requestRelaxed(() => void submit())}
-              />
-            )}
-          </>
+          <GenerateActions
+            workspace={cloudWorkspace}
+            mediaType="video"
+            label={isEdit ? 'Generate edit' : 'Generate video'}
+            cost={estimate.costUsd !== null && <span className="font-normal opacity-80">{` · ~$${estimate.costUsd.toFixed(2)}`}</span>}
+            busy={isSubmitting}
+            busyLabel={uploadProgress !== null ? `Uploading ${uploadKind === 'audio' ? 'reference audio' : uploadKind === 'video' ? 'reference video' : 'source'}… ${uploadProgress}%` : 'Starting…'}
+            onSubmit={() => void submit()}
+            error={error}
+            refusal={{
+              providerLabel: label,
+              modelLabel: selectedModel?.label ?? provider,
+              route: { provider, modelId: selectedModel?.id ?? '' },
+              hasReferences: references.length > 0 || Boolean(source) || clipVideos.length > 0 || clipAudios.length > 0,
+            }}
+            relaxed={relaxed}
+            autoRetry={autoRetry}
+          />
         }
         results={<>
           {cloudWorkspace.cloud ? <CloudJobPanel provider={provider} mediaType="video" inputMode={inputMode} onContinueFromFrame={onContinueFromFrame} /> :
-          <section className="glass-card flex min-h-[420px] flex-col gap-4 p-3.5 md:p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="display text-base font-semibold">Result</h3>
-              <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">
-                Results are temporary — download anything you want to keep.
-              </p>
-              {/* Read the producing model from the result, not the next-run selection. */}
-              {latestJob && (
-                <p className="mt-0.5 text-xs text-[var(--foreground-subtle)]">{findModel(latestJob.provider, latestJob.modelId)?.label ?? latestJob.modelId}</p>
-              )}
-            </div>
-            {latestJob && (
-              <JobStatusPill
-                tone={latestJob.state === 'error' ? 'danger' : latestJob.state === 'success' ? 'success' : 'warning'}
-                label={
-                  latestJob.state === 'queued'
-                    ? 'Queued'
-                    : latestJob.state === 'running'
-                      ? 'Generating'
-                      : latestJob.state === 'success'
-                        ? `Done${latestJob.cost !== undefined ? ` · $${latestJob.cost.toFixed(3)}` : ''}`
-                        : 'Failed'
-                }
-                startedAt={latestJob.createdAt}
-                finishedAt={isTerminal(latestJob.state) ? latestJob.updatedAt : undefined}
-              />
-            )}
-          </div>
+          <ResultPanel
+            modelLabel={latestJob ? findModel(latestJob.provider, latestJob.modelId)?.label ?? latestJob.modelId : undefined}
+            status={latestJob && {
+              tone: latestJob.state === 'error' ? 'danger' : latestJob.state === 'success' ? 'success' : 'warning',
+              label: latestJob.state === 'queued'
+                ? 'Queued'
+                : latestJob.state === 'running'
+                  ? 'Generating'
+                  : latestJob.state === 'success'
+                    ? `Done${latestJob.cost !== undefined ? ` · $${latestJob.cost.toFixed(3)}` : ''}`
+                    : 'Failed',
+              startedAt: latestJob.createdAt,
+              finishedAt: isTerminal(latestJob.state) ? latestJob.updatedAt : undefined,
+            }}
+          >
           <VideoResultStage
             resultUrl={resultUrl}
             accent="purple"
@@ -1198,43 +1098,38 @@ export default function ProviderVideoWorkspace({
             }
           />
           {resultUrl && latestJob && (
-            <VideoDownloadLink
-              href={resultUrl}
-              filename={`${filenameBase}.${extensionForMedia('video')}`}
-              busy={isDownloading}
-              label="Download video"
-              onDownload={() => void downloadResult()}
-            />
-          )}
-          {resultUrl && latestJob?.draftId && (
-            <FinalizeDraftButton
-              inputMode={latestJob.inputMode}
-              durationSeconds={seedanceDraftSeconds(latestJob.controlValues)}
-              busy={isSubmitting}
-              onApprove={async () => {
-                const seconds = seedanceDraftSeconds(latestJob.controlValues);
-                if (!latestJob.draftId || seconds === undefined) throw new Error('This draft has no saved length, so it cannot be priced.');
-                setIsSubmitting(true);
-                try {
-                  await runGuestFinalize({
-                    apiKey, modelId: latestJob.modelId, prompt: latestJob.prompt, inputMode: latestJob.inputMode,
-                    draftId: latestJob.draftId, durationSeconds: seconds,
-                  });
-                  toast.success('1080p video ready.');
-                } finally {
-                  if (mountedRef.current) setIsSubmitting(false);
-                }
-              }}
-            />
-          )}
-          {resultUrl && latestJob && (
-            <LastFrameActions
-              videoUrl={resultUrl}
+            <FinishedVideoActions
+              url={resultUrl}
               filenameBase={filenameBase}
-              onContinue={onContinueFromFrame}
-            />
+              extension={extensionForMedia('video')}
+              busy={isDownloading}
+              onDownload={() => void downloadResult()}
+              onContinueFromFrame={onContinueFromFrame}
+            >
+            {latestJob.draftId && (
+              <FinalizeDraftButton
+                inputMode={latestJob.inputMode}
+                durationSeconds={seedanceDraftSeconds(latestJob.controlValues)}
+                busy={isSubmitting}
+                onApprove={async () => {
+                  const seconds = seedanceDraftSeconds(latestJob.controlValues);
+                  if (!latestJob.draftId || seconds === undefined) throw new Error('This draft has no saved length, so it cannot be priced.');
+                  setIsSubmitting(true);
+                  try {
+                    await runGuestFinalize({
+                      apiKey, modelId: latestJob.modelId, prompt: latestJob.prompt, inputMode: latestJob.inputMode,
+                      draftId: latestJob.draftId, durationSeconds: seconds,
+                    });
+                    toast.success('1080p video ready.');
+                  } finally {
+                    if (mountedRef.current) setIsSubmitting(false);
+                  }
+                }}
+              />
+            )}
+            </FinishedVideoActions>
           )}
-          </section>}
+          </ResultPanel>}
           </>
         }
       />

@@ -2,33 +2,30 @@
 'use client';
 
 import { useCloudWorkspace } from '@/lib/account/useCloudWorkspace';
-import CloudExecutionNotice from '@/components/account/CloudExecutionNotice';
 import CloudJobPanel from '@/components/account/CloudJobPanel';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Loader2, Sparkles, Video } from 'lucide-react';
+import { Video } from 'lucide-react';
 
-import LastFrameActions from '@/components/LastFrameActions';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import PromptPanel from '@/components/PromptPanel';
 import SavedPromptsButton from '@/components/SavedPromptsButton';
-import ModelControls from '@/components/ModelControls';
 import AspectMismatchNote from '@/components/AspectMismatchNote';
 import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
+import GenerateActions from '@/components/GenerateActions';
+import ResultPanel from '@/components/ResultPanel';
+import { ModelControlsCard, WorkspaceCard } from '@/components/WorkspaceCard';
 import ConnectionGate, { isGated } from '@/components/ConnectionGate';
-import SubmissionError from '@/components/SubmissionError';
-import RelaxedFilterControl from '@/components/RelaxedFilterControl';
 import { trackGenerationResult, trackGenerationSubmitted } from '@/lib/analytics/generation-result';
-import { classifyFailure, refusalPresentation } from '@/lib/moderation/classify';
+import { classifyFailure } from '@/lib/moderation/classify';
 import { inspectPrompt } from '@/lib/moderation/floors';
 import { useRelaxedFilter } from '@/lib/moderation/use-relaxed-filter';
 import { isRetryableFailure, useAutoRetry } from '@/lib/providers/auto-retry';
 import ReferenceStack from '@/components/ReferenceStack';
 import { requestPromptSlug } from '@/lib/micro-ai/browser';
-import EditReferenceTray, { emptyEditReferenceDraft } from '@/components/EditReferenceTray';
-import { CLOUD_EDIT_REFERENCE_CAP, materializeEditReferences, packEditReferences, releaseEditReferenceDraft, type EditReferencePlan } from '@/lib/providers/edit-references';
-import { editPromptMode } from '@/lib/providers/edit-references';
-import { validateEditSource, validateEditVideo } from '@/lib/providers/video-edit';
+import EditReferenceTray from '@/components/EditReferenceTray';
+import { CLOUD_EDIT_REFERENCE_CAP, editPromptMode } from '@/lib/providers/edit-references';
+import { prepareSubmissionMedia } from '@/lib/providers/edit-submission';
 import { cancelFalJob, submitFalJob, uploadFalFiles } from '@/lib/fal/browser';
 import { buildFalInput, defaultFalValues, falModelLabel, modelsForFalMode, resolveFalVariant, validateFalInput } from '@/lib/fal/catalog';
 import { isFalJobTerminal } from '@/lib/fal/queue';
@@ -45,15 +42,18 @@ import { candidatesFromValues, useAutoAspect } from '@/lib/draft/aspect-match';
 import ModelListbox from '@/components/ModelListbox';
 import { FAL_VIDEO_COLUMNS, falVideoSpecs } from '@/lib/models/listbox-specs';
 import FalRunCost from '@/components/FalRunCost';
-import { carryOverValues } from '@/lib/draft/carry-over';
 import { isVideoFile } from '@/lib/video-frame';
 import type { EngineId } from '@/lib/engines/registry';
 import VideoSourceInput, { type SourceVideo } from '@/components/VideoSourceInput';
 import VideoPlayer from '@/components/video/VideoPlayer';
+import { FinishedVideoActions } from '@/components/VideoResult';
 import { JobStatusPill } from '@/components/StatusPill';
 import WorkspaceHeader from '@/components/WorkspaceHeader';
 import { GenExampleButton, PromptHeader } from '@/components/PromptHeader';
 import { useExamplePrompt } from '@/hooks/useExamplePrompt';
+import { useEditReferenceDraft } from '@/hooks/useEditReferenceDraft';
+import { useModelControlValues } from '@/hooks/useModelControlValues';
+import { removeReferenceAt, useMountedRef, usePromptScope, useReferenceLimit } from '@/hooks/useWorkspaceLifecycle';
 import { ModelNote, ModelPickerCard } from '@/components/ModelPickerCard';
 import { useClaimSeedFrame, useReferenceIntake } from '@/hooks/useReferenceIntake';
 import { ReferencePicker, SwapFramesButton } from '@/components/ReferencePicker';
@@ -166,14 +166,7 @@ function JobCard({
     modelId: job.modelId,
   });
   const [isDownloading, setIsDownloading] = useState(false);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  const mountedRef = useMountedRef();
 
   const download = async (url: string) => {
     setIsDownloading(true);
@@ -214,24 +207,13 @@ function JobCard({
       {resultUrl && (
         <div className="space-y-3">
           <VideoPlayer src={resultUrl} label="Generated video" className="max-h-[520px] w-full rounded-lg" />
-          <a
-            href={resultUrl}
-            download={`${filenameBase}.${extensionForMedia('video', job.mimeType)}`}
-            onClick={(event) => {
-              // fal serves results from its CDN, where the download attribute is
-              // ignored — fetch the bytes so the semantic name survives.
-              event.preventDefault();
-              void download(resultUrl);
-            }}
-            className="btn-secondary w-full"
-          >
-            {isDownloading ? <Loader2 className="animate-spin" size={17} /> : <Download size={17} />}
-            {isDownloading ? 'Preparing download…' : 'Download video'}
-          </a>
-          <LastFrameActions
-            videoUrl={resultUrl}
+          <FinishedVideoActions
+            url={resultUrl}
             filenameBase={filenameBase}
-            onContinue={onContinueFromFrame}
+            extension={extensionForMedia('video', job.mimeType)}
+            busy={isDownloading}
+            onDownload={() => void download(resultUrl)}
+            onContinueFromFrame={onContinueFromFrame}
           />
         </div>
       )}
@@ -289,23 +271,9 @@ function FalGenerationWorkspaceSession({
   const variant = resolveFalVariant(selectedModel.id, 'video', inputMode);
   const prompt = useDraftStore((state) => state.prompt);
   const setPrompt = useDraftStore((state) => state.setPrompt);
-
-  // Claims the prompt field for this kind of work, dropping a prompt written
-  // for the other kind. Declared ahead of every other mount effect here so a
-  // stale prompt cannot outlive this line and block what those effects set.
-  useEffect(() => {
-    useDraftStore.getState().enterPromptScope('video');
-  }, []);
+  usePromptScope('video');
   const references = useDraftStore((state) => state.references);
-  const controlValues = useDraftStore((state) => state.controlValues);
-  const [controlState, setControlState] = useState<{
-    variantId: string;
-    values: Record<string, FalValue>;
-  } | null>(null);
-  const values =
-    controlState?.variantId === variant.id
-      ? controlState.values
-      : carryOverValues(variant.fields, defaultFalValues(variant), controlValues);
+  const { values, update, controlValues } = useModelControlValues(variant.id, variant.fields, defaultFalValues(variant));
   const relaxed = useRelaxedFilter({
     workspaceKey: 'fal-video',
     provider: 'fal',
@@ -318,18 +286,7 @@ function FalGenerationWorkspaceSession({
 
   const epoch = useAccountStore((state) => state.epoch);
   const [selectedSource, setSelectedSource] = useState<SourceVideo | null>(null);
-  const [editDraft, setEditDraft] = useState(emptyEditReferenceDraft);
-  const [editDraftModel, setEditDraftModel] = useState(variant.id);
-  const editDraftRef = useRef(editDraft);
-  if (editDraftModel !== variant.id) {
-    releaseEditReferenceDraft(editDraft);
-    setEditDraftModel(variant.id);
-    setEditDraft(emptyEditReferenceDraft());
-  }
-  useEffect(() => {
-    editDraftRef.current = editDraft;
-  }, [editDraft]);
-  useEffect(() => () => releaseEditReferenceDraft(editDraftRef.current), []);
+  const [editDraft, setEditDraft] = useEditReferenceDraft(variant.id);
   const source = selectedSource?.epoch === epoch ? selectedSource : null;
   const [error, setError] = useState<string | null>(null);
   const [submittingVariantId, setSubmittingVariantId] = useState<string | null>(null);
@@ -341,7 +298,7 @@ function FalGenerationWorkspaceSession({
   const [cancelErrors, setCancelErrors] = useState<Record<string, string>>({});
   const submissionRef = useRef<SubmissionOperation | null>(null);
   const cancellingRef = useRef(new Set<string>());
-  const mountedRef = useRef(true);
+  const mountedRef = useMountedRef();
   const maxInputImages = variant.maxInputImages ?? 1;
   const isFramesMode = inputMode === 'frames';
   const isEdit = inputMode === 'edit';
@@ -372,23 +329,16 @@ function FalGenerationWorkspaceSession({
     };
   }, [variant.id]);
 
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      const operation = submissionRef.current;
-      if (operation) {
-        operation.stale = true;
-        if (operation.phase === 'uploading') operation.controller.abort();
-      }
-      submissionRef.current = null;
-    };
+  useEffect(() => () => {
+    const operation = submissionRef.current;
+    if (operation) {
+      operation.stale = true;
+      if (operation.phase === 'uploading') operation.controller.abort();
+    }
+    submissionRef.current = null;
   }, []);
 
-  // A stricter model must not keep more references than it accepts.
-  useEffect(() => {
-    useDraftStore.getState().limitReferences(maxInputImages);
-  }, [maxInputImages]);
+  useReferenceLimit(maxInputImages);
 
   const abortSubmission = () => {
     const operation = submissionRef.current;
@@ -400,19 +350,7 @@ function FalGenerationWorkspaceSession({
     setSubmittingVariantId(null);
   };
 
-  const updateValue = (key: string, value: FalValue) => {
-    setControlState((current) => ({
-      variantId: variant.id,
-      values: {
-        ...(current?.variantId === variant.id
-          ? current.values
-          : carryOverValues(variant.fields, defaultFalValues(variant), controlValues)),
-        [key]: value,
-      },
-    }));
-    // Remembered globally so the next model inherits whatever it can express.
-    useDraftStore.getState().rememberControlValues({ [key]: value });
-  };
+  const updateValue = (key: string, value: FalValue) => update({ [key]: value });
 
   // Adding a reference (or the first frame) snaps the aspect ratio to the
   // closest one this variant publishes.
@@ -455,11 +393,6 @@ function FalGenerationWorkspaceSession({
     onError: setError,
   });
 
-  const removeReference = (index: number) => {
-    const reference = references[index];
-    if (reference) useDraftStore.getState().removeReference(reference.id);
-  };
-
   const example = useExamplePrompt({
     featureId: `${inputMode}-to-video`,
     apiKey: geminiApiKey,
@@ -493,50 +426,30 @@ function FalGenerationWorkspaceSession({
       setError(floor.message);
       return;
     }
-    const activeReferences = inputMode === 'text' || editSpec ? [] : references;
-    if (isEdit && !source) {
-      setError('Choose a source video to edit.');
-      return;
-    }
-    if (isEdit && variant.edit && source) {
-      try {
-        validateEditVideo(source.file, variant.edit);
-        validateEditSource(source, variant.edit);
-      } catch (cause) {
-        setError(cause instanceof Error ? cause.message : 'Choose a source video this model accepts.');
-        return;
-      }
-    }
-    let packedPlan: EditReferencePlan | undefined;
-    let packedFiles = activeReferences.map((reference) => reference.file);
-    if (editSpec) {
-      const packed = packEditReferences(editDraft, editSpec);
-      if (!packed.ok) { setError(packed.error); return; }
-      const cloudCap = editSpec.keyframes?.max ?? CLOUD_EDIT_REFERENCE_CAP;
-      if (cloudWorkspace.cloud && packed.packed.files.length > cloudCap) {
-        setError(`A background job can attach ${cloudCap} reference images. Remove some, or run this edit in the browser.`);
-        return;
-      }
-      packedPlan = packed.packed.plan;
-      packedFiles = packed.packed.files;
-    }
+    const media = prepareSubmissionMedia({
+      inputMode,
+      references,
+      edit: variant.edit,
+      source,
+      editDraft,
+      cloudCap: cloudWorkspace.cloud ? (editSpec?.keyframes?.max ?? CLOUD_EDIT_REFERENCE_CAP) : undefined,
+    });
+    if (!media.ok) { setError(media.error); return; }
+    const { files: packedFiles, plan: packedPlan } = media;
     const libraryPrompt = prompt.trim() || (promptAbsent ? selectedModel.label : '');
     const submittedValues = {
       ...values,
       ...relaxed.attach(),
       ...(isEdit && source ? { sourceDurationSeconds: source.durationSeconds } : {}),
     };
-    const referenceUrls = packedFiles.map((_, index) => `https://reference.invalid/${index}`);
-    const materialized = editSpec ? { ...materializeEditReferences(editSpec, referenceUrls, packedPlan), video: 'https://source.invalid/video' } : undefined;
-    const uploadUrls = isEdit ? [...referenceUrls, 'https://source.invalid/video'] : referenceUrls;
-    const validationError = validateFalInput(variant, { prompt, uploadUrls, references: materialized });
+    const validationError = validateFalInput(variant, { prompt, uploadUrls: media.uploadUrls, references: media.references });
     if (validationError) {
       setError(validationError);
       return;
     }
 
     try {
-      buildFalInput(variant, { prompt, uploadUrls, values: submittedValues, references: materialized });
+      buildFalInput(variant, { prompt, uploadUrls: media.uploadUrls, values: submittedValues, references: media.references });
     } catch {
       setError('Review the selected fal model controls and try again.');
       return;
@@ -673,16 +586,6 @@ function FalGenerationWorkspaceSession({
     }
   };
 
-  const refusal = error
-    ? refusalPresentation(error, {
-        providerLabel: 'fal',
-        modelLabel: selectedModel.label,
-        level: relaxed.effective,
-        route: { provider: 'fal', modelId: selectedModel.id, endpointId: variant.endpointId },
-        hasReferences: references.length > 0,
-      })
-    : null;
-
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-3.5 sm:space-y-4">
       <WorkspaceHeader
@@ -748,19 +651,14 @@ function FalGenerationWorkspaceSession({
             />
           )}
           {inputMode !== 'text' && !editSpec && (!isEdit || maxInputImages > 0) && (
-            <section className="glass-card space-y-3 p-3.5 md:p-4">
-              <div>
-                <h3 className="display text-base font-semibold">
-                  {isEdit ? 'Reference images (optional)' : isFramesMode ? 'First and last frame' : 'Reference image'}
-                </h3>
-                <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">
-                  {isEdit
-                    ? `Add up to ${maxInputImages} images. Address them as @Image1, @Image2, and so on.`
-                    : isFramesMode
-                    ? `Two stills, in order: the frame the clip opens on and the one it lands on. ${selectedModel.label} generates the motion between them.`
-                    : 'This video flow accepts exactly one image. Pick a saved clip instead and its last frame is used.'}
-                </p>
-              </div>
+            <WorkspaceCard
+              title={isEdit ? 'Reference images (optional)' : isFramesMode ? 'First and last frame' : 'Reference image'}
+              description={isEdit
+                ? `Add up to ${maxInputImages} images. Address them as @Image1, @Image2, and so on.`
+                : isFramesMode
+                ? `Two stills, in order: the frame the clip opens on and the one it lands on. ${selectedModel.label} generates the motion between them.`
+                : 'This video flow accepts exactly one image. Pick a saved clip instead and its last frame is used.'}
+            >
               {!isPickerFull && (
                 <ReferencePicker
                   accept={isEdit ? 'image/png,image/jpeg,image/webp,image/avif' : 'image/png,image/jpeg,image/webp,image/avif,video/*'}
@@ -787,28 +685,22 @@ function FalGenerationWorkspaceSession({
                     : `Remove reference ${index + 1}`,
                   sourceLabel: reference.sourceLabel,
                 }))}
-                onRemove={removeReference}
+                onRemove={removeReferenceAt}
               />
               {isFramesMode && references.length === 2 && <SwapFramesButton />}
-            </section>
+            </WorkspaceCard>
           )}
 
-          <section className="glass-card space-y-3 p-3.5 md:p-4">
-            <div>
-              <h3 className="display text-base font-semibold">Model controls</h3>
-              <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">Only controls supported by {selectedModel.label} are shown.</p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <ModelControls
-                namespace={`fal-${variant.id}`}
-                fields={variant.fields as FalFieldDefinition[]}
-                values={values}
-                onChange={updateValue}
-              />
-              <RelaxedFilterControl filter={relaxed} />
-            </div>
+          <ModelControlsCard
+            description={`Only controls supported by ${selectedModel.label} are shown.`}
+            namespace={`fal-${variant.id}`}
+            fields={variant.fields as FalFieldDefinition[]}
+            values={values}
+            onChange={updateValue}
+            relaxed={relaxed}
+          >
             <AspectMismatchNote reference={references[0]} candidates={aspectCandidates} current={values.aspect_ratio} />
-          </section>
+          </ModelControlsCard>
           </>
         }
         prompt={
@@ -834,37 +726,22 @@ function FalGenerationWorkspaceSession({
           </PromptPanel>
         }
         actions={
-          <>
-            <button
-              type="button"
-              disabled={isSubmitting || cloudWorkspace.checking}
-              onClick={() => {
-                // A deliberate press is a fresh start: it drops any queued attempt
-                // and hands back the full retry budget.
-                autoRetry.reset();
-                void submit();
-              }}
-              className="btn-primary w-full">
-              {isSubmitting ? <><Loader2 className="animate-spin" size={21} /> Uploading & starting…</> : <><Sparkles size={21} /> {isEdit ? 'Generate edit' : 'Generate video'}<FalRunCost modelId={selectedModel.id} mediaType="video" inputMode={inputMode} resolution={values.resolution} audio={isEdit ? values.keep_audio : values.generate_audio} duration={isEdit ? source?.durationSeconds : values.duration} outputDuration={isEdit ? values.duration : undefined} /></>}
-            </button>
-            <CloudExecutionNotice workspace={cloudWorkspace} />
-            {error && (
-              <SubmissionError
-                message={refusal?.message ?? error}
-                retry={autoRetry.pending}
-                onCancelRetry={autoRetry.cancel}
-                offerTryRelaxed={Boolean(refusal?.offerTryRelaxed && relaxed.offered)}
-                onTryRelaxed={() => relaxed.requestRelaxed(() => void submit())}
-              />
-            )}
-          </>
+          <GenerateActions
+            workspace={cloudWorkspace}
+            mediaType="video"
+            label={isEdit ? 'Generate edit' : 'Generate video'}
+            cost={<FalRunCost modelId={selectedModel.id} mediaType="video" inputMode={inputMode} resolution={values.resolution} audio={isEdit ? values.keep_audio : values.generate_audio} duration={isEdit ? source?.durationSeconds : values.duration} outputDuration={isEdit ? values.duration : undefined} />}
+            busy={isSubmitting}
+            busyLabel="Uploading & starting…"
+            onSubmit={() => void submit()}
+            error={error}
+            refusal={{ providerLabel: 'fal', modelLabel: selectedModel.label, route: { provider: 'fal', modelId: selectedModel.id, endpointId: variant.endpointId }, hasReferences: references.length > 0 }}
+            relaxed={relaxed}
+            autoRetry={autoRetry}
+          />
         }
         results={cloudWorkspace.cloud ? <CloudJobPanel provider="fal" mediaType="video" inputMode={inputMode} onContinueFromFrame={onContinueFromFrame} /> :
-          <section className="glass-card min-h-[420px] space-y-3 p-3.5 md:p-4">
-            <div>
-              <h3 className="display text-base font-semibold">Jobs</h3>
-              <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">Recent jobs remain visible while you change models and providers.</p>
-            </div>
+          <ResultPanel title="Jobs" description="Recent jobs remain visible while you change models and providers.">
             {videoJobs.length === 0 ? (
               <div className="rounded-xl border border-[var(--border)] p-5 text-center text-[var(--foreground-muted)]">
                 <Video className="mx-auto mb-3 opacity-35" size={46} />
@@ -886,7 +763,7 @@ function FalGenerationWorkspaceSession({
               </div>
             )}
             <p className="text-center text-xs text-[var(--foreground-subtle)]">Inputs and outputs use public, temporary URLs.</p>
-          </section>
+          </ResultPanel>
         }
       />
       </ConnectionGate>

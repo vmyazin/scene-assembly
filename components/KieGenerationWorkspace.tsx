@@ -3,18 +3,17 @@
 
 import { useCloudWorkspace } from '@/lib/account/useCloudWorkspace';
 import { useAccountStore } from '@/store/useAccountStore';
-import CloudExecutionNotice from '@/components/account/CloudExecutionNotice';
 import CloudJobPanel from '@/components/account/CloudJobPanel';
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Loader2, Sparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import ReferenceStack from '@/components/ReferenceStack';
 import { requestPromptSlug } from '@/lib/micro-ai/browser';
 import { fetchKieCredits, submitKieJob, uploadKieFiles } from '@/lib/kie/browser';
 import { defaultKieValues, modelsForKieMode, resolveKieVariant, validateKieInput } from '@/lib/kie/catalog';
-import { CLOUD_EDIT_REFERENCE_CAP, editPromptMode, materializeEditReferences, packEditReferences, releaseEditReferenceDraft, type EditReferencePlan } from '@/lib/providers/edit-references';
-import { validateEditSource, validateEditVideo } from '@/lib/providers/video-edit';
+import { CLOUD_EDIT_REFERENCE_CAP, editPromptMode } from '@/lib/providers/edit-references';
+import { prepareSubmissionMedia } from '@/lib/providers/edit-submission';
 import ModelListbox from '@/components/ModelListbox';
 import { KIE_IMAGE_COLUMNS, KIE_VIDEO_COLUMNS, kieImageSpecs, kieVideoSpecs } from '@/lib/models/listbox-specs';
 import { currentKieTime, isKieJobTerminal } from '@/lib/kie/queue';
@@ -28,33 +27,34 @@ import { useKieJobsStore } from '@/store/useKieJobsStore';
 import { useDraftStore } from '@/store/useDraftStore';
 import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
 import { candidatesFromValues, useAutoAspect } from '@/lib/draft/aspect-match';
-import { carryOverValues } from '@/lib/draft/carry-over';
 import { isVideoFile } from '@/lib/video-frame';
-import LastFrameActions from '@/components/LastFrameActions';
 import ResultStack, { type ResultStackItem } from '@/components/ResultStack';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import PromptPanel from '@/components/PromptPanel';
 import SavedPromptsButton from '@/components/SavedPromptsButton';
-import ModelControls, { type ModelControlField } from '@/components/ModelControls';
+import type { ModelControlField } from '@/components/ModelControls';
 import AspectMismatchNote from '@/components/AspectMismatchNote';
 import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
+import GenerateActions from '@/components/GenerateActions';
+import ResultPanel from '@/components/ResultPanel';
+import { ModelControlsCard, WorkspaceCard } from '@/components/WorkspaceCard';
 import ConnectionGate, { isGated } from '@/components/ConnectionGate';
-import SubmissionError from '@/components/SubmissionError';
-import RelaxedFilterControl from '@/components/RelaxedFilterControl';
 import { trackGenerationResult, trackGenerationSubmitted } from '@/lib/analytics/generation-result';
-import { classifyFailure, refusalPresentation } from '@/lib/moderation/classify';
+import { classifyFailure } from '@/lib/moderation/classify';
 import { inspectPrompt } from '@/lib/moderation/floors';
 import { useRelaxedFilter } from '@/lib/moderation/use-relaxed-filter';
 import { AUTO_RETRY_DELAY_SECONDS, isRetryableFailure, useAutoRetry } from '@/lib/providers/auto-retry';
 import type { EngineId } from '@/lib/engines/registry';
-import { JobStatusPill } from '@/components/StatusPill';
 import WorkspaceHeader from '@/components/WorkspaceHeader';
 import { GenExampleButton, PromptHeader } from '@/components/PromptHeader';
 import { useExamplePrompt } from '@/hooks/useExamplePrompt';
+import { useEditReferenceDraft } from '@/hooks/useEditReferenceDraft';
+import { useModelControlValues } from '@/hooks/useModelControlValues';
+import { removeReferenceAt, useMountedRef, usePromptScope, useReferenceLimit } from '@/hooks/useWorkspaceLifecycle';
 import { ModelNote, ModelPickerCard } from '@/components/ModelPickerCard';
-import { VideoDownloadLink, VideoResultStage } from '@/components/VideoResult';
+import { FinishedVideoActions, VideoResultStage } from '@/components/VideoResult';
 import { useClaimSeedFrame, useReferenceIntake } from '@/hooks/useReferenceIntake';
-import EditReferenceTray, { emptyEditReferenceDraft } from '@/components/EditReferenceTray';
+import EditReferenceTray from '@/components/EditReferenceTray';
 import { ReferencePicker } from '@/components/ReferencePicker';
 import VideoSourceInput, { type SourceVideo } from '@/components/VideoSourceInput';
 
@@ -85,10 +85,6 @@ const isKieModelControlField = (field: KieFieldDefinition): field is KieModelCon
 
 const titleFor = (mediaType: MediaType, inputMode: KieInputMode) =>
   inputMode === 'edit' ? `Edit ${mediaType}` : `${inputMode === 'text' ? 'Text' : 'Image'} to ${mediaType}`;
-
-function modelPreferenceKey(mediaType: MediaType): 'kieImageModel' | 'kieVideoModel' {
-  return mediaType === 'image' ? 'kieImageModel' : 'kieVideoModel';
-}
 
 export default function KieGenerationWorkspace({
   mediaType,
@@ -122,39 +118,17 @@ export default function KieGenerationWorkspace({
   const selectedModel = models.find((model) => model.id === preference) ?? models[0];
   const variant = resolveKieVariant(selectedModel.id, inputMode);
   const variantKey = `${selectedModel.id}:${inputMode}`;
-  const editSpec = inputMode === 'edit' ? variant.edit?.references : undefined;
+  const isEdit = inputMode === 'edit';
+  const editSpec = isEdit ? variant.edit?.references : undefined;
   const [selectedSource, setSelectedSource] = useState<SourceVideo | null>(null);
-  const [editDraft, setEditDraft] = useState(emptyEditReferenceDraft);
-  const [editDraftModel, setEditDraftModel] = useState(variant.modelId);
-  const editDraftRef = useRef(editDraft);
-  if (editDraftModel !== variant.modelId) {
-    releaseEditReferenceDraft(editDraft);
-    setEditDraftModel(variant.modelId);
-    setEditDraft(emptyEditReferenceDraft());
-  }
-  useEffect(() => {
-    editDraftRef.current = editDraft;
-  }, [editDraft]);
-  useEffect(() => () => releaseEditReferenceDraft(editDraftRef.current), []);
+  const [editDraft, setEditDraft] = useEditReferenceDraft(variant.modelId);
   const epoch = useAccountStore((state) => state.epoch);
   const source = selectedSource?.epoch === epoch ? selectedSource : null;
   const prompt = useDraftStore((state) => state.prompt);
   const setPrompt = useDraftStore((state) => state.setPrompt);
-
-  // Claims the prompt field for this kind of work, dropping a prompt written
-  // for the other kind. Declared ahead of every other mount effect here so a
-  // stale prompt cannot outlive this line and block what those effects set.
-  useEffect(() => {
-    useDraftStore.getState().enterPromptScope(mediaType === 'video' ? 'video' : 'image');
-  }, [mediaType]);
+  usePromptScope(mediaType === 'video' ? 'video' : 'image');
   const references = useDraftStore((state) => state.references);
-  const controlValues = useDraftStore((state) => state.controlValues);
-  const [valuesByVariant, setValuesByVariant] = useState<
-    Record<string, Record<string, string | number | boolean>>
-  >({});
-  const values =
-    valuesByVariant[variantKey] ??
-    carryOverValues(variant.fields, defaultKieValues(variant), controlValues);
+  const { values, update } = useModelControlValues(variantKey, variant.fields, defaultKieValues(variant));
   const relaxed = useRelaxedFilter({
     workspaceKey: 'kie',
     provider: 'kie',
@@ -171,7 +145,7 @@ export default function KieGenerationWorkspace({
   // Latest submit, so a queued retry re-runs the button's own path with the
   // prompt and settings on screen now, not the ones from the failed render.
   const submitRef = useRef<() => void>(() => {});
-  const mountedRef = useRef(true);
+  const mountedRef = useMountedRef();
   const maxInputImages = variant.maxInputImages ?? 1;
   const matchingModels = models.filter((model) =>
     `${model.label} ${model.provider}`.toLowerCase().includes(modelSearch.toLowerCase())
@@ -190,17 +164,7 @@ export default function KieGenerationWorkspace({
   const resolvedExampleFeatureId =
     exampleFeatureId ?? (mediaType === 'video' ? `${inputMode}-to-video` : 'text-to-image');
 
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  // A stricter model must not keep more references than it accepts.
-  useEffect(() => {
-    useDraftStore.getState().limitReferences(maxInputImages);
-  }, [maxInputImages]);
+  useReferenceLimit(maxInputImages);
 
   // Seed the feature's example prompt, but never over something already typed.
   useEffect(() => {
@@ -208,14 +172,7 @@ export default function KieGenerationWorkspace({
     if (initialPrompt && !draft.prompt) draft.setPrompt(initialPrompt);
   }, [initialPrompt]);
 
-  const updateValues = (key: string, value: string | number | boolean) => {
-    setValuesByVariant((current) => ({
-      ...current,
-      [variantKey]: { ...values, [key]: value },
-    }));
-    // Remembered globally so the next model inherits whatever it can express.
-    useDraftStore.getState().rememberControlValues({ [key]: value });
-  };
+  const updateValues = (key: string, value: string | number | boolean) => update({ [key]: value });
 
   // Adding a reference snaps the aspect ratio to the closest one this
   // variant publishes.
@@ -232,8 +189,7 @@ export default function KieGenerationWorkspace({
   const setModel = (modelId: string) => {
     setError(null);
     autoRetry.reset();
-    const setter = modelPreferenceKey(mediaType) === 'kieImageModel' ? setKieImageModel : setKieVideoModel;
-    setter(modelId);
+    (mediaType === 'image' ? setKieImageModel : setKieVideoModel)(modelId);
   };
 
   useClaimSeedFrame(inputMode === 'image', 1, inputMode);
@@ -246,11 +202,6 @@ export default function KieGenerationWorkspace({
     pasteEnabled: inputMode === 'image',
     onError: setError,
   });
-
-  const removeReference = (index: number) => {
-    const reference = references[index];
-    if (reference) useDraftStore.getState().removeReference(reference.id);
-  };
 
   const example = useExamplePrompt({
     featureId: resolvedExampleFeatureId,
@@ -346,30 +297,16 @@ export default function KieGenerationWorkspace({
       setError(floor.message);
       return;
     }
-    if (inputMode === 'edit' && !source) { setError('Choose a source video to edit.'); return; }
-    if (inputMode === 'edit' && variant.edit && source) {
-      try { validateEditVideo(source.file, variant.edit); validateEditSource(source, variant.edit); }
-      catch (cause) { setError(cause instanceof Error ? cause.message : 'Choose a source video this model accepts.'); return; }
-    }
-    let packedPlan: EditReferencePlan | undefined;
-    let packedFiles = inputMode === 'text' || editSpec ? [] : references.map((reference) => reference.file);
-    if (editSpec) {
-      const packed = packEditReferences(editDraft, editSpec);
-      if (!packed.ok) { setError(packed.error); return; }
-      if (cloudWorkspace.cloud && packed.packed.files.length > CLOUD_EDIT_REFERENCE_CAP) {
-        setError(`A background job can attach ${CLOUD_EDIT_REFERENCE_CAP} reference images.`);
-        return;
-      }
-      packedPlan = packed.packed.plan;
-      packedFiles = packed.packed.files;
-    }
-    const referenceUrls = packedFiles.map((_, index) => `https://reference.invalid/${index}`);
-    const materialized = editSpec ? { ...materializeEditReferences(editSpec, referenceUrls, packedPlan), video: 'https://source.invalid/video' } : undefined;
-    const inputError = validateKieInput(variant, {
-      prompt,
-      uploadUrls: inputMode === 'edit' ? [...referenceUrls, 'https://source.invalid/video'] : references.map((reference) => reference.previewUrl),
-      references: materialized,
+    const media = prepareSubmissionMedia({
+      inputMode,
+      references,
+      edit: variant.edit,
+      source,
+      editDraft,
+      cloudCap: cloudWorkspace.cloud ? CLOUD_EDIT_REFERENCE_CAP : undefined,
     });
+    if (!media.ok) { setError(media.error); return; }
+    const inputError = validateKieInput(variant, { prompt, uploadUrls: media.uploadUrls, references: media.references });
     if (inputError) {
       setError(inputError);
       return;
@@ -378,16 +315,16 @@ export default function KieGenerationWorkspace({
     setError(null);
     setIsSubmitting(true);
     const libraryPrompt = prompt.trim() || (editPromptMode(editSpec) === 'absent' ? selectedModel.label : '');
-    const submittedValues = { ...values, ...relaxed.attach(), ...(inputMode === 'edit' && source ? { sourceDurationSeconds: source.durationSeconds } : {}) };
+    const submittedValues = { ...values, ...relaxed.attach(), ...(isEdit && source ? { sourceDurationSeconds: source.durationSeconds } : {}) };
     try {
       if(cloudWorkspace.cloud){
-        await cloudWorkspace.submit({modelId:selectedModel.id,mediaType,inputMode,prompt:libraryPrompt,values:submittedValues,...(packedPlan?{editReferencePlan:packedPlan}:{})},packedFiles,libraryPrompt,inputMode==='edit'?source?.file:undefined);
+        await cloudWorkspace.submit({modelId:selectedModel.id,mediaType,inputMode,prompt:libraryPrompt,values:submittedValues,...(media.plan?{editReferencePlan:media.plan}:{})},media.files,libraryPrompt,isEdit?source?.file:undefined);
         autoRetry.reset();toast.success('Background job accepted. You can leave this page.');return;
       }
       // The balance is read alongside the uploads, before the submit that spends
       // it, so the ledger can bill the drop once the task succeeds.
       const [uploadUrls, creditsBefore] = await Promise.all([
-        uploadKieFiles(kieApiKey, inputMode === 'edit' && source ? [...packedFiles, source.file] : references.map((reference) => reference.file)),
+        uploadKieFiles(kieApiKey, isEdit && source ? [...media.files, source.file] : media.files),
         fetchKieCredits(kieApiKey),
       ]);
       const { taskId, protocol } = await submitKieJob({
@@ -398,7 +335,7 @@ export default function KieGenerationWorkspace({
         prompt: libraryPrompt,
         uploadUrls,
         values: submittedValues,
-        ...(packedPlan ? { editReferencePlan: packedPlan } : {}),
+        ...(media.plan ? { editReferencePlan: media.plan } : {}),
       });
       const now = currentKieTime();
       const submittedPrompt = prompt.trim();
@@ -444,16 +381,6 @@ export default function KieGenerationWorkspace({
     submitRef.current = () => void submit();
   });
 
-  const refusal = error
-    ? refusalPresentation(error, {
-        providerLabel: 'Kie',
-        modelLabel: selectedModel.label,
-        level: relaxed.effective,
-        route: { provider: 'kie', modelId: selectedModel.id },
-        hasReferences: references.length > 0,
-      })
-    : null;
-
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-3.5 sm:space-y-4">
       <WorkspaceHeader
@@ -495,7 +422,7 @@ export default function KieGenerationWorkspace({
             <ModelNote label={selectedModel.label}>{selectedModel.description}</ModelNote>
           </ModelPickerCard>
 
-          {inputMode === 'edit' && variant.edit && (
+          {isEdit && variant.edit && (
             <VideoSourceInput capability={variant.edit} source={source} onChange={setSelectedSource} disabled={isSubmitting} />
           )}
           {editSpec && (
@@ -510,11 +437,10 @@ export default function KieGenerationWorkspace({
             />
           )}
           {inputMode === 'image' && (
-            <section className="glass-card space-y-3 p-3.5 md:p-4">
-              <div>
-                <h3 className="display text-base font-semibold">Reference image{maxInputImages === 1 ? '' : 's'}</h3>
-                <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">Upload up to {maxInputImages}; files are forwarded to Kie only for this task. Pick a saved clip and its last frame is used.</p>
-              </div>
+            <WorkspaceCard
+              title={`Reference image${maxInputImages === 1 ? '' : 's'}`}
+              description={`Upload up to ${maxInputImages}; files are forwarded to Kie only for this task. Pick a saved clip and its last frame is used.`}
+            >
               <ReferencePicker
                 accept="image/*,video/*"
                 multiple={maxInputImages > 1}
@@ -534,27 +460,21 @@ export default function KieGenerationWorkspace({
                   removeLabel: `Remove reference ${index + 1}`,
                   sourceLabel: reference.sourceLabel,
                 }))}
-                onRemove={removeReference}
+                onRemove={removeReferenceAt}
               />
-            </section>
+            </WorkspaceCard>
           )}
 
-          <section className="glass-card space-y-3 p-3.5 md:p-4">
-            <div>
-              <h3 className="display text-base font-semibold">Model controls</h3>
-              <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">Only controls supported by {selectedModel.label} are shown.</p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <ModelControls
-                namespace={`kie-${variantKey}`}
-                fields={variant.fields.filter(isKieModelControlField)}
-                values={values}
-                onChange={updateValues}
-              />
-              <RelaxedFilterControl filter={relaxed} />
-            </div>
+          <ModelControlsCard
+            description={`Only controls supported by ${selectedModel.label} are shown.`}
+            namespace={`kie-${variantKey}`}
+            fields={variant.fields.filter(isKieModelControlField)}
+            values={values}
+            onChange={updateValues}
+            relaxed={relaxed}
+          >
             <AspectMismatchNote reference={references[0]} candidates={aspectCandidates} current={values.aspect_ratio} />
-          </section>
+          </ModelControlsCard>
           </>
         }
         prompt={
@@ -572,50 +492,29 @@ export default function KieGenerationWorkspace({
           </PromptPanel>
         }
         actions={
-          <>
-            <button
-              type="button"
-              onClick={() => {
-                // A deliberate press is a fresh start: it drops any queued attempt
-                // and hands back the full retry budget.
-                autoRetry.reset();
-                void submit();
-              }}
-              disabled={isSubmitting || cloudWorkspace.checking}
-              className="btn-primary w-full"
-            >
-              {isSubmitting ? <><Loader2 className="animate-spin" size={21} /> Uploading & starting…</> : <><Sparkles size={21} /> Generate {mediaType}</>}
-            </button>
-            <CloudExecutionNotice workspace={cloudWorkspace} />
-            {error && (
-              <SubmissionError
-                message={refusal?.message ?? error}
-                retry={autoRetry.pending}
-                onCancelRetry={autoRetry.cancel}
-                offerTryRelaxed={Boolean(refusal?.offerTryRelaxed && relaxed.offered)}
-                onTryRelaxed={() => relaxed.requestRelaxed(() => void submit())}
-              />
-            )}
-          </>
+          <GenerateActions
+            workspace={cloudWorkspace}
+            mediaType={mediaType}
+            label={`Generate ${mediaType}`}
+            busy={isSubmitting}
+            busyLabel="Uploading & starting…"
+            onSubmit={() => void submit()}
+            error={error}
+            refusal={{ providerLabel: 'Kie', modelLabel: selectedModel.label, route: { provider: 'kie', modelId: selectedModel.id }, hasReferences: references.length > 0 }}
+            relaxed={relaxed}
+            autoRetry={autoRetry}
+          />
         }
         results={cloudWorkspace.cloud ? <CloudJobPanel provider="kie" mediaType={mediaType} inputMode={inputMode} onContinueFromFrame={onContinueFromFrame} /> :
-          <section className="glass-card flex min-h-[420px] flex-col gap-4 p-3.5 md:p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="display text-base font-semibold">Result</h3>
-              <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">Results are temporary — download anything you want to keep.</p>
-              {/* The producing model stays attached when the next-run selection changes. */}
-              {latestJob && <p className="mt-0.5 text-xs text-[var(--foreground-subtle)]">{models.find(model => model.id === latestJob.modelId)?.label ?? latestJob.modelId}</p>}
-            </div>
-            {latestJob && (
-              <JobStatusPill
-                tone={latestJob.state === 'fail' ? 'danger' : latestJob.state === 'success' ? 'success' : 'warning'}
-                label={latestJob.state === 'queuing' ? 'Queued' : latestJob.state === 'success' ? 'Done' : latestJob.state === 'fail' ? 'Failed' : 'Generating'}
-                startedAt={latestJob.createdAt}
-                finishedAt={isKieJobTerminal(latestJob.state) ? latestJob.updatedAt : undefined}
-              />
-            )}
-          </div>
+          <ResultPanel
+            modelLabel={latestJob ? models.find(model => model.id === latestJob.modelId)?.label ?? latestJob.modelId : undefined}
+            status={latestJob && {
+              tone: latestJob.state === 'fail' ? 'danger' : latestJob.state === 'success' ? 'success' : 'warning',
+              label: latestJob.state === 'queuing' ? 'Queued' : latestJob.state === 'success' ? 'Done' : latestJob.state === 'fail' ? 'Failed' : 'Generating',
+              startedAt: latestJob.createdAt,
+              finishedAt: isKieJobTerminal(latestJob.state) ? latestJob.updatedAt : undefined,
+            }}
+          >
           {mediaType === 'video' ? (
             <>
               <VideoResultStage
@@ -629,19 +528,14 @@ export default function KieGenerationWorkspace({
                 error={latestJob?.state === 'fail' ? latestJob.error || 'Kie could not complete this task. It was not resubmitted.' : undefined}
               />
               {resultUrl && latestJob && (
-                <VideoDownloadLink
-                  href={resultUrl}
-                  filename={`${filenameBase}.${extensionForMedia(mediaType)}`}
+                <FinishedVideoActions
+                  url={resultUrl}
+                  filenameBase={filenameBase}
+                  extension={extensionForMedia(mediaType)}
                   busy={Boolean(downloadingId)}
                   label={`Download ${mediaType}`}
                   onDownload={() => void downloadResult()}
-                />
-              )}
-              {resultUrl && latestJob && (
-                <LastFrameActions
-                  videoUrl={resultUrl}
-                  filenameBase={filenameBase}
-                  onContinue={onContinueFromFrame}
+                  onContinueFromFrame={onContinueFromFrame}
                 />
               )}
             </>
@@ -677,7 +571,7 @@ export default function KieGenerationWorkspace({
               />
             </>
           )}
-          </section>
+          </ResultPanel>
         }
       />
       </ConnectionGate>

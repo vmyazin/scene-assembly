@@ -47,6 +47,11 @@ rg -n '^\.[a-z]' app/globals.css
 | `components/ModelPickerCard.tsx` `ModelPickerCard`, `ModelNote` | a "Model" card with search; filtering stays with the caller |
 | `components/VideoResult.tsx` `VideoResultStage`, `VideoDownloadLink` | the latest clip's stage and its name-keeping download |
 | `hooks/useReferenceIntake.ts` `useReferenceIntake`, `useClaimSeedFrame`; `components/ReferencePicker.tsx` | reference images from picker, drop and paste, and the "Continue from last frame" handoff |
+| `components/GenerateActions.tsx` | a provider workspace's `actions` slot: generate button (reset-on-press, simulation label, cost), `CloudExecutionNotice`, `SubmissionError` with retry and "try Relaxed" |
+| `components/WorkspaceCard.tsx` `WorkspaceCard`, `ModelControlsCard` | a setup card (title, muted line, body); the "Model controls" card with `ModelControls` beside `RelaxedFilterControl` |
+| `components/ResultPanel.tsx`; `components/VideoResult.tsx` `FinishedVideoActions` | a browser-run `results` slot (title, producing model, `JobStatusPill`); a finished clip's download, provider extras, then "Continue from last frame" |
+| `hooks/useModelControlValues.ts`, `hooks/useEditReferenceDraft.ts`, `hooks/useWorkspaceLifecycle.ts` | per-model control values with carry-over; the edit tray draft scoped to a model; `usePromptScope`, `useReferenceLimit`, `removeReferenceAt`, `useMountedRef` |
+| `lib/providers/edit-submission.ts` `prepareSubmissionMedia` | fal / Kie media before upload: edit source checks, edit packing with the background cap, placeholder URLs for the catalog validator |
 
 Two downloads still free their object URL after a 10 s delay instead of at once
 (`GeminiVideoWorkspace` `downloadBlob`, `lib/account/download.ts`). No reason is recorded;

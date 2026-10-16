@@ -442,6 +442,25 @@ describe('Kie generation workspace', () => {
     expect(uploadKieFilesMock).toHaveBeenCalledWith('kie_test_key', []);
   });
 
+  it('does not upload a reference left in the draft by another mode on a text run', async () => {
+    useDraftStore.getState().addReferences([{ file: new File(['x'], 'left-over.png', { type: 'image/png' }) }], 1);
+
+    render(
+      <KieGenerationWorkspace
+        mediaType="video"
+        inputMode="text"
+        onBack={() => undefined}
+        onOpenConnections={() => undefined}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A neon cat leaps' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate video' }));
+
+    await waitFor(() => expect(submitKieJobMock).toHaveBeenCalledOnce());
+    expect(uploadKieFilesMock).toHaveBeenCalledWith('kie_test_key', []);
+  });
+
   it('reads the Kie balance before submitting and pins it to the job', async () => {
     render(
       <KieGenerationWorkspace

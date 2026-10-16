@@ -101,6 +101,15 @@
   runnable and may have been picked on purpose, but a remembered Nano Banana 2 ran at twice
   2.1's price behind only a badge (UX audit M7).
 
+- **A provider workspace's setup cards, generate button, or result panel** (fal, Kie,
+  Runware/Atlas/Comet/PiAPI) → compose the shared pieces listed under "Already
+  extracted" in `docs/ui-consistency-seeds.md` (`GenerateActions`, `WorkspaceCard`,
+  `ModelControlsCard`, `ResultPanel`, `FinishedVideoActions`, `useModelControlValues`,
+  `useEditReferenceDraft`, `prepareSubmissionMedia`). Keep only catalog, upload and
+  submit logic in the provider file, because three hand-rolled copies drifted: the
+  simulation label and the disabled-button reason reached one provider, and Kie
+  uploaded a leftover draft reference on a text run.
+
 - **Generate button placement** → first read `docs/codex/specs/2026-09-11-generate-under-prompt.md`. Use `GenerationWorkspaceLayout`’s `actions` slot for the button, cost, progress, execution notice and submission/retry feedback, because the shared prompt → actions → results order keeps submission next to the text being edited at every screen width. Setup holds only model, media and controls.
 
 - **Describe a selected source into the prompt** → `lib/describe-source/` and
