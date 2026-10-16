@@ -26,6 +26,7 @@ import type { EngineUsage } from '@/lib/engines/gemini';
 import { captureImageResult } from '@/lib/spend/capture';
 import { downloadFilenameBase } from '@/lib/download-name';
 import ProviderLogo from '@/components/ProviderLogo';
+import ConnectionGate from '@/components/ConnectionGate';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import PromptPanel from '@/components/PromptPanel';
 import SavedPromptsButton from '@/components/SavedPromptsButton';
@@ -750,6 +751,39 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
     exampleMutation.mutate();
   };
 
+  /**
+   * Drops what the last press said. Called whenever engine or model changes:
+   * the message described a request to the old selection, so keeping it (say,
+   * "API key is required" after switching to keyless Pollinations) blames the
+   * new choice for the old one's failure. The mutation keeps its own error, so
+   * it is reset too, not just the local message. A queued automatic retry goes
+   * with it: it re-runs the request straight through the mutation, past the
+   * key check, so after a switch it would send the old attempt to the new engine.
+   */
+  const clearSubmissionFeedback = () => {
+    autoRetry.reset();
+    setError(null);
+    setPromptError(null);
+    generateMutation.reset();
+  };
+
+  // Same not-connected state the video workspaces show. Pollinations runs in
+  // the browser with no key; everything else needs one (a background job needs
+  // the saved connection, whatever the engine).
+  const localKeyMissing =
+    activeEngineId === 'gemini' ? !apiKey.trim()
+      : activeEngineId === 'cloudflare' ? !hasCfCreds
+        : activeEngineId === 'fal' ? !falApiKey.trim()
+          : activeProvider ? !providerKeys[activeProvider].trim()
+            : false;
+  const needsKey = !cloudWorkspace.checking && (cloudWorkspace.cloud ? !cloudWorkspace.connected : localKeyMissing);
+  // The keyless way forward, offered only where it really is keyless: in the
+  // browser. A background Pollinations job still needs a saved connection.
+  const freeEngine =
+    !cloudWorkspace.cloud && activeEngineId !== 'pollinations'
+      ? availableEngines.find((engine) => engine.id === 'pollinations')
+      : undefined;
+
   // Derived view state from the mutation.
   const isGenerating = generateMutation.isPending || cloudSubmitting;
   const newestResult = results[0] ?? null;
@@ -814,6 +848,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
    * downgraded at submission.
    */
   const handleGeminiModelSelect = (modelId: string) => {
+    clearSubmissionFeedback();
     setGeminiImageModel(modelId);
     const next = geminiModels.find((model) => model.id === modelId);
     if (!next) return;
@@ -873,6 +908,14 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
       }
       return;
     }
+    if (activeEngine.id === 'gemini' && !apiKey.trim()) {
+      // Checked here like every other keyed engine. Without it the press went
+      // to the server, came back 400, and said "API key is required" twice
+      // (toast and inline) with no way to add one.
+      setError('Connect your Google Gemini key first in API connections.');
+      onOpenConnections('gemini');
+      return;
+    }
     if (activeEngine.id === 'cloudflare' && !hasCfCreds) {
       setError('Connect your Cloudflare account first — add your Account ID and API token in API connections.');
       onOpenConnections('cloudflare');
@@ -913,9 +956,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
   const handleEngineSelect = (engineId: EngineId) => {
     abortActiveGeneration();
     abortActiveDownload();
-    // The complaint described the panel before the switch; carrying it across
-    // outlives the state that produced it.
-    setPromptError(null);
+    clearSubmissionFeedback();
     setEngine(engineId);
   };
 
@@ -1046,6 +1087,26 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
       {/* Setup on the left, Prompt directly over the result on the right:
           the composition the video workspaces already use, so moving between
           image and video never relocates the prompt. */}
+      {/* The engine row stays outside the gate so a person without a key can
+          still switch to one that needs none. */}
+      <ConnectionGate
+        provider={activeEngine.id}
+        label={activeEngine.label}
+        storage={cloudWorkspace.cloud ? 'account' : 'browser'}
+        needsKey={needsKey}
+        hasFinishedWork={results.length > 0 || (cloudWorkspace.cloud && cloudWorkspace.hasJobs)}
+        onConnect={() => onOpenConnections(activeEngine.id)}
+        alternative={freeEngine && (
+          <button
+            type="button"
+            onClick={() => handleEngineSelect(freeEngine.id)}
+            className="btn-secondary mt-1"
+          >
+            <ProviderLogo provider={freeEngine.id} size={14} />
+            Use {freeEngine.label} instead · free, no key
+          </button>
+        )}
+      >
       <GenerationWorkspaceLayout
         setup={
           <>
@@ -1092,7 +1153,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                       cells: falImageSpecs(model),
                     }))}
                     value={activeFalImageModel.id}
-                    onChange={setFalImageModel}
+                    onChange={(id) => { clearSubmissionFeedback(); setFalImageModel(id); }}
                   />
                   <p className="px-0.5 text-sm leading-relaxed text-[var(--foreground-muted)]">
                     <span className="font-medium text-[var(--foreground)]">{activeFalImageModel.label}:</span>{' '}
@@ -1120,7 +1181,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                       cells: providerImageSpecs(model),
                     }))}
                     value={activeProviderModel ?? undefined}
-                    onChange={(id) => setProviderModel(activeProvider, 'image', id)}
+                    onChange={(id) => { clearSubmissionFeedback(); setProviderModel(activeProvider, 'image', id); }}
                   />
                   {activeProviderCatalogModel && (
                     <p className="px-0.5 text-sm leading-relaxed text-[var(--foreground-muted)]">
@@ -1201,40 +1262,6 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                   </h3>
 
                   <div className="space-y-3">
-                    {/* In cloud mode the saved account connection is what runs the job,
-                        so testing the browser key here would ask a signed-in person to
-                        reconnect a provider they already connected — directly
-                        contradicting the background-generation notice above. */}
-                    {activeEngine.id === 'cloudflare' && (cloudWorkspace.cloud ? !cloudWorkspace.connected : !hasCfCreds) && (
-                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 flex items-center justify-between gap-3">
-                        <p className="text-xs text-[var(--foreground-muted)]">
-                          Connect your Cloudflare token to use this engine.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => onOpenConnections(activeEngine.id)}
-                          className="btn-secondary flex-shrink-0"
-                        >
-                          Connect →
-                        </button>
-                      </div>
-                    )}
-
-                    {activeEngine.id === 'fal' && (cloudWorkspace.cloud ? !cloudWorkspace.connected : !falApiKey.trim()) && (
-                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 flex items-center justify-between gap-3">
-                        <p className="text-xs text-[var(--foreground-muted)]">
-                          Connect your fal API key to use this engine.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => onOpenConnections(activeEngine.id)}
-                          className="btn-secondary flex-shrink-0"
-                        >
-                          Connect →
-                        </button>
-                      </div>
-                    )}
-
                     <RelaxedFilterControl filter={relaxed} />
 
                     {activeEngine.supportsAspectRatio && (
@@ -1482,6 +1509,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
           </motion.div>
         }
       />
+      </ConnectionGate>
     </div>
   );
 }

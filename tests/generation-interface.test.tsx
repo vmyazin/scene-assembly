@@ -65,7 +65,9 @@ function renderInterface(
     <QueryClientProvider client={queryClient}>
       <GenerationInterface
         feature={feature}
-        apiKey={options.apiKey ?? ''}
+        // A key by default: a Gemini press with no key now stops before the
+        // request (H1), so tests of the generation path need one to reach it.
+        apiKey={options.apiKey ?? 'test-gemini-key'}
         onBack={options.onBack ?? (() => undefined)}
         onOpenConnections={options.onOpenConnections ?? (() => undefined)}
       />
@@ -630,7 +632,7 @@ describe('GenerationInterface fal image generation', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderInterface(textToImage, { onOpenConnections });
 
-    expect(screen.getByText('Connect your fal API key to use this engine.')).toBeTruthy();
+    expect(screen.getByText('Add your fal.ai key to start generating')).toBeTruthy();
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A paper city' } });
     fireEvent.click(screen.getByRole('button', { name: 'Generate Image' }));
 
@@ -1534,5 +1536,73 @@ describe('what the image aspect control promises for the active engine', () => {
     expect(optionsOf()).toContain('9:16 (Story/Reels)');
     expect(optionsOf()).toContain('21:9 (Ultra Wide)');
     expect(screen.queryByText(LEGEND)).toBeNull();
+  });
+});
+
+/**
+ * UX audit H1 and H2: a guest's first Generate on the default engine reached
+ * the server with no key, came back "API key is required" twice with no way
+ * forward, and the message then outlived a switch to keyless Pollinations.
+ */
+describe('GenerationInterface without a key', () => {
+  beforeEach(() => {
+    useAppStore.setState({ engine: 'gemini', geminiImageModel: DEFAULT_GEMINI_IMAGE_MODEL });
+  });
+
+  it('shows the not-connected card and stops a Gemini press before the request', () => {
+    const onOpenConnections = vi.fn();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    renderInterface(textToImage, { apiKey: '', onOpenConnections });
+
+    expect(screen.getByText('Add your Google Gemini key to start generating')).toBeTruthy();
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A paper city' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Image' }));
+
+    expect(onOpenConnections).toHaveBeenCalledWith('gemini');
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/api/generate'), expect.anything());
+    expect(screen.getByText('Connect your Google Gemini key first in API connections.')).toBeTruthy();
+  });
+
+  it('offers the free engine from the card and switches to it', () => {
+    renderInterface(textToImage, { apiKey: '' });
+
+    fireEvent.click(screen.getByRole('button', { name: /Use Pollinations · FLUX instead/ }));
+
+    expect(useAppStore.getState().engine).toBe('pollinations');
+    expect(screen.queryByText('Add your Google Gemini key to start generating')).toBeNull();
+  });
+
+  it('drops the last press\'s error when the engine changes', async () => {
+    renderInterface(textToImage, { apiKey: '' });
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A paper city' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Image' }));
+    expect(screen.getByText('Connect your Google Gemini key first in API connections.')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Use Pollinations · FLUX instead/ }));
+
+    // Waited on, not asserted at once: the message leaves with an exit animation.
+    await waitFor(() =>
+      expect(screen.queryByText('Connect your Google Gemini key first in API connections.')).toBeNull()
+    );
+  });
+
+  it('drops a failed request\'s error when the engine changes', async () => {
+    // The original H2 path: the message came from the request itself, which
+    // the mutation holds on to until reset, not from local state.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({ success: false, error: 'The provider refused this key' }),
+    }));
+    renderInterface(textToImage);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A paper city' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Image' }));
+    await waitFor(() => expect(screen.getAllByText(/The provider refused this key/).length).toBeGreaterThan(0));
+
+    act(() => useAppStore.setState({ engine: 'gemini' }));
+    fireEvent.click(screen.getByRole('button', { name: /Pollinations/ }));
+
+    await waitFor(() => expect(screen.queryByText(/The provider refused this key/)).toBeNull());
   });
 });

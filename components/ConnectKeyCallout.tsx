@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { ArrowUpRight, KeyRound } from 'lucide-react';
 
 import ProviderLogo from '@/components/ProviderLogo';
@@ -23,11 +24,18 @@ export default function ConnectKeyCallout({
   label,
   storage = 'browser',
   onConnect,
+  alternative,
 }: {
   provider: EngineId;
   label: string;
   storage?: 'browser' | 'account';
   onConnect: () => void;
+  /**
+   * A way to keep working without this key, e.g. switching to a free engine.
+   * A key is not the only route when the mode has an engine that needs none,
+   * and a first visit that only offers "Connect key" reads as a paywall.
+   */
+  alternative?: ReactNode;
 }) {
   const { href, urlLabel } = KEY_SOURCES[provider];
 
@@ -57,6 +65,7 @@ export default function ConnectKeyCallout({
             <p className="max-w-2xl text-sm leading-relaxed text-[var(--foreground-muted)]">
               {storage==='account'?'Keys are encrypted in your account and used by your background jobs.':'Keys stay in this browser and are sent only with your own generations.'}
             </p>
+            {alternative}
           </div>
         </div>
 

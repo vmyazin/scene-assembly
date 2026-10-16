@@ -74,6 +74,16 @@
   AI Image Editing with the result as its one source. "Use as reference" there filled a
   tray nobody could see and toasted success (UX audit H4).
 
+- **No key for the image workspace's engine, or a stale error after switching** →
+  `GenerationInterface` wraps its layout in the shared `ConnectionGate` (the engine row
+  stays outside it, so switching is always possible) and passes `alternative`: a
+  "Use Pollinations instead · free, no key" button, offered only in the browser, since a
+  background Pollinations job still needs a saved connection. Every keyed engine is
+  checked before the request, Gemini included; without that check a guest's first press
+  came back "API key is required" twice with no way forward (UX audit H1). Engine and
+  model changes call `clearSubmissionFeedback`, which also resets the mutation and any
+  queued auto-retry, because the retry re-runs the request past the key check (H2).
+
 - **Generate button placement** → first read `docs/codex/specs/2026-09-11-generate-under-prompt.md`. Use `GenerationWorkspaceLayout`’s `actions` slot for the button, cost, progress, execution notice and submission/retry feedback, because the shared prompt → actions → results order keeps submission next to the text being edited at every screen width. Setup holds only model, media and controls.
 
 - **Describe a selected source into the prompt** → `lib/describe-source/` and

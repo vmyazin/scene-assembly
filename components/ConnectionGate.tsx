@@ -22,6 +22,7 @@ export default function ConnectionGate({
   needsKey,
   hasFinishedWork = false,
   onConnect,
+  alternative,
   children,
 }: {
   provider: EngineId;
@@ -37,6 +38,8 @@ export default function ConnectionGate({
    */
   hasFinishedWork?: boolean;
   onConnect: () => void;
+  /** Passed to the callout: a keyless way forward, when the workspace has one. */
+  alternative?: ReactNode;
   children: ReactNode;
 }) {
   const gated = isGated(needsKey, hasFinishedWork);
@@ -44,7 +47,7 @@ export default function ConnectionGate({
   return (
     <>
       {needsKey && (
-        <ConnectKeyCallout provider={provider} label={label} storage={storage} onConnect={onConnect} />
+        <ConnectKeyCallout provider={provider} label={label} storage={storage} onConnect={onConnect} alternative={alternative} />
       )}
       <div className="relative">
         {/* The whole dimmed area is the target: someone who reaches for a control
