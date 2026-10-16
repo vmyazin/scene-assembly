@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // AGENTS.md is maintained here; dev startup must not rewrite the repo guidance.
+  agentRules: false,
   // Worktrees have their own dependencies; do not resolve through another session.
   turbopack: { root: process.cwd() },
   // The consent page decides real spend with one click; an attacker framing

@@ -5,7 +5,7 @@
 [![Live demo](https://img.shields.io/badge/Live-sceneassembly.mzork.com-00d8d8?style=for-the-badge)](https://sceneassembly.mzork.com)
 ![Multi-engine studio](https://img.shields.io/badge/AI-Multi--engine%20studio-c026d3?style=for-the-badge)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=for-the-badge&logo=typescript)
+![TypeScript](https://img.shields.io/badge/TypeScript-7-blue?style=for-the-badge&logo=typescript)
 
 An open-source, multi-engine studio for generating, editing, and composing images—and creating video—with Google Gemini, fal.ai, Kie.ai, Pollinations FLUX, and Cloudflare Workers AI. Bring your own provider credentials and choose the engine that fits the job. Guest credentials are stored in the browser; an optional Google account service can encrypt saved connections and keep jobs, media, and spend history in Cloudflare.
 
@@ -70,7 +70,7 @@ Browser-only execution for both providers creates tab-local, in-memory jobs. For
 ### Prerequisites
 
 - Node.js 24+ (the account-service tests use the built-in `node:sqlite`)
-- pnpm 10.32+ (enabled through Corepack)
+- pnpm 12.14 (pinned in `package.json`)
 - **For Gemini modes**: a [Google AI Studio API key](https://aistudio.google.com/apikey)
 - **For Cloudflare FLUX** (optional): a [Cloudflare Workers AI token](https://dash.cloudflare.com/?to=/:account/ai/workers-ai) and Account ID
 - **For fal image/video** (optional): a [fal API key](https://fal.ai/dashboard/keys)

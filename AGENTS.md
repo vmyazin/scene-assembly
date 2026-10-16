@@ -28,6 +28,11 @@
   so utilities beside them apply; a new unlayered class rule silently beats every
   utility, which is how about 400 tweaks went dead before October 2026.
 
+- **Dependency or framework updates** → first read `docs/codex/dependency-updates.md`.
+  Keep the TS 7 CLI and TS 6 compiler API aliases separate and honor the lint
+  plugins' peer ranges, because a newer compiler or ESLint can install successfully
+  while breaking lint. Next's version-matched guides live in `node_modules/next/dist/docs/`.
+
 - **Relaxed filter** → `lib/moderation/`. Standard sends today's payload
   (Kie still includes `nsfw_checker: true` and Veo `enableFallback: false`).
   Relaxed writes one documented host key and is text-only: a reference or a
