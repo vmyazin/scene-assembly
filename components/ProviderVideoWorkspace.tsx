@@ -1052,6 +1052,20 @@ export default function ProviderVideoWorkspace({
         prompt={
           <PromptPanel paused={gated} hasPrompt={prompt.trim().length > 0}>
             <PromptHeader htmlFor="provider-video-prompt">
+              {isEdit && (
+                <select
+                  aria-label="Prompt template"
+                  className="min-h-0 rounded-lg py-1.5 pl-2.5 text-xs"
+                  value=""
+                  onChange={(event) => {
+                    const text = editPromptShortcuts(selectedModel?.videoEdit).find(([label]) => label === event.target.value)?.[1];
+                    if (text) setPrompt(text);
+                  }}
+                >
+                  <option value="" disabled>Templates</option>
+                  {editPromptShortcuts(selectedModel?.videoEdit).map(([label]) => <option key={label} value={label}>{label}</option>)}
+                </select>
+              )}
               <SavedPromptsButton />
               <DescribeSourceButton
                 sources={describeSources}
@@ -1085,7 +1099,6 @@ export default function ProviderVideoWorkspace({
             {describeError && (
               <p role="alert" className="text-xs text-red-300">{describeError}</p>
             )}
-            {isEdit && <div className="flex flex-wrap gap-2">{editPromptShortcuts(selectedModel?.videoEdit).map(([label, text]) => <button key={label} type="button" className="btn-secondary" onClick={() => setPrompt(text)}>{label}</button>)}</div>}
             <AutoExpandingPrompt
               id="provider-video-prompt"
               value={prompt}

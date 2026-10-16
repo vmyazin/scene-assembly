@@ -32,7 +32,7 @@ afterEach(()=>{vi.clearAllMocks();vi.unstubAllGlobals();});
 it('requires a source, permits no reference images, and submits without stale duration controls',async()=>{
   render(<ProviderVideoWorkspace provider="runware" label="Runware" inputMode="edit" onBack={()=>{}} onOpenConnections={()=>{}}/>);
   expect(screen.queryByRole('spinbutton',{name:/Duration/})).toBeNull();
-  fireEvent.click(screen.getByRole('button',{name:'Change scene'}));
+  fireEvent.change(screen.getByRole('combobox', { name: 'Prompt template' }), { target: { value: 'Change scene' } });
   fireEvent.click(screen.getByRole('button',{name:/Generate edit/}));
   expect(screen.getByText('Choose a source video to edit.')).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText('Upload source video'),{target:{files:[new File(['clip'],'source.mp4',{type:'video/mp4'})]}});
@@ -67,7 +67,7 @@ it('sends Aleph a data URI and hides reference images', async () => {
   render(<ProviderVideoWorkspace provider="comet" label="CometAPI" inputMode="edit" onBack={() => {}} onOpenConnections={() => {}} />);
   expect(screen.queryByText(/Replacement images/)).not.toBeInTheDocument();
   expect(screen.getByRole('combobox', { name: 'Target aspect ratio' })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Change scene' }));
+  fireEvent.change(screen.getByRole('combobox', { name: 'Prompt template' }), { target: { value: 'Change scene' } });
   fireEvent.change(screen.getByLabelText('Upload source video'), { target: { files: [new File(['clip'], 'source.mp4', { type: 'video/mp4' })] } });
   await screen.findByText(/source.mp4/);
   fireEvent.change(screen.getByRole('combobox', { name: 'Target aspect ratio' }), { target: { value: '1' } });
@@ -85,7 +85,7 @@ it('explains that Aleph takes no character images and will not submit @Image pro
   render(<ProviderVideoWorkspace provider="comet" label="CometAPI" inputMode="edit" onBack={() => {}} onOpenConnections={() => {}} />);
   expect(screen.getByRole('heading', { name: 'Character images' })).toBeInTheDocument();
   expect(screen.getByText(/cannot take character or reference images/)).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Replace character' }));
+  fireEvent.change(screen.getByRole('combobox', { name: 'Prompt template' }), { target: { value: 'Replace character' } });
   const prompt = screen.getByRole('textbox') as HTMLTextAreaElement;
   expect(prompt.value).toMatch(/^Replace the main person with a woman/);
   expect(prompt.value).not.toMatch(/@(Image|Video)/);
@@ -106,7 +106,7 @@ it('pins each Aleph reference in the shared tray and does not offer a duration',
   expect(screen.queryByRole('checkbox', { name: 'Keep original sound' })).toBeNull();
   fireEvent.change(screen.getByLabelText('Add image'), { target: { files: [new File(['png'], 'coat.png', { type: 'image/png' })] } });
   fireEvent.change(await screen.findByRole('combobox', { name: 'Anchor for image 1' }), { target: { value: 'first' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Change scene' }));
+  fireEvent.change(screen.getByRole('combobox', { name: 'Prompt template' }), { target: { value: 'Change scene' } });
   expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).not.toMatch(/@Image/);
   fireEvent.change(screen.getByLabelText('Upload source video'), { target: { files: [new File(['clip'], 'source.mp4', { type: 'video/mp4' })] } });
   await screen.findByText(/source.mp4/);
@@ -130,7 +130,7 @@ it('offers Keep original sound on Kling O1 and no duration control', () => {
 it('keeps @Image shortcuts for edit models that take images', () => {
   render(<ProviderVideoWorkspace provider="runware" label="Runware" inputMode="edit" onBack={() => {}} onOpenConnections={() => {}} />);
   expect(screen.queryByRole('heading', { name: 'Character images' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Replace character' }));
+  fireEvent.change(screen.getByRole('combobox', { name: 'Prompt template' }), { target: { value: 'Replace character' } });
   expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toContain('@Image1');
 });
 
@@ -155,7 +155,7 @@ it('submits P-Video-Edit draft without stale Seedance controls', async () => {
   useAppStore.setState({runwareVideoModel:'prunaai:p-video@edit'});
   render(<ProviderVideoWorkspace provider="runware" label="Runware" inputMode="edit" onBack={()=>{}} onOpenConnections={()=>{}}/>);
   expect(screen.queryByRole('combobox',{name:/Output size/})).toBeNull();
-  fireEvent.click(screen.getByRole('button',{name:'Change scene'}));
+  fireEvent.change(screen.getByRole('combobox', { name: 'Prompt template' }), { target: { value: 'Change scene' } });
   fireEvent.change(screen.getByLabelText('Upload source video'),{target:{files:[new File(['clip'],'source.mp4',{type:'video/mp4'})]}});
   await screen.findByText(/source.mp4/);
   fireEvent.click(screen.getByRole('checkbox',{name:/Draft mode/}));
@@ -170,7 +170,7 @@ it('revalidates an already selected source when switching editing models', async
   fireEvent.change(screen.getByLabelText('Upload source video'),{target:{files:[new File(['clip'],'long.mp4',{type:'video/mp4'})]}});
   await screen.findByText(/long.mp4/);
   fireEvent.click(screen.getByRole('option',{name:/P-Video-Edit/}));
-  fireEvent.click(screen.getByRole('button',{name:'Change scene'}));
+  fireEvent.change(screen.getByRole('combobox', { name: 'Prompt template' }), { target: { value: 'Change scene' } });
   fireEvent.click(screen.getByRole('button',{name:/Generate edit/}));
   expect(await screen.findByText(/Choose a readable clip up to 15/)).toBeInTheDocument();
   expect(uploadRunwareVideo).not.toHaveBeenCalled();

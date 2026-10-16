@@ -23,11 +23,12 @@ export default function SavedPromptsButton({ className = 'px-2.5 py-1.5' }: { cl
       onClick={() => openLibrary('prompts')}
       className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[var(--border)] text-xs font-medium text-[var(--foreground-muted)] transition-colors hover:border-[var(--border-hover)] hover:text-[var(--foreground)] ${className}`}
       title="Open your saved and recent prompts"
+      aria-label="Saved prompts"
     >
       <BookMarked size={14} aria-hidden="true" />
       {/* Icon-only on a phone: beside "Prompt" and Gen Example the label
           wrapped both buttons onto two lines at 375px. */}
-      <span className="sr-only sm:not-sr-only">Saved prompts</span>
+      <span className="sr-only sm:not-sr-only" aria-hidden="true">Saved</span>
     </button>
   );
 }
