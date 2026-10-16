@@ -191,3 +191,82 @@ it('accepts a production Aleph edit larger than the inline image cap and prices 
   expect(JSON.parse(job.request_json).values.sourceDurationSeconds).toBe(6);
   expect(job.request_digest).not.toBe('');
 });
+
+function runwareEdit(modelId: string, sourceVideoId: string, values: CloudJobRequest['values'] = {}, referenceIds: string[] = []): CloudJobRequest {
+  return { provider: 'runware', modelId, mediaType: 'video', inputMode: 'edit', prompt: 'Replace the sky', referenceIds, sourceVideoId, values };
+}
+
+it('refuses an Aleph 2.0 source outside the published limits and pins the images it accepts', async () => {
+  env.APP_ORIGIN = 'https://studio.example.test';
+  env.PUBLIC_WORKER_ORIGIN = 'https://media.example.test';
+  const image = await upload('owner', 'image/png');
+  const short = await stageClip(1, 1280, 720);
+  await expect(acceptJob(env, 'owner', 'aleph20-short-token', validateRequest(env, runwareEdit('runway:aleph@2.0', short)))).rejects.toThrow(/between 2 and 30/);
+  const wide = await stageClip(6, 2560, 1440);
+  await expect(acceptJob(env, 'owner', 'aleph20-wide-token', validateRequest(env, runwareEdit('runway:aleph@2.0', wide)))).rejects.toThrow(/at most 1920/);
+  const heavy = await stageClip(6, 1280, 720);
+  db.prepare('UPDATE account_uploads SET expected_bytes = ? WHERE id = ?').run(32_000_001, heavy);
+  await expect(acceptJob(env, 'owner', 'aleph20-heavy-token', validateRequest(env, runwareEdit('runway:aleph@2.0', heavy)))).rejects.toThrow(/32 MB/);
+  const source = await stageClip(6, 1280, 720);
+  await expect(acceptJob(env, 'owner', 'aleph20-late-token', validateRequest(env, runwareEdit('runway:aleph@2.0', source, { frameAnchors: 't:12' }, [image])))).rejects.toThrow(/inside the 6.00 s source/);
+  const job = await acceptJob(env, 'owner', 'aleph20-ok-token', validateRequest(env, runwareEdit('runway:aleph@2.0', source, { frameAnchors: 'first' }, [image])));
+  expect(JSON.parse(job.request_json).values.sourceDurationSeconds).toBe(6);
+  const fetch = vi.fn().mockResolvedValue(Response.json({ data: [{}] }));
+  vi.stubGlobal('fetch', fetch);
+  await adapterFor(env, 'runware').submit(env, job);
+  const [task] = JSON.parse(fetch.mock.calls[0][1].body);
+  expect(task).toMatchObject({
+    model: 'runway:aleph@2.0', positivePrompt: 'Replace the sky',
+    inputs: { video: expect.stringContaining('/media/'), frameImages: [{ image: expect.stringContaining('/media/'), frame: 'first' }] },
+  });
+  expect(task).not.toHaveProperty('duration');
+  expect(task).not.toHaveProperty('resolution');
+  expect(task).not.toHaveProperty('settings');
+});
+
+it('submits Kling O1 with reference images and no invented duration or price inputs', async () => {
+  env.APP_ORIGIN = 'https://studio.example.test';
+  env.PUBLIC_WORKER_ORIGIN = 'https://media.example.test';
+  const image = await upload('owner', 'image/png');
+  const unread = await upload();
+  expect(() => validateRequest(env, { ...runwareEdit('klingai:kling@o1', 'source'), prompt: 'A' })).toThrow(/at least 2/);
+  const job = await acceptJob(env, 'owner', 'kling-o1-ok-token', validateRequest(env, runwareEdit('klingai:kling@o1', unread, { keepOriginalSound: false }, [image])));
+  expect(JSON.parse(job.request_json).values.sourceDurationSeconds).toBeUndefined();
+  const fetch = vi.fn().mockResolvedValue(Response.json({ data: [{}] }));
+  vi.stubGlobal('fetch', fetch);
+  await adapterFor(env, 'runware').submit(env, job);
+  const [task] = JSON.parse(fetch.mock.calls[0][1].body);
+  expect(task).toMatchObject({
+    model: 'klingai:kling@o1',
+    inputs: { video: expect.stringContaining('/media/'), referenceImages: [expect.stringContaining('/media/')] },
+    providerSettings: { klingai: { keepOriginalSound: false } },
+  });
+  expect(task).not.toHaveProperty('duration');
+  expect(task).not.toHaveProperty('resolution');
+  const standard = validateRequest(env, runwareEdit('klingai:kling@o1-standard', unread, {}, [image]));
+  expect(standard.modelId).toBe('klingai:kling@o1-standard');
+});
+
+it('refuses an Omni 4K source outside 3–15.5s or 8.29 MP and sends resolution 4k', async () => {
+  env.APP_ORIGIN = 'https://studio.example.test';
+  env.PUBLIC_WORKER_ORIGIN = 'https://media.example.test';
+  const image = await upload('owner', 'image/png');
+  const long = await stageClip(16, 1920, 1080);
+  await expect(acceptJob(env, 'owner', 'kling-o3-long-token', validateRequest(env, runwareEdit('klingai:kling-video@o3-4k', long)))).rejects.toThrow(/15.5/);
+  const small = await stageClip(6, 640, 360);
+  await expect(acceptJob(env, 'owner', 'kling-o3-small-token', validateRequest(env, runwareEdit('klingai:kling-video@o3-4k', small)))).rejects.toThrow(/700 and 4553/);
+  const source = await stageClip(6, 3840, 2160);
+  const job = await acceptJob(env, 'owner', 'kling-o3-ok-token', validateRequest(env, runwareEdit('klingai:kling-video@o3-4k', source, {}, [image])));
+  expect(JSON.parse(job.request_json).values.sourceDurationSeconds).toBe(6);
+  const fetch = vi.fn().mockResolvedValue(Response.json({ data: [{}] }));
+  vi.stubGlobal('fetch', fetch);
+  await adapterFor(env, 'runware').submit(env, job);
+  const [task] = JSON.parse(fetch.mock.calls[0][1].body);
+  expect(task).toMatchObject({
+    model: 'klingai:kling-video@o3-4k', resolution: '4k',
+    inputs: { video: expect.stringContaining('/media/'), referenceImages: [expect.stringContaining('/media/')] },
+    providerSettings: { klingai: { keepOriginalSound: true } },
+  });
+  expect(task).not.toHaveProperty('duration');
+  expect(task).not.toHaveProperty('width');
+});

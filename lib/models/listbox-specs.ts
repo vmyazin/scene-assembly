@@ -240,7 +240,16 @@ function lengthCell(seconds: number | undefined, whenMissing: SpecCell): SpecCel
 
 /** Aggregator video rows: Max · Up to · Shapes · From. */
 export function providerVideoSpecs(model: ProviderModel, inputMode?: string): SpecCell[] {
-  if (inputMode === 'edit' && model.videoEdit) return [text(`${model.videoEdit.maxSeconds}s`), text(model.videoEdit.outputLabel ?? topTier(model.videoEdit.sizes) ?? '—'), text('source'), fromCell({rate:model.videoEdit.draftRate ?? model.videoEdit.rate})];
+  if (inputMode === 'edit' && model.videoEdit) {
+    const edit = model.videoEdit;
+    const rate = edit.draftRate ?? edit.rate;
+    return [
+      edit.maxSeconds === undefined ? DASH : text(`${edit.maxSeconds}s`),
+      text(edit.outputLabel ?? topTier(edit.sizes) ?? '—'),
+      text('source'),
+      rate ? fromCell({ rate }) : fromCell({ price: model.price ?? 'price unknown' }),
+    ];
+  }
   return [
     // A video model with no seconds control fixes its own length (LTX 2.3 counts frames).
     lengthCell(maxSeconds(model), text('fixed', 'subtle')),
@@ -342,7 +351,7 @@ export function falVideoSpecs(model: FalModelDefinition, inputMode: FalInputMode
   if (variant.edit) {
     const from = rateStartLabel(falRateLabel(variant.endpointId));
     const seconds = variant.edit.maxSeconds;
-    return [text(`${seconds}s`), text('source'), DASH, from ? text(from) : DASH];
+    return [seconds === undefined ? DASH : text(`${seconds}s`), text('source'), DASH, from ? text(from) : DASH];
   }
   const cells = fieldCells(fieldSpecs(variant?.fields ?? []));
   // The label spans a range (`$0.10–0.15 / s`); the column says where it starts.

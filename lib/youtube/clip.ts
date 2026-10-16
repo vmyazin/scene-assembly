@@ -1,3 +1,4 @@
+// lib/youtube/clip.ts
 import { PROVIDER_MODELS, findModel } from '../providers/catalog';
 import type { ProviderId, ProviderModel } from '../providers/types';
 import { FAL_VIDEO_MODELS } from '../fal/catalog';
@@ -87,13 +88,17 @@ export function importBounds(edit?: { provider: string; modelId: string }): Impo
     const capability = edit.provider === 'fal'
       ? FAL_VIDEO_MODELS.find(model => model.id === edit.modelId)?.variants.find(variant => variant.inputMode === 'edit')?.edit
       : Object.hasOwn(PROVIDER_MODELS, edit.provider) ? findModel(edit.provider as ProviderId, edit.modelId)?.videoEdit : undefined;
-    return capability ? { minSeconds: Math.max(MIN_SECTION_SECONDS, capability.minSeconds ?? 0), maxSeconds: capability.maxSeconds, capability } : null;
+    if (!capability) return null;
+    // No published ceiling stays unbounded for this model. It must not widen the
+    // fallback range below, which is the widest ceiling a page actually states.
+    return { minSeconds: Math.max(MIN_SECTION_SECONDS, capability.minSeconds ?? 0), maxSeconds: capability.maxSeconds ?? Number.POSITIVE_INFINITY, capability };
   }
   const all = [
     ...Object.values(PROVIDER_MODELS).flat().flatMap(model => model.videoEdit ? [model.videoEdit] : []),
     ...FAL_VIDEO_MODELS.flatMap(model => model.variants.flatMap(variant => variant.edit ? [variant.edit] : [])),
   ];
-  return { minSeconds: Math.max(MIN_SECTION_SECONDS, Math.min(...all.map(c => c.minSeconds ?? 0))), maxSeconds: Math.max(...all.map(c => c.maxSeconds)) };
+  const ceilings = all.map(c => c.maxSeconds).filter((seconds): seconds is number => seconds !== undefined);
+  return { minSeconds: Math.max(MIN_SECTION_SECONDS, Math.min(...all.map(c => c.minSeconds ?? 0))), maxSeconds: Math.max(...ceilings) };
 }
 
 /** Why a section cannot be imported, in words a person can act on; null when it can. */
@@ -102,6 +107,10 @@ export function rangeProblem(startSeconds: number, endSeconds: number, bounds: I
   if (!tenth(startSeconds) || !tenth(endSeconds) || startSeconds < 0) return 'Set From and To as times in the video, to a tenth of a second.';
   if (endSeconds <= startSeconds) return 'To must come after From.';
   const length = roundTenth(endSeconds - startSeconds);
+  if (!Number.isFinite(bounds.maxSeconds)) {
+    if (length < bounds.minSeconds) return `Choose a section at least ${bounds.minSeconds} seconds long.`;
+    return null;
+  }
   if (length < bounds.minSeconds || length > bounds.maxSeconds) return `Choose a section between ${bounds.minSeconds} and ${bounds.maxSeconds} seconds long.`;
   return null;
 }

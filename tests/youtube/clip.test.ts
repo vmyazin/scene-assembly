@@ -59,6 +59,13 @@ describe('bounds', () => {
     expect(rangeProblem(0, 15.1, bounds)).toMatch(/Choose a section/);
   });
   it('falls back to the widest catalog range', () => expect(importBounds()).toEqual({ minSeconds: 1, maxSeconds: 30 }));
+  it('does not let a model with no published ceiling widen that fallback', () => {
+    const open = importBounds({ provider: 'runware', modelId: 'klingai:kling@o1' });
+    expect(open?.maxSeconds).toBe(Number.POSITIVE_INFINITY);
+    expect(importBounds()?.maxSeconds).toBe(30);
+    expect(rangeProblem(0, 120, open!)).toBeNull();
+    expect(rangeProblem(0, 0.5, open!)).toMatch(/at least 1/);
+  });
   it('explains every out-of-range section', () => {
     const bounds = importBounds({ provider: 'runware', modelId: 'bytedance:seedance@2.5' })!;
     expect(rangeProblem(62, 74.4, bounds)).toBeNull();

@@ -16,7 +16,7 @@ import { readContainerVideo } from '../../lib/media/container-duration';
 import { FAL_VIDEO_MODELS } from '../../lib/fal/catalog';
 import { findModel } from '../../lib/providers/catalog';
 import type { ProviderId } from '../../lib/providers/types';
-import { editVideoMaxBytes, validateEditSource, type VideoEditCapability } from '../../lib/providers/video-edit';
+import { editDurationMessage, editPromptLengthError, editVideoMaxBytes, frameAnchorTimingError, framePinsFor, pricesEditFromSourceDuration, validateEditSource, type VideoEditCapability } from '../../lib/providers/video-edit';
 import { AccountError } from './jobs';
 import { objectByteSize, readObjectRange } from './object-bytes';
 import type { Env } from './security';
@@ -34,9 +34,9 @@ function formatSeconds(value: number): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
 }
 
-/** Flat per-second edits (Kling, Aleph). Runware reports its own cost, and a resolution table is not this path. */
+/** Flat per-second edits. Runware joins only when the catalog prices that edit from the file. */
 function pricesFromMeasuredLength(request: CloudJobRequest, limits: VideoEditCapability): boolean {
-  return request.provider !== 'runware' && limits.rate.per === 'second' && limits.rate.usd !== undefined;
+  return pricesEditFromSourceDuration(request.provider, limits);
 }
 
 export async function assertEditSourceLimits(env: Env, owner: string, request: CloudJobRequest): Promise<number | undefined> {
@@ -54,9 +54,8 @@ export async function assertEditSourceLimits(env: Env, owner: string, request: C
   if (limits.mimes && !limits.mimes.includes(row.mime_type)) {
     throw new AccountError('This model does not accept that source video format.', 400, 'invalid_references');
   }
-  if (limits.maxPromptLength && request.prompt.length > limits.maxPromptLength) {
-    throw new AccountError(`This model's prompt is at most ${limits.maxPromptLength} characters.`, 400, 'invalid_settings');
-  }
+  const promptError = editPromptLengthError(limits, request.prompt);
+  if (promptError) throw new AccountError(promptError, 400, 'invalid_settings');
   if (row.state !== 'ready') return;
   const size = await objectByteSize(env.ASSETS, row.object_key);
   const measured = size === null
@@ -73,19 +72,27 @@ export async function assertEditSourceLimits(env: Env, owner: string, request: C
     throw new AccountError('The source clip\'s length and frame size could not be read, so this edit was not reserved. Use an MP4 or MOV with a duration and a video track in the file.', 400, 'invalid_references');
   }
   const min = limits.minSeconds ?? 0;
-  if (duration !== null && (duration <= 0 || duration < min || duration > limits.maxSeconds)) {
-    throw new AccountError(`Choose a readable clip ${limits.minSeconds ? `between ${limits.minSeconds} and ${limits.maxSeconds}` : `up to ${limits.maxSeconds}`} seconds long.`, 400, 'invalid_references');
+  if (duration !== null && (duration <= 0 || duration < min || (limits.maxSeconds !== undefined && duration > limits.maxSeconds))) {
+    throw new AccountError(`Choose a readable clip ${editDurationMessage(limits)}.`, 400, 'invalid_references');
   }
   const pricedFromFile = pricesFromMeasuredLength(request, limits);
   const claimed = request.values.sourceDurationSeconds;
   if (pricedFromFile && typeof claimed === 'number' && duration !== null && Math.abs(claimed - duration) > 1) {
     throw new AccountError(`The source clip is ${formatSeconds(duration)} seconds, not ${formatSeconds(claimed)}. An edit is priced from the file.`, 400, 'invalid_settings');
   }
+  const encodedAnchors = request.values.frameAnchors;
+  if (limits.frameAnchors && typeof encodedAnchors === 'string') {
+    const pins = framePinsFor(encodedAnchors, request.referenceIds.length, limits);
+    if (typeof pins === 'string') throw new AccountError(pins, 400, 'invalid_settings');
+    const timing = frameAnchorTimingError(pins, duration ?? undefined);
+    if (timing) throw new AccountError(timing, 400, 'invalid_settings');
+  }
   if (width === null || height === null) return pricedFromFile ? duration ?? undefined : undefined;
   try {
     // Duration was checked on its own. A stand-in keeps the frame check from
     // reporting a length when the container had a picture and no duration.
-    validateEditSource({ durationSeconds: duration ?? Math.min(limits.maxSeconds, Math.max(min, 1)), width, height }, limits);
+    const standIn = limits.maxSeconds !== undefined ? Math.min(limits.maxSeconds, Math.max(min, 1)) : Math.max(min, 1);
+    validateEditSource({ durationSeconds: duration ?? standIn, width, height }, limits);
   } catch (error) {
     throw new AccountError(error instanceof Error ? error.message : 'This source video is outside the model\'s limits.', 400, 'invalid_references');
   }

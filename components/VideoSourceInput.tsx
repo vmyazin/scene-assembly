@@ -8,7 +8,7 @@ import YouTubeClipDialog, { type YouTubeClipTarget } from './YouTubeClipDialog';
 import VideoPlayer from './video/VideoPlayer';
 import { probeDimensions, type ProbedDimensions } from '@/lib/timeline/probe';
 import type { ProviderModel } from '@/lib/providers/types';
-import { editVideoMaxBytes, editVideoMimes, validateEditVideo, validateEditSource } from '@/lib/providers/video-edit';
+import { editSourceSummary, editVideoMimes, validateEditVideo, validateEditSource } from '@/lib/providers/video-edit';
 import { formatClock, watchUrl, type ImportedClipSource } from '@/lib/youtube/clip';
 import { discardStagedSource } from '@/lib/account/staged-sources';
 import { useAccountStore } from '@/store/useAccountStore';
@@ -61,12 +61,18 @@ export default function VideoSourceInput({source, onChange, disabled, capability
     try {
       validateEditVideo(file, capability);
       const dimensions = await probeDimensions(file);
-      // Check non-duration constraints before doing expensive conversion.
-      validateEditSource({...dimensions, durationSeconds: Math.min(dimensions.durationSeconds, capability.maxSeconds)}, capability);
+      // A published ceiling is applied by trimming, so the pre-check looks at
+      // pixels and ratio with the length clamped. A model with no ceiling
+      // (Kling O1) keeps the measured length and is not trimmed.
+      const limit = capability.maxSeconds;
+      const precheckDuration = limit === undefined ? dimensions.durationSeconds : Math.min(dimensions.durationSeconds, limit);
+      validateEditSource({...dimensions, durationSeconds: precheckDuration}, capability);
       if (turn !== sequence.current) { discardStagedSource(file); return; }
-      const prepared = await trimVideoToLimit(file, dimensions, capability.maxSeconds, {
-        signal: controller.signal, onTrimming: () => setTrimming(true),
-      });
+      const prepared = limit === undefined
+        ? { file, ...dimensions }
+        : await trimVideoToLimit(file, dimensions, limit, {
+          signal: controller.signal, onTrimming: () => setTrimming(true),
+        });
       validateEditVideo(prepared.file, capability);
       validateEditSource(prepared, capability);
       if (turn !== sequence.current) { discardStagedSource(file); return; }
@@ -83,7 +89,7 @@ export default function VideoSourceInput({source, onChange, disabled, capability
     } finally { if (turn === sequence.current) { setReading(false); setTrimming(false); } }
   }
   return <section className="glass-card space-y-3 p-3.5 md:p-4">
-    <div><h3 className="display text-base font-semibold">Source video</h3><p className="mt-1 text-xs text-[var(--foreground-muted)]">{editVideoMimes(capability).map(mime => mime === 'video/mp4' ? 'MP4' : mime === 'video/quicktime' ? 'MOV' : mime === 'video/webm' ? 'WebM' : mime).join(', ')} · {capability.minSeconds ? `${capability.minSeconds}–${capability.maxSeconds}` : `Up to ${capability.maxSeconds}`} seconds · up to {Math.round(editVideoMaxBytes(capability) / 1_000_000)} MB{capability.sourceBounds ? ` · ${capability.sourceBounds.minEdge}–${capability.sourceBounds.maxEdge}px` : ''}. {capability.namesSource ? 'Reference this clip as @Video1.' : 'Describe how to change the source video.'} Longer clips are trimmed automatically.</p></div>
+    <div><h3 className="display text-base font-semibold">Source video</h3><p className="mt-1 text-xs text-[var(--foreground-muted)]">{editSourceSummary(capability)}{capability.maxSeconds !== undefined ? ' Longer clips are trimmed automatically.' : ''}</p></div>
     {source && <><SourceVideoPreview file={source.file} /><p className="break-all text-xs text-[var(--foreground-muted)]">{source.origin
       ? <a href={watchUrl(source.origin)} target="_blank" rel="noreferrer noopener" className="underline-offset-2 hover:underline">From YouTube · {formatClock(source.origin.startSeconds)}–{formatClock(source.origin.endSeconds)}</a>
       : source.file.name} · {source.durationSeconds.toFixed(1)}s · {source.width} × {source.height}{source.origin?.savedToLibrary ? ' · Saved to library' : ''}</p>

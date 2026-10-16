@@ -1,6 +1,5 @@
 // components/ProviderVideoWorkspace.tsx
 'use client';
-// components/ProviderVideoWorkspace.tsx
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Sparkles } from 'lucide-react';
@@ -12,7 +11,8 @@ import CloudJobPanel from '@/components/account/CloudJobPanel';
 import VideoSourceInput, { type SourceVideo } from '@/components/VideoSourceInput';
 import { useAccountStore } from '@/store/useAccountStore';
 import { ALEPH_DATA_URI_MAX, alephDataUriLength, isAlephVideoUri } from '@/lib/providers/comet';
-import { editPromptImageTokenError, editPromptShortcuts, isRunwayEditProtocol, validateEditSource } from '@/lib/providers/video-edit';
+import { editPromptImageTokenError, editPromptLengthError, editPromptShortcuts, frameAnchorTimingError, framePinsFor, isRunwayEditProtocol, validateEditSource } from '@/lib/providers/video-edit';
+import FrameAnchorControl, { type FrameAnchorChoice } from '@/components/FrameAnchorControl';
 import { uploadRunwareMedia, uploadRunwareVideo } from '@/lib/providers/upload-video';
 import ReferenceClipTray, { type AttachedReferenceClip } from '@/components/ReferenceClipTray';
 import { clipToken, fileWithReferenceClipType, referenceClipSetError, referenceClipsFor } from '@/lib/providers/reference-clips';
@@ -256,10 +256,15 @@ export default function ProviderVideoWorkspace({
     });
     if (selectedModel.videoEdit.draftRate) fields.push({key: 'draft', label: 'Draft mode', type: 'boolean', defaultValue: false, description: 'Faster, lower-quality preview at a lower price. Turn off for Standard quality.'});
     else if (selectedModel.videoEdit.draftPreview) fields.push(draftField);
+    if (selectedModel.videoEdit.keepOriginalSound) fields.push({
+      key: 'keepOriginalSound', label: 'Keep original sound', type: 'boolean', defaultValue: true,
+      description: 'Maintain the original sound from the source video.',
+    });
     return fields;
   }, [selectedModel, isEdit]);
   const epoch = useAccountStore(state => state.epoch);
   const [selectedSource, setSelectedSource] = useState<SourceVideo | null>(null);
+  const [anchorById, setAnchorById] = useState<Record<string, { choice: FrameAnchorChoice; timestamp: string }>>({});
   const source = selectedSource?.epoch === epoch ? selectedSource : null;
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadKind, setUploadKind] = useState<'source' | 'video' | 'audio' | null>(null);
@@ -607,6 +612,25 @@ export default function ProviderVideoWorkspace({
       return;
     }
     if (isEdit && !source) { setError('Choose a source video to edit.'); return; }
+    const editCapability = isEdit ? selectedModel.videoEdit : undefined;
+    const encodedAnchors = (() => {
+      if (!editCapability?.frameAnchors || references.length === 0) return undefined;
+      const tokens = references.map((reference) => {
+        const pin = anchorById[reference.id];
+        if (!pin || pin.choice === 'auto') return 'auto';
+        if (pin.choice === 'timestamp') return `t:${pin.timestamp.trim()}`;
+        return pin.choice;
+      });
+      return tokens.every((token) => token === 'auto') ? undefined : tokens.join(',');
+    })();
+    if (editCapability) {
+      const lengthError = editPromptLengthError(editCapability, prompt.trim());
+      if (lengthError) { setError(lengthError); return; }
+      const pins = framePinsFor(encodedAnchors, references.length, editCapability);
+      if (typeof pins === 'string') { setError(pins); return; }
+      const timing = frameAnchorTimingError(pins, source?.durationSeconds);
+      if (timing) { setError(timing); return; }
+    }
     const imageTokenError = isEdit && selectedModel.videoEdit ? editPromptImageTokenError(selectedModel.videoEdit, prompt) : undefined;
     if (imageTokenError) { setError(imageTokenError); return; }
     if (isReference && references.length === 0) {
@@ -653,7 +677,9 @@ export default function ProviderVideoWorkspace({
           ...((!isEdit || selectedModel.videoEdit?.sizes.length) && submittedSize ? {size:submittedSize} : {}),
           ...(isEdit && selectedModel.videoEdit?.draftRate ? {draft:values.draft === true} : {}),
           ...(seedanceDraftOn ? {draft: true} : {}),
-          ...(isEdit && selectedModel.videoEdit?.draftPreview && source?.durationSeconds ? {sourceDurationSeconds: source.durationSeconds} : {}),
+          ...(isEdit && source?.durationSeconds && (selectedModel.videoEdit?.draftPreview || selectedModel.videoEdit?.measureForPrice) ? {sourceDurationSeconds: source.durationSeconds} : {}),
+          ...(encodedAnchors ? { frameAnchors: encodedAnchors } : {}),
+          ...(selectedModel.videoEdit?.keepOriginalSound ? { keepOriginalSound: values.keepOriginalSound !== false } : {}),
           ...(!isEdit && selectedModel?.supportsAudio ? {audio:values.audio === true} : {}),
           ...(aspectRatio ? { aspectRatio } : {}),
           ...relaxed.attach(),
@@ -719,6 +745,9 @@ export default function ProviderVideoWorkspace({
         size: ((!isEdit || selectedModel.videoEdit?.sizes.length) && typeof values.size === 'string' ? values.size : undefined) || undefined,
         ...(isEdit && selectedModel.videoEdit?.draftRate ? {draft:values.draft === true} : {}),
         ...(seedanceDraftOn ? {draft: true} : {}),
+        ...(encodedAnchors ? { frameAnchors: encodedAnchors } : {}),
+        ...(selectedModel.videoEdit?.keepOriginalSound ? { keepOriginalSound: values.keepOriginalSound !== false } : {}),
+        ...(isEdit && source?.durationSeconds && (selectedModel.videoEdit?.measureForPrice || selectedModel.videoEdit?.draftPreview) ? { sourceDurationSeconds: source.durationSeconds } : {}),
         ...(!isEdit && selectedModel?.supportsAudio ? {audio:values.audio === true} : {}),
         ...(aspectRatio ? { aspectRatio } : {}),
         ...relaxed.attach(),
@@ -740,6 +769,7 @@ export default function ProviderVideoWorkspace({
           ...relaxed.attach(),
           ...(seedanceDraftOn ? { draft: true } : {}),
           ...(isEdit && source?.durationSeconds ? { sourceDurationSeconds: source.durationSeconds } : {}),
+          ...(encodedAnchors ? { frameAnchors: encodedAnchors } : {}),
         },
         state: 'queued',
         urls: [],
@@ -866,7 +896,7 @@ export default function ProviderVideoWorkspace({
                       : `Reference image${maxInputImages === 1 ? '' : 's'}`}
                 </h3>
                 <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">
-                  {isEdit ? `Add up to ${maxInputImages} character, product, or setting images to guide the edit. Address images as ${selectedModel?.videoEdit?.promptSyntax === 'image-index' ? 'image 1, image 2' : '@Image1, @Image2'}, and so on.` : isFrames
+                  {isEdit ? `Add up to ${maxInputImages} character, product, or setting images to guide the edit. Address images as ${selectedModel?.videoEdit?.promptSyntax === 'image-index' || selectedModel?.videoEdit?.plainReferences ? 'image 1, image 2' : '@Image1, @Image2'}, and so on.` : isFrames
                     ? 'Two images, in order: the frame the clip opens on, then the one it ends on. The model builds the motion between them.'
                     : isReference
                       ? `Add up to ${maxInputImages} front, three-quarter, or profile views. Their order becomes ${referenceToken(0)}, ${referenceToken(1)}, and so on in your prompt.`
@@ -891,7 +921,7 @@ export default function ProviderVideoWorkspace({
                 items={references.map((reference, index) => ({
                   id: reference.id,
                   src: reference.previewUrl,
-                  caption: isFrames ? frameSlotLabel(index) : isEdit ? (selectedModel?.videoEdit?.promptSyntax === 'image-index' ? `Image ${index + 1}` : `@Image${index + 1}`) : isReference ? referenceToken(index) : undefined,
+                  caption: isFrames ? frameSlotLabel(index) : isEdit ? (selectedModel?.videoEdit?.promptSyntax === 'image-index' || selectedModel?.videoEdit?.plainReferences ? `Image ${index + 1}` : `@Image${index + 1}`) : isReference ? referenceToken(index) : undefined,
                   alt: isFrames
                     ? frameSlotLabel(index)
                     : isReference
@@ -907,6 +937,23 @@ export default function ProviderVideoWorkspace({
                 onRemove={removeReference}
               />
               {isFrames && references.length === 2 && <SwapFramesButton />}
+              {isEdit && selectedModel?.videoEdit?.frameAnchors && references.length > 0 && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <p className="text-xs text-[var(--foreground-muted)] sm:col-span-2">
+                    Pin each image to a frame or a time in the source. Automatic lets the model place it.
+                  </p>
+                  {references.map((reference, index) => (
+                    <FrameAnchorControl
+                      key={reference.id}
+                      index={index}
+                      choice={anchorById[reference.id]?.choice ?? 'auto'}
+                      timestamp={anchorById[reference.id]?.timestamp ?? ''}
+                      disabled={isSubmitting}
+                      onChange={(next) => setAnchorById((current) => ({ ...current, [reference.id]: next }))}
+                    />
+                  ))}
+                </div>
+              )}
             </section>
           )}
 

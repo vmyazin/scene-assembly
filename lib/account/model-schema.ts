@@ -101,7 +101,7 @@ function falModels(): ModelDescriptor[] {
         mode: variant.inputMode,
         fields: [
           ...variant.fields.map(fromDefinition),
-          ...(edit?.rate.per === 'second' ? [sourceDurationField(edit.minSeconds, edit.maxSeconds, false)] : []),
+          ...(edit?.rate?.per === 'second' && edit.maxSeconds !== undefined ? [sourceDurationField(edit.minSeconds, edit.maxSeconds, false)] : []),
         ],
         references: variant.inputMode === 'text' ? NO_REFERENCES
           : variant.inputMode === 'frames' ? { min: 2, max: 2 }
@@ -206,7 +206,15 @@ function aggregatorModes(provider: ProviderId, model: ProviderModel): ModeDescri
             key: 'draft', label: 'Draft', type: 'boolean' as const, default: false,
             ...(edit.draftPreview ? { description: '480p preview only. Off by default. Turn it on, then call finalize_draft to render that preview at 1080p. That is a separate charge.' } : {}),
           }] : []),
-          ...(edit.draftPreview || edit.rate.per === 'second' ? [sourceDurationField(edit.minSeconds, edit.maxSeconds, Boolean(edit.draftPreview))] : []),
+          ...(edit.maxSeconds !== undefined && (edit.draftPreview || edit.rate?.per === 'second' || edit.measureForPrice) ? [sourceDurationField(edit.minSeconds, edit.maxSeconds, Boolean(edit.draftPreview))] : []),
+          ...(edit.keepOriginalSound ? [{
+            key: 'keepOriginalSound', label: 'Keep original sound', type: 'boolean' as const, default: true,
+            description: 'Maintain the original sound from the source video.',
+          }] : []),
+          ...(edit.frameAnchors ? [{
+            key: 'frameAnchors', label: 'Frame anchors', type: 'text' as const,
+            description: 'Optional. One token per reference image, comma-separated: auto, first, last, 0, -1, or t:seconds. Omit it and the model places the images.',
+          }] : []),
         ],
       });
       continue;
@@ -367,12 +375,12 @@ function standInEditSeconds(model: ModelDescriptor, mode: ModeDescriptor): numbe
   if (mode.mode !== 'edit' || model.provider === 'runware') return undefined;
   if (model.provider === 'fal') {
     const edit = FAL_VIDEO_MODELS.find(entry => entry.id === model.modelId)?.variants.find(variant => variant.inputMode === 'edit')?.edit;
-    if (edit?.rate.per !== 'second') return undefined;
+    if (edit?.rate?.per !== 'second') return undefined;
     return edit.minSeconds ?? 1;
   }
   if (model.provider !== 'atlas' && model.provider !== 'comet' && model.provider !== 'piapi') return undefined;
   const edit = findModel(model.provider, model.modelId)?.videoEdit;
-  if (!edit || edit.rate.per !== 'second' || edit.rate.usd === undefined) return undefined;
+  if (!edit?.rate || edit.rate.per !== 'second' || edit.rate.usd === undefined) return undefined;
   return edit.minSeconds ?? 1;
 }
 

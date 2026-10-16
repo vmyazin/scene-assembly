@@ -25,6 +25,30 @@ import type {
  * Prices are the vendors' published rates, copied as display strings because
  * the units differ — per image, per megapixel, per second of video.
  */
+
+/**
+ * Kling VIDEO O1 edit, shared by Pro and Standard.
+ * Read 2026-10-16 from
+ * https://runware.ai/docs/models/klingai-video-o1-pro and
+ * https://runware.ai/docs/models/klingai-video-o1-standard.
+ * inputs.video publishes no duration or pixel ceiling ("dimensions and duration
+ * match the input video"). referenceImages is at most 4 once a video is set.
+ * The per-second edit price is not on the page: the headline is "from", the
+ * tables are text/image/reference-to-video, and the video-edit examples omit
+ * duration. No rate is stored.
+ */
+const KLING_O1_EDIT: NonNullable<ProviderModel['videoEdit']> = {
+  sizes: [],
+  maxImages: 4,
+  minPromptLength: 2,
+  maxPromptLength: 2500,
+  keepOriginalSound: true,
+  transport: 'kling-reference',
+  plainReferences: true,
+  outputLabel: 'source',
+  note: 'Edits the source clip in place. Duration and frame follow that clip; the page publishes no separate length or pixel cap, and no duration control is sent. Up to 4 reference images. Keep original sound is sent with the clip. The per-second edit price is not published.',
+};
+
 const RUNWARE_MODELS: ProviderModel[] = [
   {
     id: 'runware:z-image@turbo',
@@ -273,6 +297,88 @@ const RUNWARE_MODELS: ProviderModel[] = [
     supportsAudio: true,
     aspectRatios: ['16:9', '9:16'],
     note: 'Optional audio. Silent is $0.03/s at 720p and $0.05/s at 1080p; with audio those are $0.05/s and $0.08/s. Capacity for this model is limited.',
+  },
+  {
+    // Read 2026-10-16 from https://runware.ai/docs/models/runway-aleph-2-0
+    // and the editing guide. $0.28 per second, flat. Examples cost $1.70 with
+    // no duration, which is not a second rate and not a minimum. No minimumUsd.
+    id: 'runway:aleph@2.0',
+    label: 'Runway Aleph 2.0',
+    fileCode: 'aleph-2_0',
+    kind: 'video',
+    modes: ['edit'],
+    price: '$0.28 / s',
+    videoEdit: {
+      sizes: [],
+      rate: { per: 'second', usd: 0.28 },
+      maxImages: 5,
+      minSeconds: 2,
+      maxSeconds: 30,
+      maxBytes: 32_000_000,
+      minPromptLength: 1,
+      maxPromptLength: 1000,
+      requireMeasurement: true,
+      measureForPrice: true,
+      transport: 'frame-anchors',
+      plainReferences: true,
+      outputLabel: '1080p',
+      sourceBounds: { maxEdge: 1920 },
+      frameAnchors: {
+        frames: ['first', 'last', '0', '-1'],
+        timestamp: { min: 0, max: 30, step: 0.01 },
+      },
+      note: 'Edits a 2–30 s source up to 1080p and 32 MB. The prompt is at most 1000 characters. Up to 5 reference images, each left automatic or pinned to the first frame, the last frame, frame 0, frame −1, or a timestamp. Output keeps the source shape. $0.28 per second.',
+    },
+  },
+  {
+    id: 'klingai:kling@o1',
+    label: 'Kling VIDEO O1 Pro',
+    fileCode: 'kling-o1',
+    kind: 'video',
+    modes: ['edit'],
+    price: 'price unknown',
+    videoEdit: KLING_O1_EDIT,
+  },
+  {
+    id: 'klingai:kling@o1-standard',
+    label: 'Kling VIDEO O1 Standard',
+    fileCode: 'kling-o1-standard',
+    kind: 'video',
+    modes: ['edit'],
+    price: 'price unknown',
+    videoEdit: KLING_O1_EDIT,
+  },
+  {
+    // Read 2026-10-16 from https://runware.ai/docs/models/klingai-video-3-0-omni-4k.
+    // Source video: 700–4553 px, aspect 1:2.5–2:1, area up to 8.29 MP
+    // (3840×2160 is 8,294,400), duration 3–15.5 s. $0.42 per second, flat.
+    // The video-edit example sends resolution "4k" and no duration.
+    // referenceImages is at most 4 with a video. Element bundles are a separate
+    // input and are not offered here.
+    id: 'klingai:kling-video@o3-4k',
+    label: 'Kling VIDEO 3.0 Omni 4K',
+    fileCode: 'kling-o3-4k',
+    kind: 'video',
+    modes: ['edit'],
+    price: '$0.42 / s',
+    videoEdit: {
+      sizes: [],
+      rate: { per: 'second', usd: 0.42 },
+      maxImages: 4,
+      minSeconds: 3,
+      maxSeconds: 15.5,
+      minPromptLength: 2,
+      maxPromptLength: 2500,
+      requireMeasurement: true,
+      measureForPrice: true,
+      keepOriginalSound: true,
+      transport: 'kling-reference',
+      outputResolution: '4k',
+      plainReferences: true,
+      outputLabel: '4K',
+      sourceBounds: { minEdge: 700, maxEdge: 4553, maxPixels: 8_294_400, minRatio: 0.4, maxRatio: 2 },
+      note: 'Edits a 3–15.5 s source. Each edge is 700–4553 px, the aspect is between 1:2.5 and 2:1, and the frame is at most 8.29 MP. Up to 4 reference images. Output is the 4K preset. Keep original sound is sent with the clip. $0.42 per second. Element bundles are not offered.',
+    },
   },
 ];
 

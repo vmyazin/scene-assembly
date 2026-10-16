@@ -29,6 +29,7 @@ import {
   resolveGeminiVideo,
   resolveHelper,
   resolveKieDelta,
+  resolveMeasuredRunwareEdit,
   resolveRunware,
   unknownFigure,
   type GeminiUsage,
@@ -238,10 +239,15 @@ export function captureProviderJob(provider: ProviderId, job: ProviderJob, task:
     };
     if (provider === 'runware') {
       const exact = resolveRunware(task.cost);
+      const values = job.controlValues ?? {};
       const catalog = exact.costUsd === null
-        ? seedanceCatalogFigure({ modelId: job.modelId, inputMode: job.inputMode, values: job.controlValues ?? {} })
+        ? seedanceCatalogFigure({ modelId: job.modelId, inputMode: job.inputMode, values })
         : null;
-      file(withFigure(base, catalog && catalog.costUsd !== null ? catalog : exact));
+      const measured = exact.costUsd === null && !(catalog && catalog.costUsd !== null)
+        ? resolveMeasuredRunwareEdit(findModel(provider, job.modelId), values.sourceDurationSeconds)
+        : null;
+      const chosen = catalog && catalog.costUsd !== null ? catalog : measured && measured.costUsd !== null ? measured : exact;
+      file(withFigure(base, chosen));
       return;
     }
     const controls = job.controlValues ?? {};

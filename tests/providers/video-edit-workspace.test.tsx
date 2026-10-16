@@ -97,6 +97,37 @@ it('explains that Aleph takes no character images and will not submit @Image pro
   expect(submitProviderVideo).not.toHaveBeenCalled();
 });
 
+it('pins each Aleph reference and does not offer a duration', async () => {
+  useAppStore.setState({ runwareApiKey: 'test', runwareVideoModel: 'runway:aleph@2.0' });
+  useDraftStore.setState({
+    prompt: 'Change the coat',
+    references: [{ id: 'ref-1', file: new File(['png'], 'coat.png', { type: 'image/png' }), previewUrl: 'blob:coat' }],
+    controlValues: {},
+  });
+  render(<ProviderVideoWorkspace provider="runware" label="Runware" inputMode="edit" onBack={() => {}} onOpenConnections={() => {}} />);
+  expect(screen.queryByRole('spinbutton', { name: /Duration/ })).toBeNull();
+  expect(screen.getByText(/2–30 seconds/)).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('combobox', { name: 'Anchor for image 1' }), { target: { value: 'first' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Change scene' }));
+  expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).not.toMatch(/@Image/);
+  fireEvent.change(screen.getByLabelText('Upload source video'), { target: { files: [new File(['clip'], 'source.mp4', { type: 'video/mp4' })] } });
+  await screen.findByText(/source.mp4/);
+  fireEvent.click(screen.getByRole('button', { name: /Generate edit/ }));
+  await waitFor(() => expect(submitProviderVideo).toHaveBeenCalled());
+  expect(vi.mocked(submitProviderVideo).mock.calls[0][0]).toMatchObject({
+    model: 'runway:aleph@2.0', frameAnchors: 'first', durationSeconds: undefined, size: undefined,
+  });
+});
+
+it('offers Keep original sound on Kling O1 and no duration control', () => {
+  useAppStore.setState({ runwareApiKey: 'test', runwareVideoModel: 'klingai:kling@o1' });
+  render(<ProviderVideoWorkspace provider="runware" label="Runware" inputMode="edit" onBack={() => {}} onOpenConnections={() => {}} />);
+  expect(screen.getByRole('checkbox', { name: 'Keep original sound' })).toBeChecked();
+  expect(screen.queryByRole('spinbutton', { name: /Duration/ })).toBeNull();
+  expect(screen.getByText(/Length follows the source/)).toBeInTheDocument();
+  expect(screen.getByText(/price is not published/)).toBeInTheDocument();
+});
+
 it('keeps @Image shortcuts for edit models that take images', () => {
   render(<ProviderVideoWorkspace provider="runware" label="Runware" inputMode="edit" onBack={() => {}} onOpenConnections={() => {}} />);
   expect(screen.queryByRole('heading', { name: 'Character images' })).not.toBeInTheDocument();

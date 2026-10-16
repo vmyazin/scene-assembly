@@ -3,6 +3,7 @@ import type { CloudJobRequest } from '../../../../lib/account/contracts';
 import { readContainerDuration } from '../../../../lib/media/container-duration';
 import { findModel } from '../../../../lib/providers/catalog';
 import { isSeedance25 } from '../../../../lib/providers/seedance-draft';
+import { pricesEditFromSourceDuration } from '../../../../lib/providers/video-edit';
 import { FAL_VIDEO_MODELS } from '../../../../lib/fal/catalog';
 import { getAsset } from '../../assets';
 import { objectByteSize, readObjectRange } from '../../object-bytes';
@@ -63,7 +64,7 @@ export async function priceEditDraftSource(ctx: ToolContext, request: CloudJobRe
     );
   }
   const min = edit.minSeconds ?? 0;
-  if (measured < min || measured > edit.maxSeconds) {
+  if (edit.maxSeconds !== undefined && (measured < min || measured > edit.maxSeconds)) {
     throw new ToolError(
       'invalid_field',
       `The source clip is ${formatSeconds(measured)} seconds. This model edits clips from ${min} to ${edit.maxSeconds} seconds, so the draft was not reserved.`,
@@ -89,13 +90,13 @@ export async function priceEditDraftSource(ctx: ToolContext, request: CloudJobRe
  * refusal, and the stored value is the one that was read.
  */
 function pricesFromFile(request: CloudJobRequest): boolean {
-  if (request.inputMode !== 'edit' || request.provider === 'runware') return false;
+  if (request.inputMode !== 'edit') return false;
   if (request.provider === 'fal') {
-    return FAL_VIDEO_MODELS.find((model) => model.id === request.modelId)?.variants.find((variant) => variant.inputMode === 'edit')?.edit?.rate.per === 'second';
+    const rate = FAL_VIDEO_MODELS.find((model) => model.id === request.modelId)?.variants.find((variant) => variant.inputMode === 'edit')?.edit?.rate;
+    return rate?.per === 'second' && rate.usd !== undefined;
   }
-  if (request.provider !== 'atlas' && request.provider !== 'comet' && request.provider !== 'piapi') return false;
-  const rate = findModel(request.provider, request.modelId)?.videoEdit?.rate;
-  return rate?.per === 'second' && rate.usd !== undefined;
+  if (request.provider !== 'atlas' && request.provider !== 'comet' && request.provider !== 'piapi' && request.provider !== 'runware') return false;
+  return pricesEditFromSourceDuration(request.provider, findModel(request.provider, request.modelId)?.videoEdit);
 }
 
 export async function priceEditSource(ctx: ToolContext, request: CloudJobRequest, source?: ReferenceInput): Promise<CloudJobRequest> {
@@ -114,7 +115,7 @@ export async function priceEditSource(ctx: ToolContext, request: CloudJobRequest
   }
   const edit = request.provider === 'fal'
     ? FAL_VIDEO_MODELS.find((model) => model.id === request.modelId)?.variants.find((variant) => variant.inputMode === 'edit')?.edit
-    : findModel(request.provider as 'atlas' | 'comet' | 'piapi', request.modelId)?.videoEdit;
+    : findModel(request.provider as 'atlas' | 'comet' | 'piapi' | 'runware', request.modelId)?.videoEdit;
   const min = edit?.minSeconds ?? 0;
   const max = edit?.maxSeconds;
   if (max !== undefined && (measured < min || measured > max)) {

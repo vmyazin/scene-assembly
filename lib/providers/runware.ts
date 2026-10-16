@@ -243,6 +243,40 @@ export async function runwareCreateVideo(request: VideoRequest, uuid = taskUUID(
     }]);
     return {taskId: uuid};
   }
+  if (request.inputMode === 'edit' && request.editTransport === 'frame-anchors') {
+    const images = request.images ?? [];
+    const pins = request.framePins ?? [];
+    if (!request.sourceVideo || images.length > 5 || (pins.length > 0 && pins.length !== images.length) || request.resolution !== undefined || request.durationSeconds !== undefined || request.width !== undefined || request.height !== undefined || request.aspectRatio !== undefined || request.audio !== undefined || request.draft !== undefined) {
+      throw new ProviderError('Invalid video edit settings.', 400, 'runware');
+    }
+    const frameImages = images.map((image, index) => {
+      const pin = pins[index];
+      if (!pin) return image;
+      return 'frame' in pin ? { image, frame: pin.frame } : { image, timestamp: pin.timestamp };
+    });
+    await runwareFetch(request.apiKey, [{
+      taskType: 'videoInference', taskUUID: uuid, model: request.model,
+      positivePrompt: request.prompt,
+      inputs: { video: request.sourceVideo, ...(frameImages.length ? { frameImages } : {}) },
+      deliveryMethod: 'async', includeCost: true, outputFormat: 'MP4',
+    }]);
+    return { taskId: uuid };
+  }
+  if (request.inputMode === 'edit' && request.editTransport === 'kling-reference') {
+    const images = request.images ?? [];
+    if (!request.sourceVideo || images.length > 4 || request.durationSeconds !== undefined || request.width !== undefined || request.height !== undefined || request.aspectRatio !== undefined || request.audio !== undefined || request.draft !== undefined || (request.resolution !== undefined && request.resolution !== request.outputResolution)) {
+      throw new ProviderError('Invalid video edit settings.', 400, 'runware');
+    }
+    await runwareFetch(request.apiKey, [{
+      taskType: 'videoInference', taskUUID: uuid, model: request.model,
+      positivePrompt: request.prompt,
+      inputs: { video: request.sourceVideo, ...(images.length ? { referenceImages: images } : {}) },
+      ...(request.outputResolution ? { resolution: request.outputResolution } : {}),
+      ...(request.keepOriginalSound !== undefined ? { providerSettings: { klingai: { keepOriginalSound: request.keepOriginalSound } } } : {}),
+      deliveryMethod: 'async', includeCost: true, outputFormat: 'MP4',
+    }]);
+    return { taskId: uuid };
+  }
   if (request.inputMode === 'edit') {
     const draft = request.draft === true;
     if ((request.draft !== undefined && typeof request.draft !== 'boolean') || request.model !== SEEDANCE_25_MODEL || !request.sourceVideo || !['480p', '720p', '1080p'].includes(request.resolution ?? '')) throw new ProviderError('Invalid video edit settings.', 400, 'runware');

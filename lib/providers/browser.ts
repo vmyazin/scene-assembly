@@ -46,6 +46,10 @@ export async function submitProviderVideo(args: {
   audio?: boolean;
   draft?: boolean;
   aspectRatio?: string;
+  /** Comma-separated pins, one per reference image. Omitted when every pin is automatic. */
+  frameAnchors?: string;
+  keepOriginalSound?: boolean;
+  sourceDurationSeconds?: number;
 }): Promise<string> {
   const data = await post({ operation: 'create', ...args });
   if (!data.taskId) throw new Error('The provider did not return a task ID.');
