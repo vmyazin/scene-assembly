@@ -35,8 +35,9 @@ function entry(overrides: Partial<SpendEntry>): SpendEntry {
 describe('ranges', () => {
   it('recognises the three ranges', () => {
     expect(isSpendRange('month')).toBe(true);
+    expect(isSpendRange('7d')).toBe(true);
     expect(isSpendRange('30d')).toBe(true);
-    expect(isSpendRange('all')).toBe(true);
+    expect(isSpendRange('all')).toBe(false);
     expect(isSpendRange('week')).toBe(false);
   });
 
@@ -48,15 +49,15 @@ describe('ranges', () => {
     expect(rangeStart('30d', NOW)).toBe(new Date(2026, 7, 17).getTime());
   });
 
-  it('has no start for all time', () => {
-    expect(rangeStart('all', NOW)).toBeNull();
+  it('counts 7 days inclusive of today', () => {
+    expect(rangeStart('7d', NOW)).toBe(new Date(2026, 8, 9).getTime());
   });
 
   it('filters by the range start', () => {
     const inside = entry({ at: NOW - DAY });
     const outside = entry({ at: NOW - 40 * DAY });
     expect(inRange([inside, outside], '30d', NOW)).toEqual([inside]);
-    expect(inRange([inside, outside], 'all', NOW)).toHaveLength(2);
+    expect(inRange([inside, entry({ at: NOW - 8 * DAY })], '7d', NOW)).toEqual([inside]);
   });
 });
 
@@ -129,9 +130,8 @@ describe('byDay', () => {
     expect(days.at(-2)).toEqual({ day: '2026-09-14', costUsd: 0, runs: 0, byProvider: {} });
   });
 
-  it('spans from the earliest entry for all time, and one day when empty', () => {
-    expect(byDay([entry({ at: NOW - 3 * DAY })], 'all', NOW)).toHaveLength(4);
-    expect(byDay([], 'all', NOW)).toHaveLength(1);
+  it('spans seven days for the week range, even when empty', () => {
+    expect(byDay([], '7d', NOW)).toHaveLength(7);
   });
 });
 

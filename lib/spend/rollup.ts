@@ -5,29 +5,31 @@
  */
 import { providerLabel, type SpendEntry, type SpendKind, type SpendProvider } from './ledger';
 
-export type SpendRange = 'month' | '30d' | 'all';
+// No all-time range: the overview shows the all-time total in its own tile, so
+// a range that repeated it only made the selector longer.
+export type SpendRange = 'month' | '7d' | '30d';
 
 export const SPEND_RANGES: ReadonlyArray<{ value: SpendRange; label: string }> = [
   { value: 'month', label: 'This month' },
+  { value: '7d', label: 'Last 7 days' },
   { value: '30d', label: 'Last 30 days' },
-  { value: 'all', label: 'All time' },
 ];
 
 export function isSpendRange(value: unknown): value is SpendRange {
-  return value === 'month' || value === '30d' || value === 'all';
+  return value === 'month' || value === '7d' || value === '30d';
 }
 
-/** Local-time start of the range, or null for all time. */
-export function rangeStart(range: SpendRange, now: number): number | null {
-  if (range === 'all') return null;
+/** Local-time start of the range; day ranges count today as their last day. */
+export function rangeStart(range: SpendRange, now: number): number {
   const date = new Date(now);
   if (range === 'month') return new Date(date.getFullYear(), date.getMonth(), 1).getTime();
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - 29).getTime();
+  const days = range === '7d' ? 7 : 30;
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - (days - 1)).getTime();
 }
 
 export function inRange(entries: SpendEntry[], range: SpendRange, now: number): SpendEntry[] {
   const start = rangeStart(range, now);
-  return start === null ? entries : entries.filter((entry) => entry.at >= start);
+  return entries.filter((entry) => entry.at >= start);
 }
 
 export interface SpendTotals {
@@ -121,11 +123,9 @@ export interface SpendDay {
   byProvider: Partial<Record<SpendProvider, number>>;
 }
 
-/** One row per day from the range start (or the earliest entry) through today, zero-filled. */
+/** One row per day from the range start through today, zero-filled. */
 export function byDay(entries: SpendEntry[], range: SpendRange, now: number): SpendDay[] {
-  const earliest = entries.reduce((min, entry) => Math.min(min, entry.at), now);
-  const start = rangeStart(range, now) ?? earliest;
-  const first = new Date(start);
+  const first = new Date(rangeStart(range, now));
   const last = new Date(now);
   const days: SpendDay[] = [];
   const cursor = new Date(first.getFullYear(), first.getMonth(), first.getDate());

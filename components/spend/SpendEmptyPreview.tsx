@@ -19,9 +19,9 @@ function Bone({ className }: { className: string }) {
   return <span className={`block rounded bg-[var(--foreground-muted)]/20 ${className}`} />;
 }
 
-function Tile({ label }: { label: string }) {
+function Tile({ label, className = '' }: { label: string; className?: string }) {
   return (
-    <div className="glass-card p-3.5 md:p-4">
+    <div className={`glass-card p-3.5 md:p-4 ${className}`}>
       <p className="field-label">{label}</p>
       <Bone className="mt-2 h-7 w-20" />
     </div>
@@ -57,11 +57,10 @@ export default function SpendEmptyPreview() {
 
   return (
     <div aria-hidden="true" className="space-y-4 opacity-80 select-none">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Tile label="Total" />
+      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-[1.6fr_1fr_1fr]">
+        <Tile label="Total" className="col-span-2 md:col-span-1" />
         <Tile label="Runs" />
-        <Tile label="Exact" />
-        <Tile label="Credits" />
+        <Tile label="All time" />
       </div>
 
       <section className="glass-card p-3.5 md:p-4">

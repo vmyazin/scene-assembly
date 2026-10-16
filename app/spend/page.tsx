@@ -1,16 +1,15 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useQueryState } from 'nuqs';
 
 import { BrandWordmark } from '@/components/BrandMark';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import SegmentedToggleGroup from '@/components/SegmentedToggleGroup';
 import AccountSpend from '@/components/spend/AccountSpend';
 import SpendReport from '@/components/spend/SpendReport';
 import ProviderBilling from '@/components/spend/ProviderBilling';
-import { isSpendRange, SPEND_RANGES } from '@/lib/spend/rollup';
+import { isSpendRange, type SpendRange } from '@/lib/spend/rollup';
 import { useAccountStore } from '@/store/useAccountStore';
 import { useAppStore } from '@/store/useAppStore';
 import { useSpendStore } from '@/store/useSpendStore';
@@ -35,11 +34,9 @@ function SpendView() {
   const [now] = useState(() => Date.now());
   const accountScope = `${ownerId ?? 'guest'}:${accountEpoch}`;
   const source: SpendSource = ownerId ? 'account' : 'browser';
-  const [accountEmpty, setAccountEmpty] = useState<{ scope: string; empty: boolean } | null>(null);
-  const onAccountEmptyChange = useCallback((empty: boolean) => setAccountEmpty({ scope: accountScope, empty }), [accountScope]);
-  const hasAnyEntries = source === 'browser'
-    ? localEntries.length > 0
-    : accountEmpty?.scope === accountScope && !accountEmpty.empty;
+  // The default range stays out of the URL, so a plain /spend link is the month view.
+  const setRange = (value: SpendRange) => void setRangeParam(value === 'month' ? null : value);
+  const balances = <ProviderBilling source={source} ownerId={ownerId} epoch={accountEpoch} />;
   const activeClearIntent = clearIntent?.scope === accountScope && clearIntent.source === source ? clearIntent : null;
 
   useEffect(() => {
@@ -61,39 +58,29 @@ function SpendView() {
       </header>
 
       <main className="mx-auto w-full max-w-7xl space-y-4 px-6 py-10 sm:px-8 md:px-12 md:py-14 lg:px-16">
-        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-          <div className="max-w-2xl">
-            <h1 className="display text-3xl font-semibold text-[var(--foreground)] sm:text-4xl">Spend</h1>
-            <p className="mt-3 text-base leading-relaxed text-[var(--foreground-muted)]">What your generations cost. Estimates use published rates.</p>
-          </div>
-          {hasAnyEntries && (
-            <div className="w-full sm:w-auto sm:min-w-[22rem]">
-              <SegmentedToggleGroup
-                label="Range"
-                options={SPEND_RANGES}
-                value={range}
-                onChange={(value) => void setRangeParam(value === 'month' ? null : String(value))}
-              />
-            </div>
-          )}
+        <div className="mb-6 max-w-2xl">
+          <h1 className="display text-3xl font-semibold text-[var(--foreground)] sm:text-4xl">Spend</h1>
+          <p className="mt-3 text-base leading-relaxed text-[var(--foreground-muted)]">What your generations cost. Estimates use published rates.</p>
         </div>
-
-        {!waitingForSession && <ProviderBilling source={source} ownerId={ownerId} epoch={accountEpoch} />}
 
         {waitingForSession ? (
           <div className="flex items-center justify-center py-16"><div className="loading-spinner" /></div>
         ) : accountStatus === 'unavailable' && ownerId && source === 'account' ? (
-          <div role="alert" className="glass-card p-6 text-center">
-            <p className="text-[var(--foreground)]">Account spend is temporarily unavailable.</p>
-            <p className="field-hint mt-2">Try again in a moment. Your browser ledger is kept separately and is unaffected.</p>
-          </div>
+          <>
+            {balances}
+            <div role="alert" className="glass-card p-6 text-center">
+              <p className="text-[var(--foreground)]">Account spend is temporarily unavailable.</p>
+              <p className="field-hint mt-2">Try again in a moment. Your browser ledger is kept separately and is unaffected.</p>
+            </div>
+          </>
         ) : source === 'account' && ownerId ? (
           <AccountSpend
             ownerId={ownerId}
             range={range}
+            onRangeChange={setRange}
+            balances={balances}
             now={now}
             onClearRequest={(clear) => setClearIntent({ source: 'account', scope: accountScope, clear })}
-            onEmptyChange={onAccountEmptyChange}
           />
         ) : (
           <>
@@ -106,6 +93,8 @@ function SpendView() {
               source="browser"
               entries={localEntries}
               range={range}
+              onRangeChange={setRange}
+              balances={balances}
               now={now}
               loading={!hasHydrated}
               onRemove={removeLocal}

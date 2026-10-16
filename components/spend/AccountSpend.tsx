@@ -1,19 +1,19 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, type ReactNode } from 'react';
 
 import SpendReport from '@/components/spend/SpendReport';
 import { useAccountSpend } from '@/lib/account/use-spend';
 import { useAccountSpendTotals } from '@/lib/account/use-spend-totals';
 import { rangeStart, type SpendRange } from '@/lib/spend/rollup';
 
-export default function AccountSpend({ ownerId, range, now, onClearRequest, onEmptyChange }: {
+export default function AccountSpend({ ownerId, range, onRangeChange, balances, now, onClearRequest }: {
   ownerId: string;
   range: SpendRange;
+  onRangeChange: (range: SpendRange) => void;
+  balances?: ReactNode;
   now: number;
   onClearRequest: (clear: () => Promise<void>) => void;
-  /** Reports whether the account has any records at all, so the page can hide range controls that have nothing to filter. */
-  onEmptyChange?: (empty: boolean) => void;
 }) {
   const spend = useAccountSpend(ownerId);
   // The summary tiles come from the Worker, which totals the whole range in one
@@ -26,12 +26,6 @@ export default function AccountSpend({ ownerId, range, now, onClearRequest, onEm
     refreshRange();
     refreshAllTime();
   }, [refreshRange, refreshAllTime]);
-  const empty = spend.entries.length === 0;
-  // A layout effect, so the page's range controls arrive in the same paint as
-  // the rows: from a passive effect they popped in a frame later, and anything
-  // reading the page between the two saw records with no range to filter them.
-  useLayoutEffect(() => { onEmptyChange?.(empty); }, [empty, onEmptyChange]);
-
   // A background poll that brings in a new run changes the newest row; re-total
   // then, but not on the first page landing, which the totals read already raced.
   const newest = spend.entries[0]?.id;
@@ -53,6 +47,8 @@ export default function AccountSpend({ ownerId, range, now, onClearRequest, onEm
       allTimeError={allTime.error}
       onRetryAllTime={allTime.refresh}
       range={range}
+      onRangeChange={onRangeChange}
+      balances={balances}
       now={now}
       loading={spend.loading}
       loadingOlder={spend.loadingOlder}

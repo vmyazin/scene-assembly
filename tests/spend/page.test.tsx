@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('nuqs', () => ({ useQueryState: () => ['all', vi.fn()] }));
+vi.mock('nuqs', () => ({ useQueryState: () => [null, vi.fn()] }));
 
 import SpendPage from '@/app/spend/page';
 import type { SpendEntry } from '@/lib/spend/ledger';
@@ -55,14 +55,20 @@ describe('SpendPage', () => {
     render(<SpendPage />);
 
     const summary = screen.getByRole('region', { name: 'Summary' });
-    expect(within(summary).getByText('$0.14')).toBeInTheDocument();
-    expect(within(summary).getByText('3')).toBeInTheDocument();
+    expect(summary).toHaveTextContent('$0.14');
+    expect(summary).toHaveTextContent('1 run unpriced');
+    expect(within(screen.getByRole('region', { name: 'Runs' })).getByText('3')).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'All-time spend' })).getByText('$0.14')).toBeInTheDocument();
+    // Kie reads in dollars first; the credit count sits under it.
     expect(await screen.findByText('940 credits')).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('Kie is low');
+    expect(screen.getByRole('radiogroup', { name: 'Range' })).toHaveTextContent('Last 7 days');
+    expect(screen.queryByRole('radio', { name: 'All time' })).toBeNull();
 
     const charts = screen.getAllByRole('img', { name: /Spend per day/ });
     expect(charts.length).toBeGreaterThan(0);
-    const focusableDay = charts[0].querySelector('[tabindex="0"]');
+    // Bars run from the range start to today; the recorded runs are all today's.
+    const focusableDay = [...charts[0].querySelectorAll('[tabindex="0"]')].at(-1);
     expect(focusableDay).not.toBeNull();
     expect(focusableDay).toHaveAttribute('aria-label', expect.stringContaining('$0.14'));
 

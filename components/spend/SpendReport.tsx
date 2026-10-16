@@ -1,14 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 
 import SpendBreakdown from '@/components/spend/SpendBreakdown';
 import SpendDailyChart from '@/components/spend/SpendDailyChart';
 import SpendEmptyPreview from '@/components/spend/SpendEmptyPreview';
 import SpendLedger from '@/components/spend/SpendLedger';
-import SpendSummary from '@/components/spend/SpendSummary';
-import { formatUsdTotal } from '@/lib/spend/format';
+import SpendOverview from '@/components/spend/SpendOverview';
 import { providerLabel, type SpendEntry, type SpendProvider } from '@/lib/spend/ledger';
 import { byDay, byModel, byProvider, inRange, toCsv, totals, type SpendRange, type SpendTotals } from '@/lib/spend/rollup';
 import { saveBlobAs } from '@/lib/save-file';
@@ -23,6 +22,9 @@ interface SpendReportProps {
   allTimeError?: string | null;
   onRetryAllTime?: () => void;
   range: SpendRange;
+  onRangeChange: (range: SpendRange) => void;
+  /** The provider balances tile; it joins the overview grid once anything is recorded. */
+  balances?: ReactNode;
   now: number;
   loading?: boolean;
   loadingOlder?: boolean;
@@ -42,6 +44,8 @@ export default function SpendReport({
   allTimeError,
   onRetryAllTime,
   range,
+  onRangeChange,
+  balances,
   now,
   loading = false,
   loadingOlder = false,
@@ -67,17 +71,6 @@ export default function SpendReport({
 
   return (
     <>
-      <section aria-label="All-time spend" className="glass-card p-3.5 md:p-4">
-        <dl>
-          <dt className="field-label">All-time spend</dt>
-          <dd className="display mt-1 text-2xl">{lifetime ? formatUsdTotal(lifetime.costUsd) : '—'}</dd>
-        </dl>
-        <p className="field-hint mt-1">
-          {allTimeError ? 'Total spend is temporarily unavailable.' : !lifetime ? 'Totalling…' : cloud ? 'Across all account runs, in every date range.' : 'Across all runs recorded in this browser.'}
-          {lifetime && lifetime.unknownRuns > 0 && ` ${lifetime.unknownRuns} run${lifetime.unknownRuns === 1 ? '' : 's'} unpriced.`}
-        </p>
-        {allTimeError && onRetryAllTime && <button type="button" onClick={onRetryAllTime} className="btn-secondary mt-3">Retry total</button>}
-      </section>
       {error && (
         <div role="alert" className="glass-card p-4 text-sm">
           <p className="text-[var(--foreground)]">{error}</p>
@@ -87,60 +80,63 @@ export default function SpendReport({
 
       {loading && entries.length === 0 ? (
         <div className="flex items-center justify-center py-16"><div className="loading-spinner" /></div>
-      ) : scoped.length === 0 ? (
+      ) : entries.length === 0 ? (
         <>
-          <section className="glass-card p-6 text-center">
-            <p className="text-[var(--foreground)]">{entries.length === 0 ? 'Nothing recorded yet.' : 'Nothing recorded yet for this range.'}</p>
-            <p className="field-hint mt-2">
-              {cloud
-                ? 'Finished and failed account runs can appear here when provider billing information is available. A failed or interrupted save may still be billed by the provider.'
-                : 'Every finished image, video, and helper task is filed here with its cost. A provider may still bill an accepted run if saving or delivery later fails.'}
-            </p>
-            {!cloud && <Link href="/" className="btn-primary mt-4">Open the studio</Link>}
-            {cloud && hasOlder && onLoadOlder && (
-              <button type="button" onClick={onLoadOlder} disabled={loadingOlder} className="btn-secondary mt-4">
-                {loadingOlder ? 'Loading…' : 'Load older records'}
-              </button>
-            )}
-          </section>
-          {entries.length === 0 && <SpendEmptyPreview />}
+          {/* Nothing to total or filter yet, so the balances stand alone and the range control stays hidden. */}
+          {balances}
+          <EmptyNotice cloud={cloud} message="Nothing recorded yet." hasOlder={hasOlder} loadingOlder={loadingOlder} onLoadOlder={onLoadOlder} />
+          <SpendEmptyPreview />
         </>
       ) : (
         <>
-          <SpendSummary totals={summaryTotals === undefined ? totals(scoped) : summaryTotals} />
-          <SpendDailyChart days={byDay(scoped, range, now)} />
-          <div className="grid gap-4 md:grid-cols-2">
-            <SpendBreakdown title="By provider" rows={byProvider(scoped)} />
-            <SpendBreakdown title="By model" rows={byModel(scoped)} />
-          </div>
-          <section className="glass-card p-3.5 md:p-4">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="field-label">Ledger</h2>
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="field-hint" htmlFor={`spend-provider-filter-${source}`}>Provider</label>
-                <select
-                  id={`spend-provider-filter-${source}`}
-                  value={providerFilter}
-                  onChange={(event) => setProviderFilter(event.target.value as SpendProvider | 'all')}
-                >
-                  <option value="all">All</option>
-                  {providersPresent.map((provider) => (
-                    <option key={provider} value={provider}>{providerLabel(provider)}</option>
-                  ))}
-                </select>
-                <button type="button" onClick={exportCsv} className="btn-secondary">Export CSV</button>
-                <button type="button" onClick={onClearRequest} className="btn-secondary">Clear ledger</button>
+          <SpendOverview
+            totals={summaryTotals === undefined ? totals(scoped) : summaryTotals}
+            allTime={lifetime}
+            allTimeError={allTimeError}
+            onRetryAllTime={onRetryAllTime}
+            range={range}
+            onRangeChange={onRangeChange}
+            balances={balances}
+          />
+          {scoped.length === 0 ? (
+            <EmptyNotice cloud={cloud} message="Nothing recorded yet for this range." hasOlder={hasOlder} loadingOlder={loadingOlder} onLoadOlder={onLoadOlder} />
+          ) : (
+            <>
+              <SpendDailyChart days={byDay(scoped, range, now)} />
+              <div className="grid gap-4 md:grid-cols-2">
+                <SpendBreakdown title="By provider" rows={byProvider(scoped)} />
+                <SpendBreakdown title="By model" rows={byModel(scoped)} />
               </div>
-            </div>
-            <SpendLedger entries={shown} onRemove={onRemove} />
-            {cloud && hasOlder && onLoadOlder && (
-              <div className="mt-4 flex justify-center border-t border-[var(--border)] pt-4">
-                <button type="button" onClick={onLoadOlder} disabled={loadingOlder} className="btn-secondary">
-                  {loadingOlder ? 'Loading…' : 'Load older records'}
-                </button>
-              </div>
-            )}
-          </section>
+              <section className="glass-card p-3.5 md:p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="field-label">Ledger</h2>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="field-hint" htmlFor={`spend-provider-filter-${source}`}>Provider</label>
+                    <select
+                      id={`spend-provider-filter-${source}`}
+                      value={providerFilter}
+                      onChange={(event) => setProviderFilter(event.target.value as SpendProvider | 'all')}
+                    >
+                      <option value="all">All</option>
+                      {providersPresent.map((provider) => (
+                        <option key={provider} value={provider}>{providerLabel(provider)}</option>
+                      ))}
+                    </select>
+                    <button type="button" onClick={exportCsv} className="btn-secondary">Export CSV</button>
+                    <button type="button" onClick={onClearRequest} className="btn-secondary">Clear ledger</button>
+                  </div>
+                </div>
+                <SpendLedger entries={shown} onRemove={onRemove} />
+                {cloud && hasOlder && onLoadOlder && (
+                  <div className="mt-4 flex justify-center border-t border-[var(--border)] pt-4">
+                    <button type="button" onClick={onLoadOlder} disabled={loadingOlder} className="btn-secondary">
+                      {loadingOlder ? 'Loading…' : 'Load older records'}
+                    </button>
+                  </div>
+                )}
+              </section>
+            </>
+          )}
         </>
       )}
 
@@ -150,5 +146,30 @@ export default function SpendReport({
           : 'Stored in this browser only. Clearing site data clears the ledger. Sign in to access your spend on any computer or phone you use.'}
       </p>
     </>
+  );
+}
+
+function EmptyNotice({ cloud, message, hasOlder, loadingOlder, onLoadOlder }: {
+  cloud: boolean;
+  message: string;
+  hasOlder: boolean;
+  loadingOlder: boolean;
+  onLoadOlder?: () => void;
+}) {
+  return (
+    <section className="glass-card p-6 text-center">
+      <p className="text-[var(--foreground)]">{message}</p>
+      <p className="field-hint mt-2">
+        {cloud
+          ? 'Finished and failed account runs can appear here when provider billing information is available. A failed or interrupted save may still be billed by the provider.'
+          : 'Every finished image, video, and helper task is filed here with its cost. A provider may still bill an accepted run if saving or delivery later fails.'}
+      </p>
+      {!cloud && <Link href="/" className="btn-primary mt-4">Open the studio</Link>}
+      {cloud && hasOlder && onLoadOlder && (
+        <button type="button" onClick={onLoadOlder} disabled={loadingOlder} className="btn-secondary mt-4">
+          {loadingOlder ? 'Loading…' : 'Load older records'}
+        </button>
+      )}
+    </section>
   );
 }

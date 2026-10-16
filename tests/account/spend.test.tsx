@@ -9,7 +9,7 @@ import { useAccountStore } from '@/store/useAccountStore';
 import { useAppStore } from '@/store/useAppStore';
 import { useSpendStore } from '@/store/useSpendStore';
 
-vi.mock('nuqs', () => ({ useQueryState: () => ['all', vi.fn()] }));
+vi.mock('nuqs', () => ({ useQueryState: () => [null, vi.fn()] }));
 vi.mock('@/lib/kie/browser', () => ({ fetchKieCredits: vi.fn() }));
 vi.mock('@/lib/account/client', () => ({ accountRequest: vi.fn() }));
 
@@ -58,11 +58,12 @@ describe('account spend', () => {
       const costUsd = path === 'spend/totals' ? 125 : 12;
       return { accountId: 'owner-1', totals: { costUsd, runs: 100, exactUsd: costUsd, estimatedUsd: 0, unknownRuns: 0 } };
     });
-    render(<AccountSpend ownerId="owner-1" range="month" now={Date.now()} onClearRequest={vi.fn()} />);
+    render(<AccountSpend ownerId="owner-1" range="month" onRangeChange={vi.fn()} now={Date.now()} onClearRequest={vi.fn()} />);
 
-    expect(await within(screen.getByRole('region', { name: 'All-time spend' })).findByText('$125.00')).toBeInTheDocument();
+    // The overview arrives with the first rows, so wait for the tile before reading it.
+    expect(await within(await screen.findByRole('region', { name: 'All-time spend' })).findByText('$125.00')).toBeInTheDocument();
     expect(await screen.findByText('Newest')).toBeInTheDocument();
-    expect(within(screen.getByRole('region', { name: 'Summary' })).getByText('$12.00')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Summary' })).toHaveTextContent('$12.00');
     expect(accountRequest).toHaveBeenCalledWith('spend/totals', expect.objectContaining({ headers: { 'X-Account-Id': 'owner-1' } }));
   });
 
@@ -73,9 +74,9 @@ describe('account spend', () => {
       if (path === 'spend/totals' && failed) throw new Error('Unavailable');
       return { accountId: 'owner-1', totals: { costUsd: 125, runs: 100, exactUsd: 125, estimatedUsd: 0, unknownRuns: 0 } };
     });
-    render(<AccountSpend ownerId="owner-1" range="month" now={Date.now()} onClearRequest={vi.fn()} />);
+    render(<AccountSpend ownerId="owner-1" range="month" onRangeChange={vi.fn()} now={Date.now()} onClearRequest={vi.fn()} />);
 
-    const total = within(screen.getByRole('region', { name: 'All-time spend' }));
+    const total = within(await screen.findByRole('region', { name: 'All-time spend' }));
     expect(await total.findByText('Total spend is temporarily unavailable.')).toBeInTheDocument();
     expect(total.getByText('—')).toBeInTheDocument();
     failed = false;
@@ -168,7 +169,7 @@ describe('account spend', () => {
   it('shows the Worker range total instead of summing the first loaded page', async () => {
     vi.mocked(accountRequest).mockImplementation(async (path) => {
       if (path === 'spend') return { accountId: 'owner-1', entries: [entry('new', 'Newest')], nextCursor: '100:old' };
-      if (path === 'spend/totals') return {
+      if (path.startsWith('spend/totals')) return {
         accountId: 'owner-1',
         totals: { costUsd: 5.24, runs: 120, exactUsd: 5, estimatedUsd: 0.24, unknownRuns: 3 },
       };
@@ -178,8 +179,8 @@ describe('account spend', () => {
 
     const summary = await screen.findByRole('region', { name: 'Summary' });
     await waitFor(() => expect(summary).toHaveTextContent('$5.24'));
-    expect(summary).toHaveTextContent('120');
     expect(summary).toHaveTextContent('3 runs unpriced');
+    expect(screen.getByRole('region', { name: 'Runs' })).toHaveTextContent('120');
   });
 
   it('appends and deduplicates older pages', async () => {
