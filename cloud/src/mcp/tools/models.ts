@@ -29,7 +29,9 @@ export const listModels = defineTool({
       .filter(model => model.modes.length > 0)
       .map(model => detailed ? model : {
         provider: model.provider, modelId: model.modelId, label: model.label, mediaType: model.mediaType,
-        ...(model.price ? { price: model.price } : {}), inputModes: model.modes.map(mode => mode.mode),
+        ...(model.price ? { price: model.price } : {}),
+        ...(model.deprecated ? { deprecated: true } : {}),
+        inputModes: model.modes.map(mode => mode.mode),
       });
     const text = !providers.length && !args.provider
       ? 'No provider is available to this agent. Ask the person to connect a provider key on their Scene Assembly account page.'

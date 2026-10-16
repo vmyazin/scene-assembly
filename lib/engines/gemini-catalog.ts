@@ -13,7 +13,8 @@
  * sight buys nothing, and a job saved last week still has to read the same.
  *
  * Capabilities are Google's, not ours:
- * https://ai.google.dev/gemini-api/docs/image-generation, read 2026-09-09.
+ * https://ai.google.dev/gemini-api/docs/image-generation and
+ * https://ai.google.dev/gemini-api/docs/models/gemini-nano-banana-2.1, read 2026-10-15.
  * Prices live beside them in `lib/spend/rates.ts`, keyed by the ids here.
  */
 
@@ -35,9 +36,34 @@ export interface GeminiImageModel {
   maxInputImages: number;
   /** The vendor's own one-line description, shown under the picker. */
   note: string;
+  /**
+   * Still runnable, but no longer the one to start from. The picker draws this
+   * as a badge. It stays off `label` so a job saved under the old name still
+   * reads that name.
+   */
+  deprecated?: boolean;
 }
 
 export const GEMINI_IMAGE_MODELS: GeminiImageModel[] = [
+  {
+    id: 'gemini-nano-banana-2.1',
+    label: 'Nano Banana 2.1',
+    fileCode: 'nano-banana-2_1',
+    sizes: ['1K', '2K', '4K'],
+    supportsGoogleSearch: true,
+    maxInputImages: 14,
+    note: 'Gemini Nano Banana 2.1 (gemini-nano-banana-2.1). High-efficiency image generation and editing at 1K, 2K and 4K, with Google Search grounding. The default.',
+  },
+  {
+    id: 'gemini-3.1-flash-image',
+    label: 'Nano Banana 2',
+    deprecated: true,
+    fileCode: 'gemini-3_1-flash-image',
+    sizes: ['1K', '2K', '4K'],
+    supportsGoogleSearch: true,
+    maxInputImages: 14,
+    note: 'Deprecated. Gemini 3.1 Flash Image (gemini-3.1-flash-image). Google recommends Nano Banana 2.1. Still available, and still grounds on Google Search.',
+  },
   {
     id: 'gemini-3-pro-image-preview',
     label: 'Gemini 3 Pro Image',
@@ -46,15 +72,6 @@ export const GEMINI_IMAGE_MODELS: GeminiImageModel[] = [
     supportsGoogleSearch: true,
     maxInputImages: 14,
     note: 'Nano Banana Pro. A professional design engine with a reasoning core for studio-quality 4K visuals, complex layouts, and precise text rendering.',
-  },
-  {
-    id: 'gemini-3.1-flash-image',
-    label: 'Gemini 3.1 Flash Image',
-    fileCode: 'gemini-3_1-flash-image',
-    sizes: ['1K', '2K', '4K'],
-    supportsGoogleSearch: true,
-    maxInputImages: 14,
-    note: 'Nano Banana 2. High-efficiency production-scale visual creation, at Gemini 3 quality and roughly half the price of Pro.',
   },
   {
     id: 'gemini-3.1-flash-lite-image',
@@ -67,7 +84,7 @@ export const GEMINI_IMAGE_MODELS: GeminiImageModel[] = [
   },
 ];
 
-/** What the studio runs when nobody has chosen: unchanged from before the picker. */
+/** What the studio runs when nobody has chosen. Nano Banana 2.1 replaced Nano Banana 2. */
 export const DEFAULT_GEMINI_IMAGE_MODEL = GEMINI_IMAGE_MODELS[0].id;
 
 export function findGeminiImageModel(modelId: string | undefined): GeminiImageModel | undefined {

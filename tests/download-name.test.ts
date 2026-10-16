@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { downloadFilenameBase, modelFileCode } from '../lib/download-name';
 import { ENGINES } from '../lib/engines/registry';
-import { FAL_IMAGE_MODEL, FAL_VIDEO_MODELS } from '../lib/fal/catalog';
+import { FAL_IMAGE_MODELS, FAL_VIDEO_MODELS } from '../lib/fal/catalog';
 import { KIE_MODELS } from '../lib/kie/catalog';
 import { PROVIDER_MODELS } from '../lib/providers/catalog';
 
@@ -12,7 +12,7 @@ const CODE_PATTERN = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/;
 
 describe('model filename codes', () => {
   const catalogued = [
-    ...[FAL_IMAGE_MODEL, ...FAL_VIDEO_MODELS].map((model) => ['fal', model.id, model.fileCode]),
+    ...[...FAL_IMAGE_MODELS, ...FAL_VIDEO_MODELS].map((model) => ['fal', model.id, model.fileCode]),
     ...KIE_MODELS.map((model) => ['kie', model.id, model.fileCode]),
     ...Object.entries(PROVIDER_MODELS).flatMap(([provider, models]) =>
       models.map((model) => [provider, model.id, model.fileCode])
@@ -41,7 +41,10 @@ describe('model filename codes', () => {
   });
 
   it('names each Gemini model, not the engine, when the run says which one', () => {
+    expect(modelFileCode('gemini', 'gemini-nano-banana-2.1')).toBe('nano-banana-2_1');
     expect(modelFileCode('gemini', 'gemini-3.1-flash-image')).toBe('gemini-3_1-flash-image');
+    expect(modelFileCode('fal', 'nano-banana-2.1')).toBe('nano-banana-2_1');
+    expect(modelFileCode('fal', 'h3-max-turbo')).toBe('h3-max-turbo');
     expect(modelFileCode('gemini', 'gemini-3.1-flash-lite-image')).toBe('gemini-3_1-flash-lite-image');
     expect(modelFileCode('gemini', 'gemini-3-pro-image-preview')).toBe('gemini-3-pro-image');
     expect(modelFileCode('gemini', 'veo-3.1-lite-generate-preview')).toBe('veo-3_1-lite');

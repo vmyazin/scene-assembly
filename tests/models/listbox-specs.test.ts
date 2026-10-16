@@ -2,11 +2,15 @@
 import { describe, expect, it } from 'vitest';
 
 import { findModel } from '@/lib/providers/catalog';
-import { FAL_VIDEO_MODELS } from '@/lib/fal/catalog';
+import { FAL_IMAGE_MODELS, FAL_VIDEO_MODELS } from '@/lib/fal/catalog';
+import { GEMINI_IMAGE_MODELS } from '@/lib/engines/gemini-catalog';
 import { KIE_MODELS } from '@/lib/kie/catalog';
 import {
   compactPrice,
+  falImageSpecs,
   falVideoSpecs,
+  geminiImageSpecs,
+  rateStartLabel,
   fieldSpecs,
   kieImageSpecs,
   kieVideoSpecs,
@@ -94,5 +98,18 @@ describe('listbox spec derivation', () => {
     expect(topTier([{ label: '480p' }, { label: '1080p (upscaled)' }])).toBe('1080p');
     expect(tierRange([{ label: '720p · 16:9' }])).toBe('720p');
     expect(compactPrice('$0.094 / 5s @ 360p · $0.248 / 5s @ 1080p')).toBe('$0.094/5s');
+    expect(rateStartLabel('$0.034–0.113 / image')).toBe('$0.034/image');
+    expect(rateStartLabel('$0.025–0.08 / s')).toBe('$0.025/s');
+    expect(rateStartLabel('$0.04 / image')).toBe('$0.04/image');
+    expect(rateStartLabel(null)).toBeUndefined();
+  });
+
+  it('feeds Gemini and fal From cells from the same rate start', () => {
+    const gemini = GEMINI_IMAGE_MODELS.find((model) => model.id === 'gemini-nano-banana-2.1')!;
+    const fal = FAL_IMAGE_MODELS.find((model) => model.id === 'nano-banana-2.1')!;
+    const h3 = FAL_VIDEO_MODELS.find((model) => model.id === 'h3-max-turbo')!;
+    expect(geminiImageSpecs(gemini).map(textOf)[0]).toBe('$0.034/image');
+    expect(falImageSpecs(fal).map(textOf)[0]).toBe('$0.04/image');
+    expect(falVideoSpecs(h3, 'image').map(textOf).at(-1)).toBe('$0.025/s');
   });
 });

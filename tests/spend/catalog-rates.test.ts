@@ -28,8 +28,10 @@ describe('provider catalog rates', () => {
       'bytedance/seedance-2.5/text-to-video': { usd: 0.134, per: 'second' },
       'bytedance/seedance-2.5/image-to-video': { usd: 0.134, per: 'second' },
       'bytedance/seedance-2.5/reference-to-video': { usd: 0.134, per: 'second' },
-      // Developer editions. Nano Banana 2 is the one family Atlas prices flat
-      // across 1K/2K/4K, which is why it is the only one offering the tier.
+      // Developer editions. Nano Banana 2.1 and Nano Banana 2 are priced flat
+      // across 1K/2K/4K. 2.1 Developer is the cheapest Nano Banana 2.1 route.
+      'google/nano-banana-2.1-developer/text-to-image': { usd: 0.018, per: 'image' },
+      'google/nano-banana-2.1-developer/edit': { usd: 0.018, per: 'image' },
       'google/nano-banana-2/text-to-image-developer': { usd: 0.028, per: 'image' },
       'google/nano-banana-2/edit-developer': { usd: 0.028, per: 'image' },
       'google/nano-banana-2-lite/text-to-image-developer': { usd: 0.014, per: 'image' },

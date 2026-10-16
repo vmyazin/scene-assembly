@@ -2,7 +2,7 @@
 import { ENGINES } from '@/lib/engines/registry';
 import { findGeminiImageModel } from '@/lib/engines/gemini-catalog';
 import { findGeminiVideoModel } from '@/lib/engines/gemini-video-catalog';
-import { FAL_IMAGE_MODEL, FAL_VIDEO_MODELS } from '@/lib/fal/catalog';
+import { FAL_IMAGE_MODELS, FAL_VIDEO_MODELS } from '@/lib/fal/catalog';
 import { KIE_MODELS } from '@/lib/kie/catalog';
 import { fallbackFilenameBase, type DownloadMediaType } from '@/lib/media-download';
 import { PROVIDER_MODELS } from '@/lib/providers/catalog';
@@ -37,7 +37,7 @@ export function modelFileCode(provider?: string, modelId?: string): string | und
   if (provider && modelId) {
     const catalog =
       provider === 'fal'
-        ? [FAL_IMAGE_MODEL, ...FAL_VIDEO_MODELS]
+        ? [...FAL_IMAGE_MODELS, ...FAL_VIDEO_MODELS]
         : provider === 'kie'
           ? KIE_MODELS
           : PROVIDER_MODELS[provider as ProviderId];

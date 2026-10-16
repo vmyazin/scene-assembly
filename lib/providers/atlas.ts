@@ -18,6 +18,7 @@ import {
   isGptImage25,
   isLumaUni,
   isNanoBanana2,
+  isNanoBanana21,
   isSeedream,
   ratioDimensions,
 } from './output-size';
@@ -89,6 +90,19 @@ function atlasImageFields(
   images: string[]
 ): Record<string, unknown> {
   const { model } = request;
+
+  if (isNanoBanana21(model)) {
+    // Same tier spelling as Nano Banana 2 (`1k`/`2k`/`4k`). The edit endpoint's
+    // image field is `reference_images`, not `images` — a name it does not know
+    // is dropped in silence and the edit runs as if no reference arrived.
+    const tier = resolveSize('atlas', model, request.resolution)?.preset;
+    return {
+      ...base,
+      ...(request.aspectRatio ? { aspect_ratio: request.aspectRatio } : {}),
+      ...(tier ? { resolution: tier } : {}),
+      ...(images.length ? { reference_images: images } : {}),
+    };
+  }
 
   if (isNanoBanana2(model)) {
     // No `size` and no `num_images` here: this family takes a shape and a

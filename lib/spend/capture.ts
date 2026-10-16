@@ -19,7 +19,7 @@ import type { ProviderJob } from '@/store/useProviderJobsStore';
 import { useSpendStore } from '@/store/useSpendStore';
 
 import { excerpt, type SpendEntry } from './ledger';
-import { DEFAULT_GEMINI_MODEL_ID } from './rates';
+import { DEFAULT_GEMINI_MODEL_ID, falBilledSeconds } from './rates';
 import {
   kieSharers,
   resolveCatalogRate,
@@ -71,6 +71,8 @@ export interface ImageResultCapture {
   falApiKey?: string;
   /** fal only: whether web search ran, which fal charges extra for. */
   webSearch?: boolean;
+  /** fal Nano Banana 2.1 `thinking_level`, when this run sent one. */
+  thinkingLevel?: string;
 }
 
 const GEMINI_MODEL = DEFAULT_GEMINI_MODEL_ID;
@@ -122,7 +124,12 @@ export function captureImageResult(args: ImageResultCapture): void {
             const figure = resolveFalRun({
               estimate,
               endpointId,
-              controls: { resolution: args.resolution, webSearch: args.webSearch },
+              controls: {
+                resolution: args.resolution,
+                webSearch: args.webSearch,
+                thinkingLevel: args.thinkingLevel,
+                inputImages: args.inputImages,
+              },
             });
             file(withFigure({ ...base, modelId }, figure));
           } catch {
@@ -158,11 +165,15 @@ export function captureFalJob(job: FalJob, apiKey: string): void {
         const controlValues = job.controlValues ?? {};
         const durationSeconds = falDurationSeconds(controlValues);
         // A rejection here is the same answer as a null estimate: fall through
-        // to the published table rather than filing an unknown.
+        // to the published table rather than filing an unknown. fal's estimate
+        // multiplies by the seconds it is given, so it gets the billed length
+        // (H3 overruns the request); the table below adds that itself.
         const estimate = await estimateFalJobCost({
           apiKey,
           endpointId,
-          ...(durationSeconds !== undefined ? { durationSeconds } : {}),
+          ...(durationSeconds !== undefined
+            ? { durationSeconds: falBilledSeconds(endpointId, durationSeconds) }
+            : {}),
         }).catch(() => null);
         const figure = resolveFalRun({
           estimate,
@@ -172,6 +183,7 @@ export function captureFalJob(job: FalJob, apiKey: string): void {
               typeof controlValues.resolution === 'string' ? controlValues.resolution : undefined,
             audio: controlValues.generate_audio !== false,
             ...(durationSeconds !== undefined ? { durationSeconds } : {}),
+            thinkingLevel: typeof controlValues.thinking_level === 'string' ? controlValues.thinking_level : undefined,
           },
         });
         file(withFigure(base, figure));

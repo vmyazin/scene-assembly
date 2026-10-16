@@ -4,13 +4,15 @@
  * when; update a whole block from that page rather than one number in
  * isolation. Dependency-free so server routes and client code can both price.
  */
+import { DEFAULT_GEMINI_IMAGE_MODEL } from '../engines/gemini-catalog';
 
 /**
  * https://ai.google.dev/gemini-api/docs/pricing and
- * https://ai.google.dev/gemini-api/docs/image-generation — the three Gemini
- * image models, read 2026-09-09. One block per model, keyed by the id the API
- * takes, because the three differ by a factor of four at the same resolution
- * and a ledger that priced them alike would be quietly wrong.
+ * https://ai.google.dev/gemini-api/docs/image-generation — the Gemini image
+ * models, read 2026-10-15 for Nano Banana 2.1 and 2026-09-09 for the rest.
+ * One block per model, keyed by the id the API takes, because they differ by
+ * a factor of four at the same resolution and a ledger that priced them alike
+ * would be quietly wrong.
  *
  * The token counts are Google's own per-resolution figures, so the published
  * per-image prices fall out of the arithmetic rather than being pasted beside
@@ -37,6 +39,16 @@ export const GEMINI_IMAGE_RATES: Record<string, GeminiImageRate> = {
     outputUsdPerMillionTokens: 60,
     outputTokensByResolution: { '1K': 1120, '2K': 1680, '4K': 2520 },
   },
+  // https://ai.google.dev/gemini-api/docs/pricing — gemini-nano-banana-2.1,
+  // read 2026-10-15. Image output is $30/M tokens: 1120 at 1K ($0.0336),
+  // 1680 at 2K ($0.0504), 3780 at 4K ($0.113). The image-generation size table
+  // still lists 2520 tokens at 4K, which would be $0.076 and contradicts the
+  // pricing page's own $0.113 figure, so the pricing page wins.
+  'gemini-nano-banana-2.1': {
+    inputUsdPerMillionTokens: 1.5,
+    outputUsdPerMillionTokens: 30,
+    outputTokensByResolution: { '1K': 1120, '2K': 1680, '4K': 3780 },
+  },
   'gemini-3.1-flash-lite-image': {
     inputUsdPerMillionTokens: 0.25,
     outputUsdPerMillionTokens: 30,
@@ -44,8 +56,12 @@ export const GEMINI_IMAGE_RATES: Record<string, GeminiImageRate> = {
   },
 };
 
-/** The model the studio ran before it had a picker, and the fallback for an unknown id. */
-export const DEFAULT_GEMINI_MODEL_ID = 'gemini-3-pro-image-preview';
+/**
+ * The model a run uses when the request names none, and the price for an id
+ * this table does not know. Aliased to the catalog default: `resolveGeminiImageModel`
+ * already runs that model, and a second literal here filed the 2.1 run at Pro's rate.
+ */
+export const DEFAULT_GEMINI_MODEL_ID = DEFAULT_GEMINI_IMAGE_MODEL;
 
 function geminiRate(modelId: string | undefined): GeminiImageRate {
   return GEMINI_IMAGE_RATES[modelId ?? ''] ?? GEMINI_IMAGE_RATES[DEFAULT_GEMINI_MODEL_ID];
@@ -147,6 +163,16 @@ export type FalRate =
       resolutionMultiplier: Record<string, number>;
       /** Added when the `enable_web_search` control is on. */
       webSearchUsd: number;
+      /**
+       * Per reference image, when the vendor bills input-image tokens on top of
+       * the short-prompt output price. Absent means references are included.
+       */
+      inputImageUsd?: number;
+      /**
+       * Added when `thinking_level` is `high`, keyed by resolution. Absent means
+       * thinking does not move the published figure.
+       */
+      highThinkingUsd?: Record<string, number>;
     }
   | {
       unit: 'second';
@@ -168,6 +194,25 @@ const NANO_BANANA_2_RATE: FalRate = {
   usd: 0.08,
   resolutionMultiplier: { '0.5K': 0.75, '1K': 1, '2K': 1.5, '4K': 2 },
   webSearchUsd: 0.015,
+};
+
+/**
+ * $0.040 / $0.059 / $0.134. Multipliers keep falPublishedCost exact at those three
+ * for a short prompt at minimal or medium thinking, which fal's 2026-10-07
+ * measurements billed the same. Each reference image is about 1,120 input
+ * tokens at the published $1.764/M. High thinking adds the gap up to those
+ * measured high totals ($0.0490 / $0.0732 / $0.1435), so a reservation at high
+ * sits on or above them.
+ * https://fal.ai/models/google/nano-banana-2.1/llms.txt — read 2026-10-15.
+ */
+const NANO_BANANA_21_INPUT_IMAGE_USD = (1120 * 1.764) / 1_000_000;
+const NANO_BANANA_21_RATE: FalRate = {
+  unit: 'image',
+  usd: 0.04,
+  resolutionMultiplier: { '1K': 1, '2K': 1.475, '4K': 3.35 },
+  webSearchUsd: 0,
+  inputImageUsd: NANO_BANANA_21_INPUT_IMAGE_USD,
+  highThinkingUsd: { '1K': 0.0094, '2K': 0.0142, '4K': 0.01 },
 };
 
 const perSecond = (
@@ -210,6 +255,12 @@ const klingRate = (audioOff: number, audioOn: number): FalRate =>
 export const FAL_RATES: Record<string, FalRate> = {
   'fal-ai/nano-banana-2': NANO_BANANA_2_RATE,
   'fal-ai/nano-banana-2/edit': NANO_BANANA_2_RATE,
+  // https://fal.ai/models/google/nano-banana-2.1 — token rates, read 2026-10-15.
+  // Canonical short-prompt text-to-image figures: $0.040 at 1K, $0.059 at 2K,
+  // $0.134 at 4K. Web search has no separate fee. Edits add input-image tokens
+  // on top of this output price; the edit endpoint uses the same baseline.
+  'google/nano-banana-2.1': NANO_BANANA_21_RATE,
+  'google/nano-banana-2.1/edit': NANO_BANANA_21_RATE,
 
   'fal-ai/veo3.1': veoRate([0.2, 0.4], [0.4, 0.6]),
   'fal-ai/veo3.1/image-to-video': veoRate([0.2, 0.4], [0.4, 0.6]),
@@ -243,7 +294,31 @@ export const FAL_RATES: Record<string, FalRate> = {
 
   'fal-ai/wan/v2.7/text-to-video': seedanceRate({ '720p': 0.1, '1080p': 0.15 }),
   'fal-ai/wan/v2.7/image-to-video': seedanceRate({ '720p': 0.1, '1080p': 0.15 }),
+
+  // https://fal.ai/models/minimax/h3-max-turbo/image-to-video — read 2026-10-15.
+  // Promo rates ended that day. Regular prices: $0.025/s at 480P, $0.04/s at
+  // 768P, $0.08/s at 1080P. One endpoint covers text, image and frames.
+  // fal bills output seconds, and the clip can run up to about 0.7 s longer
+  // than requested; falPublishedCost adds that overrun for this endpoint.
+  'minimax/h3-max-turbo/image-to-video': seedanceRate({ '480P': 0.025, '768P': 0.04, '1080P': 0.08 }),
 };
+
+/**
+ * fal's H3 page: "The output can run up to about 0.7 s longer than requested."
+ * Keyed by endpoint so the published table and fal's live estimate price the
+ * same overrun.
+ */
+const FAL_OUTPUT_OVERRUN_SECONDS: Record<string, number> = {
+  'minimax/h3-max-turbo/image-to-video': 0.7,
+};
+
+/**
+ * The seconds fal bills for a requested duration. Pass the requested length,
+ * never a measured one, or the overrun is added twice.
+ */
+export function falBilledSeconds(endpointId: string, requestedSeconds: number): number {
+  return requestedSeconds + (FAL_OUTPUT_OVERRUN_SECONDS[endpointId] ?? 0);
+}
 
 /** The run controls that move a fal price, read from a job's control values. */
 export interface FalRunControls {
@@ -251,6 +326,10 @@ export interface FalRunControls {
   audio?: boolean;
   durationSeconds?: number;
   webSearch?: boolean;
+  /** fal `thinking_level`. Only `high` moves the Nano Banana 2.1 figure. */
+  thinkingLevel?: string;
+  /** Reference images on a rate that bills them per input image. */
+  inputImages?: number;
 }
 
 export interface FalPublishedCost {
@@ -272,17 +351,26 @@ export function falPublishedCost(
   if (!rate) return null;
 
   if (rate.unit === 'image') {
-    const multiplier = rate.resolutionMultiplier[controls.resolution ?? '1K'];
+    const resolution = controls.resolution ?? '1K';
+    const multiplier = rate.resolutionMultiplier[resolution];
     if (multiplier === undefined) return null;
-    const costUsd = rate.usd * multiplier + (controls.webSearch ? rate.webSearchUsd : 0);
+    const images = controls.inputImages;
+    const imageUsd =
+      rate.inputImageUsd && Number.isFinite(images) && images !== undefined && images > 0
+        ? rate.inputImageUsd * images
+        : 0;
+    const thinkingUsd =
+      controls.thinkingLevel === 'high' ? rate.highThinkingUsd?.[resolution] ?? 0 : 0;
+    const costUsd = rate.usd * multiplier + (controls.webSearch ? rate.webSearchUsd : 0) + imageUsd + thinkingUsd;
     return { costUsd, unit: 'image', quantity: 1 };
   }
 
-  const duration = controls.durationSeconds;
-  const hasDuration = duration !== undefined && Number.isFinite(duration) && duration > 0;
+  const requested = controls.durationSeconds;
+  const hasDuration = requested !== undefined && Number.isFinite(requested) && requested > 0;
+  const duration = hasDuration ? falBilledSeconds(endpointId, requested) : requested;
 
   if (rate.unit === 'second') {
-    if (!hasDuration) return null;
+    if (!hasDuration || duration === undefined) return null;
     const price = rate.usdPerSecond[controls.resolution ?? '*'] ?? rate.usdPerSecond['*'];
     if (!price) return null;
     const perSecondUsd = controls.audio === false ? price.audioOff : price.audioOn;

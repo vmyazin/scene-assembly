@@ -21,7 +21,7 @@ import { downloadImageResult, IMAGE_DOWNLOAD_ERROR } from '@/lib/results/downloa
 import { useImageResultFeed } from '@/lib/results/image-feed';
 import { useImageResultsStore } from '@/store/useImageResultsStore';
 import { runFalImage } from '@/lib/fal/browser';
-import { FAL_IMAGE_MODEL } from '@/lib/fal/catalog';
+import { FAL_IMAGE_MODEL, FAL_IMAGE_MODELS } from '@/lib/fal/catalog';
 import type { EngineUsage } from '@/lib/engines/gemini';
 import { captureImageResult } from '@/lib/spend/capture';
 import { downloadFilenameBase } from '@/lib/download-name';
@@ -32,7 +32,7 @@ import SavedPromptsButton from '@/components/SavedPromptsButton';
 import { useAppStore } from '@/store/useAppStore';
 import { modelsFor, resolveModel } from '@/lib/providers/catalog';
 import ModelListbox from '@/components/ModelListbox';
-import { GEMINI_IMAGE_COLUMNS, PROVIDER_IMAGE_COLUMNS, geminiImageSpecs, providerImageSpecs } from '@/lib/models/listbox-specs';
+import { GEMINI_IMAGE_COLUMNS, PROVIDER_IMAGE_COLUMNS, falImageSpecs, geminiImageSpecs, providerImageSpecs } from '@/lib/models/listbox-specs';
 import type { ProviderId } from '@/lib/providers/types';
 import { useDraftStore } from '@/store/useDraftStore';
 import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
@@ -124,6 +124,23 @@ function draftedConfig(): GenerationConfig {
       ? (imageSize as GenerationConfig['imageSize'])
       : '1K',
     useGoogleSearch: false,
+    ...(remembered.thinking_level === 'minimal' || remembered.thinking_level === 'medium' || remembered.thinking_level === 'high'
+      ? { thinkingLevel: remembered.thinking_level }
+      : {}),
+  };
+}
+
+function falImageValues(
+  config: GenerationConfig,
+  thinkingLevel: string | undefined,
+  extra: Record<string, string | number | boolean>
+): Record<string, string | number | boolean> {
+  return {
+    aspect_ratio: config.aspectRatio ?? 'auto',
+    resolution: config.imageSize ?? '1K',
+    enable_web_search: Boolean(config.useGoogleSearch),
+    ...(thinkingLevel ? { thinking_level: thinkingLevel } : {}),
+    ...extra,
   };
 }
 
@@ -234,6 +251,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
     useDraftStore.getState().rememberControlValues({
       aspect_ratio: next.aspectRatio ?? DEFAULT_ASPECT_RATIO,
       resolution: next.imageSize ?? '1K',
+      ...(next.thinkingLevel ? { thinking_level: next.thinkingLevel } : {}),
     });
   };
 
@@ -263,6 +281,8 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
   const setProviderModel = useAppStore((s) => s.setProviderModel);
   const geminiImageModel = useAppStore((s) => s.geminiImageModel);
   const setGeminiImageModel = useAppStore((s) => s.setGeminiImageModel);
+  const falImageModel = useAppStore((s) => s.falImageModel);
+  const setFalImageModel = useAppStore((s) => s.setFalImageModel);
   const hasCfCreds = !!cfAccountId && !!cfToken;
   const availableEngines = enginesForFeature(feature);
   const activeEngine =
@@ -315,6 +335,19 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
     [geminiModels, geminiImageModel]
   );
   const isGemini = activeEngineId === 'gemini';
+  /**
+   * Which fal image model this press would run. Nano Banana 2.1 is the default;
+   * a saved id that has left the catalog falls back to it rather than submitting
+   * a model the queue route does not know.
+   */
+  const activeFalImageModel = useMemo(
+    () => FAL_IMAGE_MODELS.find((model) => model.id === falImageModel) ?? FAL_IMAGE_MODEL,
+    [falImageModel]
+  );
+  const falThinkingField = activeFalImageModel.variants[0]?.fields.find((field) => field.key === 'thinking_level');
+  const falThinkingLevel = falThinkingField
+    ? config.thinkingLevel ?? (typeof falThinkingField.defaultValue === 'string' ? falThinkingField.defaultValue : 'medium')
+    : undefined;
   // Aggregator prices are the vendors' published rates, carried on the catalog
   // entry — the units differ per provider, so they are shown as written rather
   // than folded into one estimate. The resolution control reads the same entry,
@@ -337,7 +370,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
   // name themselves from the engine registry; Gemini, fal and the aggregators
   // each answer with the model that actually ran.
   const activeModelId = activeProviderModel
-    ?? (activeEngineId === 'fal' ? FAL_IMAGE_MODEL.id : isGemini ? activeGeminiModel.id : undefined);
+    ?? (activeEngineId === 'fal' ? activeFalImageModel.id : isGemini ? activeGeminiModel.id : undefined);
   /**
    * The resolutions the engine on screen really offers. Only Gemini varies by
    * model — Nano Banana 2 Lite publishes 1K alone — and a control that offered
@@ -379,7 +412,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
   );
 
   const cloudWorkspace = useCloudWorkspace(activeEngine.id);
-  const cloudModelId = activeProviderModel ?? (activeEngine.id === 'fal' ? FAL_IMAGE_MODEL.id : activeEngine.id === 'gemini' ? activeGeminiModel.id : activeEngine.id === 'cloudflare' || activeEngine.id === 'pollinations' ? SINGLE_IMAGE_MODELS[activeEngine.id] : activeEngine.id);
+  const cloudModelId = activeProviderModel ?? (activeEngine.id === 'fal' ? activeFalImageModel.id : activeEngine.id === 'gemini' ? activeGeminiModel.id : activeEngine.id === 'cloudflare' || activeEngine.id === 'pollinations' ? SINGLE_IMAGE_MODELS[activeEngine.id] : activeEngine.id);
   const relaxed = useRelaxedFilter({
     workspaceKey: 'image',
     provider: activeEngine.id,
@@ -519,14 +552,10 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
         try {
           const result = await runFalImage({
             apiKey: falApiKey,
+            modelId: activeFalImageModel.id,
             prompt: finalPrompt,
             dataUrls: images.map((image) => image.dataUrl),
-            values: {
-              aspect_ratio: config.aspectRatio ?? 'auto',
-              resolution: config.imageSize ?? '1K',
-              enable_web_search: Boolean(config.useGoogleSearch),
-              ...relaxed.attach(),
-            },
+            values: falImageValues(config, falThinkingLevel, relaxed.attach()),
             signal: controller.signal,
           }, {});
 
@@ -647,6 +676,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
           galleryRecordId,
           falApiKey,
           webSearch: Boolean(config.useGoogleSearch),
+          thinkingLevel: falThinkingLevel,
         })
       );
     },
@@ -745,10 +775,15 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
   // the same, but the rate table has never known this catalogue's model ids.
   const falImageCost = falPublishedCost(
     (feature.requiresImage
-      ? FAL_IMAGE_MODEL.variants.find(candidate => candidate.inputMode === 'image')
-      : FAL_IMAGE_MODEL.variants.find(candidate => candidate.inputMode === 'text')
+      ? activeFalImageModel.variants.find(candidate => candidate.inputMode === 'image')
+      : activeFalImageModel.variants.find(candidate => candidate.inputMode === 'text')
     )?.endpointId ?? '',
-    { resolution: selectedImageSize, webSearch: Boolean(config.useGoogleSearch) }
+    {
+      resolution: selectedImageSize,
+      webSearch: Boolean(config.useGoogleSearch),
+      ...(falThinkingLevel ? { thinkingLevel: falThinkingLevel } : {}),
+      inputImages: images.length,
+    }
   );
   const costLine =
     activeEngine.id === 'pollinations'
@@ -760,7 +795,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
           // web-search toggle are both known here, which is everything the
           // published rate needs, and the ledger prices the run this way after
           // the fact anyway.
-          ? `${falImageCost ? `Est. ≈ $${falImageCost.costUsd.toFixed(3)} / image` : 'fal usage rates apply'} · Nano Banana 2`
+          ? `${falImageCost ? `Est. ≈ $${falImageCost.costUsd.toFixed(3)} / image` : 'fal usage rates apply'} · ${activeFalImageModel.label}`
           : activeProviderCatalogModel
             ? `${activeProviderCatalogModel.price ?? 'Usage rates apply'} · ${activeProviderCatalogModel.label}`
             // Three decimals, not two: Lite is $0.034 an image and "$0.03"
@@ -820,7 +855,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
       try {
         const cloudPrompt = featureImagePrompt(feature.id, prompt, references.length) || 'Edit this image while preserving its subject and composition.';
         const values: Record<string,string|number|boolean> = activeEngine.id === 'fal'
-          ? {aspect_ratio:config.aspectRatio ?? 'auto',resolution:config.imageSize ?? '1K',enable_web_search:Boolean(config.useGoogleSearch), ...relaxed.attach()}
+          ? falImageValues(config, falThinkingLevel, relaxed.attach())
           : activeProvider || activeEngine.id === 'pollinations'
             ? {aspectRatio:config.aspectRatio ?? DEFAULT_ASPECT_RATIO, ...(activeProvider === 'piapi' || providerImageSizes ? {resolution:selectedImageSize} : {}), ...relaxed.attach()}
             : activeEngine.id === 'cloudflare' ? {}
@@ -1008,9 +1043,9 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
       <GenerationWorkspaceLayout
         setup={
           <>
-            {/* One Google AI Studio key runs all three Nano Banana models at
-                four times the price spread, so Gemini gets the same rack every
-                other paid engine has rather than a fixed model nobody chose. */}
+            {/* One Google AI Studio key runs every Nano Banana model, so Gemini
+                gets the same rack every other paid engine has rather than a
+                fixed model nobody chose. Nano Banana 2.1 is the default. */}
             {isGemini && (
               <section className="glass-card space-y-3 p-3.5 md:p-4">
                 <h3 className="display text-base font-semibold">Model</h3>
@@ -1022,6 +1057,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                     rows={geminiModels.map((model) => ({
                       id: model.id,
                       label: model.label,
+                      deprecated: model.deprecated,
                       cells: geminiImageSpecs(model),
                     }))}
                     value={activeGeminiModel.id}
@@ -1030,6 +1066,31 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                   <p className="px-0.5 text-sm leading-relaxed text-[var(--foreground-muted)]">
                     <span className="font-medium text-[var(--foreground)]">{activeGeminiModel.label}:</span>{' '}
                     {activeGeminiModel.note}
+                  </p>
+                </div>
+              </section>
+            )}
+
+            {activeEngineId === 'fal' && (
+              <section className="glass-card space-y-3 p-3.5 md:p-4">
+                <h3 className="display text-base font-semibold">Model</h3>
+                <div className="space-y-2">
+                  <ModelListbox
+                    label="Model"
+                    accent="image"
+                    columns={PROVIDER_IMAGE_COLUMNS}
+                    rows={FAL_IMAGE_MODELS.map((model) => ({
+                      id: model.id,
+                      label: model.label,
+                      deprecated: model.deprecated,
+                      cells: falImageSpecs(model),
+                    }))}
+                    value={activeFalImageModel.id}
+                    onChange={setFalImageModel}
+                  />
+                  <p className="px-0.5 text-sm leading-relaxed text-[var(--foreground-muted)]">
+                    <span className="font-medium text-[var(--foreground)]">{activeFalImageModel.label}:</span>{' '}
+                    {activeFalImageModel.description}
                   </p>
                 </div>
               </section>
@@ -1049,6 +1110,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                     rows={modelsFor(activeProvider, 'image').map((model) => ({
                       id: model.id,
                       label: model.label,
+                      deprecated: model.deprecated,
                       cells: providerImageSpecs(model),
                     }))}
                     value={activeProviderModel ?? undefined}
@@ -1193,6 +1255,30 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                           {APPROXIMATE_LEGEND}
                         </span>
                       )}
+                    </div>
+                    )}
+
+                    {activeEngine.id === 'fal' && falThinkingField && (
+                    <div>
+                      <label htmlFor="fal-thinking-level" className="block text-sm font-medium mb-2 text-[var(--foreground)]">
+                        Thinking
+                      </label>
+                      <select
+                        id="fal-thinking-level"
+                        value={falThinkingLevel}
+                        onChange={(e) => applyConfig({
+                          ...config,
+                          thinkingLevel: e.target.value as NonNullable<GenerationConfig['thinkingLevel']>,
+                        })}
+                        className="w-full"
+                      >
+                        {falThinkingField.options?.map((option) => (
+                          <option key={String(option.value)} value={String(option.value)}>{option.label}</option>
+                        ))}
+                      </select>
+                      <span className="mt-1.5 block text-xs text-[var(--foreground-subtle)]">
+                        Medium is fal’s default. High uses more thinking tokens.
+                      </span>
                     </div>
                     )}
 

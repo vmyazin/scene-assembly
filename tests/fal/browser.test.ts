@@ -54,7 +54,7 @@ function imageResponse(bytes: readonly number[], mimeType: string): Response {
 
 const submitArgs = {
   apiKey,
-  modelId: 'nano-banana-2',
+  modelId: 'nano-banana-2.1',
   mediaType: 'image' as const,
   inputMode: 'text' as const,
   prompt: 'A banana observatory',
@@ -64,7 +64,7 @@ const submitArgs = {
 
 const taskArgs = {
   apiKey,
-  modelId: 'nano-banana-2',
+  modelId: 'nano-banana-2.1',
   mediaType: 'image' as const,
   inputMode: 'text' as const,
   requestId,

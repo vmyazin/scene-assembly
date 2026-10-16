@@ -694,6 +694,7 @@ function FalGenerationWorkspaceSession({
               rows={matchingModels.map((model) => ({
                 id: model.id,
                 label: model.label,
+                deprecated: model.deprecated,
                 cells: falVideoSpecs(model, inputMode),
               }))}
               value={matchingModels.some((model) => model.id === selectedModel.id) ? selectedModel.id : undefined}

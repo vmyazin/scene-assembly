@@ -456,6 +456,43 @@ function seedance25(): ProviderModel[] {
  * Lite publishes `1k` alone, so its control shows one option rather than
  * promising a resolution the endpoint refuses.
  */
+/**
+ * Nano Banana 2.1 Developer. Read 2026-10-15 from
+ * `https://www.atlascloud.ai/models/google/nano-banana-2.1-developer/text-to-image/llms.txt`
+ * and the edit sibling. The llms.txt rate is the authoritative one: $0.018 per
+ * image, flat across 1K, 2K and 4K. The page's vendor SKU table quotes $0.05
+ * and then says that table is a different platform. The id hangs `-developer`
+ * off the model (`google/nano-banana-2.1-developer/text-to-image`), not off the
+ * mode the way Nano Banana 2 does.
+ */
+function nanoBanana21Developer(): ProviderModel[] {
+  const shared = {
+    kind: 'image' as const,
+    price: '$0.018 / image',
+    rate: { usd: 0.018, per: 'image' as const },
+    sizes: ['1K', '2K', '4K'].map((label) => ({ label, preset: label.toLowerCase() })),
+  };
+  return [
+    {
+      ...shared,
+      id: 'google/nano-banana-2.1-developer/text-to-image',
+      label: 'Nano Banana 2.1 Developer',
+      fileCode: 'nano-banana-2_1-dev-t2i',
+      modes: ['text'],
+      note: 'The cheapest Nano Banana 2.1 route. $0.018 an image at 1K, 2K and 4K.',
+    },
+    {
+      ...shared,
+      id: 'google/nano-banana-2.1-developer/edit',
+      label: 'Nano Banana 2.1 Developer Edit',
+      fileCode: 'nano-banana-2_1-dev-edit',
+      modes: ['image'],
+      maxInputImages: 14,
+      note: 'Editing only — it needs at least one reference. Up to 14. Same $0.018 an image.',
+    },
+  ];
+}
+
 function nanoBanana2Developer(tier: 'full' | 'lite'): ProviderModel[] {
   const lite = tier === 'lite';
   const usd = lite ? 0.014 : 0.028;
@@ -466,28 +503,33 @@ function nanoBanana2Developer(tier: 'full' | 'lite'): ProviderModel[] {
     sizes: (lite ? ['1K'] : ['1K', '2K', '4K']).map((label) => ({ label, preset: label.toLowerCase() })),
   };
   const family = lite ? 'nano-banana-2-lite' : 'nano-banana-2';
-  const label = lite ? 'Nano Banana 2 Lite' : 'Nano Banana 2';
+  const label = lite ? 'Nano Banana 2 Lite Developer' : 'Nano Banana 2 Developer';
+  const editLabel = lite ? 'Nano Banana 2 Lite Developer Edit' : 'Nano Banana 2 Developer Edit';
   const code = lite ? 'nano-banana-2-lite-dev' : 'nano-banana-2-dev';
 
   return [
     {
       ...shared,
       id: `google/${family}/text-to-image-developer`,
-      label: `${label} Developer`,
+      label,
       fileCode: `${code}-t2i`,
       modes: ['text'],
+      ...(lite ? {} : { deprecated: true }),
       note: lite
         ? 'The cheapest image model here. 1K only — Lite publishes no larger size.'
-        : 'One price at every resolution, so 4K costs the same as 1K.',
+        : 'Deprecated. Nano Banana 2.1 Developer replaces it. Still available, one price at every resolution.',
     },
     {
       ...shared,
       id: `google/${family}/edit-developer`,
-      label: `${label} Developer Edit`,
+      label: editLabel,
       fileCode: `${code}-edit`,
       modes: ['image'],
+      ...(lite ? {} : { deprecated: true }),
       maxInputImages: 14,
-      note: 'Editing only — it needs at least one reference. Up to 14.',
+      note: lite
+        ? 'Editing only — it needs at least one reference. Up to 14.'
+        : 'Deprecated. Editing only — it needs at least one reference. Up to 14.',
     },
   ];
 }
@@ -882,6 +924,7 @@ const ATLAS_MODELS: ProviderModel[] = [
   ...seedance20Tier('fast'),
   ...seedance25(),
   // Developer editions — same weights, cheaper ids. See the block above.
+  ...nanoBanana21Developer(),
   ...nanoBanana2Developer('full'),
   ...nanoBanana2Developer('lite'),
   ...gptImage25Developer('sunburst'),

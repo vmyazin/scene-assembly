@@ -207,6 +207,15 @@ export function compactPrice(price: string): string {
   return price.split(' · ')[0].split(' @ ')[0].replace(/\s*\/\s*/g, '/');
 }
 
+/**
+ * The From column. A ranged label (`$0.034–0.113 / image`) keeps its start,
+ * and the slash is tightened so the cell matches the aggregator rows.
+ */
+export function rateStartLabel(rate: string | null): string | undefined {
+  if (!rate) return undefined;
+  return rate.replace(/^(\$[\d.]+)[–-]\$?[\d.]+/, '$1').replace(/\s*\/\s*/g, '/');
+}
+
 function fromCell(model: Pick<ProviderModel, 'rate' | 'price'>): SpecCell {
   if (model.rate) return text(rateFrom(model.rate));
   if (!model.price) return DASH;
@@ -257,11 +266,11 @@ export function providerImageSpecs(model: ProviderModel): SpecCell[] {
  * stops at 1K) and whether it can ground on Google Search.
  */
 export function geminiImageSpecs(model: GeminiImageModel): SpecCell[] {
-  const rate = geminiRateLabel(model.id);
+  const from = rateStartLabel(geminiRateLabel(model.id));
   return [
     // The label spans the resolutions ($0.0336–0.151 / image); the column says
     // where it starts, the same question the aggregator From column answers.
-    rate ? text(rate.replace(/^(\$[\d.]+)[–-]\$?[\d.]+/, '$1').replace(/\s*\/\s*/g, '/')) : DASH,
+    from ? text(from) : DASH,
     text(model.sizes[model.sizes.length - 1]),
     { kind: 'mark', on: model.supportsGoogleSearch, label: 'Google Search grounding' },
   ];
@@ -315,19 +324,29 @@ function fieldCells(specs: FieldSpecs): SpecCell[] {
   ];
 }
 
+/** fal image rows: From · Refs · Edit, the same questions the aggregator image rack asks. */
+export function falImageSpecs(model: FalModelDefinition): SpecCell[] {
+  const textRoute = model.variants.find((variant) => variant.inputMode === 'text');
+  const editRoute = model.variants.find((variant) => variant.inputMode === 'image');
+  const from = rateStartLabel(textRoute ? falRateLabel(textRoute.endpointId) : null);
+  return [
+    from ? text(from) : DASH,
+    editRoute?.maxInputImages === undefined ? DASH : text(String(editRoute.maxInputImages)),
+    { kind: 'mark', on: Boolean(editRoute), label: 'Takes a reference image' },
+  ];
+}
+
 /** fal video rows: Max · Up to · Shapes · From, for the variant this mode submits to. */
 export function falVideoSpecs(model: FalModelDefinition, inputMode: FalInputMode): SpecCell[] {
   const variant = resolveFalVariant(model.id, 'video', inputMode);
   if (variant.edit) {
-    const rate = falRateLabel(variant.endpointId);
-    const from = rate ? rate.replace(/^(\$[\d.]+)[–-]\$?[\d.]+/, '$1').replace(/\s*\/\s*/g, '/') : undefined;
+    const from = rateStartLabel(falRateLabel(variant.endpointId));
     const seconds = variant.edit.maxSeconds;
     return [text(`${seconds}s`), text('source'), DASH, from ? text(from) : DASH];
   }
   const cells = fieldCells(fieldSpecs(variant?.fields ?? []));
-  const rate = variant ? falRateLabel(variant.endpointId) : null;
   // The label spans a range (`$0.10–0.15 / s`); the column says where it starts.
-  const from = rate ? rate.replace(/^(\$[\d.]+)[–-]\$?[\d.]+/, '$1').replace(/\s*\/\s*/g, '/') : undefined;
+  const from = rateStartLabel(variant ? falRateLabel(variant.endpointId) : null);
   return [...cells, from ? text(from) : DASH];
 }
 

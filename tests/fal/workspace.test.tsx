@@ -45,6 +45,7 @@ const labels = [
   'MiniMax Hailuo 2.3 Standard',
   'MiniMax Hailuo 2.3 Pro',
   'Wan 2.7',
+  'MiniMax H3 Max Turbo',
 ];
 
 /** The model names down the rack, in order — the accessible name of each option is its label. */
@@ -177,7 +178,7 @@ describe('FalGenerationWorkspace', () => {
     expect(prompt.style.height).toBe('420px');
   });
 
-  it('lists exactly ten curated models and searches label, provider, and description', () => {
+  it('lists every curated model and searches label, provider, and description', () => {
     renderWorkspace();
     const model = screen.getByRole('listbox', { name: 'Model' });
     expect(optionNames(model)).toEqual(labels);
@@ -185,7 +186,7 @@ describe('FalGenerationWorkspace', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search fal video models' }), {
       target: { value: 'MiniMax' },
     });
-    expect(within(model).getAllByRole('option')).toHaveLength(2);
+    expect(within(model).getAllByRole('option')).toHaveLength(3);
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search fal video models' }), {
       target: { value: 'Higher-tier' },
     });
@@ -241,7 +242,7 @@ describe('FalGenerationWorkspace', () => {
   it('offers only end-frame capable models and needs both frames before upload', async () => {
     const { container } = renderWorkspace('frames');
     const model = screen.getByRole('listbox', { name: 'Model' });
-    expect(optionNames(model)).toEqual(labels.filter((label) => !label.startsWith('MiniMax')));
+    expect(optionNames(model)).toEqual(labels.filter((label) => !label.startsWith('MiniMax Hailuo')));
 
     fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'Push in on the tiger' } });
     fireEvent.click(screen.getByRole('button', { name: /^Generate video/ }));

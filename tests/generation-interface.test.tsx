@@ -232,23 +232,24 @@ describe('GenerationInterface engine selection', () => {
     expect(prompt).toHaveClass('max-h-[16.25rem]', 'overflow-y-auto', 'resize-none');
   });
 
-  it('offers all three Gemini models with their prices, and prices the press', () => {
-    // One Google AI Studio key runs Pro, Nano Banana 2 and Lite at a fourfold
-    // price spread, and the studio used to spend the most expensive of them
-    // without asking. The rack is the same one every aggregator engine has.
+  it('offers every Gemini image model with its price, and prices the press', () => {
+    // One Google AI Studio key runs Nano Banana 2.1, the deprecated Nano Banana 2,
+    // Pro and Lite. The rack is the same one every aggregator engine has.
     useAppStore.setState({ engine: 'gemini', geminiImageModel: 'gemini-3-pro-image-preview' });
     renderInterface(textToImage);
 
     const rack = screen.getByRole('listbox', { name: 'Model' });
     expect(within(rack).getAllByRole('option').map((row) => row.textContent)).toEqual([
+      expect.stringContaining('Nano Banana 2.1'),
+      expect.stringContaining('Nano Banana 2'),
       expect.stringContaining('Gemini 3 Pro Image'),
-      expect.stringContaining('Gemini 3.1 Flash Image'),
       expect.stringContaining('Gemini 3.1 Flash Lite Image'),
     ]);
+    expect(within(rack).getByRole('option', { name: 'Nano Banana 2.1' }).textContent).toContain('$0.034');
     expect(within(rack).getByRole('option', { name: 'Gemini 3.1 Flash Lite Image' }).textContent).toContain('$0.034');
     expect(screen.getByText(/Est\. ≈ \$0\.134 \/ image · Gemini 3 Pro Image/)).toBeTruthy();
 
-    fireEvent.click(within(rack).getByRole('option', { name: 'Gemini 3.1 Flash Image' }));
+    fireEvent.click(within(rack).getByRole('option', { name: 'Nano Banana 2' }));
 
     expect(useAppStore.getState().geminiImageModel).toBe('gemini-3.1-flash-image');
     // Persisted, or the choice is lost the moment the workspace is left: the
@@ -256,7 +257,19 @@ describe('GenerationInterface engine selection', () => {
     expect(useAppStore.persist.getOptions().partialize?.(useAppStore.getState())).toMatchObject({
       geminiImageModel: 'gemini-3.1-flash-image',
     });
-    expect(screen.getByText(/Est\. ≈ \$0\.067 \/ image · Gemini 3.1 Flash Image/)).toBeTruthy();
+    expect(screen.getByText(/Est\. ≈ \$0\.067 \/ image · Nano Banana 2$/)).toBeTruthy();
+    expect(within(rack).getByRole('option', { name: 'Nano Banana 2' }).textContent).toContain('deprecated');
+  });
+
+  it('defaults Gemini to Nano Banana 2.1 and keeps the deprecated model selectable', () => {
+    useAppStore.setState({ engine: 'gemini', geminiImageModel: DEFAULT_GEMINI_IMAGE_MODEL });
+    renderInterface(textToImage);
+
+    const rack = screen.getByRole('listbox', { name: 'Model' });
+    expect(within(rack).getByRole('option', { name: 'Nano Banana 2.1' }).getAttribute('aria-selected')).toBe('true');
+    expect(within(rack).getByRole('option', { name: 'Nano Banana 2' })).toBeTruthy();
+    expect(screen.getByText(/Gemini Nano Banana 2\.1/)).toBeTruthy();
+    expect(screen.getByText(/Est\. ≈ \$0\.034 \/ image · Nano Banana 2\.1/)).toBeTruthy();
   });
 
   it('narrows the resolution control to what the chosen Gemini model publishes', () => {
@@ -284,7 +297,7 @@ describe('GenerationInterface engine selection', () => {
 
     const rack = screen.getByRole('listbox', { name: 'Model' });
     expect(within(rack).queryByRole('option', { name: 'Gemini 3.1 Flash Lite Image' })).toBeNull();
-    expect(within(rack).getByRole('option', { name: 'Gemini 3 Pro Image' }).getAttribute('aria-selected')).toBe('true');
+    expect(within(rack).getByRole('option', { name: 'Nano Banana 2.1' }).getAttribute('aria-selected')).toBe('true');
   });
 
   it('renders Gemini resolution choices as concise horizontal toggles', () => {
@@ -333,6 +346,7 @@ describe('GenerationInterface fal image generation', () => {
       cfToken: 'cf_token',
       kieApiKey: 'kie_test_key',
       falApiKey: 'fal_id:fal_secret',
+      falImageModel: 'nano-banana-2.1',
     });
   });
 
@@ -388,7 +402,7 @@ describe('GenerationInterface fal image generation', () => {
       if (feature.id !== 'style-transfer') {
         fireEvent.change(screen.getByRole('textbox'), { target: { value: prompt } });
       }
-      fireEvent.change(screen.getByRole('combobox'), {
+      fireEvent.change(screen.getByRole('combobox', { name: 'Aspect Ratio' }), {
         target: { value: '3:4' },
       });
       fireEvent.click(screen.getByRole('radio', { name: '2K' }));
@@ -405,12 +419,14 @@ describe('GenerationInterface fal image generation', () => {
       expect(mockedRunFalImage).toHaveBeenCalledWith(
         expect.objectContaining({
           apiKey: 'fal_id:fal_secret',
+          modelId: 'nano-banana-2.1',
           prompt: expectedPrompt,
           dataUrls: expectedDataUrls,
           values: {
             aspect_ratio: '3:4',
             resolution: '2K',
             enable_web_search: feature.id === 'search-grounding',
+            thinking_level: 'medium',
           },
           signal: expect.any(AbortSignal),
         }),
@@ -442,12 +458,14 @@ describe('GenerationInterface fal image generation', () => {
     expect(mockedRunFalImage).toHaveBeenCalledWith(
       expect.objectContaining({
         apiKey: 'fal_id:fal_secret',
+        modelId: 'nano-banana-2.1',
         prompt: 'A bright editorial still life',
         dataUrls: [],
         values: {
           aspect_ratio: '1:1',
           resolution: '2K',
           enable_web_search: true,
+          thinking_level: 'medium',
         },
         signal: expect.any(AbortSignal),
       }),
@@ -600,7 +618,7 @@ describe('GenerationInterface fal image generation', () => {
     }));
     expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(link.href).toBe('blob:download-image');
-    expect(link.download).toBe(`glowing-canyon-nano-banana-2.${extension}`);
+    expect(link.download).toBe(`glowing-canyon-nano-banana-2_1.${extension}`);
     expect(link.download).not.toContain('fal_id:fal_secret');
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:download-image');
   });
@@ -897,13 +915,40 @@ describe('GenerationInterface fal image generation', () => {
     // table it prices the finished run with is the same table read here, so the
     // expectation is derived from that source rather than typed in - which is
     // what the original test was protecting.
-    const published = falPublishedCost('fal-ai/nano-banana-2', { resolution: '1K', webSearch: false });
+    useAppStore.setState({ falImageModel: 'nano-banana-2.1' });
+    const published = falPublishedCost('google/nano-banana-2.1', { resolution: '1K', webSearch: false });
     expect(published).not.toBeNull();
 
     renderInterface();
 
-    expect(screen.getByText(`Est. ≈ $${published!.costUsd.toFixed(3)} / image · Nano Banana 2`)).toBeTruthy();
+    const rack = screen.getByRole('listbox', { name: 'Model' });
+    expect(within(rack).getByRole('option', { name: 'Nano Banana 2.1' }).getAttribute('aria-selected')).toBe('true');
+    expect(within(rack).getByRole('option', { name: 'Nano Banana 2' })).toBeTruthy();
+    expect(screen.getByText(`Est. ≈ $${published!.costUsd.toFixed(3)} / image · Nano Banana 2.1`)).toBeTruthy();
     expect(screen.queryByText(/usage rates apply/)).toBeNull();
+
+    fireEvent.click(within(rack).getByRole('option', { name: 'Nano Banana 2' }));
+    const deprecated = falPublishedCost('fal-ai/nano-banana-2', { resolution: '1K', webSearch: false });
+    expect(useAppStore.getState().falImageModel).toBe('nano-banana-2');
+    expect(useAppStore.persist.getOptions().partialize?.(useAppStore.getState())).toMatchObject({
+      falImageModel: 'nano-banana-2',
+    });
+    expect(screen.getByText(`Est. ≈ $${deprecated!.costUsd.toFixed(3)} / image · Nano Banana 2`)).toBeTruthy();
+  });
+
+  it('prices high thinking at the level the form sends', () => {
+    useAppStore.setState({ falImageModel: 'nano-banana-2.1' });
+    renderInterface();
+    const thinking = screen.getByRole('combobox', { name: 'Thinking' });
+    expect(thinking).toHaveValue('medium');
+    fireEvent.change(thinking, { target: { value: 'high' } });
+    const high = falPublishedCost('google/nano-banana-2.1', {
+      resolution: '1K',
+      webSearch: false,
+      thinkingLevel: 'high',
+      inputImages: 0,
+    });
+    expect(screen.getByText(`Est. ≈ $${high!.costUsd.toFixed(3)} / image · Nano Banana 2.1`)).toBeTruthy();
   });
 
   it('rejects a remote image whose declared size exceeds 20 MiB', async () => {
@@ -1014,7 +1059,7 @@ describe('GenerationInterface fal image generation', () => {
 
     await waitFor(() => expect(clickSpy).toHaveBeenCalledTimes(1));
     const link = clickSpy.mock.instances[0] as HTMLAnchorElement;
-    expect(link.download).toBe('verified-mime-nano-banana-2.webp');
+    expect(link.download).toBe('verified-mime-nano-banana-2_1.webp');
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     expect(revokeObjectURL).toHaveBeenCalledTimes(1);
   });
@@ -1210,7 +1255,7 @@ describe('GenerationInterface fal image generation', () => {
     expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     // jsdom has no canvas encoder, so conversion falls back to the original PNG
     // — and the filename follows the bytes that were actually saved.
-    expect(link.download).toBe('existing-provider-image-gemini-3-pro-image.png');
+    expect(link.download).toBe('existing-provider-image-nano-banana-2_1.png');
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith('/api/generate', expect.anything());
   });

@@ -18,8 +18,8 @@ const CATALOG_PROVIDERS: ProviderId[] = ['runware', 'atlas', 'comet', 'piapi'];
 export function jobModelLabel(provider: CloudProvider, modelId: string): string {
   if (provider === 'fal') return falModelLabel(modelId);
   if (provider === 'kie') return KIE_MODELS.find(model => model.id === modelId)?.label ?? modelId;
-  // Gemini runs one of three models now, so the id names the run; the fixed
-  // label below stays as the fallback for a job saved before the picker existed.
+  // A catalogued id keeps the name it was chosen by. An id this catalog does not
+  // know ran as the current default, so the fallback label names that model.
   if (provider === 'gemini') return findGeminiImageModel(modelId)?.label ?? SINGLE_IMAGE_MODEL_LABELS.gemini;
   if (provider in SINGLE_IMAGE_MODEL_LABELS) return SINGLE_IMAGE_MODEL_LABELS[provider as keyof typeof SINGLE_IMAGE_MODELS];
   if (CATALOG_PROVIDERS.includes(provider as ProviderId)) return findModel(provider as ProviderId, modelId)?.label ?? modelId;

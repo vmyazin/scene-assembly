@@ -1,3 +1,4 @@
+// lib/engines/registry.ts
 import type { Feature } from '../../types';
 
 // Dependency-free engine metadata + capability gating. Safe to import from both
@@ -43,7 +44,7 @@ export const ENGINES: EngineMeta[] = [
   {
     id: 'gemini',
     label: 'Google Gemini',
-    blurb: 'Gemini 3 Pro Image — every mode, your API key',
+    blurb: 'Nano Banana 2.1 — every mode, your API key',
     requiresApiKey: true,
     supportsInputImages: true,
     supportsGoogleSearch: true,
@@ -123,7 +124,7 @@ export const ENGINES: EngineMeta[] = [
   {
     id: 'fal',
     label: 'fal.ai',
-    blurb: 'Nano Banana 2, on your own fal key',
+    blurb: 'Nano Banana 2.1, on your own fal key',
     requiresApiKey: true,
     supportsInputImages: true,
     supportsGoogleSearch: true,

@@ -53,7 +53,7 @@ describe('captureImageResult', () => {
     });
     expect(entries()[0]).toMatchObject({
       provider: 'gemini',
-      modelId: 'gemini-3-pro-image-preview',
+      modelId: 'gemini-nano-banana-2.1',
       kind: 'image',
       confidence: 'exact',
       source: 'usage-metadata',
@@ -129,6 +129,17 @@ describe('captureFalJob', () => {
     await vi.waitFor(() => expect(entries()).toHaveLength(1));
     expect(estimateFalJobCost).toHaveBeenCalledWith({ apiKey: 'fal-key', endpointId: 'fal-ai/veo3.1/fast', durationSeconds: 8 });
     expect(entries()[0]).toMatchObject({ id: 'fal-req-1', galleryRecordId: 'fal-req-1', kind: 'video', costUsd: 1.2, quantity: { unit: 'second', value: 8 } });
+  });
+
+  it('asks fal to price the H3 overrun, not just the requested seconds', async () => {
+    estimateFalJobCost.mockResolvedValue({ costUsd: 0.456, unit: 'second', quantity: 5.7 });
+    captureFalJob({ ...job, modelId: 'h3-max-turbo', controlValues: { duration: 5, resolution: '1080P' } }, 'fal-key');
+    await vi.waitFor(() => expect(entries()).toHaveLength(1));
+    expect(estimateFalJobCost).toHaveBeenCalledWith({
+      apiKey: 'fal-key',
+      endpointId: 'minimax/h3-max-turbo/image-to-video',
+      durationSeconds: expect.closeTo(5.7, 9),
+    });
   });
 
   it("falls back to fal's published rate when the estimate cannot answer", async () => {

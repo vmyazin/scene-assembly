@@ -41,7 +41,7 @@ export interface EngineResult {
 }
 
 interface GeminiOpts {
-  /** Which catalogued model runs. An unknown or absent id falls back to Pro. */
+  /** Which catalogued model runs. An unknown or absent id falls back to Nano Banana 2.1. */
   model?: string;
   prompt?: string;
   images?: string[]; // base64 (already stripped of data: prefix)

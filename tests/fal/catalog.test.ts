@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   FAL_IMAGE_MODEL,
+  FAL_IMAGE_MODELS,
   FAL_VIDEO_MODELS,
   buildFalInput,
   defaultFalValues,
@@ -42,11 +43,22 @@ const VIDEO_ENDPOINTS = [
     'fal-ai/minimax/hailuo-2.3/pro/image-to-video',
   ],
   ['wan-2-7', 'fal-ai/wan/v2.7/text-to-video', 'fal-ai/wan/v2.7/image-to-video'],
+  [
+    'h3-max-turbo',
+    'minimax/h3-max-turbo/image-to-video',
+    'minimax/h3-max-turbo/image-to-video',
+  ],
 ] as const;
 
 describe('fal model catalog', () => {
-  it('contains Nano Banana 2 plus the curated video choices', () => {
-    expect(FAL_IMAGE_MODEL.id).toBe('nano-banana-2');
+  it('defaults the image catalog to Nano Banana 2.1 and keeps Nano Banana 2', () => {
+    expect(FAL_IMAGE_MODEL.id).toBe('nano-banana-2.1');
+    expect(FAL_IMAGE_MODELS.map((model) => model.id)).toEqual(['nano-banana-2.1', 'nano-banana-2']);
+    expect(FAL_IMAGE_MODELS.map((model) => model.label)).toEqual([
+      'Nano Banana 2.1',
+      'Nano Banana 2',
+    ]);
+    expect(FAL_IMAGE_MODELS.map((model) => model.deprecated ?? false)).toEqual([false, true]);
     expect(FAL_VIDEO_MODELS.map((model) => model.id)).toEqual([
       'veo-3-1',
       'veo-3-1-fast',
@@ -58,6 +70,7 @@ describe('fal model catalog', () => {
       'hailuo-2-3-standard',
       'hailuo-2-3-pro',
       'wan-2-7',
+      'h3-max-turbo',
       'kling-o1-edit',
       'kling-o3-standard-edit',
     ]);
@@ -72,12 +85,27 @@ describe('fal model catalog', () => {
       'MiniMax Hailuo 2.3 Standard',
       'MiniMax Hailuo 2.3 Pro',
       'Wan 2.7',
+      'MiniMax H3 Max Turbo',
       'Kling O1 Edit',
       'Kling O3 Standard Edit',
     ]);
   });
 
   it('maps the Nano Banana text and edit endpoints exactly', () => {
+    expect(resolveFalVariant('nano-banana-2.1', 'image', 'text').endpointId).toBe(
+      'google/nano-banana-2.1'
+    );
+    expect(resolveFalVariant('nano-banana-2.1', 'image', 'image')).toMatchObject({
+      endpointId: 'google/nano-banana-2.1/edit',
+      imageInputKey: 'image_urls',
+      imageInputMultiple: true,
+      maxInputImages: 14,
+    });
+    expect(defaultFalValues(resolveFalVariant('nano-banana-2.1', 'image', 'text'))).toMatchObject({
+      thinking_level: 'medium',
+      resolution: '1K',
+      enable_web_search: false,
+    });
     expect(resolveFalVariant('nano-banana-2', 'image', 'text').endpointId).toBe(
       'fal-ai/nano-banana-2'
     );
@@ -87,13 +115,16 @@ describe('fal model catalog', () => {
       imageInputMultiple: true,
       maxInputImages: 14,
     });
+    expect(resolveFalVariant('nano-banana-2', 'image', 'text').fields.map((field) => field.key)).not.toContain(
+      'thinking_level'
+    );
   });
 
-  it('defines text and image variants for all 20 curated video endpoints', () => {
-    // 20 text/image variants, plus a frames variant on the eight models fal
-    // documents as accepting a closing frame.
-    // Two edit-only Kling models sit beside the 28 text, image and frames variants.
-    expect(FAL_VIDEO_MODELS.flatMap((model) => model.variants)).toHaveLength(30);
+  it('defines text and image variants for every curated video endpoint', () => {
+    // 22 text/image variants (eleven models), plus a frames variant on the nine
+    // models fal documents as accepting a closing frame. Two edit-only Kling
+    // models sit beside those 31.
+    expect(FAL_VIDEO_MODELS.flatMap((model) => model.variants)).toHaveLength(33);
 
     for (const [modelId, textEndpoint, imageEndpoint] of VIDEO_ENDPOINTS) {
       expect(resolveFalVariant(modelId, 'video', 'text').endpointId).toBe(textEndpoint);
@@ -130,6 +161,7 @@ describe('fal model catalog', () => {
       'kling-3-standard',
       'kling-3-pro',
       'wan-2-7',
+      'h3-max-turbo',
     ]);
     // Hailuo 2.3 takes an opening frame only.
     expect(() => resolveFalVariant('hailuo-2-3-pro', 'video', 'frames')).toThrow();
@@ -176,7 +208,7 @@ describe('fal model catalog', () => {
     expect(variant.maxInputImages).toBe(2);
   });
 
-  it('exposes all ten video choices for image-to-video', () => {
+  it('exposes every image-to-video choice', () => {
     expect(modelsForFalMode('video', 'image').map((model) => model.id)).toEqual(
       VIDEO_ENDPOINTS.map(([modelId]) => modelId)
     );
@@ -640,5 +672,55 @@ describe('Veo 3.1 Lite payloads', () => {
     expect(() => reject({ aspect_ratio: '1:1' })).toThrow(/aspect_ratio/i);
     expect(() => reject({ resolution: '4k' })).toThrow(/resolution/i);
     expect(() => buildFalInput(image, { prompt: 'She turns', uploadUrls: [frames[0]], values: { aspect_ratio: '1:1' } })).toThrow(/aspect_ratio/i);
+  });
+
+  it('builds MiniMax H3 Max Turbo inside its documented limits', () => {
+    const text = resolveFalVariant('h3-max-turbo', 'video', 'text');
+    const image = resolveFalVariant('h3-max-turbo', 'video', 'image');
+    const framesVariant = resolveFalVariant('h3-max-turbo', 'video', 'frames');
+    const frame = 'https://v3.fal.media/open.png';
+    const close = 'https://v3.fal.media/close.png';
+
+    expect(text.endpointId).toBe('minimax/h3-max-turbo/image-to-video');
+    expect(image.endpointId).toBe(text.endpointId);
+    expect(framesVariant.endpointId).toBe(text.endpointId);
+    expect(text.maxPromptLength).toBe(50_000);
+    expect(framesVariant.maxPromptLength).toBe(50_000);
+    expect(defaultFalValues(image)).toMatchObject({
+      duration: 5,
+      resolution: '768P',
+      prompt_expansion_mode: 'balanced',
+    });
+    expect(buildFalInput(text, { prompt: 'A tide pool', uploadUrls: [], values: {} })).toMatchObject({
+      prompt: 'A tide pool',
+      duration: 5,
+      resolution: '768P',
+      prompt_expansion_mode: 'balanced',
+    });
+    expect(buildFalInput(text, { prompt: 'A tide pool', uploadUrls: [], values: {} })).not.toHaveProperty('image_url');
+    expect(buildFalInput(image, { prompt: 'She turns', uploadUrls: [frame], values: {} })).toMatchObject({
+      image_url: frame,
+    });
+    expect(buildFalInput(framesVariant, { prompt: 'Cross the room', uploadUrls: [frame, close], values: {} })).toMatchObject({
+      image_url: frame,
+      end_image_url: close,
+    });
+
+    expect(validateFalInput(text, { prompt: 'a'.repeat(50_000), uploadUrls: [] })).toBeNull();
+    expect(validateFalInput(text, { prompt: 'a'.repeat(50_001), uploadUrls: [] })).toMatch(/50,?000/);
+    expect(validateFalInput(image, { prompt: 'She turns', uploadUrls: [] })).toMatch(/reference image/);
+
+    expect(buildFalInput(image, { prompt: 'She turns', uploadUrls: [frame], values: { duration: 0.92 } })).toMatchObject({
+      duration: 0.92,
+    });
+    expect(buildFalInput(image, { prompt: 'She turns', uploadUrls: [frame], values: { duration: 15 } })).toMatchObject({
+      duration: 15,
+    });
+    expect(() => buildFalInput(image, { prompt: 'She turns', uploadUrls: [frame], values: { duration: 0.91 } })).toThrow(/duration/i);
+    expect(() => buildFalInput(image, { prompt: 'She turns', uploadUrls: [frame], values: { duration: 15.01 } })).toThrow(/duration/i);
+    expect(() => buildFalInput(image, { prompt: 'She turns', uploadUrls: [frame], values: { resolution: '720p' } })).toThrow(/resolution/i);
+    expect(() =>
+      buildFalInput(image, { prompt: 'She turns', uploadUrls: [frame], values: { prompt_expansion_mode: 'fast' } })
+    ).toThrow(/prompt_expansion_mode/i);
   });
 });

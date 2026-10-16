@@ -57,7 +57,12 @@ const kieImagen = (id: string) => id === 'imagen-4-ultra' || id === 'google/imag
 const RULES: RouteRule[] = [
   {
     provider: 'fal',
-    test: (id, endpoint) => id === 'nano-banana-2' || (endpoint ?? '').includes('nano-banana-2'),
+    // The studio route names the catalog id (`nano-banana-2.1`), not the fal
+    // endpoint. The endpoint check still covers `google/nano-banana-2.1`.
+    test: (id, endpoint) =>
+      id === 'nano-banana-2' ||
+      id === 'nano-banana-2.1' ||
+      (endpoint ?? '').includes('nano-banana-2'),
     relaxable: true,
     key: 'safety_tolerance',
     relaxedValue: '6',

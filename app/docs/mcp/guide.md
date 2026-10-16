@@ -77,7 +77,7 @@ To change these later, open the Connected agents panel on your account page, edi
 
 Each step is one tool call. The arguments are examples.
 
-1. **See what can run.** `list_models` with no arguments returns a compact list of the models your connected providers offer.
+1. **See what can run.** `list_models` with no arguments returns a compact list of the models your connected providers offer. A model the vendor has deprecated still runs. The list sets `deprecated` to true on it and leaves `label` as the name a saved job already uses.
 
    ```json
    {}
@@ -86,19 +86,19 @@ Each step is one tool call. The arguments are examples.
 2. **Read one model's settings.** `list_models` with `provider` and `modelId` returns each input mode with its fields, options, bounds and defaults, and how many reference images it takes.
 
    ```json
-   { "provider": "gemini", "modelId": "gemini-3-pro-image-preview" }
+   { "provider": "gemini", "modelId": "gemini-nano-banana-2.1" }
    ```
 
 3. **Price it.** `estimate_cost` takes the same fields as `generate` and checks the result against the agent's limit. Settings you leave out take the model's defaults, and the response echoes them in `values`.
 
    ```json
-   { "provider": "gemini", "modelId": "gemini-3-pro-image-preview", "mediaType": "image", "inputMode": "text", "prompt": "A paper kite over a harbour at dawn", "values": { "aspectRatio": "16:9" } }
+   { "provider": "gemini", "modelId": "gemini-nano-banana-2.1", "mediaType": "image", "inputMode": "text", "prompt": "A paper kite over a harbour at dawn", "values": { "aspectRatio": "16:9" } }
    ```
 
 4. **Start the job.** `generate` with an `idempotencyKey`. It returns at once with a `job`, the estimate and the agent's remaining budget.
 
    ```json
-   { "provider": "gemini", "modelId": "gemini-3-pro-image-preview", "mediaType": "image", "inputMode": "text", "prompt": "A paper kite over a harbour at dawn", "values": { "aspectRatio": "16:9" }, "idempotencyKey": "harbour-kite-1" }
+   { "provider": "gemini", "modelId": "gemini-nano-banana-2.1", "mediaType": "image", "inputMode": "text", "prompt": "A paper kite over a harbour at dawn", "values": { "aspectRatio": "16:9" }, "idempotencyKey": "harbour-kite-1" }
    ```
 
 5. **Wait for it.** `get_job` with `waitSeconds` (up to 25) holds the call until the job's state changes. Call it again until the state is `saved`, `failed`, `cancelled` or `needs_attention`. A saved job lists its `outputs`, each with an `assetId` and a download link.
@@ -164,7 +164,7 @@ A different type or byte count is refused by the upload link itself with an HTTP
 **Using it.** An `uploadId` lasts 24 hours. It is cleaned up soon after the jobs that used it finish, so stage the file again for a later job. A file already in your library needs no staging: pass its `assetId`. The refusals these steps can return are listed under [Errors](#references-2).
 
 ```json
-{ "provider": "gemini", "modelId": "gemini-3-pro-image-preview", "mediaType": "image", "inputMode": "image", "prompt": "The same kite, in watercolour", "references": [{ "uploadId": "<from add_reference>" }, { "assetId": "<from list_assets>" }], "idempotencyKey": "harbour-kite-watercolour" }
+{ "provider": "gemini", "modelId": "gemini-nano-banana-2.1", "mediaType": "image", "inputMode": "image", "prompt": "The same kite, in watercolour", "references": [{ "uploadId": "<from add_reference>" }, { "assetId": "<from list_assets>" }], "idempotencyKey": "harbour-kite-watercolour" }
 ```
 
 References go in order. `list_models` gives each mode's minimum and maximum count, and whether that mode accepts reference video or audio. In edit mode, pass the clip as `sourceVideo` instead of in `references`. Reference video and audio are separate arrays, not extra images. A reference video is MP4 or MOV. WebM is an edit source only. A Seedance draft may include them; `finalize_draft` does not resend them. An account can hold up to 32 staged references, 256 MB in all, across the browser and every agent.

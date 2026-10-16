@@ -43,12 +43,19 @@ export interface FalModelVariant {
    * the Worker use for Runware and Comet.
    */
   edit?: VideoEditCapability;
+  /** Vendor prompt ceiling. The queue route may be stricter still. */
+  maxPromptLength?: number;
   fields: FalFieldDefinition[];
 }
 
 export interface FalModelDefinition {
   id: string;
   label: string;
+  /**
+   * Still runnable. The picker draws a badge; `label` stays the name a saved
+   * job and `list_models` already use.
+   */
+  deprecated?: boolean;
   /** Short code appended to download filenames — see FAL_FILE_CODES. */
   fileCode: string;
   provider: string;

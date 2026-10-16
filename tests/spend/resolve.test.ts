@@ -18,8 +18,9 @@ import {
 
 describe('resolveGemini', () => {
   it('is exact when the response carried usage', () => {
+    // No model id: the ledger prices Nano Banana 2.1, the same model the run uses.
     expect(resolveGemini({ usage: { promptTokens: 560, outputTokens: 1120 }, resolution: '4K', inputImages: 3 })).toEqual({
-      costUsd: expect.closeTo(0.13552, 6),
+      costUsd: expect.closeTo(0.03444, 6),
       confidence: 'exact',
       source: 'usage-metadata',
       quantity: { unit: 'token', value: 1680 },
@@ -27,7 +28,7 @@ describe('resolveGemini', () => {
   });
   it('falls back to the resolution estimate', () => {
     expect(resolveGemini({ usage: null, resolution: '4K', inputImages: 1 })).toEqual({
-      costUsd: expect.closeTo(0.24112, 6),
+      costUsd: expect.closeTo(0.11424, 6),
       confidence: 'estimated',
       source: 'catalog-rate',
       quantity: { unit: 'image', value: 1 },

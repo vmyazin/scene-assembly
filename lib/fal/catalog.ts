@@ -163,47 +163,89 @@ const withFrames = (
   };
 };
 
+const NANO_ASPECT_RATIOS = [
+  'auto',
+  '21:9',
+  '16:9',
+  '3:2',
+  '4:3',
+  '5:4',
+  '1:1',
+  '4:5',
+  '3:4',
+  '2:3',
+  '9:16',
+  '4:1',
+  '1:4',
+  '8:1',
+  '1:8',
+];
+
 const NANO_FIELDS = [
-  selectField('aspect_ratio', 'Aspect ratio', 'auto', [
-    'auto',
-    '21:9',
-    '16:9',
-    '3:2',
-    '4:3',
-    '5:4',
-    '1:1',
-    '4:5',
-    '3:4',
-    '2:3',
-    '9:16',
-    '4:1',
-    '1:4',
-    '8:1',
-    '1:8',
-  ]),
+  selectField('aspect_ratio', 'Aspect ratio', 'auto', NANO_ASPECT_RATIOS),
   selectField('resolution', 'Resolution', '1K', ['1K', '2K', '4K']),
   booleanField('enable_web_search', 'Enable web search', false),
 ];
 
-export const FAL_IMAGE_MODEL: FalModelDefinition = {
-  id: 'nano-banana-2',
-  label: 'Nano Banana 2',
-  fileCode: 'nano-banana-2',
+/**
+ * Nano Banana 2.1 on fal, read 2026-10-15 from
+ * https://fal.ai/models/google/nano-banana-2.1/llms.txt and the edit sibling.
+ * Same aspect and resolution enums as Nano Banana 2, plus thinking_level.
+ * Text is `google/nano-banana-2.1`; references are `google/nano-banana-2.1/edit`
+ * (up to 14 `image_urls`).
+ */
+const NANO_21_FIELDS = [
+  ...NANO_FIELDS,
+  selectField('thinking_level', 'Thinking', 'medium', ['minimal', 'medium', 'high']),
+];
+
+const nanoBananaImageModel = (
+  id: string,
+  label: string,
+  fileCode: string,
+  description: string,
+  textEndpoint: string,
+  editEndpoint: string,
+  fields: FalFieldDefinition[],
+  deprecated?: boolean
+): FalModelDefinition => ({
+  id,
+  label,
+  fileCode,
   provider: 'Google',
-  description: 'Reasoning-guided image generation and multi-image editing with optional web grounding.',
+  description,
   mediaType: 'image',
+  ...(deprecated ? { deprecated: true } : {}),
   variants: [
-    textVariant('nano-banana-2', 'fal-ai/nano-banana-2', NANO_FIELDS),
-    imageVariant(
-      'nano-banana-2',
-      'fal-ai/nano-banana-2/edit',
-      'image_urls',
-      NANO_FIELDS,
-      14,
-      true
-    ),
+    textVariant(id, textEndpoint, fields),
+    imageVariant(id, editEndpoint, 'image_urls', fields, 14, true),
   ],
-};
+});
+
+export const FAL_IMAGE_MODELS: FalModelDefinition[] = [
+  nanoBananaImageModel(
+    'nano-banana-2.1',
+    'Nano Banana 2.1',
+    'nano-banana-2_1',
+    'Nano Banana 2.1. Text and multi-image editing at 1K, 2K or 4K, with optional web search and thinking.',
+    'google/nano-banana-2.1',
+    'google/nano-banana-2.1/edit',
+    NANO_21_FIELDS
+  ),
+  nanoBananaImageModel(
+    'nano-banana-2',
+    'Nano Banana 2',
+    'nano-banana-2',
+    'Deprecated. Nano Banana 2.1 replaces it. Still available: reasoning-guided image generation and multi-image editing with optional web grounding.',
+    'fal-ai/nano-banana-2',
+    'fal-ai/nano-banana-2/edit',
+    NANO_FIELDS,
+    true
+  ),
+];
+
+/** The image model a fal run uses when nobody has chosen. */
+export const FAL_IMAGE_MODEL: FalModelDefinition = FAL_IMAGE_MODELS[0];
 
 const VEO_BASE_FIELDS = [
   selectField('duration', 'Duration', '8s', ['4s', '6s', '8s']),
@@ -285,6 +327,47 @@ const HAILUO_STANDARD_FIELDS = [
 
 const HAILUO_PRO_FIELDS = [booleanField('prompt_optimizer', 'Optimize prompt', true)];
 
+/**
+ * MiniMax H3 Max Turbo, read 2026-10-15 from the fal OpenAPI schema.
+ * Duration is a number from 0.92 to 15 (default 5), not a fixed enum, so there
+ * is no step: 5 and 0.92 are both legal, and a step of 1 off 0.92 would reject
+ * every whole second. Resolution values stay uppercase because that is the enum.
+ */
+const H3_MAX_TURBO_FIELDS: FalFieldDefinition[] = [
+  {
+    key: 'duration',
+    label: 'Duration',
+    type: 'number',
+    defaultValue: 5,
+    min: 0.92,
+    max: 15,
+    description: 'Seconds, from 0.92 to 15. The clip can run about 0.7 s longer than requested.',
+  },
+  {
+    key: 'resolution',
+    label: 'Resolution',
+    type: 'select',
+    defaultValue: '768P',
+    options: [
+      { label: '480p', value: '480P' },
+      { label: '768p', value: '768P' },
+      { label: '1080p', value: '1080P' },
+    ],
+  },
+  {
+    key: 'prompt_expansion_mode',
+    label: 'Prompt expansion',
+    type: 'select',
+    defaultValue: 'balanced',
+    options: [
+      { label: 'Disabled', value: 'disabled' },
+      { label: 'Balanced', value: 'balanced' },
+      { label: 'Quality', value: 'quality' },
+    ],
+    description: 'Disabled skips rewriting. Balanced takes about a second. Quality can take about 30 seconds.',
+  },
+];
+
 const wanFields = (includeAspectRatio: boolean): FalFieldDefinition[] => [
   numberField('duration', 'Duration', 5, 2, 15),
   selectField('resolution', 'Resolution', '720p', ['720p', '1080p']),
@@ -314,6 +397,7 @@ const FAL_FILE_CODES: Record<string, string> = {
   'hailuo-2-3-standard': 'hailuo-2_3-standard',
   'hailuo-2-3-pro': 'hailuo-2_3-pro',
   'wan-2-7': 'wan-2_7',
+  'h3-max-turbo': 'h3-max-turbo',
   'kling-o1-edit': 'kling-o1-edit',
   'kling-o3-standard-edit': 'kling-o3-standard-edit',
 };
@@ -369,6 +453,12 @@ const editVideoModel = (
     edit,
     fields: [booleanField('keep_audio', 'Keep source audio', keepAudio)],
   }],
+});
+
+/** The same prompt ceiling on every variant, including one withFrames adds. */
+const withPromptLimit = (model: FalModelBase, maxPromptLength: number): FalModelBase => ({
+  ...model,
+  variants: model.variants.map((variant) => ({ ...variant, maxPromptLength })),
 });
 
 const withFileCodes = (models: FalModelBase[]): FalModelDefinition[] =>
@@ -513,6 +603,29 @@ export const FAL_VIDEO_MODELS: FalModelDefinition[] = withFileCodes([
     ),
     { lastFrameKey: 'end_image_url' }
   ),
+  // Read 2026-10-15 from
+  // https://fal.ai/models/minimax/h3-max-turbo/image-to-video/llms.txt
+  // and the OpenAPI schema. One endpoint: omit both images for text-to-video,
+  // `image_url` for the first frame, `end_image_url` for the last. Duration is
+  // 0.92–15 seconds (default 5). Resolution is 480P, 768P (default) or 1080P.
+  // Prompt is required, at most 50,000 characters. prompt_expansion_mode is
+  // required: disabled, balanced (default) or quality. Regular prices, the
+  // promo having ended 2026-10-15: $0.025 / $0.04 / $0.08 per second.
+  withPromptLimit(
+    withFrames(
+      videoModel(
+        'h3-max-turbo',
+        'MiniMax H3 Max Turbo',
+        'MiniMax',
+        'Image to video on fal. Optional closing frame. $0.025/s at 480p, $0.04/s at 768p, $0.08/s at 1080p.',
+        'minimax/h3-max-turbo/image-to-video',
+        'minimax/h3-max-turbo/image-to-video',
+        H3_MAX_TURBO_FIELDS
+      ),
+      { lastFrameKey: 'end_image_url' }
+    ),
+    50_000
+  ),
   // Read 2026-10-13 from
   // https://fal.ai/models/fal-ai/kling-video/o1/video-to-video/edit/llms.txt
   // mp4/mov, 3–10s (hard max 10.05), 720–2160px, 200MB, ≤4 images, $0.168/s.
@@ -547,7 +660,7 @@ export const FAL_VIDEO_MODELS: FalModelDefinition[] = withFileCodes([
  */
 export function falModelLabel(modelId: string): string {
   return (
-    [FAL_IMAGE_MODEL, ...FAL_VIDEO_MODELS].find((model) => model.id === modelId)?.label ?? modelId
+    [...FAL_IMAGE_MODELS, ...FAL_VIDEO_MODELS].find((model) => model.id === modelId)?.label ?? modelId
   );
 }
 
@@ -561,7 +674,7 @@ function compatibleFalModels(
   mediaType: FalMediaType,
   inputMode: FalInputMode
 ): FalModelDefinition[] {
-  const models = mediaType === 'image' ? [FAL_IMAGE_MODEL] : FAL_VIDEO_MODELS;
+  const models = mediaType === 'image' ? FAL_IMAGE_MODELS : FAL_VIDEO_MODELS;
   return models.filter((model) => model.variants.some((variant) => variant.inputMode === inputMode));
 }
 
@@ -603,7 +716,11 @@ export function validateFalInput(
   variant: FalModelVariant,
   args: { prompt: string; uploadUrls: string[] }
 ): string | null {
-  if (!args.prompt.trim()) return 'Enter a prompt for the selected fal model.';
+  const prompt = args.prompt.trim();
+  if (!prompt) return 'Enter a prompt for the selected fal model.';
+  if (variant.maxPromptLength !== undefined && prompt.length > variant.maxPromptLength) {
+    return `This fal model accepts a prompt of at most ${variant.maxPromptLength} characters.`;
+  }
   if (variant.inputMode === 'text') return null;
   if (variant.inputMode === 'edit') {
     if (args.uploadUrls.length < 1) return 'Choose a source video to edit.';

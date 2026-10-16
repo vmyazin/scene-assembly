@@ -117,6 +117,11 @@ export interface ProviderModel {
   id: string;
   label: string;
   /**
+   * Still runnable. The picker draws a badge; `label` stays the name a saved
+   * job and `list_models` already use.
+   */
+  deprecated?: boolean;
+  /**
    * Short code appended to download filenames, so a saved file says which model
    * made it: `neon-tiger-in-the-rain-wan-2_7.mp4`. Lowercase, hyphen-separated,
    * with a version's decimal point written as `_` (`2.7` → `2_7`) so it reads

@@ -114,6 +114,8 @@ export function buildAccountSpendEntry(args: BuildAccountSpendEntryArgs): Accoun
           audio: request.values.generate_audio !== false,
           durationSeconds: falDurationSeconds(request.values),
           webSearch: request.values.enable_web_search === true,
+          thinkingLevel: typeof request.values.thinking_level === 'string' ? request.values.thinking_level : undefined,
+          inputImages: request.referenceIds.length,
         },
       });
       return {
