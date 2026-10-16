@@ -149,3 +149,51 @@ export function useAutoAspect(
     if (matched) applyRef.current(matched.value);
   }, [id, width, height, candidatesKey]);
 }
+
+/** Ratios people name; anything else is described by its pixels. */
+const NAMED_RATIOS = ['21:9', '16:9', '3:2', '4:3', '5:4', '1:1', '4:5', '3:4', '2:3', '9:16', '9:21'];
+
+function ratioName(width: number, height: number): string {
+  const target = Math.log(width / height);
+  let best: string | null = null;
+  let bestDistance = SAME_SHAPE;
+  for (const name of NAMED_RATIOS) {
+    const ratio = parseAspect(name);
+    if (ratio === null) continue;
+    const distance = Math.abs(Math.log(ratio) - target);
+    if (distance <= bestDistance) {
+      best = name;
+      bestDistance = distance;
+    }
+  }
+  return best ?? `${width}×${height}`;
+}
+
+/**
+ * Says so when the reference image has a shape the model cannot output.
+ *
+ * `useAutoAspect` snaps to the nearest shape a model publishes, which is right
+ * but silent: Veo offers only 16:9 and 9:16, so a square image landed on 16:9
+ * and the person learned the frame would be reframed only from the result
+ * (UX audit M5). Null when the selected shape matches, when the control has no
+ * ratio to compare, or before the reference has been measured.
+ */
+export function describeAspectMismatch(
+  reference: { width?: number; height?: number } | undefined,
+  candidates: AspectCandidate[],
+  current: string | undefined
+): string | null {
+  const width = reference?.width;
+  const height = reference?.height;
+  if (!width || !height || width <= 0 || height <= 0 || !current) return null;
+  const chosen = candidates.find((candidate) => candidate.value === current);
+  if (!chosen) return null;
+  if (Math.abs(Math.log(chosen.ratio) - Math.log(width / height)) <= SAME_SHAPE) return null;
+  const offered = candidates.some(
+    (candidate) => Math.abs(Math.log(candidate.ratio) - Math.log(width / height)) <= SAME_SHAPE
+  );
+  const shape = ratioName(width, height);
+  return offered
+    ? `Your reference is ${shape} but the output is set to ${current}, so it will be reframed.`
+    : `Your reference is ${shape}, and this model has no ${shape} output. It will be reframed to ${current}.`;
+}

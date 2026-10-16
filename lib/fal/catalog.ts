@@ -208,7 +208,8 @@ const nanoBananaImageModel = (
   textEndpoint: string,
   editEndpoint: string,
   fields: FalFieldDefinition[],
-  deprecated?: boolean
+  /** Set on a retired model: its successor's id, which also marks it deprecated. */
+  replacedBy?: string
 ): FalModelDefinition => ({
   id,
   label,
@@ -216,7 +217,7 @@ const nanoBananaImageModel = (
   provider: 'Google',
   description,
   mediaType: 'image',
-  ...(deprecated ? { deprecated: true } : {}),
+  ...(replacedBy ? { deprecated: true, replacedBy } : {}),
   variants: [
     textVariant(id, textEndpoint, fields),
     imageVariant(id, editEndpoint, 'image_urls', fields, 14, true),
@@ -241,7 +242,7 @@ export const FAL_IMAGE_MODELS: FalModelDefinition[] = [
     'fal-ai/nano-banana-2',
     'fal-ai/nano-banana-2/edit',
     NANO_FIELDS,
-    true
+    'nano-banana-2.1'
   ),
 ];
 

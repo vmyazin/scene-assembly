@@ -56,6 +56,8 @@ export interface FalModelDefinition {
    * job and `list_models` already use.
    */
   deprecated?: boolean;
+  /** The model that took over, offered as a one-click switch while this one is selected. */
+  replacedBy?: string;
   /** Short code appended to download filenames — see FAL_FILE_CODES. */
   fileCode: string;
   provider: string;

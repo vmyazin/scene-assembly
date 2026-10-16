@@ -1606,3 +1606,23 @@ describe('GenerationInterface without a key', () => {
     await waitFor(() => expect(screen.queryByText(/The provider refused this key/)).toBeNull());
   });
 });
+
+/** UX audit M7: a remembered deprecated model stayed selected with only a badge. */
+describe('GenerationInterface on a retired model', () => {
+  it('offers its successor and switches with one click', () => {
+    useAppStore.setState({ engine: 'gemini', geminiImageModel: 'gemini-3.1-flash-image' });
+    renderInterface();
+
+    fireEvent.click(screen.getByRole('button', { name: /Switch to Nano Banana 2\.1/ }));
+
+    expect(useAppStore.getState().geminiImageModel).toBe('gemini-nano-banana-2.1');
+    expect(screen.queryByRole('button', { name: /Switch to Nano Banana 2\.1/ })).toBeNull();
+  });
+
+  it('offers nothing on a current model', () => {
+    useAppStore.setState({ engine: 'gemini', geminiImageModel: 'gemini-nano-banana-2.1' });
+    renderInterface();
+
+    expect(screen.queryByRole('button', { name: /^Switch to/ })).toBeNull();
+  });
+});

@@ -431,6 +431,12 @@
       "runtimeExecutable": "env",
       "runtimeArgs": ["ACCOUNT_WORKER_PORT=8919", "DEV_FAKE_GENERATION=1", "npm", "run", "dev", "--", "--port", "3319"],
       "port": 3319
+    },
+    {
+      "name": "UX audit M batch smoke test",
+      "runtimeExecutable": "env",
+      "runtimeArgs": ["ACCOUNT_WORKER_PORT=8921", "DEV_FAKE_GENERATION=1", "npm", "run", "dev", "--", "--port", "3321"],
+      "port": 3321
     }
   ],
   "version": "0.0.1"

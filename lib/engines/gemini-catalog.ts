@@ -42,6 +42,8 @@ export interface GeminiImageModel {
    * reads that name.
    */
   deprecated?: boolean;
+  /** The model that took over, offered as a one-click switch while this one is selected. */
+  replacedBy?: string;
 }
 
 export const GEMINI_IMAGE_MODELS: GeminiImageModel[] = [
@@ -58,6 +60,7 @@ export const GEMINI_IMAGE_MODELS: GeminiImageModel[] = [
     id: 'gemini-3.1-flash-image',
     label: 'Nano Banana 2',
     deprecated: true,
+    replacedBy: 'gemini-nano-banana-2.1',
     fileCode: 'gemini-3_1-flash-image',
     sizes: ['1K', '2K', '4K'],
     supportsGoogleSearch: true,

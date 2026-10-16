@@ -908,13 +908,30 @@ body::after {
   opacity: 0.85;
 }
 
-/* On a phone-width column the name is what matters; price and reference
-   count step aside (both are restated in the note under the list) so the
-   name is not the thing that truncates. */
+/* On a phone-width column there is room for the name and one or two specs.
+   Price is the one kept: it is what a choice between models usually turns on,
+   and the note under the list restates it only for the model already picked,
+   so hiding it left people choosing blind. Resolution, shapes, search, edit and
+   reference count step aside instead; "Up to" survives only where a list has no
+   price column to show. */
 @container (max-width: 420px) {
-  .model-listbox [data-column='from'],
-  .model-listbox [data-column='refs'] {
+  .model-listbox [data-column='shapes'],
+  .model-listbox [data-column='search'],
+  .model-listbox [data-column='edit'],
+  .model-listbox [data-column='refs'],
+  .model-listbox:has([data-column='from'], [data-column='run']) [data-column='tier'] {
     display: none;
+  }
+  /* Two lines rather than "Nano …": next to a badge and a price there is no
+     single-line width left, and a clipped name is the one cell that cannot be
+     guessed. */
+  .model-listbox-name {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+  .model-listbox-name-text {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 }
 

@@ -24,6 +24,7 @@ import PromptPanel from '@/components/PromptPanel';
 import SavedPromptsButton from '@/components/SavedPromptsButton';
 import DescribeSourceButton from '@/components/DescribeSourceButton';
 import ModelControls, { type ModelControlField } from '@/components/ModelControls';
+import AspectMismatchNote from '@/components/AspectMismatchNote';
 import ConnectionGate, { isGated } from '@/components/ConnectionGate';
 import SubmissionError from '@/components/SubmissionError';
 import RelaxedFilterControl from '@/components/RelaxedFilterControl';
@@ -1043,6 +1044,7 @@ export default function ProviderVideoWorkspace({
                 />
                 <RelaxedFilterControl filter={relaxed} />
               </div>
+              <AspectMismatchNote reference={isEdit ? undefined : references[0]} candidates={sizeCandidates} current={values.size} />
             </section>
           )}
           </>

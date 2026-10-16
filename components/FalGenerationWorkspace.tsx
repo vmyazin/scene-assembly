@@ -13,6 +13,7 @@ import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import PromptPanel from '@/components/PromptPanel';
 import SavedPromptsButton from '@/components/SavedPromptsButton';
 import ModelControls from '@/components/ModelControls';
+import AspectMismatchNote from '@/components/AspectMismatchNote';
 import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
 import ConnectionGate, { isGated } from '@/components/ConnectionGate';
 import SubmissionError from '@/components/SubmissionError';
@@ -806,6 +807,7 @@ function FalGenerationWorkspaceSession({
               />
               <RelaxedFilterControl filter={relaxed} />
             </div>
+            <AspectMismatchNote reference={references[0]} candidates={aspectCandidates} current={values.aspect_ratio} />
           </section>
           </>
         }

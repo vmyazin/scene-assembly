@@ -5,6 +5,7 @@ import {
   candidatesFromSizes,
   candidatesFromValues,
   closestAspectCandidate,
+  describeAspectMismatch,
   parseAspect,
   useAutoAspect,
 } from '../../lib/draft/aspect-match';
@@ -174,5 +175,37 @@ describe('an explicit size choice survives a new reference',()=>{
     const ratios=candidatesFromValues(['16:9','9:16','1:1','4:3']);
     expect(closestAspectCandidate(1920,1080,ratios,'16:9')?.value).toBe('16:9');
     expect(closestAspectCandidate(1080,1920,ratios,'16:9')?.value).toBe('9:16');
+  });
+});
+
+/** UX audit M5: Veo's 16:9 / 9:16 silently reframed a square reference. */
+describe('describeAspectMismatch', () => {
+  const veo = candidatesFromValues(['16:9', '9:16']);
+  const kling = candidatesFromValues(['16:9', '1:1', '9:16']);
+
+  it('names a shape the model cannot output', () => {
+    expect(describeAspectMismatch({ width: 1024, height: 1024 }, veo, '16:9')).toBe(
+      'Your reference is 1:1, and this model has no 1:1 output. It will be reframed to 16:9.'
+    );
+  });
+
+  it('points at the control when a matching shape exists but is not selected', () => {
+    expect(describeAspectMismatch({ width: 1024, height: 1024 }, kling, '16:9')).toBe(
+      'Your reference is 1:1 but the output is set to 16:9, so it will be reframed.'
+    );
+  });
+
+  it('stays quiet when the shapes agree within vendor rounding', () => {
+    expect(describeAspectMismatch({ width: 864, height: 496 }, veo, '16:9')).toBeNull();
+  });
+
+  it('stays quiet before the reference is measured or without a ratio control', () => {
+    expect(describeAspectMismatch({}, veo, '16:9')).toBeNull();
+    expect(describeAspectMismatch({ width: 1024, height: 1024 }, veo, undefined)).toBeNull();
+    expect(describeAspectMismatch({ width: 1024, height: 1024 }, [], 'auto')).toBeNull();
+  });
+
+  it('describes an unnamed shape by its pixels', () => {
+    expect(describeAspectMismatch({ width: 1000, height: 370 }, veo, '16:9')).toMatch(/^Your reference is 1000×370,/);
   });
 });

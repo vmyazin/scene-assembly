@@ -27,6 +27,7 @@ import { captureImageResult } from '@/lib/spend/capture';
 import { downloadFilenameBase } from '@/lib/download-name';
 import ProviderLogo from '@/components/ProviderLogo';
 import ConnectionGate from '@/components/ConnectionGate';
+import ReplaceDeprecatedModel from '@/components/ReplaceDeprecatedModel';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import PromptPanel from '@/components/PromptPanel';
 import SavedPromptsButton from '@/components/SavedPromptsButton';
@@ -784,6 +785,14 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
       ? availableEngines.find((engine) => engine.id === 'pollinations')
       : undefined;
 
+  // A retired model's successor, offered while the retired one is selected.
+  const geminiSuccessor = activeGeminiModel.replacedBy
+    ? geminiModels.find((model) => model.id === activeGeminiModel.replacedBy)
+    : undefined;
+  const falSuccessor = activeFalImageModel.replacedBy
+    ? FAL_IMAGE_MODELS.find((model) => model.id === activeFalImageModel.replacedBy)
+    : undefined;
+
   // Derived view state from the mutation.
   const isGenerating = generateMutation.isPending || cloudSubmitting;
   const newestResult = results[0] ?? null;
@@ -1134,6 +1143,12 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                     <span className="font-medium text-[var(--foreground)]">{activeGeminiModel.label}:</span>{' '}
                     {activeGeminiModel.note}
                   </p>
+                  {geminiSuccessor && (
+                    <ReplaceDeprecatedModel
+                      replacementLabel={geminiSuccessor.label}
+                      onSwitch={() => handleGeminiModelSelect(geminiSuccessor.id)}
+                    />
+                  )}
                 </div>
               </section>
             )}
@@ -1159,6 +1174,12 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                     <span className="font-medium text-[var(--foreground)]">{activeFalImageModel.label}:</span>{' '}
                     {activeFalImageModel.description}
                   </p>
+                  {falSuccessor && (
+                    <ReplaceDeprecatedModel
+                      replacementLabel={falSuccessor.label}
+                      onSwitch={() => { clearSubmissionFeedback(); setFalImageModel(falSuccessor.id); }}
+                    />
+                  )}
                 </div>
               </section>
             )}

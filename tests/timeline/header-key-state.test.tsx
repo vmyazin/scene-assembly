@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import TimelinePage from '../../app/timeline/page';
+import { useAccountStore } from '../../store/useAccountStore';
 import { useAppStore } from '../../store/useAppStore';
 
 /** The workspace itself is irrelevant here — this is about the header above it. */
@@ -37,7 +38,8 @@ function browserWithSavedKey() {
 
 beforeEach(() => {
   localStorage.clear();
-  useAppStore.setState({ apiKey: '', kieApiKey: '', falApiKey: '', hasHydrated: false });
+  useAppStore.setState({ apiKey: '', kieApiKey: '', falApiKey: '', runwareApiKey: '', hasHydrated: false });
+  useAccountStore.setState({ session: null });
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -74,5 +76,33 @@ describe('the timeline header reads the same key state as the studio', () => {
 
     await waitFor(() => expect(useAppStore.getState().hasHydrated).toBe(true));
     expect(useAppStore.getState().falApiKey).toBe('fal-key');
+  });
+});
+
+/**
+ * UX audit M1: the button counted only the Gemini, Kie and fal browser keys, so
+ * a signed-in person with eight connections saved to their account was still
+ * told to "Add API Keys".
+ */
+describe('the header counts every place a key can live', () => {
+  it('confirms keys saved to the account, with none in this browser', async () => {
+    useAccountStore.setState({
+      session: { connections: [{ id: 'c1', provider: 'gemini', revision: 1, hint: 'jUtA' }] },
+    } as unknown as Partial<ReturnType<typeof useAccountStore.getState>>);
+
+    render(<TimelinePage />);
+
+    expect(await screen.findByTitle('Update your API keys')).toBeInTheDocument();
+  });
+
+  it('confirms a browser key for an engine outside the original three', async () => {
+    useAppStore.setState({ runwareApiKey: 'rw-key', hasHydrated: true });
+    const persisted = localStorage.getItem(STORAGE_KEY);
+    useAppStore.setState({ runwareApiKey: '', hasHydrated: false });
+    if (persisted) localStorage.setItem(STORAGE_KEY, persisted);
+
+    render(<TimelinePage />);
+
+    expect(await screen.findByTitle('Update your API keys')).toBeInTheDocument();
   });
 });

@@ -84,6 +84,18 @@
   model changes call `clearSubmissionFeedback`, which also resets the mutation and any
   queued auto-retry, because the retry re-runs the request past the key check (H2).
 
+- **A reference image whose shape the model cannot output** → `useAutoAspect` snaps to the
+  nearest shape silently, so each workspace that uses it also renders `AspectMismatchNote`
+  (text from `describeAspectMismatch` in `lib/draft/aspect-match.ts`) under its model
+  controls. Veo offers only 16:9 and 9:16, and a square image was reframed with no word
+  (UX audit M5).
+
+- **A retired model** → mark it `deprecated` and set `replacedBy` to its successor's id
+  (Gemini and fal image catalogs). The image workspace then shows `ReplaceDeprecatedModel`,
+  a one-click switch, while the retired model is selected. Not a silent migration: it stays
+  runnable and may have been picked on purpose, but a remembered Nano Banana 2 ran at twice
+  2.1's price behind only a badge (UX audit M7).
+
 - **Generate button placement** → first read `docs/codex/specs/2026-09-11-generate-under-prompt.md`. Use `GenerationWorkspaceLayout`’s `actions` slot for the button, cost, progress, execution notice and submission/retry feedback, because the shared prompt → actions → results order keeps submission next to the text being edited at every screen width. Setup holds only model, media and controls.
 
 - **Describe a selected source into the prompt** → `lib/describe-source/` and
@@ -464,6 +476,12 @@ cp cloud/.dev.vars.example cloud/.dev.vars # then set DEV_FAKE_GENERATION=1 for 
 If either `pnpm install` fails in sharp's install script with "Please add node-addon-api to
 your dependencies", sharp found a global libvips and tried to build from source; rerun the
 same install with `SHARP_IGNORE_GLOBAL_LIBVIPS=1` in front.
+
+Turbopack's on-disk cache does not see edits made inside `.claude/worktrees/` after
+the dev server has started: a CSS change stayed absent from the served stylesheet
+across a server restart and only appeared after `rm -rf .next` in the worktree (found
+2026-10-16). Before trusting a smoke test of an edit made while the server ran, stop the
+server, delete the worktree's `.next`, and start it again.
 
 Install rather than symlink `node_modules`: `ln -s ../../../node_modules` still
 satisfies `tsc` and `vitest`, but Turbopack treats the worktree as its filesystem

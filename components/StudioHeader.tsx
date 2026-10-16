@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Check, Command as CommandIcon, Film, Key, Library as LibraryIcon, Volume2, VolumeX } from 'lucide-react';
+import { Check, Command as CommandIcon, Key, Library as LibraryIcon, Volume2, VolumeX } from 'lucide-react';
 
 import ApiKeyConfig from '@/components/ApiKeyConfig';
 import { BrandWordmark } from '@/components/BrandMark';
@@ -12,6 +12,7 @@ import { CommandPalette } from '@/components/CommandPalette';
 import LibraryOverlay from '@/components/LibraryOverlay';
 import { brand } from '@/lib/brand';
 import { setUiSoundsEnabled } from '@/lib/notify/chime';
+import { useAccountStore } from '@/store/useAccountStore';
 import { useAppStore } from '@/store/useAppStore';
 import { useConnectionsDialog } from '@/store/useConnectionsDialog';
 import { useLibraryDialog } from '@/store/useLibraryDialog';
@@ -117,12 +118,20 @@ export default function StudioHeader({
     return () => observer.disconnect();
   }, []);
 
-  const apiKey = useAppStore((s) => s.apiKey);
-  const kieApiKey = useAppStore((s) => s.kieApiKey);
-  const falApiKey = useAppStore((s) => s.falApiKey);
+  // Every credential the app can hold, in the browser or in the account. The
+  // button used to count only the Gemini, Kie and fal browser keys, so a
+  // signed-in person with eight connections saved to their account (or a guest
+  // with only a Runware key) was told to "Add API Keys" they already had.
+  const hasBrowserKey = useAppStore((s) =>
+    Boolean(
+      s.apiKey || s.kieApiKey || s.falApiKey || s.runwareApiKey || s.atlasApiKey ||
+      s.cometApiKey || s.piapiApiKey || (s.cfAccountId && s.cfToken)
+    )
+  );
+  const savedConnections = useAccountStore((s) => s.session?.connections?.length ?? 0);
   const hasHydrated = useAppStore((s) => s.hasHydrated);
   const uiSoundsEnabled = useAppStore((s) => s.uiSoundsEnabled);
-  const hasKey = hasHydrated && !!(apiKey || kieApiKey || falApiKey);
+  const hasKey = hasHydrated && (hasBrowserKey || savedConnections > 0);
 
   const keyDialogOpen = useConnectionsDialog((s) => s.open);
   const keyDialogFocus = useConnectionsDialog((s) => s.focusProvider);
@@ -137,19 +146,26 @@ export default function StudioHeader({
   const openLibrary = useLibraryDialog((s) => s.openLibrary);
   const setLibraryOpen = useLibraryDialog((s) => s.setOpen);
 
-  const pill = 'rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm';
+  // 44px tall on phones (a thumb target), the compact pill from `sm` up.
+  const pill =
+    'inline-flex min-h-11 flex-1 items-center justify-center rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors sm:min-h-0 sm:flex-none sm:px-3';
   const idle = 'text-[var(--foreground-muted)] hover:text-[var(--foreground)]';
 
   return (
     <>
-      {/* Header — sticky, hairline border, backdrop blur (Linear/Vercel nav) */}
-      <header ref={headerRef} className="sticky top-0 z-50 shrink-0 border-b border-[var(--border)] bg-[hsl(var(--tint-hue)_38%_5%/0.72)] backdrop-blur-xl">
+      {/* Header — sticky from `sm` up, hairline border, backdrop blur. On a
+          phone it wraps to two rows (see below), and pinning both would keep
+          about a seventh of the screen; it scrolls away there instead. Nothing
+          below `lg` offsets itself by --app-header-height. */}
+      <header ref={headerRef} className="relative top-0 z-50 shrink-0 sm:sticky border-b border-[var(--border)] bg-[hsl(var(--tint-hue)_38%_5%/0.72)] backdrop-blur-xl">
         <div
-          className={`w-full px-6 py-3.5 sm:px-8 md:px-12 md:py-4 lg:px-16 ${
+          className={`w-full px-4 py-3 sm:px-8 sm:py-3.5 md:px-12 md:py-4 lg:px-16 ${
             fullBleed ? '' : `${columnWidth} mx-auto`
           }`}
         >
-          <div className="flex items-center justify-between gap-4">
+          {/* Wraps below `sm`: the workspace tabs drop to a full-width second
+              row. In one row at 375px the logo slid under the Image tab. */}
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 sm:flex-nowrap">
             <Link
               href="/"
               aria-label="Go to Scene Assembly home"
@@ -180,7 +196,7 @@ export default function StudioHeader({
                 opens the editor in a tab, the way every other link here does. */}
             <nav
               aria-label="Workspace"
-              className="flex items-center rounded-xl border border-[var(--border)] bg-[var(--background-elevated)]/70 p-1"
+              className="order-last flex w-full items-center rounded-xl border border-[var(--border)] bg-[var(--background-elevated)]/70 p-1 sm:order-none sm:w-auto"
             >
               {onSelectWorkspace ? (
                 <button
@@ -216,13 +232,11 @@ export default function StudioHeader({
                   title="Timeline"
                   className={`${pill} flex items-center gap-1 bg-[var(--neon-cyan)]/15 text-[var(--neon-cyan)]`}
                 >
-                  <Film size={13} className="sm:hidden" aria-hidden />
-                  <span className="hidden sm:inline">Timeline</span>
+                  <span>Timeline</span>
                 </span>
               ) : (
                 <Link href="/timeline" title="Timeline" className={`${pill} ${idle} flex items-center gap-1`}>
-                  <Film size={13} className="sm:hidden" aria-hidden />
-                  <span className="hidden sm:inline">Timeline</span>
+                  <span>Timeline</span>
                 </Link>
               )}
             </nav>
@@ -237,7 +251,8 @@ export default function StudioHeader({
 
               <button
                 onClick={() => openLibrary()}
-                className="inline-flex items-center gap-1.5 rounded-[9px] border border-[var(--border)] px-2.5 py-2 text-xs text-[var(--foreground-muted)] transition-colors hover:border-[var(--border-hover)] hover:text-[var(--foreground)]"
+                aria-label="Library"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-[9px] border sm:min-h-0 sm:min-w-0 border-[var(--border)] px-2.5 py-2 text-xs text-[var(--foreground-muted)] transition-colors hover:border-[var(--border-hover)] hover:text-[var(--foreground)]"
                 title="Kept results and saved prompts"
               >
                 <LibraryIcon size={13} />
@@ -267,7 +282,7 @@ export default function StudioHeader({
 
               <button
                 onClick={() => openConnections()}
-                className={`${hasKey ? 'btn-secondary' : 'btn-primary'} text-sm`}
+                className={`${hasKey ? 'btn-secondary' : 'btn-primary'} min-h-11 text-sm sm:min-h-0`}
                 title={hasKey ? 'Update your API keys' : 'Add your API keys'}
               >
                 {hasKey ? (
