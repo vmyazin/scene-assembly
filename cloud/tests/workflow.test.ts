@@ -66,6 +66,10 @@ describe('background generation and capture',()=>{
     expect(safeResultUrl('https://atlas-media.oss-us-west-1.aliyuncs.com/outputs/result.png').hostname).toBe('atlas-media.oss-us-west-1.aliyuncs.com');
     for(const url of ['https://someone-else.oss-us-west-1.aliyuncs.com/file','https://oss-us-west-1.aliyuncs.com/file','https://aliyuncs.com/file'])expect(()=>safeResultUrl(url)).toThrow();
   });
+  it('accepts the DashScope bucket Atlas Wan 2.7 Edit delivers from, and no other bucket on the accelerate endpoint',()=>{
+    expect(safeResultUrl('https://dashscope-463f.oss-accelerate.aliyuncs.com/1d/out.mp4').hostname).toBe('dashscope-463f.oss-accelerate.aliyuncs.com');
+    for(const url of ['https://someone-else.oss-accelerate.aliyuncs.com/file','https://oss-accelerate.aliyuncs.com/file','https://dashscope-463f.oss-us-west-1.aliyuncs.com/file'])expect(()=>safeResultUrl(url)).toThrow();
+  });
 });
 
 describe('private video range downloads',()=>{

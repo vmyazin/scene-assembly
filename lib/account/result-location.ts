@@ -3,8 +3,11 @@
  * allowing all of aliyuncs.com would also trust buckets anybody can create.
  * Comet's Runway Aleph 2 returns results on Runway's own CloudFront distribution
  * (seen on a live job on 2026-10-14); that one distribution is allowed, never
- * cloudfront.net, which anybody can put a distribution on. */
-const RESULT_DOMAINS = ['fal.media', 'fal.ai', 'kie.ai', 'kieai.redpandaai.co', 'tempfile.ai', 'tempfile.redpandaai.co', 'redpandaai.co', 'runware.ai', 'atlascloud.ai', 'atlas-media.oss-us-west-1.aliyuncs.com', 'cometapi.com', 'filesystem.site', 'piapi.ai', 'theapi.app', 'dnznrvs05pmza.cloudfront.net'];
+ * cloudfront.net, which anybody can put a distribution on.
+ * Atlas's Wan 2.7 Edit hands back Alibaba DashScope's own result bucket on the
+ * OSS accelerate endpoint (seen on a live job on 2026-10-16); that bucket is
+ * allowed by exact host, for the same reason as Atlas's bucket above. */
+const RESULT_DOMAINS = ['fal.media', 'fal.ai', 'kie.ai', 'kieai.redpandaai.co', 'tempfile.ai', 'tempfile.redpandaai.co', 'redpandaai.co', 'runware.ai', 'atlascloud.ai', 'atlas-media.oss-us-west-1.aliyuncs.com', 'cometapi.com', 'filesystem.site', 'piapi.ai', 'theapi.app', 'dnznrvs05pmza.cloudfront.net', 'dashscope-463f.oss-accelerate.aliyuncs.com'];
 
 /** Browser navigation only. This MUST NOT authorize a Worker fetch: an unknown
  * public-looking hostname can resolve or redirect anywhere. Links are shown
