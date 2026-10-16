@@ -1,4 +1,5 @@
 // cloud/src/provider-adapters/aggregators.ts
+import { editPromptMode, editReferenceError, materializeEditReferences, parseEditReferencePlan, splitEditUploads } from '../../../lib/providers/edit-references';
 import { referenceClipCountError, referenceClipSetError, referenceClipsFor } from '../../../lib/providers/reference-clips';
 import { editPromptImageTokenError, editSettingsError, isRunwayEditProtocol } from '../../../lib/providers/video-edit';
 import { isSeedance25, isSeedanceDraftSize, isSeedanceFinalizeValues, seedanceFinalizeValuesError } from '../../../lib/providers/seedance-draft';
@@ -44,7 +45,11 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
   const referenceVideos = r.referenceVideoIds ?? [];
   const referenceAudios = r.referenceAudioIds ?? [];
   const clipCapability = referenceClipsFor(model, r.inputMode);
-  if ((referenceVideos.length > 0 || referenceAudios.length > 0) && !clipCapability) return invalid(`${model.label} does not take reference video or audio in ${describeMode(r.inputMode)}.`);
+  const drivingAudio = r.inputMode === 'edit' && Boolean(model.videoEdit?.references?.audio);
+  if (referenceVideos.length > 0 && !clipCapability) return invalid(`${model.label} does not take reference video or audio in ${describeMode(r.inputMode)}.`);
+  if (referenceAudios.length > 0 && !clipCapability && !drivingAudio) return invalid(`${model.label} does not take reference video or audio in ${describeMode(r.inputMode)}.`);
+  if (drivingAudio && referenceAudios.length > 1) return invalid('This edit takes one audio clip.');
+  if (drivingAudio && referenceVideos.length > 0) return invalid(`${model.label} does not take a reference video.`);
   if (clipCapability?.video) {
     const countError = referenceClipCountError(clipCapability.video, referenceVideos.length);
     if (countError) return invalid(countError);
@@ -52,12 +57,22 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
   if (clipCapability?.audio) {
     const countError = referenceClipCountError(clipCapability.audio, referenceAudios.length);
     if (countError) return invalid(countError);
-  } else if (referenceAudios.length > 0) return invalid(`${model.label} does not take reference audio.`);
+  } else if (referenceAudios.length > 0 && !drivingAudio) return invalid(`${model.label} does not take reference audio.`);
   const clipSetError = clipCapability ? referenceClipSetError(clipCapability, { images: count, videos: referenceVideos.length, audios: referenceAudios.length }) : null;
   if (clipSetError) return invalid(clipSetError);
   if (r.inputMode === 'edit') {
     if (!model.videoEdit || !r.sourceVideoId) return invalid('Choose a source video to edit.');
-    if (count > model.videoEdit.maxImages) return invalid(`Add up to ${model.videoEdit.maxImages} replacement images.`);
+    const promptMode = editPromptMode(model.videoEdit.references);
+    if (promptMode === 'required' && !r.prompt.trim()) return invalid('Enter a prompt for this edit.');
+    const spec = model.videoEdit.references;
+    if (spec) {
+      let plan;
+      try { plan = parseEditReferencePlan(r.editReferencePlan, count); }
+      catch (error) { return invalid(error instanceof Error ? error.message : 'Invalid edit references.'); }
+      const urls = r.referenceIds.map((_, index) => `https://reference.invalid/${index}`);
+      const referenceError = editReferenceError(spec, materializeEditReferences(spec, urls, plan, referenceAudios[0] ? 'https://reference.invalid/audio' : undefined));
+      if (referenceError) return invalid(referenceError);
+    } else if (count > model.videoEdit.maxImages) return invalid(`Add up to ${model.videoEdit.maxImages} replacement images.`);
     if (model.videoEdit.maxPromptLength && r.prompt.length > model.videoEdit.maxPromptLength) return invalid(`This model's prompt is at most ${model.videoEdit.maxPromptLength} characters.`);
     const imageTokenError = editPromptImageTokenError(model.videoEdit, r.prompt);
     if (imageTokenError) return invalid(imageTokenError);
@@ -177,6 +192,29 @@ export const aggregatorAdapter: GenerationAdapter = {
         aspectRatio: typeof r.values.aspectRatio === 'string' ? r.values.aspectRatio : undefined,
       });
       return {handle: {id: result.taskId, protocol: 'runway'}};
+    }
+    if (r.inputMode === 'edit' && provider === 'atlas') {
+      const split = splitEditUploads(r, common.images);
+      if (!split.source) throw new AccountError('Choose a source video to edit.', 400, 'invalid_references');
+      const sizeLabel = typeof r.values.size === 'string' ? r.values.size : undefined;
+      const size = resolveSize(provider, r.modelId, sizeLabel);
+      const result = await atlasCreateVideo({
+        apiKey: common.apiKey,
+        model: r.modelId,
+        prompt: r.prompt,
+        moderation,
+        inputMode: 'edit',
+        sourceVideo: split.source,
+        images: split.images,
+        ...(split.audio ? { referenceAudios: [split.audio] } : {}),
+        ...(size?.preset ? { resolution: size.preset } : {}),
+        ...(typeof r.values.aspectRatio === 'string' ? { aspectRatio: r.values.aspectRatio } : {}),
+        ...(typeof r.values.keepOriginalSound === 'boolean' ? { keepOriginalSound: r.values.keepOriginalSound } : {}),
+        ...(typeof r.values.outputDuration === 'number' ? { outputDuration: r.values.outputDuration } : {}),
+        ...(typeof r.values.negativePrompt === 'string' ? { negativePrompt: r.values.negativePrompt } : {}),
+        ...(typeof r.values.promptExtend === 'boolean' ? { promptExtend: r.values.promptExtend } : {}),
+      });
+      return { handle: { id: result.taskId } };
     }
     if (r.inputMode === 'edit') {
       // inputUrls keeps the source last, matching jobInputIds; it is never an image.

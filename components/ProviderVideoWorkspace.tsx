@@ -9,9 +9,11 @@ import { useCloudWorkspace } from '@/lib/account/useCloudWorkspace';
 import CloudExecutionNotice from '@/components/account/CloudExecutionNotice';
 import CloudJobPanel from '@/components/account/CloudJobPanel';
 
+import EditReferenceTray, { emptyEditReferenceDraft } from '@/components/EditReferenceTray';
 import VideoSourceInput, { type SourceVideo } from '@/components/VideoSourceInput';
 import { useAccountStore } from '@/store/useAccountStore';
 import { ALEPH_DATA_URI_MAX, alephDataUriLength, isAlephVideoUri } from '@/lib/providers/comet';
+import { CLOUD_EDIT_REFERENCE_CAP, editPromptMode, packEditReferences, type EditReferencePlan } from '@/lib/providers/edit-references';
 import { editPromptImageTokenError, editPromptShortcuts, isRunwayEditProtocol, validateEditSource } from '@/lib/providers/video-edit';
 import { uploadRunwareMedia, uploadRunwareVideo } from '@/lib/providers/upload-video';
 import ReferenceClipTray, { type AttachedReferenceClip } from '@/components/ReferenceClipTray';
@@ -256,10 +258,29 @@ export default function ProviderVideoWorkspace({
     });
     if (selectedModel.videoEdit.draftRate) fields.push({key: 'draft', label: 'Draft mode', type: 'boolean', defaultValue: false, description: 'Faster, lower-quality preview at a lower price. Turn off for Standard quality.'});
     else if (selectedModel.videoEdit.draftPreview) fields.push(draftField);
+    for (const control of selectedModel.videoEdit.controls ?? []) {
+      fields.push({
+        key: control.key,
+        label: control.label,
+        type: control.kind,
+        description: control.description,
+        defaultValue: control.defaultValue,
+        options: control.options ? [...control.options] : undefined,
+        min: control.min,
+        max: control.max,
+      });
+    }
     return fields;
   }, [selectedModel, isEdit]);
   const epoch = useAccountStore(state => state.epoch);
   const [selectedSource, setSelectedSource] = useState<SourceVideo | null>(null);
+  const [editDraft, setEditDraft] = useState(emptyEditReferenceDraft);
+  const [editDraftModel, setEditDraftModel] = useState(selectedModel?.id);
+  if (editDraftModel !== selectedModel?.id) {
+    setEditDraftModel(selectedModel?.id);
+    setEditDraft(emptyEditReferenceDraft());
+  }
+  const editSpec = isEdit ? selectedModel?.videoEdit?.references : undefined;
   const source = selectedSource?.epoch === epoch ? selectedSource : null;
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadKind, setUploadKind] = useState<'source' | 'video' | 'audio' | null>(null);
@@ -593,7 +614,8 @@ export default function ProviderVideoWorkspace({
       setError(`${label} has no model for this mode.`);
       return;
     }
-    if (!prompt.trim()) {
+    const promptMode = isEdit ? editPromptMode(selectedModel?.videoEdit?.references) : 'required';
+    if (promptMode === 'required' && !prompt.trim()) {
       setError('Describe the clip you want before generating.');
       return;
     }
@@ -607,6 +629,24 @@ export default function ProviderVideoWorkspace({
       return;
     }
     if (isEdit && !source) { setError('Choose a source video to edit.'); return; }
+    if (isEdit && provider === 'atlas' && !cloudWorkspace.cloud) {
+      setError('Atlas video edits need a background job, so the source clip has a hosted address.');
+      return;
+    }
+    let packedPlan: EditReferencePlan | undefined;
+    let packedFiles = inputMode === 'text' || editSpec ? [] : references.map((reference) => reference.file);
+    let packedAudio: File | undefined;
+    if (editSpec) {
+      const packed = packEditReferences(editDraft, editSpec);
+      if (!packed.ok) { setError(packed.error); return; }
+      if (packed.packed.files.length > CLOUD_EDIT_REFERENCE_CAP) {
+        setError(`A background job can attach ${CLOUD_EDIT_REFERENCE_CAP} reference images.`);
+        return;
+      }
+      packedPlan = packed.packed.plan;
+      packedFiles = packed.packed.files;
+      packedAudio = packed.packed.audio;
+    }
     const imageTokenError = isEdit && selectedModel.videoEdit ? editPromptImageTokenError(selectedModel.videoEdit, prompt) : undefined;
     if (imageTokenError) { setError(imageTokenError); return; }
     if (isReference && references.length === 0) {
@@ -648,16 +688,23 @@ export default function ProviderVideoWorkspace({
       if (isEdit && source && selectedModel.videoEdit) validateEditSource(source, selectedModel.videoEdit);
       if (cloudWorkspace.cloud) {
         const submittedSize = typeof values.size === 'string' ? values.size : undefined;
-        await cloudWorkspace.submit({modelId:selectedModel.id, mediaType:'video', inputMode, prompt:prompt.trim(), values:{
+        const libraryPrompt = prompt.trim() || (promptMode === 'absent' ? selectedModel.label : '');
+        const editControls = Object.fromEntries((selectedModel.videoEdit?.controls ?? []).flatMap((control) => {
+          const value = values[control.key];
+          return value === undefined || value === '' ? [] : [[control.key, value]];
+        }));
+        const audios = [...(clipCapability ? clipAudios.map((clip) => clip.file) : []), ...(packedAudio ? [packedAudio] : [])];
+        await cloudWorkspace.submit({modelId:selectedModel.id, mediaType:'video', inputMode, prompt:libraryPrompt, ...(packedPlan ? { editReferencePlan: packedPlan } : {}), values:{
           ...(!isEdit && typeof values.duration === 'number' ? {durationSeconds:values.duration} : {}),
           ...((!isEdit || selectedModel.videoEdit?.sizes.length) && submittedSize ? {size:submittedSize} : {}),
           ...(isEdit && selectedModel.videoEdit?.draftRate ? {draft:values.draft === true} : {}),
           ...(seedanceDraftOn ? {draft: true} : {}),
-          ...(isEdit && selectedModel.videoEdit?.draftPreview && source?.durationSeconds ? {sourceDurationSeconds: source.durationSeconds} : {}),
+          ...(isEdit && source?.durationSeconds && (selectedModel.videoEdit?.rate?.per === 'second' || selectedModel.videoEdit?.draftPreview) ? {sourceDurationSeconds: source.durationSeconds} : {}),
           ...(!isEdit && selectedModel?.supportsAudio ? {audio:values.audio === true} : {}),
           ...(aspectRatio ? { aspectRatio } : {}),
+          ...editControls,
           ...relaxed.attach(),
-        }}, inputMode === 'text' ? [] : references.map(reference => reference.file), prompt.trim(), isEdit ? source?.file : undefined, clipCapability ? { videos: clipVideos.map((clip) => clip.file), audios: clipAudios.map((clip) => clip.file) } : undefined);
+        }}, editSpec ? packedFiles : (inputMode === 'text' ? [] : references.map(reference => reference.file)), libraryPrompt, isEdit ? source?.file : undefined, (clipCapability || packedAudio) ? { videos: clipVideos.map((clip) => clip.file), audios } : undefined);
         autoRetry.reset();
         return;
       }
@@ -847,7 +894,17 @@ export default function ProviderVideoWorkspace({
 
           {isEdit && <VideoSourceInput capability={selectedModel!.videoEdit!} source={source} onChange={setSelectedSource} disabled={isSubmitting}
             youtube={cloudWorkspace.cloud ? {provider, modelId: selectedModel!.id, modelLabel: selectedModel!.label} : undefined} />}
-          {isEdit && maxInputImages === 0 && (
+          {editSpec && (
+            <EditReferenceTray
+              spec={editSpec}
+              draft={editDraft}
+              onChange={setEditDraft}
+              disabled={isSubmitting}
+              fileCap={Math.min(CLOUD_EDIT_REFERENCE_CAP, editSpec.keyframes?.max ?? CLOUD_EDIT_REFERENCE_CAP)}
+              promptSyntax={selectedModel?.videoEdit?.promptSyntax}
+            />
+          )}
+          {isEdit && maxInputImages === 0 && !editSpec && (
             <section className="glass-card space-y-1 p-3.5 md:p-4">
               <h3 className="display text-base font-semibold">Character images</h3>
               <p className="text-xs text-[var(--foreground-muted)]">
@@ -855,7 +912,7 @@ export default function ProviderVideoWorkspace({
               </p>
             </section>
           )}
-          {inputMode !== 'text' && maxInputImages > 0 && (
+          {inputMode !== 'text' && maxInputImages > 0 && !editSpec && (
             <section className="glass-card space-y-3 p-3.5 md:p-4">
               <div>
                 <h3 className="display text-base font-semibold">
@@ -987,7 +1044,7 @@ export default function ProviderVideoWorkspace({
               id="provider-video-prompt"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              placeholder={isEdit ? (selectedModel?.videoEdit?.namesSource ? 'Describe what to change in @Video1 and what to keep…' : 'Describe what to change in the source video and what to keep…') : clipCapability ? `Describe the motion. Address clips as ${clipToken(clipSyntax, 'Video', 0)} and ${clipToken(clipSyntax, 'Audio', 0)}.` : "Describe the motion, camera, mood, and scene…"}
+              placeholder={isEdit ? (selectedModel?.videoEdit?.promptSyntax === 'triple-angle' ? 'Describe the edit. Address the source as <<<video_1>>> and images as <<<image_1>>>.' : selectedModel?.videoEdit?.namesSource ? 'Describe what to change in @Video1 and what to keep…' : 'Describe what to change in the source video and what to keep…') : clipCapability ? `Describe the motion. Address clips as ${clipToken(clipSyntax, 'Video', 0)} and ${clipToken(clipSyntax, 'Audio', 0)}.` : "Describe the motion, camera, mood, and scene…"}
             />
           </PromptPanel>
         }

@@ -292,7 +292,38 @@ export async function atlasGenerateImage(
   throw new ProviderError('Atlas Cloud is still working on this image. Try again in a moment.', 504, 'atlas');
 }
 
+/**
+ * Edit bodies use the upstream field names. Kling takes `video` plus `images`
+ * and `keep_original_sound`. Wan 2.7 takes `video`, `images`, optional `audio`,
+ * `resolution`, `ratio` (not `aspect_ratio`), and `duration` only when the
+ * output is shorter than the source.
+ */
+export function atlasEditBody(request: VideoRequest): Record<string, unknown> {
+  const kling = request.model.includes('kling-video-o3');
+  const wan = request.model.includes('wan-2.7');
+  const body: Record<string, unknown> = {
+    model: request.model,
+    ...(request.prompt.trim() ? { prompt: request.prompt } : {}),
+    video: request.sourceVideo,
+    ...(request.images?.length ? { images: request.images } : {}),
+    ...(request.referenceAudios?.[0] ? { audio: request.referenceAudios[0] } : {}),
+  };
+  if (kling) body.keep_original_sound = request.keepOriginalSound !== false;
+  if (wan) {
+    if (request.resolution) body.resolution = request.resolution;
+    if (request.aspectRatio) body.ratio = request.aspectRatio;
+    if (typeof request.outputDuration === 'number' && request.outputDuration > 0) body.duration = request.outputDuration;
+    if (request.negativePrompt?.trim()) body.negative_prompt = request.negativePrompt.trim();
+    if (typeof request.promptExtend === 'boolean') body.prompt_extend = request.promptExtend;
+  }
+  return body;
+}
+
 export async function atlasCreateVideo(request: VideoRequest): Promise<{ taskId: string }> {
+  if (request.inputMode === 'edit') {
+    const taskId = await submit(request.apiKey, 'generateVideo', atlasEditBody(request));
+    return { taskId };
+  }
   const taskId = await submit(request.apiKey, 'generateVideo', {
     model: request.model,
     prompt: request.prompt,

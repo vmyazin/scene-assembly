@@ -1,7 +1,7 @@
 // tests/providers/atlas-comet.test.ts
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { atlasCreateVideo, atlasGenerateImage, atlasPollVideo } from '@/lib/providers/atlas';
+import { atlasCreateVideo, atlasEditBody, atlasGenerateImage, atlasPollVideo } from '@/lib/providers/atlas';
 import { cometCreateVideo, cometGenerateImage, cometPollRunway, cometPollVideo } from '@/lib/providers/comet';
 import { resolveModel } from '@/lib/providers/catalog';
 
@@ -245,6 +245,48 @@ describe('atlas cloud', () => {
         noSleep
       )
     ).rejects.toThrow(/content policy violation/);
+  });
+
+  it('sends Atlas Kling and Wan edits with their documented fields', () => {
+    expect(atlasEditBody({
+      apiKey: 'at-key',
+      model: 'kwaivgi/kling-video-o3-pro/video-edit',
+      prompt: 'Edit <<<video_1>>> with <<<image_1>>>',
+      inputMode: 'edit',
+      sourceVideo: 'https://cdn.example/clip.mp4',
+      images: ['https://cdn.example/a.png'],
+      keepOriginalSound: true,
+    })).toEqual({
+      model: 'kwaivgi/kling-video-o3-pro/video-edit',
+      prompt: 'Edit <<<video_1>>> with <<<image_1>>>',
+      video: 'https://cdn.example/clip.mp4',
+      images: ['https://cdn.example/a.png'],
+      keep_original_sound: true,
+    });
+    expect(atlasEditBody({
+      apiKey: 'at-key',
+      model: 'alibaba/wan-2.7/video-edit',
+      prompt: 'Change the coat',
+      inputMode: 'edit',
+      sourceVideo: 'https://cdn.example/clip.mp4',
+      images: ['https://cdn.example/a.png'],
+      referenceAudios: ['https://cdn.example/drive.mp3'],
+      resolution: '1080P',
+      aspectRatio: '16:9',
+      outputDuration: 0,
+      promptExtend: true,
+      negativePrompt: 'blur',
+    })).toEqual({
+      model: 'alibaba/wan-2.7/video-edit',
+      prompt: 'Change the coat',
+      video: 'https://cdn.example/clip.mp4',
+      images: ['https://cdn.example/a.png'],
+      audio: 'https://cdn.example/drive.mp3',
+      resolution: '1080P',
+      ratio: '16:9',
+      prompt_extend: true,
+      negative_prompt: 'blur',
+    });
   });
 
   it('passes an image-to-video reference as the documented image field', async () => {

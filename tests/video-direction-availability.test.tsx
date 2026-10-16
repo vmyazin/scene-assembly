@@ -21,11 +21,11 @@ describe('direction-first engine selection', () => {
       expect(screen.getByRole('button', { name })).toBeVisible();
     }
     expect(screen.getAllByRole('radio')).toHaveLength(7);
-    expect(screen.getByRole('radio', { name: 'Kie.ai' })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: 'Kie.ai' })).toBeEnabled();
     expect(screen.getByRole('radio', { name: 'Gemini' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Edit video' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('workspace')).toHaveTextContent('runware:edit');
-    expect(useAppStore.getState().videoEngine).toBe('runware');
+    expect(screen.getByText('kie workspace')).toBeInTheDocument();
+    expect(useAppStore.getState().videoEngine).toBe('kie');
     expect(onInputModeChange).not.toHaveBeenCalled();
   });
 

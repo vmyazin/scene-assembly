@@ -8,6 +8,7 @@ import YouTubeClipDialog, { type YouTubeClipTarget } from './YouTubeClipDialog';
 import VideoPlayer from './video/VideoPlayer';
 import { probeDimensions, type ProbedDimensions } from '@/lib/timeline/probe';
 import type { ProviderModel } from '@/lib/providers/types';
+import { editSourceToken } from '@/lib/providers/edit-references';
 import { editVideoMaxBytes, editVideoMimes, validateEditVideo, validateEditSource } from '@/lib/providers/video-edit';
 import { formatClock, watchUrl, type ImportedClipSource } from '@/lib/youtube/clip';
 import { discardStagedSource } from '@/lib/account/staged-sources';
@@ -16,6 +17,12 @@ import { trimVideoToLimit, videoTrimNotice } from '@/lib/media/trim-video';
 import { useObjectUrl } from '@/lib/media/use-object-url';
 
 export interface SourceVideo extends ProbedDimensions { file: File; epoch: number; origin?: ImportedClipSource; trimNotice?: string }
+
+function sourceHint(capability: NonNullable<ProviderModel['videoEdit']>): string {
+  if (capability.promptSyntax === 'triple-angle') return `Reference this clip as ${editSourceToken(capability.promptSyntax)}.`;
+  if (capability.namesSource) return 'Reference this clip as @Video1.';
+  return 'Describe how to change the source video.';
+}
 export function SourceVideoPreview({file, label = 'Original video'}: {file: File; label?: string}) {
   const url = useObjectUrl(file);
   return url ? <VideoPlayer src={url} label={label} className="aspect-video w-full" /> : null;
@@ -83,7 +90,7 @@ export default function VideoSourceInput({source, onChange, disabled, capability
     } finally { if (turn === sequence.current) { setReading(false); setTrimming(false); } }
   }
   return <section className="glass-card space-y-3 p-3.5 md:p-4">
-    <div><h3 className="display text-base font-semibold">Source video</h3><p className="mt-1 text-xs text-[var(--foreground-muted)]">{editVideoMimes(capability).map(mime => mime === 'video/mp4' ? 'MP4' : mime === 'video/quicktime' ? 'MOV' : mime === 'video/webm' ? 'WebM' : mime).join(', ')} · {capability.minSeconds ? `${capability.minSeconds}–${capability.maxSeconds}` : `Up to ${capability.maxSeconds}`} seconds · up to {Math.round(editVideoMaxBytes(capability) / 1_000_000)} MB{capability.sourceBounds ? ` · ${capability.sourceBounds.minEdge}–${capability.sourceBounds.maxEdge}px` : ''}. {capability.namesSource ? 'Reference this clip as @Video1.' : 'Describe how to change the source video.'} Longer clips are trimmed automatically.</p></div>
+    <div><h3 className="display text-base font-semibold">Source video</h3><p className="mt-1 text-xs text-[var(--foreground-muted)]">{editVideoMimes(capability).map(mime => mime === 'video/mp4' ? 'MP4' : mime === 'video/quicktime' ? 'MOV' : mime === 'video/webm' ? 'WebM' : mime).join(', ')} · {capability.minSeconds ? `${capability.minSeconds}–${capability.maxSeconds}` : `Up to ${capability.maxSeconds}`} seconds · up to {Math.round(editVideoMaxBytes(capability) / 1_000_000)} MB{capability.sourceBounds ? ` · ${capability.sourceBounds.minEdge}–${capability.sourceBounds.maxEdge}px` : ''}. {sourceHint(capability)} Longer clips are trimmed automatically.</p></div>
     {source && <><SourceVideoPreview file={source.file} /><p className="break-all text-xs text-[var(--foreground-muted)]">{source.origin
       ? <a href={watchUrl(source.origin)} target="_blank" rel="noreferrer noopener" className="underline-offset-2 hover:underline">From YouTube · {formatClock(source.origin.startSeconds)}–{formatClock(source.origin.endSeconds)}</a>
       : source.file.name} · {source.durationSeconds.toFixed(1)}s · {source.width} × {source.height}{source.origin?.savedToLibrary ? ' · Saved to library' : ''}</p>

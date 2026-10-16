@@ -143,9 +143,13 @@ export function buildAccountSpendEntry(args: BuildAccountSpendEntryArgs): Accoun
   const model = findModel(request.provider, request.modelId);
   const edit = request.inputMode === 'edit';
   const sourceDuration = typeof request.values.sourceDurationSeconds === 'number' ? request.values.sourceDurationSeconds : undefined;
-  const duration = edit && sourceDuration !== undefined
-    ? sourceDuration
-    : typeof request.values.durationSeconds === 'number' ? request.values.durationSeconds : undefined;
+  const outputDuration = typeof request.values.outputDuration === 'number' && request.values.outputDuration > 0
+    ? request.values.outputDuration
+    : undefined;
+  const duration = outputDuration
+    ?? (edit && sourceDuration !== undefined
+      ? sourceDuration
+      : typeof request.values.durationSeconds === 'number' ? request.values.durationSeconds : undefined);
   const resolved = resolveCatalogRate(model, duration, outputs, {
     audio: request.values.audio === true,
     size: request.provider === 'piapi' && request.mediaType === 'image' ? String(request.values.resolution ?? '1K') : typeof request.values.size === 'string' ? request.values.size : undefined,

@@ -748,7 +748,7 @@ describe('fal API routes', () => {
         name: 'upload URL count',
         body: {
           ...submitBody,
-          uploadUrls: Array.from({ length: 17 }, (_, index) => `https://fal.media/${index}.png`),
+          uploadUrls: Array.from({ length: 66 }, (_, index) => `https://fal.media/${index}.png`),
         },
         status: 413,
       },

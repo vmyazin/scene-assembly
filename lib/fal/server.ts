@@ -1,5 +1,7 @@
+// lib/fal/server.ts
 import { createFalClient } from '@fal-ai/client';
 
+import type { EditReferenceInput } from '../providers/edit-references';
 import { buildFalInput, extractFalResult, resolveFalVariant } from './catalog';
 import { falUnitQuantity } from './pricing';
 import type { FalInputMode, FalMediaType, FalTask, FalValue } from './types';
@@ -286,6 +288,7 @@ export async function submitFalTask(args: {
   prompt: string;
   uploadUrls: string[];
   values: Record<string, FalValue>;
+  references?: EditReferenceInput;
 }): Promise<{ requestId: string }> {
   return withSafeFalErrors(async () => {
     const variant = resolveFalVariant(args.modelId, args.mediaType, args.inputMode);
@@ -293,6 +296,7 @@ export async function submitFalTask(args: {
       prompt: args.prompt,
       uploadUrls: args.uploadUrls,
       values: args.values,
+      references: args.references,
     });
 
     return withSafeFalErrors(async () => {

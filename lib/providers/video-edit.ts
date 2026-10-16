@@ -54,6 +54,7 @@ export function editPromptShortcuts(capability?: Pick<VideoEditCapability, 'maxI
       return [label, written.replace(/^Edit @Video1: (\w)/, (_, first: string) => first.toUpperCase())];
     }
     if (capability?.promptSyntax === 'image-index') return [label, text.replace('@Video1', 'the source video').replace(/@Image(\d+)/g, 'image $1')];
+    if (capability?.promptSyntax === 'triple-angle') return [label, text.replace('@Video1', '<<<video_1>>>').replace(/@Image(\d+)/g, (_, n: string) => `<<<image_${n}>>>`)];
     return [label, text];
   });
 }
@@ -73,9 +74,18 @@ export function editSettingsError(capability: VideoEditCapability, values: Recor
     ...(capability.draftRate || capability.draftPreview ? ['draft'] : []),
     // The Worker overwrites this with the container length before reserve.
     // A caller-supplied number is only a check, within a second of the file.
-    ...(capability.draftPreview || capability.rate.per === 'second' ? ['sourceDurationSeconds'] : []),
+    ...(capability.draftPreview || capability.rate?.per === 'second' ? ['sourceDurationSeconds'] : []),
+    ...(capability.controls ?? []).map(control => control.key),
   ];
   if (Object.keys(values).some(key => values[key] !== undefined && !allowed.includes(key))) return 'Unsupported edit setting. Duration and aspect ratio follow the source.';
+  for (const control of capability.controls ?? []) {
+    const value = values[control.key];
+    if (value === undefined) continue;
+    if (control.kind === 'boolean' && typeof value !== 'boolean') return `${control.label} must be on or off.`;
+    if (control.kind === 'text' && (typeof value !== 'string' || (control.maxLength !== undefined && value.length > control.maxLength))) return `${control.label} is too long.`;
+    if (control.kind === 'number' && (typeof value !== 'number' || !Number.isFinite(value) || (control.min !== undefined && value < control.min) || (control.max !== undefined && value > control.max))) return `${control.label} is outside this model's range.`;
+    if (control.kind === 'select' && !control.options?.some(option => option.value === value)) return `Choose a supported ${control.label.toLowerCase()}.`;
+  }
   if (values.draft !== undefined && typeof values.draft !== 'boolean') return 'Draft must be on or off.';
   if (capability.draftPreview && values.draft === true && values.size !== '480p') return 'A Seedance draft edit is 480p only.';
   if (capability.sizes.length && !capability.sizes.some(size => size.label === values.size)) return 'Choose a supported edit resolution.';

@@ -1,4 +1,6 @@
 // lib/kie/catalog.ts
+// lib/kie/catalog.ts
+import { editPromptMode, editReferenceError, editReferenceFields, materializeEditReferences, type EditReferenceInput } from '../providers/edit-references';
 import { applyProviderModeration, lockKieVeoFallback } from '../moderation/capabilities';
 import { effectiveModerationLevel } from '../moderation/floors';
 import type {
@@ -321,14 +323,90 @@ export const KIE_MODELS: KieModelDefinition[] = [
     provider: 'Wan',
     description: 'Text to video, or animates one image. Expands short prompts.',
     mediaType: 'video',
-    variants: paired(
-      'wan/2-7-text-to-video',
-      'wan/2-7-image-to-video',
-      'image_url',
-      [aspectRatios, duration, videoResolution, boolField('enable_prompt_expansion', 'Expand prompt', true), seed],
-      1,
-      false
-    ),
+    variants: [
+      ...paired(
+        'wan/2-7-text-to-video',
+        'wan/2-7-image-to-video',
+        'image_url',
+        [aspectRatios, duration, videoResolution, boolField('enable_prompt_expansion', 'Expand prompt', true), seed],
+        1,
+        false
+      ),
+      // https://docs.kie.ai/market/wan/2-7-videoedit (read 2026-10-16).
+      // video_url required. reference_image is one optional URL.
+      // Source 2–10s, 240–4096px, aspect 1:8–8:1, ≤100MB, mp4/mov.
+      // Duration 0 or 2–10 (1 is not valid). No dollar price is published.
+      {
+        modelId: 'wan/2-7-videoedit',
+        protocol: 'market',
+        inputMode: 'edit',
+        imageInputKey: 'reference_image',
+        imageInputMultiple: false,
+        maxInputImages: 1,
+        price: 'unknown',
+        edit: {
+          sizes: [],
+          maxImages: 1,
+          minSeconds: 2,
+          maxSeconds: 10,
+          maxBytes: 100_000_000,
+          mimes: ['video/mp4', 'video/quicktime'],
+          requireMeasurement: true,
+          sourceBounds: { minEdge: 240, maxEdge: 4096, minRatio: 1 / 8, maxRatio: 8 },
+          references: { prompt: 'optional', images: { max: 1, wire: 'reference_image' } },
+          note: 'Kie has not published a dollar price for this edit. One optional reference image. Output duration 0 keeps the source length.',
+        },
+        fields: [
+          {
+            key: 'resolution',
+            label: 'Resolution',
+            type: 'select',
+            defaultValue: '1080p',
+            description: '1080p costs more than 720p. Kie does not publish the dollar amounts.',
+            options: ['720p', '1080p'].map((value) => ({ label: value, value })),
+          },
+          {
+            key: 'aspect_ratio',
+            label: 'Aspect ratio',
+            type: 'select',
+            description: 'Match source keeps a frame close to the input. Omit the field to keep it.',
+            options: [
+              { label: 'Match source', value: '' },
+              ...['16:9', '9:16', '1:1', '4:3', '3:4'].map((value) => ({ label: value, value })),
+            ],
+          },
+          {
+            key: 'duration',
+            label: 'Output duration',
+            type: 'select',
+            defaultValue: 0,
+            description: 'Match source keeps the input length. Any other value clips from the start. 1 second is not a valid length.',
+            options: [
+              { label: 'Match source', value: 0 },
+              ...[2, 3, 4, 5, 6, 7, 8, 9, 10].map((value) => ({ label: `${value} seconds`, value })),
+            ],
+          },
+          {
+            key: 'audio_setting',
+            label: 'Audio',
+            type: 'select',
+            defaultValue: 'auto',
+            options: [
+              { label: 'Auto', value: 'auto' },
+              { label: 'Keep original', value: 'origin' },
+            ],
+          },
+          boolField('prompt_extend', 'Expand prompt', true),
+          {
+            key: 'negative_prompt',
+            label: 'Negative prompt',
+            type: 'text',
+            maxLength: 500,
+            description: 'Up to 500 characters. Leave blank to omit it.',
+          },
+        ],
+      },
+    ],
   },
   {
     id: 'hailuo-2-3-pro',
@@ -421,9 +499,18 @@ export function defaultKieValues(variant: KieModelVariant): Record<string, strin
 
 export function validateKieInput(
   variant: KieModelVariant,
-  args: { prompt: string; uploadUrls: string[] }
+  args: { prompt: string; uploadUrls: string[]; references?: EditReferenceInput }
 ): string | null {
-  if (!args.prompt.trim()) return 'Enter a prompt for the selected Kie model.';
+  const promptMode = variant.inputMode === 'edit' ? editPromptMode(variant.edit?.references) : 'required';
+  if (promptMode === 'required' && !args.prompt.trim()) return 'Enter a prompt for the selected Kie model.';
+  if (variant.inputMode === 'edit' && args.prompt.trim().length > 5000) return 'This model\'s prompt is at most 5000 characters.';
+  if (variant.inputMode === 'edit') {
+    if (args.uploadUrls.length < 1 && !args.references?.video) return 'Choose a source video to edit.';
+    const spec = variant.edit?.references;
+    if (!spec) return null;
+    const images = args.uploadUrls.slice(0, Math.max(0, args.uploadUrls.length - 1));
+    return editReferenceError(spec, args.references ?? materializeEditReferences(spec, images));
+  }
   if (variant.inputMode !== 'image') return null;
   if (args.uploadUrls.length === 0) return 'Add at least one reference image for the selected Kie model.';
   const maxInputImages = variant.maxInputImages ?? 1;
@@ -439,11 +526,25 @@ export function buildKieInput(
     prompt: string;
     uploadUrls: string[];
     values: Record<string, string | number | boolean | undefined>;
+    references?: EditReferenceInput;
   }
 ): Record<string, string | number | boolean | string[]> {
-  const input: Record<string, string | number | boolean | string[]> = { prompt: args.prompt };
+  const promptMode = variant.inputMode === 'edit' ? editPromptMode(variant.edit?.references) : 'required';
+  const input: Record<string, string | number | boolean | string[]> = {};
+  if (promptMode !== 'absent' && args.prompt.trim()) input.prompt = args.prompt.trim();
 
-  if (variant.imageInputKey && args.uploadUrls.length > 0) {
+  if (variant.inputMode === 'edit' && variant.edit?.references) {
+    const spec = variant.edit.references;
+    const video = args.references?.video ?? args.uploadUrls[args.uploadUrls.length - 1];
+    const images = args.uploadUrls.slice(0, Math.max(0, args.uploadUrls.length - 1));
+    const references = args.references ?? materializeEditReferences(spec, images);
+    const fields = editReferenceFields(spec, { ...references, video });
+    for (const [key, value] of Object.entries(fields)) {
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || Array.isArray(value)) {
+        input[key] = value as string | number | boolean | string[];
+      }
+    }
+  } else if (variant.imageInputKey && args.uploadUrls.length > 0) {
     input[variant.imageInputKey] = variant.imageInputMultiple
       ? args.uploadUrls
       : args.uploadUrls[0];

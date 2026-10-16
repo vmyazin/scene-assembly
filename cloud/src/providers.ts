@@ -1,3 +1,4 @@
+// cloud/src/providers.ts
 import { LOCAL_VIDEO_BASE64 } from './local-video-fixture';
 import { falAdapter, kieAdapter, validateQueuedRequest } from './provider-adapters/queued';
 import { aggregatorAdapter, validateAggregatorRequest } from './provider-adapters/aggregators';
@@ -6,7 +7,10 @@ import type { CloudJobRequest } from '../../lib/account/contracts';
 import { AccountError, type JobRow } from './jobs';
 import { isLocal, type Env } from './security';
 import { writeOutput, type ProviderResult } from './assets';
+import { resolveFalVariant } from '../../lib/fal/catalog';
+import { resolveKieVariant } from '../../lib/kie/catalog';
 import { findModel } from '../../lib/providers/catalog';
+import { editPromptMode, parseEditReferencePlan } from '../../lib/providers/edit-references';
 import { referenceClipsFor } from '../../lib/providers/reference-clips';
 import type { ProviderId } from '../../lib/providers/types';
 import { inspectPrompt } from '../../lib/moderation/floors';
@@ -66,10 +70,22 @@ export function adapterFor(env:Env,provider:CloudJobRequest['provider']):Generat
   }
   throw new AccountError('Background generation for this provider is not enabled yet. Continue with the existing browser workflow.',409,'provider_unavailable');
 }
+
+/** Relight has no prompt. Recast and Kie Wan treat it as optional. */
+function editPromptMayBeEmpty(r: Partial<CloudJobRequest>): boolean {
+  if (r.inputMode !== 'edit' || typeof r.modelId !== 'string') return false;
+  try {
+    if (r.provider === 'fal') return editPromptMode(resolveFalVariant(r.modelId, r.mediaType === 'image' ? 'image' : 'video', 'edit').edit?.references) !== 'required';
+    if (r.provider === 'kie') return editPromptMode(resolveKieVariant(r.modelId, 'edit').edit?.references) !== 'required';
+  } catch { return false; }
+  const catalog = (['runware', 'atlas', 'comet', 'piapi'] as const).find((id) => id === r.provider);
+  return catalog ? editPromptMode(findModel(catalog, r.modelId)?.videoEdit?.references) !== 'required' : false;
+}
+
 export function validateRequest(env:Env,value:unknown):CloudJobRequest {
   if(!value||typeof value!=='object')throw new AccountError('Invalid generation request.',400,'invalid_request');
   const r=value as Partial<CloudJobRequest>;
-  if(typeof r.prompt!=='string'||!r.prompt.trim()||r.prompt.length>20000||typeof r.modelId!=='string'||r.modelId.length>256||!['image','video'].includes(r.mediaType||'')||!['text','image','frames','reference','edit'].includes(r.inputMode||'')||!Array.isArray(r.referenceIds)||r.referenceIds.length>16||r.referenceIds.some(id=>typeof id!=='string'||id.length>128)||!r.values||typeof r.values!=='object'||Array.isArray(r.values)||Object.keys(r.values).length>64||Object.values(r.values).some(v=>!['string','boolean','number'].includes(typeof v)||typeof v==='number'&&!Number.isFinite(v)||typeof v==='string'&&v.length>2048))throw new AccountError('Invalid generation settings.',400,'invalid_request');
+  if(typeof r.prompt!=='string'||(!r.prompt.trim()&&!editPromptMayBeEmpty(r))||r.prompt.length>20000||typeof r.modelId!=='string'||r.modelId.length>256||!['image','video'].includes(r.mediaType||'')||!['text','image','frames','reference','edit'].includes(r.inputMode||'')||!Array.isArray(r.referenceIds)||r.referenceIds.length>16||r.referenceIds.some(id=>typeof id!=='string'||id.length>128)||!r.values||typeof r.values!=='object'||Array.isArray(r.values)||Object.keys(r.values).length>64||Object.values(r.values).some(v=>!['string','boolean','number'].includes(typeof v)||typeof v==='number'&&!Number.isFinite(v)||typeof v==='string'&&v.length>2048))throw new AccountError('Invalid generation settings.',400,'invalid_request');
   if(isLocal(env)&&env.DEV_FAKE_GENERATION==='1'&&r.mediaType!=='image'&&r.inputMode!=='edit')throw new AccountError('The local fixture currently supports image generation only.',409,'local_fixture_mode');
   if(r.sourceVideoId!==undefined&&(typeof r.sourceVideoId!=='string'||!r.sourceVideoId||r.sourceVideoId.length>128||r.inputMode!=='edit'))throw new AccountError('Invalid source video.',400,'invalid_request');
   const referenceVideoIds = idList(r.referenceVideoIds, 'reference video');
@@ -87,11 +103,19 @@ export function validateRequest(env:Env,value:unknown):CloudJobRequest {
   const values = (floor.forceStandard || hasReferences) && r.values!.moderation === 'relaxed'
     ? { ...r.values!, moderation: 'standard' as const }
     : r.values!;
-  const request: CloudJobRequest = {provider:r.provider!,modelId:r.modelId!,mediaType:r.mediaType as 'image'|'video',inputMode:r.inputMode as CloudJobRequest['inputMode'],prompt:r.prompt!.trim(),values,referenceIds:r.referenceIds!,...(r.sourceVideoId?{sourceVideoId:r.sourceVideoId}:{}),...(referenceVideoIds.length?{referenceVideoIds}:{}),...(referenceAudioIds.length?{referenceAudioIds}:{})};
+  let editReferencePlan;
+  if (r.editReferencePlan !== undefined) {
+    if (r.inputMode !== 'edit') throw new AccountError('Invalid edit references.', 400, 'invalid_request');
+    try { editReferencePlan = parseEditReferencePlan(r.editReferencePlan, r.referenceIds!.length); }
+    catch (error) { throw new AccountError(error instanceof Error ? error.message : 'Invalid edit references.', 400, 'invalid_request'); }
+  }
+  const request: CloudJobRequest = {provider:r.provider!,modelId:r.modelId!,mediaType:r.mediaType as 'image'|'video',inputMode:r.inputMode as CloudJobRequest['inputMode'],prompt:r.prompt!.trim(),values,referenceIds:r.referenceIds!,...(r.sourceVideoId?{sourceVideoId:r.sourceVideoId}:{}),...(referenceVideoIds.length?{referenceVideoIds}:{}),...(referenceAudioIds.length?{referenceAudioIds}:{}),...(editReferencePlan?{editReferencePlan}:{})};
   // fal, Kie and the synchronous adapters never look at these ids. inputUrls
   // would then hand a clip to them as another image on a paid run. Only a
   // catalog model that declares referenceClips for this mode may carry them.
-  if (referenceVideoIds.length > 0 || referenceAudioIds.length > 0) {
+  // Atlas Wan edit is the exception: one driving audio clip, no reference video.
+  const atlasDrivingAudio = request.provider === 'atlas' && request.inputMode === 'edit' && referenceVideoIds.length === 0 && referenceAudioIds.length === 1 && Boolean(findModel('atlas', request.modelId)?.videoEdit?.references?.audio);
+  if ((referenceVideoIds.length > 0 || referenceAudioIds.length > 0) && !atlasDrivingAudio) {
     const catalogProvider = (['runware', 'atlas', 'comet', 'piapi'] as const satisfies readonly ProviderId[]).find((id) => id === request.provider);
     const model = catalogProvider ? findModel(catalogProvider, request.modelId) : undefined;
     if (!referenceClipsFor(model, request.inputMode)) {

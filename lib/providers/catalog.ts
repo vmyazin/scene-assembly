@@ -938,6 +938,133 @@ const ATLAS_MODELS: ProviderModel[] = [
   ...lumaRay32(),
   ...lumaUni1('standard'),
   ...lumaUni1('max'),
+  // Read 2026-10-16 from
+  // https://www.atlascloud.ai/models/kwaivgi/kling-video-o3-pro/video-edit/llms.txt
+  // Authoritative price is $0.143/s. The $0.168 figure on that page is fal's
+  // vendor rate, which Atlas says does not apply. Source MP4/MOV, 3–10s,
+  // 700–4553px, ratio 0.4–2.5, 200MB, 24–60 fps (fps is not measured here).
+  // Output is 1080P. Images ≤ 4. Prompt syntax <<<video_1>>> / <<<image_1>>>.
+  {
+    id: 'kwaivgi/kling-video-o3-pro/video-edit',
+    label: 'Kling O3 Pro Edit',
+    fileCode: 'kling-o3-pro-edit',
+    kind: 'video',
+    modes: ['edit'],
+    price: '$0.143 / s',
+    rate: { per: 'second', usd: 0.143 },
+    videoEdit: {
+      sizes: [],
+      rate: { per: 'second', usd: 0.143 },
+      maxImages: 4,
+      minSeconds: 3,
+      maxSeconds: 10,
+      maxBytes: 200_000_000,
+      mimes: ['video/mp4', 'video/quicktime'],
+      requireMeasurement: true,
+      sourceBounds: { minEdge: 700, maxEdge: 4553, minRatio: 0.4, maxRatio: 2.5 },
+      maxPromptLength: 2500,
+      promptSyntax: 'triple-angle',
+      namesSource: true,
+      outputLabel: '1080P',
+      references: { images: { max: 4, wire: 'images' } },
+      controls: [{
+        key: 'keepOriginalSound',
+        label: 'Keep original sound',
+        kind: 'boolean',
+        defaultValue: true,
+        description: 'Leaves the source audio in the edit. On unless you turn it off.',
+      }],
+      note: 'Address the source as <<<video_1>>> and images as <<<image_1>>>. Output is 1080P. Frame rate 24–60 is required by the model and is not read from the file here. $0.143 per second.',
+    },
+  },
+  // https://www.atlascloud.ai/models/kwaivgi/kling-video-o3-std/video-edit/llms.txt
+  // Authoritative price is $0.107/s, not the $0.126 vendor figure. Output is 720P.
+  {
+    id: 'kwaivgi/kling-video-o3-std/video-edit',
+    label: 'Kling O3 Standard Edit',
+    fileCode: 'kling-o3-std-edit',
+    kind: 'video',
+    modes: ['edit'],
+    price: '$0.107 / s',
+    rate: { per: 'second', usd: 0.107 },
+    videoEdit: {
+      sizes: [],
+      rate: { per: 'second', usd: 0.107 },
+      maxImages: 4,
+      minSeconds: 3,
+      maxSeconds: 10,
+      maxBytes: 200_000_000,
+      mimes: ['video/mp4', 'video/quicktime'],
+      requireMeasurement: true,
+      sourceBounds: { minEdge: 700, maxEdge: 4553, minRatio: 0.4, maxRatio: 2.5 },
+      maxPromptLength: 2500,
+      promptSyntax: 'triple-angle',
+      namesSource: true,
+      outputLabel: '720P',
+      references: { images: { max: 4, wire: 'images' } },
+      controls: [{
+        key: 'keepOriginalSound',
+        label: 'Keep original sound',
+        kind: 'boolean',
+        defaultValue: true,
+        description: 'Leaves the source audio in the edit. On unless you turn it off.',
+      }],
+      note: 'Address the source as <<<video_1>>> and images as <<<image_1>>>. Output is 720P. Frame rate 24–60 is required by the model and is not read from the file here. $0.107 per second.',
+    },
+  },
+  // https://www.atlascloud.ai/models/alibaba/wan-2.7/video-edit/llms.txt
+  // Authoritative price is a flat $0.10/s. The 1.5× 1080P line is in the
+  // vendor section Atlas says does not apply, so both tiers use $0.10.
+  // Images ≤ 3. Optional driving audio. Resolution 720P or 1080P.
+  // The ratio field is `ratio`. Duration 0 matches the source; otherwise 2–10.
+  {
+    id: 'alibaba/wan-2.7/video-edit',
+    label: 'Wan 2.7 Edit',
+    fileCode: 'wan-2_7-edit',
+    kind: 'video',
+    modes: ['edit'],
+    price: '$0.10 / s',
+    rate: { per: 'second', usd: 0.1 },
+    videoEdit: {
+      sizes: [{ label: '1080P', preset: '1080P' }, { label: '720P', preset: '720P' }],
+      rate: { per: 'second', usd: 0.1 },
+      maxImages: 3,
+      minSeconds: 2,
+      maxSeconds: 10,
+      maxBytes: 100_000_000,
+      mimes: ['video/mp4', 'video/quicktime'],
+      requireMeasurement: true,
+      aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
+      references: { images: { max: 3, wire: 'images' }, audio: true },
+      controls: [
+        {
+          key: 'outputDuration',
+          label: 'Output duration',
+          kind: 'select',
+          defaultValue: 0,
+          description: 'Match source keeps the input length. Any other value clips from the start.',
+          options: [
+            { label: 'Match source', value: 0 },
+            ...[2, 3, 4, 5, 6, 7, 8, 9, 10].map((value) => ({ label: `${value} seconds`, value })),
+          ],
+        },
+        {
+          key: 'promptExtend',
+          label: 'Expand prompt',
+          kind: 'boolean',
+          defaultValue: true,
+        },
+        {
+          key: 'negativePrompt',
+          label: 'Negative prompt',
+          kind: 'text',
+          maxLength: 500,
+          description: 'Up to 500 characters. Leave blank to omit it.',
+        },
+      ],
+      note: 'Up to 3 reference images, and an optional driving audio clip. $0.10 per second at 720P and at 1080P. A background job is required so the source has a hosted address.',
+    },
+  },
 ];
 
 const COMET_MODELS: ProviderModel[] = [

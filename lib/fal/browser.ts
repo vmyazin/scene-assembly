@@ -1,4 +1,5 @@
 // lib/fal/browser.ts
+import type { EditReferencePlan } from '@/lib/providers/edit-references';
 import type {
   FalInputMode,
   FalMediaType,
@@ -51,6 +52,7 @@ type FalSubmitRequest = {
   prompt: string;
   uploadUrls: string[];
   values: Record<string, FalValue>;
+  editReferencePlan?: EditReferencePlan;
 };
 
 type FalImageRunnerArgs = {
@@ -228,6 +230,7 @@ export async function submitFalJob(
       prompt: args.prompt,
       uploadUrls: args.uploadUrls,
       values: args.values,
+      ...(args.editReferencePlan ? { editReferencePlan: args.editReferencePlan } : {}),
     }, options.signal),
     args.apiKey
   );

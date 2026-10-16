@@ -207,3 +207,10 @@ it('does not accept a trim that finishes after changing models', async () => {
   expect(onChange).not.toHaveBeenCalled();
   expect(screen.getByLabelText('Upload source video')).not.toBeDisabled();
 });
+
+it('names an Atlas Kling source with the triple-angle token', () => {
+  render(<VideoSourceInput capability={findModel('atlas', 'kwaivgi/kling-video-o3-pro/video-edit')!.videoEdit!} source={null} onChange={() => {}} disabled={false} />);
+  expect(screen.getByText(/<<<video_1>>>/)).toBeInTheDocument();
+  expect(screen.getByText(/Longer clips are trimmed automatically/)).toBeInTheDocument();
+  expect(screen.queryByText(/@Video1/)).not.toBeInTheDocument();
+});

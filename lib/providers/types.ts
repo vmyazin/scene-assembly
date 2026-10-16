@@ -20,7 +20,41 @@ export type MediaKind = 'image' | 'video';
 export type ProviderMode = 'text' | 'image' | 'frames' | 'reference' | 'edit';
 
 export type VideoInputField = 'frameImages' | 'referenceImages';
-export type VideoPromptSyntax = 'image-index' | 'at-image-index' | 'at-image-underscore-index';
+/** `triple-angle` is Atlas Kling's `<<<video_1>>>` / `<<<image_1>>>`. */
+export type VideoPromptSyntax = 'image-index' | 'at-image-index' | 'at-image-underscore-index' | 'triple-angle';
+
+/**
+ * How an edit model's reference stills are shaped. Absent means the flat
+ * image list counted by `maxImages`. Each block is omitted when the model
+ * does not take that input, so the tray can hide it.
+ */
+export interface EditReferenceSpec {
+  /** `absent` means the vendor schema has no prompt field. */
+  prompt?: 'required' | 'optional' | 'absent';
+  images?: { max: number; wire: 'image_urls' | 'reference_image_url' | 'images' | 'reference_image' };
+  /** Kling elements: one frontal still plus 1–3 angle stills. Combined with images. */
+  elements?: { minAngles: number; maxAngles: number; combinedMax: number };
+  /** Luma: keyframes and a start frame are mutually exclusive. */
+  keyframes?: { max: number; startImage: boolean };
+  persons?: { min: number; max: number };
+  litSphere?: boolean;
+  audio?: boolean;
+  /** Kling O3's `shot_type` is the constant `customize`. Sent, not offered as a choice. */
+  shotTypeCustomize?: boolean;
+}
+
+/** A scalar edit setting the vendor accepts on top of resolution and aspect. */
+export interface EditControl {
+  key: string;
+  label: string;
+  kind: 'boolean' | 'select' | 'text' | 'number';
+  description?: string;
+  defaultValue?: string | number | boolean;
+  options?: readonly { label: string; value: string | number }[];
+  min?: number;
+  max?: number;
+  maxLength?: number;
+}
 
 export interface ProviderVideoInputCapability {
   field: VideoInputField;
@@ -148,7 +182,10 @@ export interface ProviderModel {
    */
   draftPreview?: boolean;
   videoEdit?: {
-    sizes: ProviderSize[]; rate: ProviderRate; maxImages: number;
+    sizes: ProviderSize[];
+    /** Absent when the vendor has not published a price. The ledger stays unknown. */
+    rate?: ProviderRate;
+    maxImages: number;
     draftRate?: ProviderRate;
     /** Same draft preview as `draftPreview`, for edit mode. */
     draftPreview?: boolean;
@@ -183,6 +220,10 @@ export interface ProviderModel {
      */
     namesSource?: boolean;
     note?: string;
+    /** Structured references. The flat `maxImages` tray stays when this is absent. */
+    references?: EditReferenceSpec;
+    /** Extra settings this edit accepts. Keys not listed here are refused. */
+    controls?: readonly EditControl[];
   };
   /** Max reference images the model accepts, when the vendor documents one. */
   maxInputImages?: number;
@@ -280,6 +321,12 @@ export interface VideoRequest {
   inputField?: VideoInputField;
   /** See ImageRequest. No video route in v1 is relaxable; the field is ignored there. */
   moderation?: ModerationLevel;
+  /** Atlas Kling `keep_original_sound`. Omitted means the vendor default, which is on. */
+  keepOriginalSound?: boolean;
+  /** Atlas Wan output length. `0` and omitted both mean “match the source”. */
+  outputDuration?: number;
+  negativePrompt?: string;
+  promptExtend?: boolean;
 }
 
 export type TaskState = 'queued' | 'running' | 'success' | 'error';

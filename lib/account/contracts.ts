@@ -1,3 +1,4 @@
+import type { EditReferencePlan } from '../providers/edit-references';
 import type { ClipOrigin } from '../youtube/clip';
 // lib/account/contracts.ts
 /** Serializable contract shared by browser and Worker; never contains provider keys. */
@@ -15,6 +16,11 @@ export interface CloudJobRequest {
   referenceVideoIds?: string[];
   /** Reference audio clips. Omitted when the model has none. */
   referenceAudioIds?: string[];
+  /**
+   * Which referenceIds are images, elements, keyframes, person photos or a
+   * lighting sphere. Absent means every referenceId is a plain image.
+   */
+  editReferencePlan?: EditReferencePlan;
 }
 export type CloudJobState = 'queued' | 'submitting' | 'running' | 'saving' | 'saved' | 'needs_attention' | 'failed' | 'cancelled';
 /** The agent that started a job, kept after it disconnects so old work stays attributed. */
