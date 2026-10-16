@@ -11,10 +11,12 @@
 import type { ProviderModel, ProviderRate, ProviderSize } from '@/lib/providers/types';
 import { sizeTier } from '@/lib/providers/types';
 import type { FalInputMode, FalModelDefinition } from '@/lib/fal/types';
-import { resolveFalVariant } from '@/lib/fal/catalog';
+import { defaultFalValues, resolveFalVariant } from '@/lib/fal/catalog';
+import { falSecondsFrom } from '@/lib/fal/pricing';
+import { carryOverValues, type DraftValue } from '@/lib/draft/carry-over';
 import type { KieInputMode, KieModelDefinition } from '@/lib/kie/types';
 import { resolveKieVariant } from '@/lib/kie/catalog';
-import { falRateLabel, geminiRateLabel } from '@/lib/spend/rates';
+import { falPublishedCost, falRateLabel, geminiRateLabel } from '@/lib/spend/rates';
 import type { GeminiImageModel } from '@/lib/engines/gemini-catalog';
 
 export type SpecCell =
@@ -32,6 +34,13 @@ const LENGTH: SpecColumn = { key: 'length', label: 'Max', align: 'right' };
 const TIER: SpecColumn = { key: 'tier', label: 'Up to', align: 'right' };
 const SHAPES: SpecColumn = { key: 'shapes', label: 'Shapes' };
 const FROM: SpecColumn = { key: 'from', label: 'From', align: 'right' };
+/**
+ * What one press of Generate costs at the settings on screen. fal video rows
+ * use it instead of From because a per-second start rate hid the run: Veo 3.1
+ * read "$0.2/s" while 8 seconds with audio billed $3.20, so the price only
+ * appeared on the button after the model was already chosen.
+ */
+const PER_RUN: SpecColumn = { key: 'run', label: 'Per run', align: 'right' };
 const REFS: SpecColumn = { key: 'refs', label: 'Refs', align: 'right' };
 const EDIT: SpecColumn = { key: 'edit', label: 'Edit' };
 const SEARCH: SpecColumn = { key: 'search', label: 'Search' };
@@ -39,7 +48,7 @@ const SEARCH: SpecColumn = { key: 'search', label: 'Search' };
 export const PROVIDER_VIDEO_COLUMNS: SpecColumn[] = [LENGTH, TIER, SHAPES, FROM];
 export const PROVIDER_IMAGE_COLUMNS: SpecColumn[] = [FROM, REFS, EDIT];
 export const GEMINI_IMAGE_COLUMNS: SpecColumn[] = [FROM, TIER, SEARCH];
-export const FAL_VIDEO_COLUMNS: SpecColumn[] = [LENGTH, TIER, SHAPES, FROM];
+export const FAL_VIDEO_COLUMNS: SpecColumn[] = [LENGTH, TIER, SHAPES, PER_RUN];
 export const KIE_VIDEO_COLUMNS: SpecColumn[] = [LENGTH, TIER, SHAPES];
 export const KIE_IMAGE_COLUMNS: SpecColumn[] = [TIER, SHAPES, REFS];
 
@@ -345,18 +354,33 @@ export function falImageSpecs(model: FalModelDefinition): SpecCell[] {
   ];
 }
 
-/** fal video rows: Max · Up to · Shapes · From, for the variant this mode submits to. */
-export function falVideoSpecs(model: FalModelDefinition, inputMode: FalInputMode): SpecCell[] {
+/** fal video rows: Max · Up to · Shapes · Per run, for the variant this mode submits to. */
+export function falVideoSpecs(
+  model: FalModelDefinition,
+  inputMode: FalInputMode,
+  controlValues: Record<string, DraftValue> = {}
+): SpecCell[] {
   const variant = resolveFalVariant(model.id, 'video', inputMode);
   if (variant.edit) {
+    // An edit is billed on the source clip's length, unknown until one is picked.
     const from = rateStartLabel(falRateLabel(variant.endpointId));
     const seconds = variant.edit.maxSeconds;
-    return [seconds === undefined ? DASH : text(`${seconds}s`), text('source'), DASH, from ? text(from) : DASH];
+    return [seconds === undefined ? DASH : text(`${seconds}s`), text('source'), DASH, from ? text(`from ${from}`, 'muted') : DASH];
   }
   const cells = fieldCells(fieldSpecs(variant?.fields ?? []));
-  // The label spans a range (`$0.10–0.15 / s`); the column says where it starts.
-  const from = rateStartLabel(variant ? falRateLabel(variant.endpointId) : null);
-  return [...cells, from ? text(from) : DASH];
+  // Priced the way the Generate button prices it: this model's own defaults,
+  // overlaid with whatever duration, resolution and audio the draft carries,
+  // so the row and the button never disagree about the same run.
+  const values = carryOverValues(variant.fields, defaultFalValues(variant), controlValues);
+  const run = falPublishedCost(variant.endpointId, {
+    resolution: typeof values.resolution === 'string' ? values.resolution : undefined,
+    audio: typeof values.generate_audio === 'boolean' ? values.generate_audio : undefined,
+    durationSeconds: falSecondsFrom(values.duration),
+  });
+  if (run) return [...cells, text(`~$${run.costUsd.toFixed(2)}`)];
+  // No exact figure for this combination: say where the published rate starts.
+  const from = rateStartLabel(falRateLabel(variant.endpointId));
+  return [...cells, from ? text(`from ${from}`, 'muted') : DASH];
 }
 
 /** Kie video rows: Max · Up to · Shapes. */

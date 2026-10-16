@@ -719,7 +719,7 @@ function FalGenerationWorkspaceSession({
                 id: model.id,
                 label: model.label,
                 deprecated: model.deprecated,
-                cells: falVideoSpecs(model, inputMode),
+                cells: falVideoSpecs(model, inputMode, controlValues),
               }))}
               value={matchingModels.some((model) => model.id === selectedModel.id) ? selectedModel.id : undefined}
               onChange={setModel}

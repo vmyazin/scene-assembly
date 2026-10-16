@@ -79,6 +79,11 @@ interface ResultStackProps {
    * than offering a button that goes nowhere.
    */
   onUseAsFirstFrame?: () => void;
+  /**
+   * Open image editing with the chosen result. Passed only by modes without a
+   * reference slot, which turns their reference action into "Edit this image".
+   */
+  onEditImage?: () => void;
 }
 
 /** How many results are kept on screen; the rest stay in the library. */
@@ -115,6 +120,7 @@ export default function ResultStack({
   filenameBase,
   referenceLimit,
   onUseAsFirstFrame,
+  onEditImage,
 }: ResultStackProps) {
   const [openId, setOpenId] = useState<string | null>(null);
   // Read off the decoded image rather than asked of the caller: it is the one
@@ -209,6 +215,7 @@ export default function ResultStack({
                 filenameBase={filenameBase?.(item) ?? item.id}
                 referenceLimit={referenceLimit}
                 onUseAsFirstFrame={onUseAsFirstFrame}
+                onEditImage={onEditImage}
                 dense
                 stack
               />

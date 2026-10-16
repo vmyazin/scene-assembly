@@ -20,7 +20,7 @@ import { convertedForDownload } from '@/lib/image/download-format';
 import { useAppStore } from '@/store/useAppStore';
 import { useDraftStore } from '@/store/useDraftStore';
 import { useGalleryStore } from '@/store/useGalleryStore';
-import { useTimelineStore } from '@/store/useTimelineStore';
+import { placeClipOnTimeline } from '@/lib/timeline/place-clip';
 import { saveBlobAs } from '@/lib/save-file';
 import { useObjectUrls } from '@/lib/media/use-object-url';
 
@@ -180,13 +180,12 @@ export default function GalleryGrid({
    * lets the same gesture work from the main library, where the timeline
    * workspace is not mounted to receive one.
    */
-  const addToTimeline = (record: GalleryRecord) => {
+  const addToTimeline = async (record: GalleryRecord) => {
     if (!record.blob) {
       toast.error('Keep this clip first so it can be placed.');
       return;
     }
-    useTimelineStore.getState().addClip(record.id);
-    toast.success('Added to the timeline');
+    await placeClipOnTimeline(record.id);
     onAddedToTimeline?.();
   };
 
@@ -307,7 +306,7 @@ export default function GalleryGrid({
                   type="button"
                   onClick={() => {
                     if (onPickVideo && record.blob) void onPickVideo(new File([record.blob], `${fallbackFilenameBase(record.prompt, 'video')}.${extensionForMedia('video', record.blob.type || record.mimeType)}`, {type: record.blob.type || record.mimeType})).catch(error => toast.error(error instanceof Error ? error.message : 'Could not select video.'));
-                    else addToTimeline(record);
+                    else void addToTimeline(record);
                   }}
                   className="btn-secondary"
                 >
@@ -340,7 +339,7 @@ export default function GalleryGrid({
                       type="button"
                       onClick={() => {
                     if (onPickVideo && record.blob) void onPickVideo(new File([record.blob], `${fallbackFilenameBase(record.prompt, 'video')}.${extensionForMedia('video', record.blob.type || record.mimeType)}`, {type: record.blob.type || record.mimeType})).catch(error => toast.error(error instanceof Error ? error.message : 'Could not select video.'));
-                    else addToTimeline(record);
+                    else void addToTimeline(record);
                   }}
                       className="btn-secondary"
                     >

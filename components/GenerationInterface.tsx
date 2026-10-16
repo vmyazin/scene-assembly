@@ -69,6 +69,8 @@ interface GenerationInterfaceProps {
   onOpenConnections: (provider?: EngineId) => void;
   /** Switch to image-to-video, seeded with a finished image. */
   onUseAsFirstFrame?: () => void;
+  /** Switch to image editing, seeded with a finished image. */
+  onEditImage?: () => void;
 }
 
 const RESOLUTION_OPTIONS = ['1K', '2K', '4K'].map((value) => ({
@@ -226,7 +228,10 @@ function EngineSelector({ engines, activeEngineId, onSelect, accountMode = false
   );
 }
 
-export default function GenerationInterface({ feature, apiKey, onBack, onOpenConnections, onUseAsFirstFrame }: GenerationInterfaceProps) {
+export default function GenerationInterface({ feature, apiKey, onBack, onOpenConnections, onUseAsFirstFrame, onEditImage }: GenerationInterfaceProps) {
+  // Only a mode with no reference slot hands results on to editing; a mode
+  // that takes references keeps "Use as reference", whose tray is on screen.
+  const editResult = feature.requiresImage ? undefined : onEditImage;
   const prompt = useDraftStore((state) => state.prompt);
   const setPrompt = useDraftStore((state) => state.setPrompt);
 
@@ -997,6 +1002,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
         onBack={handleBack}
         onOpenConnections={onOpenConnections}
         onUseAsFirstFrame={onUseAsFirstFrame}
+        onEditImage={editResult}
       />
     );
   }
@@ -1439,7 +1445,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
           </>
         }
         results={
-          cloudWorkspace.cloud ? <CloudJobPanel provider={activeEngine.id} mediaType="image" inputMode={cloudInputMode} /> : <motion.div
+          cloudWorkspace.cloud ? <CloudJobPanel provider={activeEngine.id} mediaType="image" inputMode={cloudInputMode} onEditImage={editResult} /> : <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             className="glass-card p-4 space-y-3"
@@ -1464,6 +1470,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
               downloadLabel="Download Image"
               filenameBase={(item) => item.slug || (item.prompt === prompt && filenameSlug) || 'generated-image'}
               onUseAsFirstFrame={onUseAsFirstFrame}
+              onEditImage={editResult}
 
               emptyState={
                 <div className="p-5 text-center text-[var(--foreground-muted)]">

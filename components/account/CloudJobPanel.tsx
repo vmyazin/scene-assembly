@@ -6,7 +6,7 @@ import ResultStack from '@/components/ResultStack';
 import LastFrameActions from '@/components/LastFrameActions';
 import ResultActions from '@/components/ResultActions';
 import { saveCloudVideoToGallery } from '@/lib/timeline/import-cloud';
-import { useTimelineStore } from '@/store/useTimelineStore';
+import { placeClipOnTimeline } from '@/lib/timeline/place-clip';
 import { knownAccountAssetFilenameBase } from '@/lib/account/asset-name';
 import { useAccountStore } from '@/store/useAccountStore';
 import { downloadAccountAsset } from '@/lib/account/download';
@@ -22,7 +22,7 @@ import CloudJobCardGrid from './CloudJobCardGrid';
 import CloudJobList from './CloudJobList';
 import { AccountSurface } from './AccountSurface';
 import TemporaryAssetNotice from './TemporaryAssetNotice';
-export default function CloudJobPanel({provider,mediaType,inputMode,onContinueFromFrame}:Pick<CloudJobRequest,'provider'|'mediaType'|'inputMode'> & {onContinueFromFrame?:()=>void}) {
+export default function CloudJobPanel({provider,mediaType,inputMode,onContinueFromFrame,onEditImage}:Pick<CloudJobRequest,'provider'|'mediaType'|'inputMode'> & {onContinueFromFrame?:()=>void;onEditImage?:()=>void}) {
   const allJobs=useAccountStore(state=>state.jobs),allAssets=useAccountStore(state=>state.assets);
   const [error,setError]=useState<string|null>(null),[downloading,setDownloading]=useState<string|null>(null);
   // Keep the shared image feed across providers and modes. Video shares results
@@ -42,8 +42,7 @@ export default function CloudJobPanel({provider,mediaType,inputMode,onContinueFr
     const owner=useAccountStore.getState().session?.account?.id;
     if(!owner)throw new Error('Sign in again to add this clip to the timeline.');
     const recordId=await saveCloudVideoToGallery(asset,owner);
-    useTimelineStore.getState().addClip(recordId);
-    toast.success('Added to the timeline');
+    await placeClipOnTimeline(recordId);
   }
   async function download(asset:CloudAsset){setDownloading(asset.id);try{await downloadAccountAsset(asset);}catch(error){setError(error instanceof Error?error.message:'Download failed.');}finally{setDownloading(null);}}
   async function changeJob(id:string,action:'resume'|'cancel'){
@@ -112,7 +111,7 @@ export default function CloudJobPanel({provider,mediaType,inputMode,onContinueFr
       // that reads as one fact fewer rather than a broken row.
       const job=a.jobId?allJobs.find(j=>j.id===a.jobId):undefined;
       return {id:a.id,src:`/api/account/assets/${a.id}/content`,mimeType:a.mimeType,label:a.expiresAt?'Temporary result':undefined,provider:a.metadata.provider,modelId:a.metadata.modelId,relaxed:a.metadata.values.moderation==='relaxed',createdAt:a.createdAt,startedAt:job?.createdAt,finishedAt:job?.updatedAt};
-    })} downloadingId={downloading} filenameBase={item=>{const asset=assets.find(a=>a.id===item.id);return asset?knownAccountAssetFilenameBase(asset):item.id;}} onUseAsFirstFrame={onContinueFromFrame} onDownload={item=>{const asset=assets.find(a=>a.id===item.id);if(asset)return download(asset);}} emptyState={<p className="p-5 text-center text-sm text-[var(--foreground-muted)]">Your saved images will appear here.</p>}/>):assets[0]?<><VideoPlayer crossOrigin label="Saved video" src={`/api/account/assets/${assets[0].id}/content`} className="w-full rounded-xl"/><button type="button" disabled={Boolean(downloading)} onClick={()=>void download(assets[0])} className="btn-secondary"><Download size={16} aria-hidden="true"/>Download video</button></>:active?null:<div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-[var(--foreground-muted)]">Your saved video will appear here.</div>}
+    })} downloadingId={downloading} filenameBase={item=>{const asset=assets.find(a=>a.id===item.id);return asset?knownAccountAssetFilenameBase(asset):item.id;}} onUseAsFirstFrame={onContinueFromFrame} onEditImage={onEditImage} onDownload={item=>{const asset=assets.find(a=>a.id===item.id);if(asset)return download(asset);}} emptyState={<p className="p-5 text-center text-sm text-[var(--foreground-muted)]">Your saved images will appear here.</p>}/>):assets[0]?<><VideoPlayer crossOrigin label="Saved video" src={`/api/account/assets/${assets[0].id}/content`} className="w-full rounded-xl"/><button type="button" disabled={Boolean(downloading)} onClick={()=>void download(assets[0])} className="btn-secondary"><Download size={16} aria-hidden="true"/>Download video</button></>:active?null:<div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-[var(--foreground-muted)]">Your saved video will appear here.</div>}
     {mediaType==='video'&&assets[0]?.draftId&&<FinalizeDraftButton inputMode={assets[0].metadata.inputMode} durationSeconds={seedanceDraftSeconds(assets[0].metadata.values)} busy={busy} onApprove={async()=>{
       const asset=assets[0];
       const seconds=seedanceDraftSeconds(asset.metadata.values);

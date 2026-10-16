@@ -419,6 +419,12 @@
       "runtimeExecutable": "env",
       "runtimeArgs": ["ACCOUNT_WORKER_PORT=8991", "npm", "run", "dev", "--", "--port", "3291"],
       "port": 3291
+    },
+    {
+      "name": "UX audit H3-H5 smoke test",
+      "runtimeExecutable": "env",
+      "runtimeArgs": ["ACCOUNT_WORKER_PORT=8917", "DEV_FAKE_GENERATION=1", "npm", "run", "dev", "--", "--port", "3317"],
+      "port": 3317
     }
   ],
   "version": "0.0.1"

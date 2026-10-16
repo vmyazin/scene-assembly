@@ -58,14 +58,20 @@ function namedFile(blob: Blob, filenameBase: string, kind: ResultKind): File {
  */
 export async function sendResultToReferences(
   blob: Blob,
-  { filenameBase, kind, sourceLabel, limit }: {
+  { filenameBase, kind, sourceLabel, limit, replace = false }: {
     filenameBase: string;
     kind: ResultKind;
     sourceLabel: string;
     limit: number;
+    /**
+     * Make this result the source rather than one more reference: older
+     * references give way instead of refusing. For a handoff into a mode the
+     * user has not opened yet, whose slots they cannot see to clear.
+     */
+    replace?: boolean;
   }
 ) {
-  if (useDraftStore.getState().references.length >= limit) {
+  if (!replace && useDraftStore.getState().references.length >= limit) {
     throw new Error('Remove a reference before adding another.');
   }
   const prepared = await prepareReferences(
@@ -74,7 +80,7 @@ export async function sendResultToReferences(
   );
   // Re-checked after the await: conversion is asynchronous and the user can
   // fill the stack while it runs.
-  if (useDraftStore.getState().references.length >= limit) {
+  if (!replace && useDraftStore.getState().references.length >= limit) {
     throw new Error('Remove a reference before adding another.');
   }
   useDraftStore.getState().addReferences(prepared, limit);

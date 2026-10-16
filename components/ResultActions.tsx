@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Film, ImageDown, Loader2, SquarePlay } from 'lucide-react';
+import { Film, ImageDown, Loader2, SquarePlay, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import {
@@ -26,6 +26,13 @@ export interface ResultActionsProps {
    * keeps the row from showing a button that goes nowhere.
    */
   onUseAsFirstFrame?: () => void;
+  /**
+   * Open the image-editing mode with this result as its source. Passed by
+   * hosts whose mode has no reference slot (text-to-image): there "Use as
+   * reference" filled a tray nobody could see and reported success, so the
+   * action becomes "Edit this image" and goes where the reference is used.
+   */
+  onEditImage?: () => void;
   /** Place this result on the timeline. Video results only. */
   onAddToTimeline?: () => void | Promise<void>;
   /** Tightens the row where it sits under a card rather than a full panel. */
@@ -59,6 +66,7 @@ export default function ResultActions({
   filenameBase,
   referenceLimit = 8,
   onUseAsFirstFrame,
+  onEditImage,
   onAddToTimeline,
   dense = false,
   stack = false,
@@ -107,8 +115,16 @@ export default function ResultActions({
         filenameBase,
         kind,
         sourceLabel: `From ${filenameBase}`,
-        limit: referenceLimit,
+        // Editing takes one source image, so the handoff replaces rather than
+        // stacking behind references left over from an earlier edit.
+        limit: onEditImage ? 1 : referenceLimit,
+        replace: Boolean(onEditImage),
       });
+      if (onEditImage) {
+        // The mode switch is the confirmation: the image appears in its slot.
+        onEditImage();
+        return;
+      }
       toast.success('Added as a reference');
     });
 
@@ -136,8 +152,8 @@ export default function ResultActions({
         disabled={pending !== null}
         className={buttonClass}
       >
-        {pending === 'reference' ? spinner : <ImageDown size={size} aria-hidden="true" />}
-        {pending === 'reference' ? `Reading ${label}…` : 'Use as reference'}
+        {pending === 'reference' ? spinner : onEditImage ? <Wand2 size={size} aria-hidden="true" /> : <ImageDown size={size} aria-hidden="true" />}
+        {pending === 'reference' ? `Reading ${label}…` : onEditImage ? 'Edit this image' : 'Use as reference'}
       </button>
 
       {onUseAsFirstFrame && (
