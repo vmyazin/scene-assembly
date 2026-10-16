@@ -8,9 +8,14 @@ import { useAccountStore } from '@/store/useAccountStore';
 import { useAppStore } from '@/store/useAppStore';
 import { useDraftStore } from '@/store/useDraftStore';
 import { useProviderJobsStore } from '@/store/useProviderJobsStore';
+import { trimVideoToLimit } from '@/lib/media/trim-video';
 import { probeDimensions } from '@/lib/timeline/probe';
 import { uploadRunwareVideo } from '@/lib/providers/upload-video';
 import { submitProviderVideo } from '@/lib/providers/browser';
+vi.mock('@/lib/media/trim-video', async importOriginal => {
+  const actual = await importOriginal<typeof import('@/lib/media/trim-video')>();
+  return {...actual, trimVideoToLimit: vi.fn(async (file, dimensions) => ({file,...dimensions}))};
+});
 vi.mock('@/lib/timeline/probe',()=>({probeDimensions:vi.fn().mockResolvedValue({width:1280,height:720,durationSeconds:4})}));
 vi.mock('@/lib/providers/upload-video',()=>({uploadRunwareVideo:vi.fn().mockResolvedValue('989ba605-1449-4e1e-b462-cd83ec9c1a67')}));
 vi.mock('@/lib/providers/browser',()=>({submitProviderVideo:vi.fn().mockResolvedValue('task'),getProviderVideoStatus:vi.fn(),pollDelayMs:()=>100000}));
@@ -176,4 +181,29 @@ it.each(['browser', 'account'] as const)('keeps the edit result when switching m
     act(()=>useAccountStore.getState().applySession({account:{id:'other-owner',name:'Other',email:'other@example.test'},googleEnabled:false,localSignIn:true,providers:['runware'],connections:[]}));
     expect(result()).toBeNull();
   }
+});
+
+it('accepts a trimmed source and revalidates the resulting bytes', async () => {
+  const capability = {...findModel('runware', 'bytedance:seedance@2.5')!.videoEdit!, maxSeconds:10.05};
+  vi.mocked(probeDimensions).mockResolvedValueOnce({width:1280,height:720,durationSeconds:10.08});
+  const trimmed = new File(['trimmed'], 'source-trimmed.mp4', {type:'video/mp4'});
+  vi.mocked(trimVideoToLimit).mockResolvedValueOnce({file:trimmed,width:1280,height:720,durationSeconds:9.98,trimmedFromSeconds:10.08});
+  const onChange = vi.fn();
+  render(<VideoSourceInput capability={capability} source={null} onChange={onChange} disabled={false}/>);
+  fireEvent.change(screen.getByLabelText('Upload source video'),{target:{files:[new File(['clip'],'source.mp4',{type:'video/mp4'})]}});
+  await waitFor(()=>expect(onChange).toHaveBeenCalledWith(expect.objectContaining({file:trimmed,durationSeconds:9.98,trimNotice:expect.stringContaining('first 9.98 seconds')})));
+});
+it('does not accept a trim that finishes after changing models', async () => {
+  const capability = findModel('runware', 'bytedance:seedance@2.5')!.videoEdit!;
+  let resolve!: (value: Awaited<ReturnType<typeof trimVideoToLimit>>) => void;
+  vi.mocked(trimVideoToLimit).mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));
+  const onChange = vi.fn();
+  const {rerender} = render(<VideoSourceInput capability={capability} source={null} onChange={onChange} disabled={false}/>);
+  const file = new File(['clip'],'source.mp4',{type:'video/mp4'});
+  fireEvent.change(screen.getByLabelText('Upload source video'),{target:{files:[file]}});
+  await waitFor(()=>expect(resolve).toBeDefined());
+  rerender(<VideoSourceInput capability={{...capability,maxSeconds:15}} source={null} onChange={onChange} disabled={false}/>);
+  await act(async()=>resolve({file,width:1280,height:720,durationSeconds:4}));
+  expect(onChange).not.toHaveBeenCalled();
+  expect(screen.getByLabelText('Upload source video')).not.toBeDisabled();
 });

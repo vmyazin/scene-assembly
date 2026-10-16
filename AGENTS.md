@@ -16,6 +16,12 @@
 
 ## Auto-load routing
 
+- **A selected source/reference video exceeds model duration** → first read
+  `docs/codex/specs/2026-10-15-auto-trim-ref-clip.md`. Use
+  `lib/media/trim-video.ts` before accepting the selection and revalidate its output,
+  because changing duration metadata leaves oversized bytes for the provider.
+  Keep library originals intact and release replaced staged YouTube inputs.
+
 - **UI consistency scan, component extraction, or a Tailwind utility that does
   nothing** → first read `docs/ui-consistency-seeds.md`. Shared classes in
   `app/globals.css` sit in `@layer components` (field defaults in `@layer base`)

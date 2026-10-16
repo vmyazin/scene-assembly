@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState, type DragEvent, type RefObject } from 'react';
 import { Film, Loader2, Music } from 'lucide-react';
+import { trimVideoToLimit, videoTrimNotice } from '@/lib/media/trim-video';
 import { SourceVideoPreview } from '@/components/VideoSourceInput';
 import { probeDimensions, probeWithDemuxer } from '@/lib/timeline/probe';
 import {
@@ -17,6 +18,7 @@ import { useObjectUrl } from '@/lib/media/use-object-url';
 
 export interface AttachedReferenceClip extends ProbedClip {
   id: string;
+  trimNotice?: string;
   file: File;
   kind: 'video' | 'audio';
 }
@@ -91,19 +93,25 @@ export default function ReferenceClipTray({
   const videoInput = useRef<HTMLInputElement>(null);
   const audioInput = useRef<HTMLInputElement>(null);
   const sequence = useRef(0);
+  const pending = useRef<AbortController | null>(null);
+  const [trimming, setTrimming] = useState(false);
   const [reading, setReading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const locked = disabled || reading || hostedOnly;
 
-  useEffect(() => () => { sequence.current += 1; }, []);
+  useEffect(() => () => { sequence.current += 1; pending.current?.abort(); }, []);
 
   async function add(kind: 'video' | 'audio', incoming: File[]) {
     const spec = kind === 'video' ? capability.video : capability.audio;
     if (!spec || incoming.length === 0) return;
     const turn = ++sequence.current;
+    pending.current?.abort();
+    const controller = new AbortController();
+    pending.current = controller;
     const scope = epoch.current;
     const current = () => turn === sequence.current && epoch.current === scope;
     setReading(true);
+    setTrimming(false);
     setError(null);
     const next = kind === 'video' ? [...videos] : [...audios];
     try {
@@ -119,15 +127,35 @@ export default function ReferenceClipTray({
           continue;
         }
         try {
-          const probed = kind === 'video' ? await probeVideo(file, spec) : { durationSeconds: await probeAudioDuration(file) };
+          let probed = kind === 'video' ? await probeVideo(file, spec) : { durationSeconds: await probeAudioDuration(file) };
           if (!current()) return;
           const existing = next.reduce((sum, clip) => sum + clip.durationSeconds, 0);
+          let selectedFile = file;
+          let trimNotice: string | undefined;
+          if (kind === 'video') {
+            const limit = Math.min(spec.maxSeconds, spec.maxTotalSeconds - existing);
+            // Too little room for the minimum remains a normal validation error.
+            if (limit >= spec.minSeconds && probed.durationSeconds > limit) {
+              const shapeError = referenceClipProbeError(spec, {...probed, durationSeconds: limit}, existing);
+              if (shapeError) { setError(shapeError); continue; }
+              const prepared = await trimVideoToLimit(file, {
+                width: probed.width!, height: probed.height!, durationSeconds: probed.durationSeconds,
+              }, limit, {signal: controller.signal, onTrimming: () => setTrimming(true)});
+              if (!current()) return;
+              selectedFile = prepared.file;
+              probed = await probeVideo(selectedFile, spec);
+              if (!current()) return;
+              trimNotice = videoTrimNotice(prepared);
+              const outputError = referenceClipFileError(spec, selectedFile);
+              if (outputError) { setError(outputError); continue; }
+            }
+          }
           const probeError = referenceClipProbeError(spec, probed, existing);
           if (probeError) {
             setError(probeError);
             continue;
           }
-          next.push({ id: crypto.randomUUID(), file, kind, ...probed });
+          next.push({ id: crypto.randomUUID(), file: selectedFile, kind, ...probed, trimNotice });
         } catch (cause) {
           if (!current()) return;
           setError(cause instanceof Error ? cause.message : 'Could not read that file.');
@@ -196,6 +224,7 @@ export default function ReferenceClipTray({
           />
         )}
       </div>
+      {trimming && reading && <p role="status" className="text-xs text-[var(--foreground-muted)]">Trimming video…</p>}
       {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
     </section>
   );
@@ -219,7 +248,7 @@ function ClipColumn({
   const label = kind === 'video' ? 'reference video' : 'reference audio';
   return (
     <div className="space-y-2">
-      <p className="text-xs text-[var(--foreground-muted)]">{limitCopy(spec)}</p>
+      <p className="text-xs text-[var(--foreground-muted)]">{limitCopy(spec)}{kind === 'video' ? ' Longer clips are trimmed automatically.' : ''}</p>
       <input
         ref={inputRef}
         type="file"
@@ -252,6 +281,7 @@ function ClipColumn({
             {clipToken(syntax, spec.token, index)} · {clip.file.name} · {clip.durationSeconds.toFixed(1)}s
             {clip.width && clip.height ? ` · ${clip.width} × ${clip.height}` : ''}
           </p>
+          {clip.trimNotice && <p role="status" className="text-xs text-[var(--neon-cyan)]">{clip.trimNotice}</p>}
           <button type="button" disabled={locked} className="text-xs text-[var(--foreground-muted)] hover:text-[var(--foreground)]" onClick={() => onRemove(clip.id)}>
             Remove {label}
           </button>
