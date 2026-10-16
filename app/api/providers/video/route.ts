@@ -1,6 +1,6 @@
 // app/api/providers/video/route.ts
 import { cometPollRunway, isAlephVideoUri } from '@/lib/providers/comet';
-import { editPromptLengthError, editSettingsError, frameAnchorTimingError, framePinsFor, isRunwayEditProtocol } from '@/lib/providers/video-edit';
+import { editHasControl, editPromptLengthError, editSettingsError, frameAnchorTimingError, framePinsFor, isRunwayEditProtocol } from '@/lib/providers/video-edit';
 import { referenceClipCountError, referenceClipSetError, referenceClipsFor } from '@/lib/providers/reference-clips';
 import { SEEDANCE_25_MODEL, isSeedanceDraftSize } from '@/lib/providers/seedance-draft';
 import { runwareDeleteMedia } from '@/lib/providers/runware';
@@ -206,7 +206,7 @@ export async function POST(request: NextRequest) {
         ...(capability.outputResolution ? { outputResolution: capability.outputResolution } : {}),
         ...(capability.transport ? { editTransport: capability.transport } : {}),
         ...(capability.transport === 'frame-anchors' && Array.isArray(pins) ? { framePins: pins } : {}),
-        ...(capability.keepOriginalSound ? { keepOriginalSound: body.keepOriginalSound !== false } : {}),
+        ...(editHasControl(capability, 'keepOriginalSound') ? { keepOriginalSound: body.keepOriginalSound !== false } : {}),
         ...(typeof body.aspectRatio === 'string' ? { aspectRatio: body.aspectRatio } : {}),
         ...(capability.draftRate || (model === SEEDANCE_25_MODEL && body.draft === true) ? { draft: body.draft === true } : {}),
         ...(moderation === 'relaxed' ? { moderation } : {}),

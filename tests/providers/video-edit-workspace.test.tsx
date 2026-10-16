@@ -97,17 +97,15 @@ it('explains that Aleph takes no character images and will not submit @Image pro
   expect(submitProviderVideo).not.toHaveBeenCalled();
 });
 
-it('pins each Aleph reference and does not offer a duration', async () => {
+it('pins each Aleph reference in the shared tray and does not offer a duration', async () => {
   useAppStore.setState({ runwareApiKey: 'test', runwareVideoModel: 'runway:aleph@2.0' });
-  useDraftStore.setState({
-    prompt: 'Change the coat',
-    references: [{ id: 'ref-1', file: new File(['png'], 'coat.png', { type: 'image/png' }), previewUrl: 'blob:coat' }],
-    controlValues: {},
-  });
+  useDraftStore.setState({ prompt: 'Change the coat', references: [], controlValues: {} });
   render(<ProviderVideoWorkspace provider="runware" label="Runware" inputMode="edit" onBack={() => {}} onOpenConnections={() => {}} />);
   expect(screen.queryByRole('spinbutton', { name: /Duration/ })).toBeNull();
   expect(screen.getByText(/2–30 seconds/)).toBeInTheDocument();
-  fireEvent.change(screen.getByRole('combobox', { name: 'Anchor for image 1' }), { target: { value: 'first' } });
+  expect(screen.queryByRole('checkbox', { name: 'Keep original sound' })).toBeNull();
+  fireEvent.change(screen.getByLabelText('Add image'), { target: { files: [new File(['png'], 'coat.png', { type: 'image/png' })] } });
+  fireEvent.change(await screen.findByRole('combobox', { name: 'Anchor for image 1' }), { target: { value: 'first' } });
   fireEvent.click(screen.getByRole('button', { name: 'Change scene' }));
   expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).not.toMatch(/@Image/);
   fireEvent.change(screen.getByLabelText('Upload source video'), { target: { files: [new File(['clip'], 'source.mp4', { type: 'video/mp4' })] } });
@@ -250,4 +248,11 @@ it('does not accept a trim that finishes after changing models', async () => {
   await act(async()=>resolve({file,width:1280,height:720,durationSeconds:4}));
   expect(onChange).not.toHaveBeenCalled();
   expect(screen.getByLabelText('Upload source video')).not.toBeDisabled();
+});
+
+it('names an Atlas Kling source with the triple-angle token', () => {
+  render(<VideoSourceInput capability={findModel('atlas', 'kwaivgi/kling-video-o3-pro/video-edit')!.videoEdit!} source={null} onChange={() => {}} disabled={false} />);
+  expect(screen.getByText(/<<<video_1>>>/)).toBeInTheDocument();
+  expect(screen.getByText(/Longer clips are trimmed automatically/)).toBeInTheDocument();
+  expect(screen.queryByText(/@Video1/)).not.toBeInTheDocument();
 });

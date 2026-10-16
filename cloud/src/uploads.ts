@@ -9,6 +9,8 @@ import { mediaAccess, mediaCors, mediaOrigin, mediaToken, readMedia } from './me
 import { currentAccount } from './sessions';
 import { json, type Env } from './security';
 export const MAX_INPUT_BYTES=20_000_000;
+/** One Luma edit is a source plus 64 keyframes. 32 slots made that job impossible. */
+export const MAX_PENDING_INPUTS=80;
 export const MAX_TEMP_BYTES=256_000_000;
 export const MAX_GLOBAL_TEMP_BYTES=10_000_000_000;
 export const INPUT_TTL=86_400_000;
@@ -30,7 +32,7 @@ export async function reserveUpload(env:Env,owner:string,bytes:number,mime:strin
   const id=crypto.randomUUID(),key=`accounts/${owner}/inputs/${id}`,now=Date.now();
   const inserted=await env.DB.prepare(`INSERT INTO account_uploads (id,user_id,object_key,mime_type,expected_bytes,created_at,expires_at)
     SELECT ?,?,?,?,?,?,? WHERE (SELECT COALESCE(SUM(expected_bytes),0) FROM account_uploads WHERE user_id=? AND state!='deleted')+?<=?
-    AND (SELECT COUNT(*) FROM account_uploads WHERE user_id=? AND state!='deleted')<32
+    AND (SELECT COUNT(*) FROM account_uploads WHERE user_id=? AND state!='deleted')<${MAX_PENDING_INPUTS}
     AND (SELECT COALESCE(SUM(expected_bytes),0) FROM account_uploads WHERE state!='deleted')+?<=?`)
     .bind(id,owner,key,mime,bytes,now,now+INPUT_TTL,owner,bytes,MAX_TEMP_BYTES,owner,bytes,MAX_GLOBAL_TEMP_BYTES).run();
   // Named for what the reader can actually do about it. The old wording asked

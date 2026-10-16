@@ -1,5 +1,8 @@
+// lib/kie/types.ts
+import type { VideoEditCapability } from '../providers/video-edit';
+
 export type MediaType = 'image' | 'video';
-export type KieInputMode = 'text' | 'image';
+export type KieInputMode = 'text' | 'image' | 'edit';
 export type KieProtocol = 'market' | 'veo';
 export type KieFieldType = 'text' | 'number' | 'boolean' | 'select' | 'file';
 
@@ -17,6 +20,7 @@ export interface KieFieldDefinition {
   options?: KieFieldOption[];
   min?: number;
   max?: number;
+  maxLength?: number;
   step?: number;
   required?: boolean;
 }
@@ -29,6 +33,9 @@ export interface KieModelVariant {
   imageInputMultiple?: boolean;
   maxInputImages?: number;
   fields: KieFieldDefinition[];
+  /** Present on a video-to-video edit. `price: 'unknown'` means Kie published no dollar rate. */
+  edit?: VideoEditCapability;
+  price?: 'unknown';
 }
 
 export interface KieModelDefinition {

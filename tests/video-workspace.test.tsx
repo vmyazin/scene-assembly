@@ -81,10 +81,10 @@ describe('VideoWorkspace provider selection', () => {
       'CometAPI',
       'PiAPI',
     ]);
-    for (const name of ['Runware', 'fal.ai', 'CometAPI']) {
+    for (const name of ['Runware', 'Kie.ai', 'fal.ai', 'Atlas Cloud', 'CometAPI']) {
       expect(screen.getByRole('radio', { name })).toBeEnabled();
     }
-    for (const name of ['Kie.ai', 'Gemini', 'Atlas Cloud', 'PiAPI']) {
+    for (const name of ['Gemini', 'PiAPI']) {
       expect(screen.getByRole('radio', { name })).toBeDisabled();
     }
     await userEvent.click(screen.getByRole('radio', { name: 'fal.ai' }));

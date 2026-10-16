@@ -24,6 +24,9 @@ import { useRelaxedFilter } from '@/lib/moderation/use-relaxed-filter';
 import { isRetryableFailure, useAutoRetry } from '@/lib/providers/auto-retry';
 import ReferenceStack from '@/components/ReferenceStack';
 import { requestPromptSlug } from '@/lib/micro-ai/browser';
+import EditReferenceTray, { emptyEditReferenceDraft } from '@/components/EditReferenceTray';
+import { CLOUD_EDIT_REFERENCE_CAP, materializeEditReferences, packEditReferences, releaseEditReferenceDraft, type EditReferencePlan } from '@/lib/providers/edit-references';
+import { editPromptMode } from '@/lib/providers/edit-references';
 import { validateEditSource, validateEditVideo } from '@/lib/providers/video-edit';
 import { cancelFalJob, submitFalJob, uploadFalFiles } from '@/lib/fal/browser';
 import { buildFalInput, defaultFalValues, falModelLabel, modelsForFalMode, resolveFalVariant, validateFalInput } from '@/lib/fal/catalog';
@@ -314,6 +317,18 @@ function FalGenerationWorkspaceSession({
 
   const epoch = useAccountStore((state) => state.epoch);
   const [selectedSource, setSelectedSource] = useState<SourceVideo | null>(null);
+  const [editDraft, setEditDraft] = useState(emptyEditReferenceDraft);
+  const [editDraftModel, setEditDraftModel] = useState(variant.id);
+  const editDraftRef = useRef(editDraft);
+  if (editDraftModel !== variant.id) {
+    releaseEditReferenceDraft(editDraft);
+    setEditDraftModel(variant.id);
+    setEditDraft(emptyEditReferenceDraft());
+  }
+  useEffect(() => {
+    editDraftRef.current = editDraft;
+  }, [editDraft]);
+  useEffect(() => () => releaseEditReferenceDraft(editDraftRef.current), []);
   const source = selectedSource?.epoch === epoch ? selectedSource : null;
   const [error, setError] = useState<string | null>(null);
   const [submittingVariantId, setSubmittingVariantId] = useState<string | null>(null);
@@ -329,6 +344,8 @@ function FalGenerationWorkspaceSession({
   const maxInputImages = variant.maxInputImages ?? 1;
   const isFramesMode = inputMode === 'frames';
   const isEdit = inputMode === 'edit';
+  const editSpec = isEdit ? variant.edit?.references : undefined;
+  const promptAbsent = editPromptMode(editSpec) === 'absent';
   const pickerLabel = !isFramesMode
     ? 'Choose an image, or a video to use its last frame'
     : references.length === 0
@@ -475,7 +492,7 @@ function FalGenerationWorkspaceSession({
       setError(floor.message);
       return;
     }
-    const activeReferences = inputMode === 'text' ? [] : references;
+    const activeReferences = inputMode === 'text' || editSpec ? [] : references;
     if (isEdit && !source) {
       setError('Choose a source video to edit.');
       return;
@@ -489,30 +506,36 @@ function FalGenerationWorkspaceSession({
         return;
       }
     }
+    let packedPlan: EditReferencePlan | undefined;
+    let packedFiles = activeReferences.map((reference) => reference.file);
+    if (editSpec) {
+      const packed = packEditReferences(editDraft, editSpec);
+      if (!packed.ok) { setError(packed.error); return; }
+      const cloudCap = editSpec.keyframes?.max ?? CLOUD_EDIT_REFERENCE_CAP;
+      if (cloudWorkspace.cloud && packed.packed.files.length > cloudCap) {
+        setError(`A background job can attach ${cloudCap} reference images. Remove some, or run this edit in the browser.`);
+        return;
+      }
+      packedPlan = packed.packed.plan;
+      packedFiles = packed.packed.files;
+    }
+    const libraryPrompt = prompt.trim() || (promptAbsent ? selectedModel.label : '');
     const submittedValues = {
       ...values,
       ...relaxed.attach(),
       ...(isEdit && source ? { sourceDurationSeconds: source.durationSeconds } : {}),
     };
-    const validationError = validateFalInput(variant, {
-      prompt,
-      uploadUrls: isEdit
-        ? [...activeReferences.map((reference) => reference.previewUrl), 'https://source.invalid/video']
-        : activeReferences.map((reference) => reference.previewUrl),
-    });
+    const referenceUrls = packedFiles.map((_, index) => `https://reference.invalid/${index}`);
+    const materialized = editSpec ? { ...materializeEditReferences(editSpec, referenceUrls, packedPlan), video: 'https://source.invalid/video' } : undefined;
+    const uploadUrls = isEdit ? [...referenceUrls, 'https://source.invalid/video'] : referenceUrls;
+    const validationError = validateFalInput(variant, { prompt, uploadUrls, references: materialized });
     if (validationError) {
       setError(validationError);
       return;
     }
 
     try {
-      buildFalInput(variant, {
-        prompt,
-        uploadUrls: isEdit
-          ? [...activeReferences.map((reference) => reference.previewUrl), 'https://source.invalid/video']
-          : activeReferences.map((reference) => reference.previewUrl),
-        values: submittedValues,
-      });
+      buildFalInput(variant, { prompt, uploadUrls, values: submittedValues, references: materialized });
     } catch {
       setError('Review the selected fal model controls and try again.');
       return;
@@ -520,7 +543,7 @@ function FalGenerationWorkspaceSession({
 
     if(cloudWorkspace.cloud){
       setError(null);setSubmittingVariantId(variant.id);
-      try{await cloudWorkspace.submit({modelId:selectedModel.id,mediaType:'video',inputMode,prompt:prompt.trim(),values:submittedValues},activeReferences.map(r=>r.file),prompt.trim(),isEdit?source?.file:undefined);autoRetry.reset();}
+      try{await cloudWorkspace.submit({modelId:selectedModel.id,mediaType:'video',inputMode,prompt:libraryPrompt,values:submittedValues,...(packedPlan?{editReferencePlan:packedPlan}:{})},packedFiles,libraryPrompt,isEdit?source?.file:undefined);autoRetry.reset();}
       catch(error){if(mountedRef.current)setError(error instanceof Error?error.message:'Could not confirm this background job.');}
       finally{if(mountedRef.current)setSubmittingVariantId(null);}
       return;
@@ -542,7 +565,7 @@ function FalGenerationWorkspaceSession({
     try {
       const uploadUrls = await uploadFalFiles(
         apiKey.trim(),
-        isEdit && source ? [...activeReferences.map((reference) => reference.file), source.file] : activeReferences.map((reference) => reference.file),
+        isEdit && source ? [...packedFiles, source.file] : packedFiles,
         { signal: operation.controller.signal }
       );
       if (!isCurrent()) return;
@@ -552,9 +575,10 @@ function FalGenerationWorkspaceSession({
         modelId: selectedModel.id,
         mediaType: 'video',
         inputMode,
-        prompt: prompt.trim(),
+        prompt: libraryPrompt,
         uploadUrls,
         values: submittedValues,
+        ...(packedPlan ? { editReferencePlan: packedPlan } : {}),
       }, { signal: operation.controller.signal });
       if (!isCurrent()) {
         if (!operation.reconciled) {
@@ -711,8 +735,18 @@ function FalGenerationWorkspaceSession({
             <VideoSourceInput capability={variant.edit} source={source} onChange={setSelectedSource} disabled={isSubmitting}
               youtube={cloudWorkspace.cloud ? { provider: 'fal', modelId: selectedModel.id, modelLabel: selectedModel.label } : undefined} />
           )}
-
-          {inputMode !== 'text' && (!isEdit || maxInputImages > 0) && (
+          {editSpec && (
+            <EditReferenceTray
+              key={variant.id}
+              spec={editSpec}
+              draft={editDraft}
+              onChange={setEditDraft}
+              disabled={isSubmitting}
+              fileCap={editSpec.keyframes?.max ?? (cloudWorkspace.cloud ? CLOUD_EDIT_REFERENCE_CAP : 64)}
+              promptSyntax={variant.edit?.promptSyntax}
+            />
+          )}
+          {inputMode !== 'text' && !editSpec && (!isEdit || maxInputImages > 0) && (
             <section className="glass-card space-y-3 p-3.5 md:p-4">
               <div>
                 <h3 className="display text-base font-semibold">
@@ -776,19 +810,25 @@ function FalGenerationWorkspaceSession({
           </>
         }
         prompt={
-          <PromptPanel paused={gated} hasPrompt={prompt.trim().length > 0}>
-            <PromptHeader htmlFor="fal-video-prompt">
-              <SavedPromptsButton />
-              <GenExampleButton busy={example.generating} onClick={() => void example.generate()} />
-            </PromptHeader>
-            <AutoExpandingPrompt
-              id="fal-video-prompt"
-              aria-required="true"
-              required
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              placeholder={isEdit ? (variant.edit?.namesSource ? 'Describe what to change in @Video1 and what to keep…' : 'Describe what to change, and address reference images as @Image1…') : 'Describe the motion, camera, mood, and scene…'}
-            />
+          <PromptPanel paused={gated} hasPrompt={!promptAbsent && prompt.trim().length > 0}>
+            {promptAbsent ? (
+              <p className="text-sm text-[var(--foreground-muted)]">This model does not take a prompt. The lighting sphere is the only reference.</p>
+            ) : (
+              <>
+                <PromptHeader htmlFor="fal-video-prompt">
+                  <SavedPromptsButton />
+                  <GenExampleButton busy={example.generating} onClick={() => void example.generate()} />
+                </PromptHeader>
+                <AutoExpandingPrompt
+                  id="fal-video-prompt"
+                  aria-required="true"
+                  required
+                  value={prompt}
+                  onChange={(event) => setPrompt(event.target.value)}
+                  placeholder={isEdit ? (variant.edit?.namesSource ? 'Describe what to change in @Video1 and what to keep…' : 'Describe what to change, and address reference images as @Image1…') : 'Describe the motion, camera, mood, and scene…'}
+                />
+              </>
+            )}
           </PromptPanel>
         }
         actions={
@@ -803,7 +843,7 @@ function FalGenerationWorkspaceSession({
                 void submit();
               }}
               className="btn-primary w-full">
-              {isSubmitting ? <><Loader2 className="animate-spin" size={21} /> Uploading & starting…</> : <><Sparkles size={21} /> {isEdit ? 'Generate edit' : 'Generate video'}<FalRunCost modelId={selectedModel.id} mediaType="video" inputMode={inputMode} resolution={values.resolution} audio={isEdit ? values.keep_audio : values.generate_audio} duration={isEdit ? source?.durationSeconds : values.duration} /></>}
+              {isSubmitting ? <><Loader2 className="animate-spin" size={21} /> Uploading & starting…</> : <><Sparkles size={21} /> {isEdit ? 'Generate edit' : 'Generate video'}<FalRunCost modelId={selectedModel.id} mediaType="video" inputMode={inputMode} resolution={values.resolution} audio={isEdit ? values.keep_audio : values.generate_audio} duration={isEdit ? source?.durationSeconds : values.duration} outputDuration={isEdit ? values.duration : undefined} /></>}
             </button>
             <CloudExecutionNotice workspace={cloudWorkspace} />
             {error && (

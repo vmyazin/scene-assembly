@@ -20,7 +20,53 @@ export type MediaKind = 'image' | 'video';
 export type ProviderMode = 'text' | 'image' | 'frames' | 'reference' | 'edit';
 
 export type VideoInputField = 'frameImages' | 'referenceImages';
-export type VideoPromptSyntax = 'image-index' | 'at-image-index' | 'at-image-underscore-index';
+/** `triple-angle` is Atlas Kling's `<<<video_1>>>` / `<<<image_1>>>`. */
+export type VideoPromptSyntax = 'image-index' | 'at-image-index' | 'at-image-underscore-index' | 'triple-angle';
+
+/**
+ * How an edit model's reference stills are shaped. Absent means the flat
+ * image list counted by `maxImages`. Each block is omitted when the model
+ * does not take that input, so the tray can hide it.
+ */
+export interface EditReferenceSpec {
+  /** `absent` means the vendor schema has no prompt field. */
+  prompt?: 'required' | 'optional' | 'absent';
+  images?: { max: number; wire: 'image_urls' | 'reference_image_url' | 'images' | 'reference_image' };
+  /** Kling elements: one frontal still plus 1–3 angle stills. Combined with images. */
+  elements?: { minAngles: number; maxAngles: number; combinedMax: number };
+  /** Luma: keyframes and a start frame are mutually exclusive. */
+  keyframes?: { max: number; startImage: boolean };
+  persons?: { min: number; max: number };
+  litSphere?: boolean;
+  audio?: boolean;
+  /**
+   * File bounds for driving audio. The Atlas video-edit page names the field
+   * and does not publish a size; this carries the published Wan 2.7 driving-audio
+   * bound so a huge file is refused before a job is reserved.
+   */
+  audioLimit?: ReferenceClipLimit;
+  /** Kling O3's `shot_type` is the constant `customize`. Sent, not offered as a choice. */
+  shotTypeCustomize?: boolean;
+}
+
+/** A scalar edit setting the vendor accepts on top of resolution and aspect. */
+export interface EditControl {
+  key: string;
+  label: string;
+  kind: 'boolean' | 'select' | 'text' | 'number';
+  description?: string;
+  defaultValue?: string | number | boolean;
+  options?: readonly { label: string; value: string | number }[];
+  min?: number;
+  max?: number;
+  maxLength?: number;
+  /**
+   * `tray` means the reference tray edits this value. Model controls do not
+   * draw it: a per-image pin is not a scalar widget. The key still feeds the
+   * settings allow-list and the agent schema.
+   */
+  surface?: 'tray';
+}
 
 export interface ProviderVideoInputCapability {
   field: VideoInputField;
@@ -151,7 +197,8 @@ export interface ProviderModel {
     sizes: ProviderSize[];
     /**
      * Published arithmetic. Absent when the vendor page does not state a rate
-     * for this edit — an example cost with no duration is not a rate.
+     * for this edit — an example cost with no duration is not a rate, and the
+     * ledger stays unknown.
      */
     rate?: ProviderRate;
     maxImages: number;
@@ -213,8 +260,6 @@ export interface ProviderModel {
       frames: readonly ('first' | 'last' | '0' | '-1')[];
       timestamp: { min: number; max: number; step: number };
     };
-    /** The model accepts `providerSettings.klingai.keepOriginalSound`. */
-    keepOriginalSound?: boolean;
     /** Fixed preset sent with the source. Kling Omni 4K's edit example sends `4k`. */
     outputResolution?: string;
     /** The prompt does not name images with @Image. Seedance still does. */
@@ -225,6 +270,10 @@ export interface ProviderModel {
      */
     measureForPrice?: boolean;
     note?: string;
+    /** Structured references. The flat `maxImages` tray stays when this is absent. */
+    references?: EditReferenceSpec;
+    /** Extra settings this edit accepts. Keys not listed here are refused. */
+    controls?: readonly EditControl[];
   };
   /** Max reference images the model accepts, when the vendor documents one. */
   maxInputImages?: number;
@@ -329,9 +378,19 @@ export interface VideoRequest {
   framePins?: Array<{ frame: 'first' | 'last' | '0' | '-1' } | { timestamp: number } | null>;
   /** Catalog transport. Absent keeps the Seedance / P-Video edit body. */
   editTransport?: 'frame-anchors' | 'kling-reference';
+  /**
+   * Vendor keep-original-sound. Omitted means the vendor default, which is on.
+   * A Runware edit that lists the control still sends the boolean.
+   */
   keepOriginalSound?: boolean;
   /** Fixed output preset from the catalog, not a control the caller picks. */
   outputResolution?: string;
+  /** Atlas Wan output length. `0` and omitted both mean “match the source”. */
+  outputDuration?: number;
+  /** Measured source length. Wan sends `duration` only when the output is shorter. */
+  sourceDurationSeconds?: number;
+  negativePrompt?: string;
+  promptExtend?: boolean;
 }
 
 export type TaskState = 'queued' | 'running' | 'success' | 'error';

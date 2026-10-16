@@ -1,4 +1,6 @@
+// lib/kie/client.ts
 import { buildKieInput } from './catalog';
+import type { EditReferenceInput } from '../providers/edit-references';
 import type { KieModelVariant, KieProtocol, KieTask } from './types';
 
 export const KIE_API = 'https://api.kie.ai';
@@ -116,11 +118,13 @@ export async function createKieTask(args: {
   prompt: string;
   uploadUrls: string[];
   values: Record<string, string | number | boolean | undefined>;
+  references?: EditReferenceInput;
 }): Promise<{ taskId: string; protocol: KieProtocol }> {
   const input = buildKieInput(args.variant, {
     prompt: args.prompt,
     uploadUrls: args.uploadUrls,
     values: args.values,
+    references: args.references,
   });
   const endpoint = args.variant.protocol === 'market' ? `${KIE_API}/api/v1/jobs/createTask` : `${KIE_API}/api/v1/veo/generate`;
   const body =

@@ -14,6 +14,7 @@
 import type { CloudJobRequest } from '../../lib/account/contracts';
 import { readContainerVideo } from '../../lib/media/container-duration';
 import { FAL_VIDEO_MODELS } from '../../lib/fal/catalog';
+import { KIE_MODELS } from '../../lib/kie/catalog';
 import { findModel } from '../../lib/providers/catalog';
 import type { ProviderId } from '../../lib/providers/types';
 import { editDurationMessage, editPromptLengthError, editSourceMaxSeconds, editVideoMaxBytes, frameAnchorTimingError, framePinsFor, pricesEditFromSourceDuration, validateEditSource, type VideoEditCapability } from '../../lib/providers/video-edit';
@@ -25,6 +26,9 @@ function limitsFor(request: CloudJobRequest): VideoEditCapability | undefined {
   if (request.provider === 'fal') {
     return FAL_VIDEO_MODELS.find((model) => model.id === request.modelId)?.variants.find((variant) => variant.inputMode === 'edit')?.edit;
   }
+  if (request.provider === 'kie') {
+    return KIE_MODELS.find((model) => model.id === request.modelId)?.variants.find((variant) => variant.inputMode === 'edit')?.edit;
+  }
   const catalogProvider = (['runware', 'atlas', 'comet', 'piapi'] as const satisfies readonly ProviderId[]).find((id) => id === request.provider);
   return catalogProvider ? findModel(catalogProvider, request.modelId)?.videoEdit : undefined;
 }
@@ -34,9 +38,15 @@ function formatSeconds(value: number): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
 }
 
-/** Flat per-second edits. Runware joins only when the catalog prices that edit from the file. */
+/**
+ * Per-second edits, including a resolution table. Runware reports its own cost
+ * and joins only when the catalog marks `measureForPrice`.
+ */
 function pricesFromMeasuredLength(request: CloudJobRequest, limits: VideoEditCapability): boolean {
-  return pricesEditFromSourceDuration(request.provider, limits);
+  if (pricesEditFromSourceDuration(request.provider, limits)) return true;
+  if (request.provider === 'runware') return false;
+  const rate = limits.rate;
+  return Boolean(rate && rate.per === 'second' && rate.usdByResolution !== undefined);
 }
 
 export async function assertEditSourceLimits(env: Env, owner: string, request: CloudJobRequest): Promise<number | undefined> {

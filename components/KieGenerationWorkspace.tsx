@@ -2,6 +2,7 @@
 'use client';
 
 import { useCloudWorkspace } from '@/lib/account/useCloudWorkspace';
+import { useAccountStore } from '@/store/useAccountStore';
 import CloudExecutionNotice from '@/components/account/CloudExecutionNotice';
 import CloudJobPanel from '@/components/account/CloudJobPanel';
 
@@ -12,6 +13,8 @@ import ReferenceStack from '@/components/ReferenceStack';
 import { requestPromptSlug } from '@/lib/micro-ai/browser';
 import { fetchKieCredits, submitKieJob, uploadKieFiles } from '@/lib/kie/browser';
 import { defaultKieValues, modelsForKieMode, resolveKieVariant, validateKieInput } from '@/lib/kie/catalog';
+import { CLOUD_EDIT_REFERENCE_CAP, editPromptMode, materializeEditReferences, packEditReferences, releaseEditReferenceDraft, type EditReferencePlan } from '@/lib/providers/edit-references';
+import { validateEditSource, validateEditVideo } from '@/lib/providers/video-edit';
 import ModelListbox from '@/components/ModelListbox';
 import { KIE_IMAGE_COLUMNS, KIE_VIDEO_COLUMNS, kieImageSpecs, kieVideoSpecs } from '@/lib/models/listbox-specs';
 import { currentKieTime, isKieJobTerminal } from '@/lib/kie/queue';
@@ -50,7 +53,9 @@ import { useExamplePrompt } from '@/hooks/useExamplePrompt';
 import { ModelNote, ModelPickerCard } from '@/components/ModelPickerCard';
 import { VideoDownloadLink, VideoResultStage } from '@/components/VideoResult';
 import { useClaimSeedFrame, useReferenceIntake } from '@/hooks/useReferenceIntake';
+import EditReferenceTray, { emptyEditReferenceDraft } from '@/components/EditReferenceTray';
 import { ReferencePicker } from '@/components/ReferencePicker';
+import VideoSourceInput, { type SourceVideo } from '@/components/VideoSourceInput';
 
 interface KieGenerationWorkspaceProps {
   mediaType: MediaType;
@@ -76,7 +81,7 @@ const isKieModelControlField = (field: KieFieldDefinition): field is KieModelCon
   field.type !== 'file';
 
 const titleFor = (mediaType: MediaType, inputMode: KieInputMode) =>
-  `${inputMode === 'text' ? 'Text' : 'Image'} to ${mediaType}`;
+  inputMode === 'edit' ? `Edit ${mediaType}` : `${inputMode === 'text' ? 'Text' : 'Image'} to ${mediaType}`;
 
 function modelPreferenceKey(mediaType: MediaType): 'kieImageModel' | 'kieVideoModel' {
   return mediaType === 'image' ? 'kieImageModel' : 'kieVideoModel';
@@ -113,6 +118,22 @@ export default function KieGenerationWorkspace({
   const selectedModel = models.find((model) => model.id === preference) ?? models[0];
   const variant = resolveKieVariant(selectedModel.id, inputMode);
   const variantKey = `${selectedModel.id}:${inputMode}`;
+  const editSpec = inputMode === 'edit' ? variant.edit?.references : undefined;
+  const [selectedSource, setSelectedSource] = useState<SourceVideo | null>(null);
+  const [editDraft, setEditDraft] = useState(emptyEditReferenceDraft);
+  const [editDraftModel, setEditDraftModel] = useState(variant.modelId);
+  const editDraftRef = useRef(editDraft);
+  if (editDraftModel !== variant.modelId) {
+    releaseEditReferenceDraft(editDraft);
+    setEditDraftModel(variant.modelId);
+    setEditDraft(emptyEditReferenceDraft());
+  }
+  useEffect(() => {
+    editDraftRef.current = editDraft;
+  }, [editDraft]);
+  useEffect(() => () => releaseEditReferenceDraft(editDraftRef.current), []);
+  const epoch = useAccountStore((state) => state.epoch);
+  const source = selectedSource?.epoch === epoch ? selectedSource : null;
   const prompt = useDraftStore((state) => state.prompt);
   const setPrompt = useDraftStore((state) => state.setPrompt);
 
@@ -321,9 +342,29 @@ export default function KieGenerationWorkspace({
       setError(floor.message);
       return;
     }
+    if (inputMode === 'edit' && !source) { setError('Choose a source video to edit.'); return; }
+    if (inputMode === 'edit' && variant.edit && source) {
+      try { validateEditVideo(source.file, variant.edit); validateEditSource(source, variant.edit); }
+      catch (cause) { setError(cause instanceof Error ? cause.message : 'Choose a source video this model accepts.'); return; }
+    }
+    let packedPlan: EditReferencePlan | undefined;
+    let packedFiles = inputMode === 'text' || editSpec ? [] : references.map((reference) => reference.file);
+    if (editSpec) {
+      const packed = packEditReferences(editDraft, editSpec);
+      if (!packed.ok) { setError(packed.error); return; }
+      if (cloudWorkspace.cloud && packed.packed.files.length > CLOUD_EDIT_REFERENCE_CAP) {
+        setError(`A background job can attach ${CLOUD_EDIT_REFERENCE_CAP} reference images.`);
+        return;
+      }
+      packedPlan = packed.packed.plan;
+      packedFiles = packed.packed.files;
+    }
+    const referenceUrls = packedFiles.map((_, index) => `https://reference.invalid/${index}`);
+    const materialized = editSpec ? { ...materializeEditReferences(editSpec, referenceUrls, packedPlan), video: 'https://source.invalid/video' } : undefined;
     const inputError = validateKieInput(variant, {
       prompt,
-      uploadUrls: references.map((reference) => reference.previewUrl),
+      uploadUrls: inputMode === 'edit' ? [...referenceUrls, 'https://source.invalid/video'] : references.map((reference) => reference.previewUrl),
+      references: materialized,
     });
     if (inputError) {
       setError(inputError);
@@ -332,16 +373,17 @@ export default function KieGenerationWorkspace({
 
     setError(null);
     setIsSubmitting(true);
-    const submittedValues = { ...values, ...relaxed.attach() };
+    const libraryPrompt = prompt.trim() || (editPromptMode(editSpec) === 'absent' ? selectedModel.label : '');
+    const submittedValues = { ...values, ...relaxed.attach(), ...(inputMode === 'edit' && source ? { sourceDurationSeconds: source.durationSeconds } : {}) };
     try {
       if(cloudWorkspace.cloud){
-        await cloudWorkspace.submit({modelId:selectedModel.id,mediaType,inputMode,prompt:prompt.trim(),values:submittedValues},(inputMode==='text'?[]:references).map(r=>r.file));
+        await cloudWorkspace.submit({modelId:selectedModel.id,mediaType,inputMode,prompt:libraryPrompt,values:submittedValues,...(packedPlan?{editReferencePlan:packedPlan}:{})},packedFiles,libraryPrompt,inputMode==='edit'?source?.file:undefined);
         autoRetry.reset();toast.success('Background job accepted. You can leave this page.');return;
       }
       // The balance is read alongside the uploads, before the submit that spends
       // it, so the ledger can bill the drop once the task succeeds.
       const [uploadUrls, creditsBefore] = await Promise.all([
-        uploadKieFiles(kieApiKey, references.map((reference) => reference.file)),
+        uploadKieFiles(kieApiKey, inputMode === 'edit' && source ? [...packedFiles, source.file] : references.map((reference) => reference.file)),
         fetchKieCredits(kieApiKey),
       ]);
       const { taskId, protocol } = await submitKieJob({
@@ -349,9 +391,10 @@ export default function KieGenerationWorkspace({
         modelId: selectedModel.id,
         mediaType,
         inputMode,
-        prompt: prompt.trim(),
+        prompt: libraryPrompt,
         uploadUrls,
         values: submittedValues,
+        ...(packedPlan ? { editReferencePlan: packedPlan } : {}),
       });
       const now = currentKieTime();
       const submittedPrompt = prompt.trim();
@@ -448,6 +491,20 @@ export default function KieGenerationWorkspace({
             <ModelNote label={selectedModel.label}>{selectedModel.description}</ModelNote>
           </ModelPickerCard>
 
+          {inputMode === 'edit' && variant.edit && (
+            <VideoSourceInput capability={variant.edit} source={source} onChange={setSelectedSource} disabled={isSubmitting} />
+          )}
+          {editSpec && (
+            <EditReferenceTray
+              key={variant.modelId}
+              spec={editSpec}
+              draft={editDraft}
+              onChange={setEditDraft}
+              disabled={isSubmitting}
+              fileCap={1}
+              promptSyntax={variant.edit?.promptSyntax}
+            />
+          )}
           {inputMode === 'image' && (
             <section className="glass-card space-y-3 p-3.5 md:p-4">
               <div>

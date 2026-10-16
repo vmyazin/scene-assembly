@@ -16,6 +16,7 @@ import { trimVideoToLimit, videoTrimNotice } from '@/lib/media/trim-video';
 import { useObjectUrl } from '@/lib/media/use-object-url';
 
 export interface SourceVideo extends ProbedDimensions { file: File; epoch: number; origin?: ImportedClipSource; trimNotice?: string }
+
 export function SourceVideoPreview({file, label = 'Original video'}: {file: File; label?: string}) {
   const url = useObjectUrl(file);
   return url ? <VideoPlayer src={url} label={label} className="aspect-video w-full" /> : null;

@@ -286,6 +286,19 @@ export const FAL_RATES: Record<string, FalRate> = {
   'fal-ai/kling-video/o1/video-to-video/edit': klingRate(0.168, 0.168),
   // https://fal.ai/models/fal-ai/kling-video/o3/standard/video-to-video/edit/llms.txt — $0.126/s.
   'fal-ai/kling-video/o3/standard/video-to-video/edit': klingRate(0.126, 0.126),
+  // https://fal.ai/models/fal-ai/kling-video/o3/pro/video-to-video/edit/llms.txt — $0.168/s.
+  'fal-ai/kling-video/o3/pro/video-to-video/edit': klingRate(0.168, 0.168),
+  // https://fal.ai/models/fal-ai/kling-video/o3/4k/video-to-video/edit/llms.txt — $0.42/s, audio or not.
+  'fal-ai/kling-video/o3/4k/video-to-video/edit': klingRate(0.42, 0.42),
+  // https://fal.ai/models/fal-ai/wan/v2.7/edit-video/llms.txt — $0.10/s at 720p, $0.15/s at 1080p.
+  'fal-ai/wan/v2.7/edit-video': seedanceRate({ '720p': 0.1, '1080p': 0.15 }),
+  // https://fal.ai/models/luma/agent/ray/v3.2/video-to-video/llms.txt
+  // $0.72 / $1.08 / $2.16 per 5 seconds, written here per second. HDR is not offered.
+  'luma/agent/ray/v3.2/video-to-video': seedanceRate({ '540p': 0.144, '720p': 0.216, '1080p': 0.432 }),
+  // https://fal.ai/models/minimax/h3-max/recast/llms.txt — $0.30/s at 768P, $0.45/s at 1080P.
+  'minimax/h3-max/recast': seedanceRate({ '768P': 0.3, '1080P': 0.45 }),
+  // https://fal.ai/models/minimax/h3-max/relight/llms.txt
+  'minimax/h3-max/relight': seedanceRate({ '480P': 0.05, '768P': 0.08, '1080P': 0.16, '2K': 0.32 }),
 
   'fal-ai/minimax/hailuo-2.3/standard/text-to-video': { unit: 'video', usdPerRun: { '6': 0.28, '10': 0.56 } },
   'fal-ai/minimax/hailuo-2.3/standard/image-to-video': { unit: 'video', usdPerRun: { '6': 0.28, '10': 0.56 } },

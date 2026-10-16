@@ -68,6 +68,7 @@ export function editPromptShortcuts(capability?: Pick<VideoEditCapability, 'maxI
     // plainReferences names the picture in words. @Image is Seedance's token, and
     // these Runware edit pages do not document it.
     if (capability?.promptSyntax === 'image-index' || capability?.plainReferences) return [label, text.replace('@Video1', 'the source video').replace(/@Image(\d+)/g, 'image $1')];
+    if (capability?.promptSyntax === 'triple-angle') return [label, text.replace('@Video1', '<<<video_1>>>').replace(/@Image(\d+)/g, (_, n: string) => `<<<image_${n}>>>`)];
     return [label, text];
   });
 }
@@ -161,6 +162,11 @@ export function frameAnchorTimingError(pins: FramePin[], durationSeconds: number
   }
 }
 
+/** Whether this edit lists a shared control, including one the tray draws. */
+export function editHasControl(capability: Pick<VideoEditCapability, 'controls'> | undefined, key: string): boolean {
+  return Boolean(capability?.controls?.some((control) => control.key === key));
+}
+
 /**
  * Per-second edits priced from the container. Runware reports a cost after the
  * run, so it stays off this path unless the catalog marks `measureForPrice`.
@@ -183,13 +189,15 @@ export function editSourceSummary(capability: VideoEditCapability): string {
     ? ` · ${bounds.minEdge}–${bounds.maxEdge}px`
     : bounds?.maxEdge !== undefined ? ` · up to ${bounds.maxEdge}px`
       : bounds?.minEdge !== undefined ? ` · at least ${bounds.minEdge}px` : '';
-  const tail = capability.namesSource ? 'Reference this clip as @Video1.' : 'Describe how to change the source video.';
+  const tail = capability.promptSyntax === 'triple-angle'
+    ? 'Reference this clip as <<<video_1>>>.'
+    : capability.namesSource ? 'Reference this clip as @Video1.' : 'Describe how to change the source video.';
   return `${mimes} · ${seconds} · up to ${Math.round(editVideoMaxBytes(capability) / 1_000_000)} MB${pixels}. ${tail}`;
 }
 
 /** Validate only model-owned settings; fixed-output models must not receive stale resolution. */
 export function editSettingsError(capability: VideoEditCapability, values: Record<string, unknown>): string | undefined {
-  const allowsDuration = capability.maxSeconds !== undefined && (capability.draftPreview || capability.rate?.per === 'second' || capability.measureForPrice);
+  const allowsDuration = Boolean(capability.draftPreview || capability.rate?.per === 'second' || capability.measureForPrice);
   const allowed = [
     ...(capability.sizes.length ? ['size'] : []),
     ...(capability.aspectRatios?.length ? ['aspectRatio'] : []),
@@ -197,20 +205,26 @@ export function editSettingsError(capability: VideoEditCapability, values: Recor
     // The Worker overwrites this with the container length before reserve.
     // A caller-supplied number is only a check, within a second of the file.
     ...(allowsDuration ? ['sourceDurationSeconds'] : []),
-    ...(capability.frameAnchors ? ['frameAnchors'] : []),
-    ...(capability.keepOriginalSound ? ['keepOriginalSound'] : []),
+    ...(capability.controls ?? []).map(control => control.key),
   ];
-  if (Object.keys(values).some(key => values[key] !== undefined && !allowed.includes(key))) return 'Unsupported edit setting. Duration and aspect ratio follow the source.';
-  if (values.draft !== undefined && typeof values.draft !== 'boolean') return 'Draft must be on or off.';
-  if (capability.draftPreview && values.draft === true && values.size !== '480p') return 'A Seedance draft edit is 480p only.';
-  if (capability.sizes.length && !capability.sizes.some(size => size.label === values.size)) return 'Choose a supported edit resolution.';
-  if (values.aspectRatio !== undefined && !capability.aspectRatios?.includes(String(values.aspectRatio))) return 'Choose a supported aspect ratio.';
-  if (values.keepOriginalSound !== undefined && typeof values.keepOriginalSound !== 'boolean') return 'Keep original sound must be on or off.';
   if (values.frameAnchors !== undefined && typeof values.frameAnchors !== 'string') return 'Frame anchors must be a comma-separated list.';
   if (typeof values.frameAnchors === 'string') {
     const tokenError = frameAnchorTokenError(capability, values.frameAnchors);
     if (tokenError) return tokenError;
   }
+  if (Object.keys(values).some(key => values[key] !== undefined && !allowed.includes(key))) return 'Unsupported edit setting. Duration and aspect ratio follow the source.';
+  for (const control of capability.controls ?? []) {
+    const value = values[control.key];
+    if (value === undefined) continue;
+    if (control.kind === 'boolean' && typeof value !== 'boolean') return `${control.label} must be on or off.`;
+    if (control.kind === 'text' && (typeof value !== 'string' || (control.maxLength !== undefined && value.length > control.maxLength))) return `${control.label} is too long.`;
+    if (control.kind === 'number' && (typeof value !== 'number' || !Number.isFinite(value) || (control.min !== undefined && value < control.min) || (control.max !== undefined && value > control.max))) return `${control.label} is outside this model's range.`;
+    if (control.kind === 'select' && !control.options?.some(option => option.value === value)) return `Choose a supported ${control.label.toLowerCase()}.`;
+  }
+  if (values.draft !== undefined && typeof values.draft !== 'boolean') return 'Draft must be on or off.';
+  if (capability.draftPreview && values.draft === true && values.size !== '480p') return 'A Seedance draft edit is 480p only.';
+  if (capability.sizes.length && !capability.sizes.some(size => size.label === values.size)) return 'Choose a supported edit resolution.';
+  if (values.aspectRatio !== undefined && !capability.aspectRatios?.includes(String(values.aspectRatio))) return 'Choose a supported aspect ratio.';
   if (values.sourceDurationSeconds !== undefined && (typeof values.sourceDurationSeconds !== 'number' || !Number.isFinite(values.sourceDurationSeconds) || values.sourceDurationSeconds <= 0 || (capability.maxSeconds !== undefined && values.sourceDurationSeconds > capability.maxSeconds))) return 'Source duration must be a positive number of seconds within this model\'s limit.';
 }
 
