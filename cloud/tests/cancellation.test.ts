@@ -165,9 +165,12 @@ describe('attention job dismissal',()=>{
     const job=await attention();
     await env.DB.prepare('UPDATE account_jobs SET provider_task=? WHERE id=?').bind(JSON.stringify({id:'provider-task'}),job.id).run();
     const [dismissed,resumed]=await Promise.all([dismissRequest(job.id),resumeRequest(job.id)]);
-    expect([dismissed?.status,resumed?.status].sort()).toEqual([200,409]);
     const row=await getJob(env,job.id);
     expect(['failed','running']).toContain(row?.state);
+    // Whichever request claimed the job answers with its own success code and
+    // the loser gets 409: dismissal is 200, resume is 202 (accepted, the
+    // workflow continues). Pinning [200,409] failed CI whenever resume won.
+    expect([dismissed?.status,resumed?.status]).toEqual(row?.state==='failed'?[200,409]:[409,202]);
     if(row?.state==='failed'){
       expect(row.error_code).toBe('tracking_stopped');
       expect(db.prepare('SELECT reserved_bytes,active_jobs FROM account_storage WHERE user_id=?').get('owner')).toMatchObject({reserved_bytes:0,active_jobs:0});
