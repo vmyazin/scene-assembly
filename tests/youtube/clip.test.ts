@@ -42,9 +42,21 @@ describe('bounds', () => {
     expect(importBounds({ provider: 'runware', modelId: 'prunaai:p-video@edit' })).toMatchObject({ minSeconds: 1, maxSeconds: 15 });
   });
   it('refuses a model without edit, an unknown provider, and prototype keys', () => {
+    expect(importBounds({ provider: 'fal', modelId: 'veo-3-1-fast' })).toBeNull();
+    expect(importBounds({ provider: 'fal', modelId: 'unknown' })).toBeNull();
     expect(importBounds({ provider: 'runware', modelId: 'runware:z-image@turbo' })).toBeNull();
     expect(importBounds({ provider: 'nope', modelId: 'x' })).toBeNull();
     expect(importBounds({ provider: 'toString', modelId: 'x' })).toBeNull();
+  });
+  it.each([
+    ['kling-o1-edit', 10.05, 2160],
+    ['kling-o3-standard-edit', 15, 3840],
+  ])('uses fal edit limits for %s in the dialog and importer', (modelId, maxSeconds, maxEdge) => {
+    const bounds = importBounds({ provider: 'fal', modelId })!;
+    expect(bounds).toMatchObject({ minSeconds: 3, maxSeconds, capability: { sourceBounds: { minEdge: 720, maxEdge } } });
+    expect(rangeProblem(0, 3, bounds)).toBeNull();
+    expect(rangeProblem(0, 2.9, bounds)).toMatch(/Choose a section/);
+    expect(rangeProblem(0, 15.1, bounds)).toMatch(/Choose a section/);
   });
   it('falls back to the widest catalog range', () => expect(importBounds()).toEqual({ minSeconds: 1, maxSeconds: 30 }));
   it('explains every out-of-range section', () => {

@@ -399,6 +399,13 @@
       "request": "launch",
       "command": "ACCOUNT_WORKER_PORT=8983 DEV_FAKE_GENERATION=1 npm run dev -- --port 3283",
       "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "fal edit YouTube smoke test",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "ACCOUNT_WORKER_PORT=8907 npm run dev -- --port 3307",
+      "cwd": "${workspaceFolder}"
     }
   ],
   "version": "0.0.1"

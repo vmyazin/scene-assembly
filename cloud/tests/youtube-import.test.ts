@@ -11,6 +11,16 @@ const SEEDANCE = { provider: 'runware', modelId: 'bytedance:seedance@2.5' };
 afterEach(() => vi.restoreAllMocks());
 
 describe('importYouTubeClip', () => {
+  it.each(['kling-o1-edit', 'kling-o3-standard-edit'])('stages a fal source for %s and rejects its invalid ranges before download', async modelId => {
+    const importer = fakeImporter(() => clipOk({ durationSeconds: 5 }));
+    const { env, db } = agentEnv({ YOUTUBE_IMPORTER: importer.namespace });
+    const edit = { provider: 'fal', modelId };
+    const clip = await importYouTubeClip(env, OWNER, { url: URL_, startSeconds: 0, endSeconds: 5, edit });
+    expect(db.prepare('SELECT state FROM account_uploads WHERE id=?').get(clip.uploadId)).toEqual({ state: 'ready' });
+    await expect(importYouTubeClip(env, OWNER, { url: URL_, startSeconds: 0, endSeconds: 2, edit })).rejects.toMatchObject({ code: 'invalid_range' });
+    await expect(importYouTubeClip(env, OWNER, { url: URL_, startSeconds: 0, endSeconds: 16, edit })).rejects.toMatchObject({ code: 'invalid_range' });
+    expect(importer.calls).toHaveLength(1);
+  });
   it('stages the section as a ready upload for its owner', async () => {
     const importer = fakeImporter(() => clipOk());
     const { env, db } = agentEnv({ YOUTUBE_IMPORTER: importer.namespace });

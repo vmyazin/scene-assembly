@@ -708,7 +708,8 @@ function FalGenerationWorkspaceSession({
           </ModelPickerCard>
 
           {isEdit && variant.edit && (
-            <VideoSourceInput capability={variant.edit} source={source} onChange={setSelectedSource} disabled={isSubmitting} />
+            <VideoSourceInput capability={variant.edit} source={source} onChange={setSelectedSource} disabled={isSubmitting}
+              youtube={cloudWorkspace.cloud ? { provider: 'fal', modelId: selectedModel.id, modelLabel: selectedModel.label } : undefined} />
           )}
 
           {inputMode !== 'text' && (!isEdit || maxInputImages > 0) && (

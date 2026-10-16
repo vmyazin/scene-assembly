@@ -1,5 +1,6 @@
 import { PROVIDER_MODELS, findModel } from '../providers/catalog';
 import type { ProviderId, ProviderModel } from '../providers/types';
+import { FAL_VIDEO_MODELS } from '../fal/catalog';
 
 /** Imports per account per rolling hour, shared by the browser and every agent, so
  *  connecting more agents does not raise the proxy bill. */
@@ -81,10 +82,17 @@ export interface ImportBounds { minSeconds: number; maxSeconds: number; capabili
  *  any edit model in the catalog accepts. Null for a model that cannot edit. */
 export function importBounds(edit?: { provider: string; modelId: string }): ImportBounds | null {
   if (edit) {
-    const capability = Object.hasOwn(PROVIDER_MODELS, edit.provider) ? findModel(edit.provider as ProviderId, edit.modelId)?.videoEdit : undefined;
+    // fal keeps edit capabilities on its variants; both the dialog and Worker
+    // must resolve that catalog or a visible import button still refuses the model.
+    const capability = edit.provider === 'fal'
+      ? FAL_VIDEO_MODELS.find(model => model.id === edit.modelId)?.variants.find(variant => variant.inputMode === 'edit')?.edit
+      : Object.hasOwn(PROVIDER_MODELS, edit.provider) ? findModel(edit.provider as ProviderId, edit.modelId)?.videoEdit : undefined;
     return capability ? { minSeconds: Math.max(MIN_SECTION_SECONDS, capability.minSeconds ?? 0), maxSeconds: capability.maxSeconds, capability } : null;
   }
-  const all = Object.values(PROVIDER_MODELS).flat().flatMap(model => model.videoEdit ? [model.videoEdit] : []);
+  const all = [
+    ...Object.values(PROVIDER_MODELS).flat().flatMap(model => model.videoEdit ? [model.videoEdit] : []),
+    ...FAL_VIDEO_MODELS.flatMap(model => model.variants.flatMap(variant => variant.edit ? [variant.edit] : [])),
+  ];
   return { minSeconds: Math.max(MIN_SECTION_SECONDS, Math.min(...all.map(c => c.minSeconds ?? 0))), maxSeconds: Math.max(...all.map(c => c.maxSeconds)) };
 }
 
