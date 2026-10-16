@@ -345,6 +345,7 @@ function FalGenerationWorkspaceSession({
   const isFramesMode = inputMode === 'frames';
   const isEdit = inputMode === 'edit';
   const editSpec = isEdit ? variant.edit?.references : undefined;
+  const promptAbsent = editPromptMode(editSpec) === 'absent';
   const pickerLabel = !isFramesMode
     ? 'Choose an image, or a video to use its last frame'
     : references.length === 0
@@ -518,7 +519,7 @@ function FalGenerationWorkspaceSession({
       packedPlan = packed.packed.plan;
       packedFiles = packed.packed.files;
     }
-    const libraryPrompt = prompt.trim() || (editPromptMode(editSpec) === 'absent' ? selectedModel.label : '');
+    const libraryPrompt = prompt.trim() || (promptAbsent ? selectedModel.label : '');
     const submittedValues = {
       ...values,
       ...relaxed.attach(),
@@ -809,26 +810,26 @@ function FalGenerationWorkspaceSession({
           </>
         }
         prompt={
-          editPromptMode(editSpec) === 'absent' ? (
-            <PromptPanel paused={gated} hasPrompt={false}>
+          <PromptPanel paused={gated} hasPrompt={!promptAbsent && prompt.trim().length > 0}>
+            {promptAbsent ? (
               <p className="text-sm text-[var(--foreground-muted)]">This model does not take a prompt. The lighting sphere is the only reference.</p>
-            </PromptPanel>
-          ) : (
-          <PromptPanel paused={gated} hasPrompt={prompt.trim().length > 0}>
-            <PromptHeader htmlFor="fal-video-prompt">
-              <SavedPromptsButton />
-              <GenExampleButton busy={example.generating} onClick={() => void example.generate()} />
-            </PromptHeader>
-            <AutoExpandingPrompt
-              id="fal-video-prompt"
-              aria-required="true"
-              required
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              placeholder={isEdit ? (variant.edit?.namesSource ? 'Describe what to change in @Video1 and what to keep…' : 'Describe what to change, and address reference images as @Image1…') : 'Describe the motion, camera, mood, and scene…'}
-            />
+            ) : (
+              <>
+                <PromptHeader htmlFor="fal-video-prompt">
+                  <SavedPromptsButton />
+                  <GenExampleButton busy={example.generating} onClick={() => void example.generate()} />
+                </PromptHeader>
+                <AutoExpandingPrompt
+                  id="fal-video-prompt"
+                  aria-required="true"
+                  required
+                  value={prompt}
+                  onChange={(event) => setPrompt(event.target.value)}
+                  placeholder={isEdit ? (variant.edit?.namesSource ? 'Describe what to change in @Video1 and what to keep…' : 'Describe what to change, and address reference images as @Image1…') : 'Describe the motion, camera, mood, and scene…'}
+                />
+              </>
+            )}
           </PromptPanel>
-          )
         }
         actions={
           <>

@@ -62,6 +62,11 @@ describe('provider catalog rates', () => {
       'luma/uni-1/edit': { usd: 0.043, per: 'image' },
       'luma/uni-1-max/text-to-image': { usd: 0.1, per: 'image' },
       'luma/uni-1-max/edit': { usd: 0.103, per: 'image' },
+      // Video edits bill the measured source (or a shorter requested output).
+      // Atlas disclaims the vendor's higher Kling rates and Wan's 1.5× 1080P line.
+      'kwaivgi/kling-video-o3-pro/video-edit': { usd: 0.143, per: 'second' },
+      'kwaivgi/kling-video-o3-std/video-edit': { usd: 0.107, per: 'second' },
+      'alibaba/wan-2.7/video-edit': { usd: 0.1, per: 'second' },
     });
   });
 
