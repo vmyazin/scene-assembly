@@ -2,6 +2,7 @@
 import { editReferenceError, materializeEditReferences, parseEditReferencePlan, splitEditUploads, type EditReferenceInput } from '../../../lib/providers/edit-references';
 import { inputUrls } from '../uploads';
 import { buildFalInput, resolveFalVariant, validateFalInput } from '../../../lib/fal/catalog';
+import type { FalInputMode } from '../../../lib/fal/types';
 import { getFalTask, submitFalTask } from '../../../lib/fal/server';
 import { KIE_MODELS, resolveKieVariant, validateKieInput } from '../../../lib/kie/catalog';
 import { createKieTask, getKieTask } from '../../../lib/kie/client';
@@ -19,11 +20,16 @@ export async function credentials(env: Env, job: JobRow) {
   return connection.secret.apiKey;
 }
 function request(job: JobRow): CloudJobRequest { return JSON.parse(job.request_json); }
+/** fal has no reference-to-video variant; validateQueuedRequest refuses that mode before a job exists. */
+function falInputMode(r: CloudJobRequest): FalInputMode {
+  if (r.inputMode === 'reference') throw new Error('fal has no reference mode');
+  return r.inputMode;
+}
 
 /** Validate before reserving quota or entering the non-retrying submit step. */
 export function validateQueuedRequest(r: CloudJobRequest) {
   const endpointId = r.provider === 'fal'
-    ? (() => { try { return resolveFalVariant(r.modelId, r.mediaType, r.inputMode as 'text' | 'image' | 'frames' | 'edit').endpointId; } catch { return undefined; } })()
+    ? (() => { try { return resolveFalVariant(r.modelId, r.mediaType, falInputMode(r)).endpointId; } catch { return undefined; } })()
     : undefined;
   const moderationError = moderationValueError({ provider: r.provider, modelId: r.modelId, endpointId }, r.values);
   if (moderationError) throw new AccountError(moderationError, 400, 'invalid_settings');
@@ -72,19 +78,20 @@ export function validateQueuedRequest(r: CloudJobRequest) {
 export const falAdapter: GenerationAdapter = {
   async submit(env, job) {
     const r = request(job);
+    const inputMode = falInputMode(r);
     const uploadUrls = await inputUrls(env, job);
-    const variant = resolveFalVariant(r.modelId, r.mediaType, r.inputMode);
+    const variant = resolveFalVariant(r.modelId, r.mediaType, inputMode);
     const spec = r.inputMode === 'edit' ? variant.edit?.references : undefined;
     const split = spec ? splitEditUploads(r, uploadUrls) : undefined;
     const references = spec && split
       ? { ...materializeEditReferences(spec, split.images, r.editReferencePlan, split.audio), video: split.source }
       : undefined;
-    const result = await submitFalTask({...r, inputMode:r.inputMode as 'text'|'image'|'frames'|'edit', uploadUrls, references, apiKey:await credentials(env,job)});
+    const result = await submitFalTask({...r, inputMode, uploadUrls, references, apiKey:await credentials(env,job)});
     return {handle:{id:result.requestId}};
   },
   async poll(env, job, handle) {
     const r = request(job);
-    const result = await getFalTask({...r, inputMode:r.inputMode as 'text'|'image'|'frames'|'edit', requestId:handle.id, apiKey:await credentials(env,job)});
+    const result = await getFalTask({...r, inputMode:falInputMode(r), requestId:handle.id, apiKey:await credentials(env,job)});
     if (result.state !== 'success') return {state:'running'};
     if (!result.resultUrl) throw new Error('Missing output');
     return {state:'success',result:{sources:[{url:result.resultUrl,mimeType:result.mimeType}]}};
