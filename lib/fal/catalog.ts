@@ -1,5 +1,4 @@
 // lib/fal/catalog.ts
-// lib/fal/catalog.ts
 import { editPromptMode, editReferenceError, editReferenceFields, materializeEditReferences, type EditReferenceInput } from '../providers/edit-references';
 import { applyProviderModeration } from '../moderation/capabilities';
 import { effectiveModerationLevel } from '../moderation/floors';

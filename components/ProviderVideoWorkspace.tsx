@@ -1,6 +1,5 @@
 // components/ProviderVideoWorkspace.tsx
 'use client';
-// components/ProviderVideoWorkspace.tsx
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Sparkles } from 'lucide-react';
@@ -13,7 +12,7 @@ import EditReferenceTray, { emptyEditReferenceDraft } from '@/components/EditRef
 import VideoSourceInput, { type SourceVideo } from '@/components/VideoSourceInput';
 import { useAccountStore } from '@/store/useAccountStore';
 import { ALEPH_DATA_URI_MAX, alephDataUriLength, isAlephVideoUri } from '@/lib/providers/comet';
-import { CLOUD_EDIT_REFERENCE_CAP, editPromptMode, packEditReferences, type EditReferencePlan } from '@/lib/providers/edit-references';
+import { CLOUD_EDIT_REFERENCE_CAP, editPromptMode, packEditReferences, releaseEditReferenceDraft, type EditReferencePlan } from '@/lib/providers/edit-references';
 import { editPromptImageTokenError, editPromptShortcuts, isRunwayEditProtocol, validateEditSource } from '@/lib/providers/video-edit';
 import { uploadRunwareMedia, uploadRunwareVideo } from '@/lib/providers/upload-video';
 import ReferenceClipTray, { type AttachedReferenceClip } from '@/components/ReferenceClipTray';
@@ -276,10 +275,16 @@ export default function ProviderVideoWorkspace({
   const [selectedSource, setSelectedSource] = useState<SourceVideo | null>(null);
   const [editDraft, setEditDraft] = useState(emptyEditReferenceDraft);
   const [editDraftModel, setEditDraftModel] = useState(selectedModel?.id);
+  const editDraftRef = useRef(editDraft);
   if (editDraftModel !== selectedModel?.id) {
+    releaseEditReferenceDraft(editDraft);
     setEditDraftModel(selectedModel?.id);
     setEditDraft(emptyEditReferenceDraft());
   }
+  useEffect(() => {
+    editDraftRef.current = editDraft;
+  }, [editDraft]);
+  useEffect(() => () => releaseEditReferenceDraft(editDraftRef.current), []);
   const editSpec = isEdit ? selectedModel?.videoEdit?.references : undefined;
   const source = selectedSource?.epoch === epoch ? selectedSource : null;
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -444,14 +449,20 @@ export default function ProviderVideoWorkspace({
    * The rate and the duration were both already here, and the reader was left
    * to multiply them — once per clip, without mixing up which tier they had
    * selected. Priced through the same resolver the spend ledger uses, so the
-   * figure on the button and the figure in the ledger cannot disagree; null
-   * whenever the vendor never published a rate for this size, which is a
-   * silence rather than a guess.
+   * figure on the button and the figure in the ledger cannot disagree. A
+   * requested output longer than the source is not what Atlas renders, so
+   * both use the shorter of the two. Null whenever the vendor never
+   * published a rate for this size, which is a silence rather than a guess.
    */
   const pricedSize = typeof values.size === 'string' ? values.size : undefined;
+  const requestedOutput = typeof values.outputDuration === 'number' && values.outputDuration > 0 ? values.outputDuration : undefined;
+  const sourceSeconds = source?.durationSeconds;
+  const pricedSeconds = isEdit
+    ? (requestedOutput !== undefined && sourceSeconds !== undefined ? Math.min(requestedOutput, sourceSeconds) : sourceSeconds)
+    : (typeof values.duration === 'number' ? values.duration : undefined);
   const estimate = resolveCatalogRate(
     selectedModel,
-    isEdit ? source?.durationSeconds : typeof values.duration === 'number' ? values.duration : undefined,
+    pricedSeconds,
     1,
     { inputMode, draft: values.draft === true || values.draftPreview === true, size: pricedSize, audio: values.audio === true }
   );
@@ -896,6 +907,7 @@ export default function ProviderVideoWorkspace({
             youtube={cloudWorkspace.cloud ? {provider, modelId: selectedModel!.id, modelLabel: selectedModel!.label} : undefined} />}
           {editSpec && (
             <EditReferenceTray
+              key={selectedModel?.id}
               spec={editSpec}
               draft={editDraft}
               onChange={setEditDraft}

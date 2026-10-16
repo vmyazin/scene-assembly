@@ -91,12 +91,20 @@ function fromDefinition(field: {
   };
 }
 
-/** Cloud jobs stop at 16 reference files. A browser Luma run can still attach 64. */
+/**
+ * What an agent can send without an `editReferencePlan`. The studio sends a
+ * plan, so it can attach Kling elements or 64 Luma keyframes. The MCP tool
+ * does not, and without a plan every file is a plain image: two Luma stills
+ * are refused, and a fifth Kling image is over the image cap. The descriptor
+ * stops at the mapping that actually works.
+ */
 function editReferenceBounds(spec: EditReferenceSpec | undefined, fileMax: number): { min: number; max: number } {
-  const max = Math.min(fileMax, 16);
-  if (spec?.persons) return { min: spec.persons.min, max };
-  if (spec?.litSphere) return { min: 1, max };
-  return { min: 0, max };
+  if (spec?.persons) return { min: spec.persons.min, max: spec.persons.max };
+  if (spec?.litSphere) return { min: 1, max: 1 };
+  if (spec?.keyframes) return { min: 0, max: spec.keyframes.startImage ? 1 : 0 };
+  if (spec?.images) return { min: 0, max: spec.images.max };
+  if (spec) return { min: 0, max: 0 };
+  return { min: 0, max: Math.min(fileMax, 16) };
 }
 
 function falModels(): ModelDescriptor[] {

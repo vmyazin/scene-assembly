@@ -198,6 +198,8 @@ export const aggregatorAdapter: GenerationAdapter = {
       if (!split.source) throw new AccountError('Choose a source video to edit.', 400, 'invalid_references');
       const sizeLabel = typeof r.values.size === 'string' ? r.values.size : undefined;
       const size = resolveSize(provider, r.modelId, sizeLabel);
+      const outputDuration = typeof r.values.outputDuration === 'number' ? r.values.outputDuration : undefined;
+      const sourceDurationSeconds = typeof r.values.sourceDurationSeconds === 'number' ? r.values.sourceDurationSeconds : undefined;
       const result = await atlasCreateVideo({
         apiKey: common.apiKey,
         model: r.modelId,
@@ -210,7 +212,8 @@ export const aggregatorAdapter: GenerationAdapter = {
         ...(size?.preset ? { resolution: size.preset } : {}),
         ...(typeof r.values.aspectRatio === 'string' ? { aspectRatio: r.values.aspectRatio } : {}),
         ...(typeof r.values.keepOriginalSound === 'boolean' ? { keepOriginalSound: r.values.keepOriginalSound } : {}),
-        ...(typeof r.values.outputDuration === 'number' ? { outputDuration: r.values.outputDuration } : {}),
+        ...(outputDuration !== undefined ? { outputDuration } : {}),
+        ...(sourceDurationSeconds !== undefined ? { sourceDurationSeconds } : {}),
         ...(typeof r.values.negativePrompt === 'string' ? { negativePrompt: r.values.negativePrompt } : {}),
         ...(typeof r.values.promptExtend === 'boolean' ? { promptExtend: r.values.promptExtend } : {}),
       });

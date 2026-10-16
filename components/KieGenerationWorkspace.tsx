@@ -13,7 +13,7 @@ import ReferenceStack from '@/components/ReferenceStack';
 import { requestPromptSlug } from '@/lib/micro-ai/browser';
 import { fetchKieCredits, submitKieJob, uploadKieFiles } from '@/lib/kie/browser';
 import { defaultKieValues, modelsForKieMode, resolveKieVariant, validateKieInput } from '@/lib/kie/catalog';
-import { CLOUD_EDIT_REFERENCE_CAP, editPromptMode, materializeEditReferences, packEditReferences, type EditReferencePlan } from '@/lib/providers/edit-references';
+import { CLOUD_EDIT_REFERENCE_CAP, editPromptMode, materializeEditReferences, packEditReferences, releaseEditReferenceDraft, type EditReferencePlan } from '@/lib/providers/edit-references';
 import { validateEditSource, validateEditVideo } from '@/lib/providers/video-edit';
 import ModelListbox from '@/components/ModelListbox';
 import { KIE_IMAGE_COLUMNS, KIE_VIDEO_COLUMNS, kieImageSpecs, kieVideoSpecs } from '@/lib/models/listbox-specs';
@@ -122,10 +122,16 @@ export default function KieGenerationWorkspace({
   const [selectedSource, setSelectedSource] = useState<SourceVideo | null>(null);
   const [editDraft, setEditDraft] = useState(emptyEditReferenceDraft);
   const [editDraftModel, setEditDraftModel] = useState(variant.modelId);
+  const editDraftRef = useRef(editDraft);
   if (editDraftModel !== variant.modelId) {
+    releaseEditReferenceDraft(editDraft);
     setEditDraftModel(variant.modelId);
     setEditDraft(emptyEditReferenceDraft());
   }
+  useEffect(() => {
+    editDraftRef.current = editDraft;
+  }, [editDraft]);
+  useEffect(() => () => releaseEditReferenceDraft(editDraftRef.current), []);
   const epoch = useAccountStore((state) => state.epoch);
   const source = selectedSource?.epoch === epoch ? selectedSource : null;
   const prompt = useDraftStore((state) => state.prompt);
@@ -490,6 +496,7 @@ export default function KieGenerationWorkspace({
           )}
           {editSpec && (
             <EditReferenceTray
+              key={variant.modelId}
               spec={editSpec}
               draft={editDraft}
               onChange={setEditDraft}

@@ -31,6 +31,11 @@ describe('per-model output sizes', () => {
     expect(resolveSize('runware', 'lightricks:ltx@2.5-fast')).toMatchObject({ width: 1280, height: 720 });
   });
 
+  it('reads an Atlas Wan edit size from the edit capability', () => {
+    expect(resolveSize('atlas', 'alibaba/wan-2.7/video-edit', '720P')?.preset).toBe('720P');
+    expect(resolveSize('atlas', 'alibaba/wan-2.7/video-edit', '1080P')?.preset).toBe('1080P');
+  });
+
   it('ignores a label the model does not publish', () => {
     // "480p · 16:9" belongs to Seedance 2.0 Mini, not to LTX-2.5 Fast.
     expect(resolveSize('runware', 'lightricks:ltx@2.5-fast', '480p · 16:9')).toMatchObject({

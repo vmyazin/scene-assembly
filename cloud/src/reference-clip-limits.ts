@@ -80,7 +80,8 @@ export async function assertReferenceClipLimits(env: Env, owner: string, request
   const catalogProvider = (['runware', 'atlas', 'comet', 'piapi'] as const satisfies readonly ProviderId[]).find((id) => id === request.provider);
   const model = catalogProvider ? findModel(catalogProvider, request.modelId) : undefined;
   const spec = referenceClipsFor(model, request.inputMode);
-  if (!spec) return;
+  const drivingAudio = request.inputMode === 'edit' ? model?.videoEdit?.references?.audioLimit : undefined;
+  if (!spec && !drivingAudio) return;
   const ids = [...videoIds, ...audioIds];
   const rows = await env.DB.prepare(
     'SELECT id, mime_type, expected_bytes, object_key, state FROM account_uploads WHERE user_id = ? AND id IN (SELECT value FROM json_each(?))',
@@ -118,6 +119,7 @@ export async function assertReferenceClipLimits(env: Env, owner: string, request
     }
   };
 
-  if (spec.video) await checkList(videoIds, 'video', spec.video);
-  if (spec.audio) await checkList(audioIds, 'audio', spec.audio);
+  if (spec?.video) await checkList(videoIds, 'video', spec.video);
+  if (spec?.audio) await checkList(audioIds, 'audio', spec.audio);
+  else if (drivingAudio) await checkList(audioIds, 'audio', drivingAudio);
 }

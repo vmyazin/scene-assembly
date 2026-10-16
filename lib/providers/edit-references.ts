@@ -60,8 +60,21 @@ export function emptyEditReferenceDraft(): EditReferenceDraft {
   };
 }
 
-/** Background jobs stop at the account reference cap. The browser can go higher. */
+/** Account jobs other than a Luma keyframe edit stop at 16 reference files. */
 export const CLOUD_EDIT_REFERENCE_CAP = 16;
+
+export function releaseEditReferenceDraft(draft: EditReferenceDraft): void {
+  if (typeof URL === 'undefined' || typeof URL.revokeObjectURL !== 'function') return;
+  const stills = [
+    ...draft.images,
+    ...draft.elements.flatMap((element) => [element.frontal, ...element.angles]),
+    draft.startImage,
+    ...draft.keyframes.map((frame) => frame.image),
+    ...draft.persons,
+    draft.litSphere,
+  ];
+  for (const still of stills) if (still?.previewUrl) URL.revokeObjectURL(still.previewUrl);
+}
 
 export function editPromptMode(spec?: EditReferenceSpec): 'required' | 'optional' | 'absent' {
   return spec?.prompt ?? 'required';
@@ -208,10 +221,13 @@ export function packEditReferences(draft: EditReferenceDraft, spec: EditReferenc
   }
   if (spec.keyframes) {
     if (draft.guide === 'keyframes') {
-      plan.keyframes = draft.keyframes.map((frame) => ({
-        image: pushStill(files, frame.image),
-        index: Number(frame.index),
-      }));
+      const keyframes: { image: number; index: number }[] = [];
+      for (const frame of draft.keyframes) {
+        // Number('') is 0, so a cleared field would be sent as index 0.
+        if (!/^\d+$/.test(frame.index)) return { ok: false, error: 'Each keyframe needs a frame index of 0 or more.' };
+        keyframes.push({ image: pushStill(files, frame.image), index: Number(frame.index) });
+      }
+      plan.keyframes = keyframes;
     } else if (draft.startImage) {
       plan.startImage = pushStill(files, draft.startImage);
     }

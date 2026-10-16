@@ -1,7 +1,7 @@
 // components/EditReferenceTray.tsx
 'use client';
 
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import {
   editImageToken,
@@ -9,6 +9,7 @@ import {
   type EditReferenceDraft,
   type EditStill,
 } from '@/lib/providers/edit-references';
+import { referenceClipFileError, referenceClipProbeError } from '@/lib/providers/reference-clips';
 import type { EditReferenceSpec, VideoPromptSyntax } from '@/lib/providers/types';
 
 const IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp';
@@ -18,7 +19,7 @@ export interface EditReferenceTrayProps {
   draft: EditReferenceDraft;
   onChange: (draft: EditReferenceDraft) => void;
   disabled?: boolean;
-  /** Background jobs stop at 16 files. The browser can go higher when the model does. */
+  /** A Luma edit uses the model's keyframe max. Other background jobs stop at 16. */
   fileCap: number;
   promptSyntax?: VideoPromptSyntax;
 }
@@ -29,6 +30,23 @@ function stillFrom(file: File): EditStill {
 
 function revoke(still: EditStill | null | undefined) {
   if (still) URL.revokeObjectURL(still.previewUrl);
+}
+
+function probeAudioDuration(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const audio = document.createElement('audio');
+    audio.preload = 'metadata';
+    const finish = (done: () => void) => () => {
+      clearTimeout(timer);
+      URL.revokeObjectURL(url);
+      done();
+    };
+    audio.addEventListener('loadedmetadata', finish(() => resolve(Number.isFinite(audio.duration) ? audio.duration : 0)), { once: true });
+    audio.addEventListener('error', finish(() => reject(new Error('Could not read that audio.'))), { once: true });
+    const timer = setTimeout(finish(() => reject(new Error('Could not read that audio.'))), 15_000);
+    audio.src = url;
+  });
 }
 
 function fileCount(draft: EditReferenceDraft): number {
@@ -52,6 +70,12 @@ function Thumb({ still, label, onRemove, disabled }: { still: EditStill; label: 
 
 export default function EditReferenceTray({ spec, draft, onChange, disabled, fileCap, promptSyntax }: EditReferenceTrayProps) {
   const imageInput = useRef<HTMLInputElement>(null);
+  const alive = useRef(true);
+  const audioRequest = useRef(0);
+  const [audioError, setAudioError] = useState<string | null>(null);
+  // The workspace owns the draft, including across a mode change that unmounts
+  // this tray, so it is the one that revokes previews.
+  useEffect(() => () => { alive.current = false; }, []);
   const used = fileCount(draft);
   const room = Math.max(0, fileCap - used);
   const capped = fileCap < (spec.keyframes?.max ?? fileCap);
@@ -240,7 +264,12 @@ export default function EditReferenceTray({ spec, draft, onChange, disabled, fil
       {spec.audio && (
         <div className="space-y-2" data-testid="edit-audio">
           <h3 className="display text-base font-semibold">Driving audio</h3>
-          <p className="text-xs text-[var(--foreground-muted)]">Optional. One clip drives the edit.</p>
+          <p className="text-xs text-[var(--foreground-muted)]">
+            {spec.audioLimit
+              ? `Optional. ${spec.audioLimit.formatsLabel}, ${spec.audioLimit.minSeconds}–${spec.audioLimit.maxSeconds} seconds, up to ${Math.round(spec.audioLimit.maxBytes / 1_000_000)} MB.`
+              : 'Optional. One clip drives the edit.'}
+          </p>
+          {audioError && <p role="alert" className="text-sm text-red-300">{audioError}</p>}
           {draft.audio && (
             <p className="flex items-center gap-2 text-sm">
               {draft.audio.name}
@@ -250,10 +279,29 @@ export default function EditReferenceTray({ spec, draft, onChange, disabled, fil
           {!draft.audio && (
             <label className="btn-secondary inline-flex cursor-pointer">
               Add audio
-              <input type="file" accept="audio/*" className="sr-only" disabled={disabled} onChange={(event) => {
+              <input type="file" accept={spec.audioLimit ? spec.audioLimit.accept.join(',') : 'audio/*'} className="sr-only" disabled={disabled} onChange={(event) => {
                 const file = event.target.files?.[0];
-                if (file) onChange({ ...draft, audio: { id: crypto.randomUUID(), file, name: file.name } });
                 event.target.value = '';
+                if (!file) return;
+                const requestId = ++audioRequest.current;
+                const limit = spec.audioLimit;
+                void (async () => {
+                  if (limit) {
+                    const fileError = referenceClipFileError(limit, file);
+                    if (fileError) { if (alive.current && audioRequest.current === requestId) setAudioError(fileError); return; }
+                    try {
+                      const durationSeconds = await probeAudioDuration(file);
+                      const probeError = referenceClipProbeError(limit, { durationSeconds });
+                      if (probeError) { if (alive.current && audioRequest.current === requestId) setAudioError(probeError); return; }
+                    } catch (cause) {
+                      if (alive.current && audioRequest.current === requestId) setAudioError(cause instanceof Error ? cause.message : 'Could not read that audio.');
+                      return;
+                    }
+                  }
+                  if (!alive.current || audioRequest.current !== requestId) return;
+                  setAudioError(null);
+                  onChange({ ...draft, audio: { id: crypto.randomUUID(), file, name: file.name } });
+                })();
               }} />
             </label>
           )}

@@ -39,6 +39,12 @@ export interface EditReferenceSpec {
   persons?: { min: number; max: number };
   litSphere?: boolean;
   audio?: boolean;
+  /**
+   * File bounds for driving audio. The Atlas video-edit page names the field
+   * and does not publish a size; this carries the published Wan 2.7 driving-audio
+   * bound so a huge file is refused before a job is reserved.
+   */
+  audioLimit?: ReferenceClipLimit;
   /** Kling O3's `shot_type` is the constant `customize`. Sent, not offered as a choice. */
   shotTypeCustomize?: boolean;
 }
@@ -325,6 +331,8 @@ export interface VideoRequest {
   keepOriginalSound?: boolean;
   /** Atlas Wan output length. `0` and omitted both mean “match the source”. */
   outputDuration?: number;
+  /** Measured source length. Wan sends `duration` only when the output is shorter. */
+  sourceDurationSeconds?: number;
   negativePrompt?: string;
   promptExtend?: boolean;
 }

@@ -287,6 +287,24 @@ describe('atlas cloud', () => {
       prompt_extend: true,
       negative_prompt: 'blur',
     });
+    expect(atlasEditBody({
+      apiKey: 'at-key',
+      model: 'alibaba/wan-2.7/video-edit',
+      prompt: 'Shorter',
+      inputMode: 'edit',
+      sourceVideo: 'https://cdn.example/clip.mp4',
+      outputDuration: 3,
+      sourceDurationSeconds: 10,
+    }).duration).toBe(3);
+    expect(atlasEditBody({
+      apiKey: 'at-key',
+      model: 'alibaba/wan-2.7/video-edit',
+      prompt: 'Longer than the file',
+      inputMode: 'edit',
+      sourceVideo: 'https://cdn.example/clip.mp4',
+      outputDuration: 10,
+      sourceDurationSeconds: 3,
+    }).duration).toBeUndefined();
   });
 
   it('passes an image-to-video reference as the documented image field', async () => {

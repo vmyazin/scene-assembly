@@ -1035,7 +1035,24 @@ const ATLAS_MODELS: ProviderModel[] = [
       mimes: ['video/mp4', 'video/quicktime'],
       requireMeasurement: true,
       aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
-      references: { images: { max: 3, wire: 'images' }, audio: true },
+      // The video-edit page names `audio` and publishes no size. The bound is
+      // Wan 2.7 driving audio from the image-to-video reference: wav/mp3,
+      // 2–30s, 15 MB.
+      // https://help.aliyun.com/en/model-studio/image-to-video-general-api-reference
+      references: {
+        images: { max: 3, wire: 'images' },
+        audio: true,
+        audioLimit: {
+          max: 1,
+          minSeconds: 2,
+          maxSeconds: 30,
+          maxTotalSeconds: 30,
+          maxBytes: 15_000_000,
+          accept: ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav'],
+          formatsLabel: 'MP3 or WAV',
+          token: 'Audio',
+        },
+      },
       controls: [
         {
           key: 'outputDuration',
@@ -1422,7 +1439,11 @@ export function resolveSize(
   modelId: string,
   requestedLabel?: string
 ): ProviderSize | undefined {
-  const sizes = findModel(provider, modelId)?.sizes;
+  const model = findModel(provider, modelId);
+  // Edit models such as Atlas Wan publish sizes only on `videoEdit`. Falling
+  // back to the first top-level size would drop a 720P choice and let the
+  // vendor render its own default.
+  const sizes = model?.sizes?.length ? model.sizes : model?.videoEdit?.sizes;
   if (!sizes || sizes.length === 0) return undefined;
   return sizes.find((size) => size.label === requestedLabel) ?? sizes[0];
 }

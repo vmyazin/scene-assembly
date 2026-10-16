@@ -146,7 +146,12 @@ export function buildAccountSpendEntry(args: BuildAccountSpendEntryArgs): Accoun
   const outputDuration = typeof request.values.outputDuration === 'number' && request.values.outputDuration > 0
     ? request.values.outputDuration
     : undefined;
-  const duration = outputDuration
+  // A requested output longer than the file is not what Atlas renders. Bill the
+  // shorter of the two so a 3s source with "10 seconds" selected is not $1.00.
+  const clippedOutput = outputDuration !== undefined && sourceDuration !== undefined
+    ? Math.min(outputDuration, sourceDuration)
+    : outputDuration;
+  const duration = clippedOutput
     ?? (edit && sourceDuration !== undefined
       ? sourceDuration
       : typeof request.values.durationSeconds === 'number' ? request.values.durationSeconds : undefined);

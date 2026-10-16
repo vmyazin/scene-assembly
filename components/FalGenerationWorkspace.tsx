@@ -25,7 +25,7 @@ import { isRetryableFailure, useAutoRetry } from '@/lib/providers/auto-retry';
 import ReferenceStack from '@/components/ReferenceStack';
 import { requestPromptSlug } from '@/lib/micro-ai/browser';
 import EditReferenceTray, { emptyEditReferenceDraft } from '@/components/EditReferenceTray';
-import { CLOUD_EDIT_REFERENCE_CAP, materializeEditReferences, packEditReferences, type EditReferencePlan } from '@/lib/providers/edit-references';
+import { CLOUD_EDIT_REFERENCE_CAP, materializeEditReferences, packEditReferences, releaseEditReferenceDraft, type EditReferencePlan } from '@/lib/providers/edit-references';
 import { editPromptMode } from '@/lib/providers/edit-references';
 import { validateEditSource, validateEditVideo } from '@/lib/providers/video-edit';
 import { cancelFalJob, submitFalJob, uploadFalFiles } from '@/lib/fal/browser';
@@ -319,10 +319,16 @@ function FalGenerationWorkspaceSession({
   const [selectedSource, setSelectedSource] = useState<SourceVideo | null>(null);
   const [editDraft, setEditDraft] = useState(emptyEditReferenceDraft);
   const [editDraftModel, setEditDraftModel] = useState(variant.id);
+  const editDraftRef = useRef(editDraft);
   if (editDraftModel !== variant.id) {
+    releaseEditReferenceDraft(editDraft);
     setEditDraftModel(variant.id);
     setEditDraft(emptyEditReferenceDraft());
   }
+  useEffect(() => {
+    editDraftRef.current = editDraft;
+  }, [editDraft]);
+  useEffect(() => () => releaseEditReferenceDraft(editDraftRef.current), []);
   const source = selectedSource?.epoch === epoch ? selectedSource : null;
   const [error, setError] = useState<string | null>(null);
   const [submittingVariantId, setSubmittingVariantId] = useState<string | null>(null);
@@ -504,8 +510,9 @@ function FalGenerationWorkspaceSession({
     if (editSpec) {
       const packed = packEditReferences(editDraft, editSpec);
       if (!packed.ok) { setError(packed.error); return; }
-      if (cloudWorkspace.cloud && packed.packed.files.length > CLOUD_EDIT_REFERENCE_CAP) {
-        setError(`A background job can attach ${CLOUD_EDIT_REFERENCE_CAP} reference images. Remove some, or run this edit in the browser.`);
+      const cloudCap = editSpec.keyframes?.max ?? CLOUD_EDIT_REFERENCE_CAP;
+      if (cloudWorkspace.cloud && packed.packed.files.length > cloudCap) {
+        setError(`A background job can attach ${cloudCap} reference images. Remove some, or run this edit in the browser.`);
         return;
       }
       packedPlan = packed.packed.plan;
@@ -729,11 +736,12 @@ function FalGenerationWorkspaceSession({
           )}
           {editSpec && (
             <EditReferenceTray
+              key={variant.id}
               spec={editSpec}
               draft={editDraft}
               onChange={setEditDraft}
               disabled={isSubmitting}
-              fileCap={cloudWorkspace.cloud ? Math.min(CLOUD_EDIT_REFERENCE_CAP, editSpec.keyframes?.max ?? CLOUD_EDIT_REFERENCE_CAP) : (editSpec.keyframes?.max ?? 64)}
+              fileCap={editSpec.keyframes?.max ?? (cloudWorkspace.cloud ? CLOUD_EDIT_REFERENCE_CAP : 64)}
               promptSyntax={variant.edit?.promptSyntax}
             />
           )}

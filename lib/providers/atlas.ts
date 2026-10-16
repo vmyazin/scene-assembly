@@ -312,7 +312,12 @@ export function atlasEditBody(request: VideoRequest): Record<string, unknown> {
   if (wan) {
     if (request.resolution) body.resolution = request.resolution;
     if (request.aspectRatio) body.ratio = request.aspectRatio;
-    if (typeof request.outputDuration === 'number' && request.outputDuration > 0) body.duration = request.outputDuration;
+    // Duration clips from the start. A value at or above the source is the
+    // same as omitting it, and a longer value would ask Atlas for time the
+    // file does not have.
+    const output = request.outputDuration;
+    const source = request.sourceDurationSeconds;
+    if (typeof output === 'number' && output > 0 && typeof source === 'number' && output < source) body.duration = output;
     if (request.negativePrompt?.trim()) body.negative_prompt = request.negativePrompt.trim();
     if (typeof request.promptExtend === 'boolean') body.prompt_extend = request.promptExtend;
   }

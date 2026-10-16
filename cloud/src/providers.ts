@@ -17,6 +17,16 @@ import { inspectPrompt } from '../../lib/moderation/floors';
 
 export interface ProviderHandle { id: string; protocol?: string; notBefore?:number; sourceMedia?:string; storedMedia?:string[] }
 
+/** Shared reference list. A Luma edit may carry up to 64 keyframes; everything else stays at 16. */
+export function referenceIdCap(request: { provider?: string; modelId?: string; mediaType?: string; inputMode?: string }): number {
+  if (request.provider !== 'fal' || request.inputMode !== 'edit' || request.mediaType !== 'video' || typeof request.modelId !== 'string') return 16;
+  try {
+    const max = resolveFalVariant(request.modelId, 'video', 'edit').edit?.references?.keyframes?.max;
+    if (typeof max === 'number' && max > 16) return max;
+  } catch { /* an unknown model keeps the shared cap */ }
+  return 16;
+}
+
 function idList(value: unknown, label: string): string[] {
   if (value === undefined) return [];
   if (!Array.isArray(value) || value.length > 10 || value.some((id) => typeof id !== 'string' || !id || id.length > 128)) {
@@ -85,7 +95,7 @@ function editPromptMayBeEmpty(r: Partial<CloudJobRequest>): boolean {
 export function validateRequest(env:Env,value:unknown):CloudJobRequest {
   if(!value||typeof value!=='object')throw new AccountError('Invalid generation request.',400,'invalid_request');
   const r=value as Partial<CloudJobRequest>;
-  if(typeof r.prompt!=='string'||(!r.prompt.trim()&&!editPromptMayBeEmpty(r))||r.prompt.length>20000||typeof r.modelId!=='string'||r.modelId.length>256||!['image','video'].includes(r.mediaType||'')||!['text','image','frames','reference','edit'].includes(r.inputMode||'')||!Array.isArray(r.referenceIds)||r.referenceIds.length>16||r.referenceIds.some(id=>typeof id!=='string'||id.length>128)||!r.values||typeof r.values!=='object'||Array.isArray(r.values)||Object.keys(r.values).length>64||Object.values(r.values).some(v=>!['string','boolean','number'].includes(typeof v)||typeof v==='number'&&!Number.isFinite(v)||typeof v==='string'&&v.length>2048))throw new AccountError('Invalid generation settings.',400,'invalid_request');
+  if(typeof r.prompt!=='string'||(!r.prompt.trim()&&!editPromptMayBeEmpty(r))||r.prompt.length>20000||typeof r.modelId!=='string'||r.modelId.length>256||!['image','video'].includes(r.mediaType||'')||!['text','image','frames','reference','edit'].includes(r.inputMode||'')||!Array.isArray(r.referenceIds)||r.referenceIds.length>referenceIdCap(r)||r.referenceIds.some(id=>typeof id!=='string'||id.length>128)||!r.values||typeof r.values!=='object'||Array.isArray(r.values)||Object.keys(r.values).length>64||Object.values(r.values).some(v=>!['string','boolean','number'].includes(typeof v)||typeof v==='number'&&!Number.isFinite(v)||typeof v==='string'&&v.length>2048))throw new AccountError('Invalid generation settings.',400,'invalid_request');
   if(isLocal(env)&&env.DEV_FAKE_GENERATION==='1'&&r.mediaType!=='image'&&r.inputMode!=='edit')throw new AccountError('The local fixture currently supports image generation only.',409,'local_fixture_mode');
   if(r.sourceVideoId!==undefined&&(typeof r.sourceVideoId!=='string'||!r.sourceVideoId||r.sourceVideoId.length>128||r.inputMode!=='edit'))throw new AccountError('Invalid source video.',400,'invalid_request');
   const referenceVideoIds = idList(r.referenceVideoIds, 'reference video');

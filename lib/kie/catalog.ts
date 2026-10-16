@@ -1,5 +1,4 @@
 // lib/kie/catalog.ts
-// lib/kie/catalog.ts
 import { editPromptMode, editReferenceError, editReferenceFields, materializeEditReferences, type EditReferenceInput } from '../providers/edit-references';
 import { applyProviderModeration, lockKieVeoFallback } from '../moderation/capabilities';
 import { effectiveModerationLevel } from '../moderation/floors';
