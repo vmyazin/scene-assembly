@@ -21,6 +21,7 @@ export default function GenerateActions({
   mediaType,
   label,
   cost,
+  note,
   busy,
   busyLabel,
   onSubmit,
@@ -35,6 +36,8 @@ export default function GenerateActions({
   label: string;
   /** The run's price after the label; hidden for a simulation, which costs nothing. */
   cost?: ReactNode;
+  /** A line under the button, for a workspace that prices the run there instead. */
+  note?: ReactNode;
   busy: boolean;
   busyLabel: ReactNode;
   onSubmit: () => void;
@@ -74,6 +77,7 @@ export default function GenerateActions({
           </>
         )}
       </button>
+      {note}
       <CloudExecutionNotice workspace={workspace} />
       {error && (
         <SubmissionError

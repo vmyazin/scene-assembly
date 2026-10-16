@@ -10,6 +10,7 @@ const read = (file: string) => readFileSync(`${process.cwd()}/${file}`, 'utf8');
 
 /** Workspaces whose button and error live in the shared `GenerateActions`. */
 const sharedActionWorkspaces = [
+  'components/GenerationInterface.tsx',
   'components/FalGenerationWorkspace.tsx',
   'components/KieGenerationWorkspace.tsx',
   'components/ProviderVideoWorkspace.tsx',
@@ -23,15 +24,6 @@ function expectSharedRetryGate(source: string) {
 }
 
 describe('shared automatic retry adoption', () => {
-  it('GenerationInterface retries through the shared countdown', () => {
-    const source = read('components/GenerationInterface.tsx');
-    expectSharedRetryGate(source);
-    // The budget starts over on a deliberate press and on a run that worked.
-    expect(source.match(/autoRetry\.reset\(\)/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
-    // And the countdown is always cancellable.
-    expect(source).toMatch(/onCancel(Retry)?=\{autoRetry\.cancel\}/);
-  });
-
   for (const file of sharedActionWorkspaces) {
     it(`${file} retries through the shared countdown and GenerateActions`, () => {
       const source = read(file);

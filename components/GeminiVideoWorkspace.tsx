@@ -2,19 +2,20 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Download, Loader2, Sparkles, Video } from 'lucide-react';
+import { Loader2, Sparkles, Video } from 'lucide-react';
 import { toast } from 'sonner';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import ConnectionGate, { isGated } from '@/components/ConnectionGate';
 import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
 import JobElapsed from '@/components/JobElapsed';
-import LastFrameActions from '@/components/LastFrameActions';
 import ModelControls, { type ModelControlField } from '@/components/ModelControls';
 import PromptPanel from '@/components/PromptPanel';
 import SavedPromptsButton from '@/components/SavedPromptsButton';
 import ProviderLogo from '@/components/ProviderLogo';
 import ReferenceStack from '@/components/ReferenceStack';
+import ResultPanel from '@/components/ResultPanel';
 import SubmissionError from '@/components/SubmissionError';
+import { FinishedVideoActions } from '@/components/VideoResult';
 import VideoPlayer from '@/components/video/VideoPlayer';
 import { downloadFilenameBase } from '@/lib/download-name';
 import { GEMINI_VIDEO_TIMEOUT_MS, geminiDownloadVideo, geminiGenerateVideo, geminiPollVideoOperation, geminiVideoWait } from '@/lib/engines/gemini';
@@ -35,6 +36,7 @@ import type { EngineId } from '@/lib/engines/registry';
 import { fileAsDataUrl } from '@/lib/file-data-url';
 import { useClaimSeedFrame, useReferenceIntake } from '@/hooks/useReferenceIntake';
 import { ReferencePicker } from '@/components/ReferencePicker';
+import { removeReferenceAt, useMountedRef, usePromptScope, useReferenceLimit } from '@/hooks/useWorkspaceLifecycle';
 
 interface GeminiVideoWorkspaceProps {
   inputMode: 'text' | 'image';
@@ -73,6 +75,12 @@ function downloadBlob(blob: Blob, filename: string) {
   anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
+
+/**
+ * At module scope because the purity lint reads the component body as render
+ * scope and rejects a `Date.now()` there, even inside an async handler.
+ */
+const now = () => Date.now();
 
 /**
  * Same ModelControls the fal/Kie video workspaces use, so duration sits in a
@@ -143,7 +151,7 @@ export default function GeminiVideoWorkspace({
   const [startedAt, setStartedAt] = useState<number | undefined>(undefined);
   const [clips, setClips] = useState<GeminiClip[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const mountedRef = useRef(true);
+  const mountedRef = useMountedRef();
   const generateRef = useRef<() => void>(() => {});
   const runTokenRef = useRef(0);
   const autoRetry = useAutoRetry();
@@ -162,21 +170,8 @@ export default function GeminiVideoWorkspace({
 
   // Claims the prompt field for motion, so a still-image prompt is not left
   // sitting in this workspace after a tab switch.
-  useEffect(() => {
-    useDraftStore.getState().enterPromptScope('video');
-  }, []);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      runTokenRef.current += 1;
-    };
-  }, []);
-
-  useEffect(() => {
-    useDraftStore.getState().limitReferences(MAX_INPUT_IMAGES);
-  }, []);
+  usePromptScope('video');
+  useReferenceLimit(MAX_INPUT_IMAGES);
 
   // Switching into image-to-video remounts this workspace, which is why the
   // seed lives in a store.
@@ -190,11 +185,6 @@ export default function GeminiVideoWorkspace({
     pasteEnabled: isImageMode,
     onError: setError,
   });
-
-  const removeReference = (index: number) => {
-    const reference = references[index];
-    if (reference) useDraftStore.getState().removeReference(reference.id);
-  };
 
   const updateControl = (key: string, value: string | number | boolean) => {
     if (key === 'resolution' && isGeminiResolution(value)) {
@@ -230,7 +220,7 @@ export default function GeminiVideoWorkspace({
     const runToken = runTokenRef.current + 1;
     runTokenRef.current = runToken;
     const isCurrent = () => mountedRef.current && runTokenRef.current === runToken;
-    const started = Date.now();
+    const started = now();
     setError(null);
     setPhase('start');
     setStartedAt(started);
@@ -263,7 +253,7 @@ export default function GeminiVideoWorkspace({
       const deadline = started + GEMINI_VIDEO_TIMEOUT_MS;
       while (!operation.done) {
         if (!isCurrent()) return;
-        if (Date.now() >= deadline) {
+        if (now() >= deadline) {
           throw new Error(
             'Gemini video generation timed out. The job may still finish in AI Studio if you were charged.'
           );
@@ -299,7 +289,7 @@ export default function GeminiVideoWorkspace({
         slug: slug ?? undefined,
         modelId: geminiVideoModel,
         startedAt: started,
-        finishedAt: Date.now(),
+        finishedAt: now(),
         costUsd: costEstimate,
       };
       setClips((current) => [clip, ...current]);
@@ -411,7 +401,7 @@ export default function GeminiVideoWorkspace({
               removeLabel: `Remove reference ${index + 1}`,
               sourceLabel: reference.sourceLabel,
             }))}
-            onRemove={removeReference}
+            onRemove={removeReferenceAt}
           />
         </section>
       )}
@@ -461,13 +451,7 @@ export default function GeminiVideoWorkspace({
   );
 
   const results = (
-    <section className="glass-card min-h-[420px] space-y-3 p-3.5 md:p-4">
-      <div>
-        <h3 className="display text-base font-semibold">Result</h3>
-        <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">
-          Finished clips stay here while you keep generating.
-        </p>
-      </div>
+    <ResultPanel description="Finished clips stay here while you keep generating.">
       {isGenerating && clips.length === 0 && (
         <div className="flex min-h-[240px] flex-col items-center justify-center gap-2 rounded-xl border border-[var(--border)] p-5 text-center text-[var(--foreground-muted)]">
           <Loader2 className="animate-spin opacity-60" size={36} />
@@ -488,33 +472,29 @@ export default function GeminiVideoWorkspace({
           provider: 'gemini',
           modelId: clip.modelId,
         });
+        const extension = extensionForMedia('video', clip.blob.type);
         return (
           <article key={clip.id} className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background-elevated)]/60 p-4">
             <VideoPlayer src={clip.src} label="Generated video" className="max-h-[520px] w-full rounded-lg" />
-            <button
-              type="button"
-              onClick={() => {
+            <FinishedVideoActions
+              url={clip.src}
+              filenameBase={filenameBase}
+              extension={extension}
+              busy={downloadingId === clip.id}
+              onDownload={() => {
                 setDownloadingId(clip.id);
                 try {
-                  downloadBlob(clip.blob, `${filenameBase}.${extensionForMedia('video', clip.blob.type)}`);
+                  downloadBlob(clip.blob, `${filenameBase}.${extension}`);
                 } finally {
                   setDownloadingId(null);
                 }
               }}
-              className="btn-secondary w-full"
-            >
-              {downloadingId === clip.id ? <Loader2 className="animate-spin" size={17} /> : <Download size={17} />}
-              {downloadingId === clip.id ? 'Preparing download…' : 'Download video'}
-            </button>
-            <LastFrameActions
-              videoUrl={clip.src}
-              filenameBase={filenameBase}
-              onContinue={onContinueFromFrame}
+              onContinueFromFrame={onContinueFromFrame}
             />
           </article>
         );
       })}
-    </section>
+    </ResultPanel>
   );
 
   return (

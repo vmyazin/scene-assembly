@@ -5,10 +5,9 @@ import { useState, useRef, useEffect, useId, useMemo } from 'react';
 import { useCloudWorkspace } from '@/lib/account/useCloudWorkspace';
 import { SINGLE_IMAGE_MODELS } from '@/lib/account/models';
 import { featureImagePrompt } from '@/lib/image/feature-prompt';
-import CloudExecutionNotice from '@/components/account/CloudExecutionNotice';
 import CloudJobPanel from '@/components/account/CloudJobPanel';
 import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Feature, GenerationConfig } from '@/types';
@@ -50,12 +49,14 @@ import StoredImagePicker from '@/components/StoredImagePicker';
 import ImageFormatControl from '@/components/ImageFormatControl';
 import RelaxedFilterControl from '@/components/RelaxedFilterControl';
 import { trackGenerationResult } from '@/lib/analytics/generation-result';
-import { classifyFailure, refusalPresentation } from '@/lib/moderation/classify';
+import { classifyFailure } from '@/lib/moderation/classify';
 import { inspectPrompt } from '@/lib/moderation/floors';
 import { useRelaxedFilter } from '@/lib/moderation/use-relaxed-filter';
 import { playGenerationChime } from '@/lib/notify/chime';
 import ResultStack, { type ResultStackItem } from '@/components/ResultStack';
-import RetryCountdown from '@/components/RetryCountdown';
+import GenerateActions from '@/components/GenerateActions';
+import { WorkspaceCard } from '@/components/WorkspaceCard';
+import { removeReferenceAt, usePromptScope } from '@/hooks/useWorkspaceLifecycle';
 import { AUTO_RETRY_DELAY_SECONDS, isRetryableFailure, useAutoRetry } from '@/lib/providers/auto-retry';
 import { RouteError, routeStatus } from '@/lib/providers/route-error';
 import ReferenceStack from '@/components/ReferenceStack';
@@ -237,12 +238,9 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
   const prompt = useDraftStore((state) => state.prompt);
   const setPrompt = useDraftStore((state) => state.setPrompt);
 
-  // Claims the prompt field for this kind of work, dropping a prompt written
-  // for the other kind. Declared ahead of every other mount effect here so a
-  // stale prompt cannot outlive this line and block what those effects set.
-  useEffect(() => {
-    useDraftStore.getState().enterPromptScope('image');
-  }, []);
+  // Declared ahead of every other mount effect here so a stale prompt cannot
+  // outlive this line and block what those effects set.
+  usePromptScope('image');
   const references = useDraftStore((state) => state.references);
   // The id travels with the bytes rather than living in a parallel array: the
   // read is async, so for one render after a removal a bare `string[]` would
@@ -523,11 +521,6 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
     e.target.value = '';
   };
 
-  const removeImage = (index: number) => {
-    const reference = references[index];
-    if (reference) useDraftStore.getState().removeReference(reference.id);
-  };
-
   const autoRetry = useAutoRetry();
   // Latest generate call, so a queued retry re-runs the button's own path.
   const generateRef = useRef<() => void>(() => {});
@@ -806,16 +799,6 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
     !(generateMutation.error instanceof LocalFalCancellation)
       ? generateMutation.error.message
       : null);
-  const refusal = rawDisplayError
-    ? refusalPresentation(rawDisplayError, {
-        providerLabel: activeEngine.label,
-        modelLabel: String(activeModelId),
-        level: relaxed.effective,
-        route: { provider: activeEngine.id, modelId: String(cloudModelId) },
-        hasReferences: images.length > 0,
-      })
-    : null;
-  const displayError = refusal?.message ?? rawDisplayError;
 
   // Cost line, per engine. Gemini's rate is the single table in lib/spend/rates.ts —
   // that file names the vendor page it was read from. Pollinations is free.
@@ -874,9 +857,6 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
 
   const handleGenerate = async () => {
     if (cloudWorkspace.checking || cloudSubmitting) return;
-    // A deliberate press is a fresh start: it drops any queued attempt and hands
-    // back the full retry budget.
-    autoRetry.reset();
     const floor = inspectPrompt(prompt, relaxed.levelRef.current);
     if (floor.blocked && floor.message) {
       setError(floor.message);
@@ -1124,8 +1104,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                 gets the same rack every other paid engine has rather than a
                 fixed model nobody chose. Nano Banana 2.1 is the default. */}
             {isGemini && (
-              <section className="glass-card space-y-3 p-3.5 md:p-4">
-                <h3 className="display text-base font-semibold">Model</h3>
+              <WorkspaceCard title="Model">
                 <div className="space-y-2">
                   <ModelListbox
                     label="Model"
@@ -1151,12 +1130,11 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                     />
                   )}
                 </div>
-              </section>
+              </WorkspaceCard>
             )}
 
             {activeEngineId === 'fal' && (
-              <section className="glass-card space-y-3 p-3.5 md:p-4">
-                <h3 className="display text-base font-semibold">Model</h3>
+              <WorkspaceCard title="Model">
                 <div className="space-y-2">
                   <ModelListbox
                     label="Model"
@@ -1182,15 +1160,14 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                     />
                   )}
                 </div>
-              </section>
+              </WorkspaceCard>
             )}
 
             {/* Same shape as the Model card in the Kie and fal workspaces: the rack
                 of what this provider serves, with the vendor's own description of the
                 chosen one underneath. */}
             {activeProvider && (
-              <section className="glass-card space-y-3 p-3.5 md:p-4">
-                <h3 className="display text-base font-semibold">Model</h3>
+              <WorkspaceCard title="Model">
                 <div className="space-y-2">
                   <ModelListbox
                     label="Model"
@@ -1215,7 +1192,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                     </p>
                   )}
                 </div>
-              </section>
+              </WorkspaceCard>
             )}
 
             {/* Image Upload */}
@@ -1267,7 +1244,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                       alt: `Upload ${index + 1}`,
                       removeLabel: `Remove upload ${index + 1}`,
                     }))}
-                    onRemove={removeImage}
+                    onRemove={removeReferenceAt}
                   />
                 )}
               </div>
@@ -1448,54 +1425,28 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
         }
         actions={
           <>
-            {/* Generate Button */}
-            <button
-              onClick={handleGenerate}
-              disabled={isGenerating || cloudWorkspace.checking}
-              className="btn-primary w-full"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="animate-spin" size={24} />
-                  Generating Magic...
-                </>
-              ) : (
-                <>
-                  <Wand2 size={24} />
-                  Generate Image
-                </>
-              )}
-            </button>
-
-            <p className="text-center text-xs text-[var(--foreground-subtle)]">
-              {costLine}
-            </p>
-
-            <CloudExecutionNotice workspace={cloudWorkspace} />
-
-            {/* Error Display */}
-            <AnimatePresence>
-              {displayError && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="glass-card p-4 text-red-300 whitespace-pre-wrap"
-                >
-                  {displayError}
-                  {refusal?.offerTryRelaxed && relaxed.offered && (
-                    <button
-                      type="button"
-                      className="btn-secondary mt-2"
-                      onClick={() => relaxed.requestRelaxed(() => generateRef.current())}
-                    >
-                      Try with Relaxed
-                    </button>
-                  )}
-                  <RetryCountdown retry={autoRetry.pending} onCancel={autoRetry.cancel} />
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <GenerateActions
+              workspace={cloudWorkspace}
+              mediaType="image"
+              label="Generate Image"
+              busy={isGenerating}
+              busyLabel="Generating Magic..."
+              onSubmit={() => void handleGenerate()}
+              note={
+                <p className="text-center text-xs text-[var(--foreground-subtle)]">
+                  {costLine}
+                </p>
+              }
+              error={rawDisplayError}
+              refusal={{
+                providerLabel: activeEngine.label,
+                modelLabel: String(activeModelId),
+                route: { provider: activeEngine.id, modelId: String(cloudModelId) },
+                hasReferences: images.length > 0,
+              }}
+              relaxed={relaxed}
+              autoRetry={autoRetry}
+            />
           </>
         }
         results={
