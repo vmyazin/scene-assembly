@@ -73,6 +73,12 @@ describe('fal model catalog', () => {
       'h3-max-turbo',
       'kling-o1-edit',
       'kling-o3-standard-edit',
+      'kling-o3-pro-edit',
+      'kling-o3-4k-edit',
+      'wan-2-7-edit',
+      'luma-ray-3-2-edit',
+      'h3-max-recast',
+      'h3-max-relight',
     ]);
     expect(FAL_VIDEO_MODELS.map((model) => model.label)).toEqual([
       'Veo 3.1 Standard',
@@ -88,6 +94,12 @@ describe('fal model catalog', () => {
       'MiniMax H3 Max Turbo',
       'Kling O1 Edit',
       'Kling O3 Standard Edit',
+      'Kling O3 Pro Edit',
+      'Kling O3 4K Edit',
+      'Wan 2.7 Edit',
+      'Luma Ray 3.2',
+      'MiniMax H3 Max Recast',
+      'MiniMax H3 Max Relight',
     ]);
   });
 
@@ -122,9 +134,9 @@ describe('fal model catalog', () => {
 
   it('defines text and image variants for every curated video endpoint', () => {
     // 22 text/image variants (eleven models), plus a frames variant on the nine
-    // models fal documents as accepting a closing frame. Two edit-only Kling
-    // models sit beside those 31.
-    expect(FAL_VIDEO_MODELS.flatMap((model) => model.variants)).toHaveLength(33);
+    // models fal documents as accepting a closing frame. Eight edit-only models
+    // sit beside those 31.
+    expect(FAL_VIDEO_MODELS.flatMap((model) => model.variants)).toHaveLength(39);
 
     for (const [modelId, textEndpoint, imageEndpoint] of VIDEO_ENDPOINTS) {
       expect(resolveFalVariant(modelId, 'video', 'text').endpointId).toBe(textEndpoint);
@@ -148,7 +160,78 @@ describe('fal model catalog', () => {
     expect(o3.endpointId).toBe('fal-ai/kling-video/o3/standard/video-to-video/edit');
     expect(o3.edit).toMatchObject({ maxSeconds: 15, maxImages: 4, namesSource: true });
     expect(o3.edit?.sourceBounds).toMatchObject({ minEdge: 720, maxEdge: 3840 });
-    expect(modelsForFalMode('video', 'edit').map((model) => model.id)).toEqual(['kling-o1-edit', 'kling-o3-standard-edit']);
+    expect(modelsForFalMode('video', 'edit').map((model) => model.id)).toEqual([
+      'kling-o1-edit',
+      'kling-o3-standard-edit',
+      'kling-o3-pro-edit',
+      'kling-o3-4k-edit',
+      'wan-2-7-edit',
+      'luma-ray-3-2-edit',
+      'h3-max-recast',
+      'h3-max-relight',
+    ]);
+  });
+
+  it('builds structured edit references and omits a prompt the model does not take', () => {
+    const pro = resolveFalVariant('kling-o3-pro-edit', 'video', 'edit');
+    const elements = buildFalInput(pro, {
+      prompt: 'Use @Element1',
+      uploadUrls: ['https://cdn.example/front.png', 'https://cdn.example/angle.png', 'https://cdn.example/clip.mp4'],
+      values: { keep_audio: true },
+      references: {
+        video: 'https://cdn.example/clip.mp4',
+        elements: [{ frontal: 'https://cdn.example/front.png', angles: ['https://cdn.example/angle.png'] }],
+      },
+    });
+    expect(elements).toMatchObject({
+      video_url: 'https://cdn.example/clip.mp4',
+      shot_type: 'customize',
+      elements: [{ frontal_image_url: 'https://cdn.example/front.png', reference_image_urls: ['https://cdn.example/angle.png'] }],
+    });
+    expect(elements.image_urls).toBeUndefined();
+
+    const wan = resolveFalVariant('wan-2-7-edit', 'video', 'edit');
+    expect(buildFalInput(wan, {
+      prompt: 'Change the coat',
+      uploadUrls: ['https://cdn.example/ref.png', 'https://cdn.example/clip.mp4'],
+      values: { resolution: '720p', aspect_ratio: '', duration: 0, audio_setting: 'auto' },
+    })).toMatchObject({ reference_image_url: 'https://cdn.example/ref.png', resolution: '720p', duration: 0 });
+    expect(buildFalInput(wan, {
+      prompt: 'Change the coat',
+      uploadUrls: ['https://cdn.example/clip.mp4'],
+      values: { aspect_ratio: '' },
+    }).aspect_ratio).toBeUndefined();
+
+    const luma = resolveFalVariant('luma-ray-3-2-edit', 'video', 'edit');
+    expect(buildFalInput(luma, {
+      prompt: 'Hold the doorway',
+      uploadUrls: ['https://cdn.example/a.png', 'https://cdn.example/b.png', 'https://cdn.example/clip.mp4'],
+      values: { duration: '5s', resolution: '540p' },
+      references: { keyframes: [{ url: 'https://cdn.example/a.png', index: 0 }, { url: 'https://cdn.example/b.png', index: 12 }] },
+    })).toMatchObject({ keyframes: ['https://cdn.example/a.png', 'https://cdn.example/b.png'], keyframe_indexes: [0, 12], duration: '5s' });
+    expect(buildFalInput(luma, {
+      prompt: 'Hold the doorway',
+      uploadUrls: ['https://cdn.example/start.png', 'https://cdn.example/clip.mp4'],
+      values: {},
+      references: { startImage: 'https://cdn.example/start.png' },
+    }).start_image_url).toBe('https://cdn.example/start.png');
+
+    const recast = resolveFalVariant('h3-max-recast', 'video', 'edit');
+    expect(validateFalInput(recast, { prompt: '', uploadUrls: ['https://cdn.example/person.png', 'https://cdn.example/clip.mp4'] })).toBeNull();
+    expect(buildFalInput(recast, {
+      prompt: '',
+      uploadUrls: ['https://cdn.example/person.png', 'https://cdn.example/clip.mp4'],
+      values: { resolution: '768P' },
+    })).toMatchObject({ reference_image_urls: ['https://cdn.example/person.png'], resolution: '768P' });
+
+    const relight = resolveFalVariant('h3-max-relight', 'video', 'edit');
+    const relit = buildFalInput(relight, {
+      prompt: 'Relight',
+      uploadUrls: ['https://cdn.example/sphere.png', 'https://cdn.example/clip.mp4'],
+      values: { resolution: '768P', aspect_ratio: '16:9' },
+    });
+    expect(relit.prompt).toBeUndefined();
+    expect(relit).toMatchObject({ reference_image_url: 'https://cdn.example/sphere.png', resolution: '768P' });
   });
 
   it('offers first-and-last-frame runs only where fal documents an end frame', () => {

@@ -16,7 +16,7 @@ import { FAL_IMAGE_MODELS, FAL_VIDEO_MODELS } from '../fal/catalog';
 import { KIE_MODELS } from '../kie/catalog';
 import { findModel, PROVIDER_MODELS, resolveVideoInput } from '../providers/catalog';
 import { isSeedanceDraftSize } from '../providers/seedance-draft';
-import type { ProviderId, ProviderModel } from '../providers/types';
+import type { EditReferenceSpec, ProviderId, ProviderModel } from '../providers/types';
 import { GEMINI_IMAGE_MODELS } from '../engines/gemini-catalog';
 import { ENGINES } from '../engines/registry';
 
@@ -91,6 +91,22 @@ function fromDefinition(field: {
   };
 }
 
+/**
+ * What an agent can send without an `editReferencePlan`. The studio sends a
+ * plan, so it can attach Kling elements or 64 Luma keyframes. The MCP tool
+ * does not, and without a plan every file is a plain image: two Luma stills
+ * are refused, and a fifth Kling image is over the image cap. The descriptor
+ * stops at the mapping that actually works.
+ */
+function editReferenceBounds(spec: EditReferenceSpec | undefined, fileMax: number): { min: number; max: number } {
+  if (spec?.persons) return { min: spec.persons.min, max: spec.persons.max };
+  if (spec?.litSphere) return { min: 1, max: 1 };
+  if (spec?.keyframes) return { min: 0, max: spec.keyframes.startImage ? 1 : 0 };
+  if (spec?.images) return { min: 0, max: spec.images.max };
+  if (spec) return { min: 0, max: 0 };
+  return { min: 0, max: Math.min(fileMax, 16) };
+}
+
 function falModels(): ModelDescriptor[] {
   return [...FAL_IMAGE_MODELS, ...FAL_VIDEO_MODELS].map(model => ({
     provider: 'fal', modelId: model.id, label: model.label, mediaType: model.mediaType, note: model.description,
@@ -101,11 +117,11 @@ function falModels(): ModelDescriptor[] {
         mode: variant.inputMode,
         fields: [
           ...variant.fields.map(fromDefinition),
-          ...(edit?.rate.per === 'second' ? [sourceDurationField(edit.minSeconds, edit.maxSeconds, false)] : []),
+          ...(edit?.rate?.per === 'second' ? [sourceDurationField(edit.minSeconds, edit.maxSeconds, false)] : []),
         ],
         references: variant.inputMode === 'text' ? NO_REFERENCES
           : variant.inputMode === 'frames' ? { min: 2, max: 2 }
-            : variant.inputMode === 'edit' ? { min: 0, max: variant.maxInputImages ?? 0 }
+            : variant.inputMode === 'edit' ? editReferenceBounds(variant.edit?.references, variant.maxInputImages ?? 0)
               : { min: 1, max: variant.maxInputImages ?? 1 },
         sourceVideo: variant.inputMode === 'edit',
       };
@@ -120,8 +136,10 @@ function kieModels(): ModelDescriptor[] {
       mode: variant.inputMode,
       // A `file` field is filled from references, never from `values`.
       fields: variant.fields.filter(field => field.type !== 'file').map(fromDefinition),
-      references: variant.inputMode === 'text' ? NO_REFERENCES : { min: 1, max: variant.maxInputImages ?? 1 },
-      sourceVideo: false,
+      references: variant.inputMode === 'text' ? NO_REFERENCES
+        : variant.inputMode === 'edit' ? editReferenceBounds(variant.edit?.references, variant.maxInputImages ?? 0)
+          : { min: 1, max: variant.maxInputImages ?? 1 },
+      sourceVideo: variant.inputMode === 'edit',
     })),
   }));
 }
@@ -191,6 +209,7 @@ function aggregatorModes(provider: ProviderId, model: ProviderModel): ModeDescri
       if (!edit) continue;
       modes.push({
         mode, sourceVideo: true, references: { min: 0, max: edit.maxImages },
+        ...(edit.references?.audio ? { clips: { audio: { max: 1 }, audioRequiresVisual: false } } : {}),
         // editSettingsError accepts these keys; duration and ratio follow the source.
         fields: [
           ...(edit.aspectRatios?.length ? [select('aspectRatio', 'Target aspect ratio', edit.aspectRatios, {
@@ -206,7 +225,17 @@ function aggregatorModes(provider: ProviderId, model: ProviderModel): ModeDescri
             key: 'draft', label: 'Draft', type: 'boolean' as const, default: false,
             ...(edit.draftPreview ? { description: '480p preview only. Off by default. Turn it on, then call finalize_draft to render that preview at 1080p. That is a separate charge.' } : {}),
           }] : []),
-          ...(edit.draftPreview || edit.rate.per === 'second' ? [sourceDurationField(edit.minSeconds, edit.maxSeconds, Boolean(edit.draftPreview))] : []),
+          ...(edit.controls ?? []).map((control) => ({
+            key: control.key,
+            label: control.label,
+            type: control.kind,
+            ...(control.description ? { description: control.description } : {}),
+            ...(control.defaultValue !== undefined ? { default: control.defaultValue } : {}),
+            ...(control.options ? { options: control.options.map((option) => ({ value: option.value, label: option.label })) } : {}),
+            ...(control.min !== undefined ? { min: control.min } : {}),
+            ...(control.max !== undefined ? { max: control.max } : {}),
+          })),
+          ...(edit.draftPreview || edit.rate?.per === 'second' ? [sourceDurationField(edit.minSeconds, edit.maxSeconds, Boolean(edit.draftPreview))] : []),
         ],
       });
       continue;
@@ -367,12 +396,12 @@ function standInEditSeconds(model: ModelDescriptor, mode: ModeDescriptor): numbe
   if (mode.mode !== 'edit' || model.provider === 'runware') return undefined;
   if (model.provider === 'fal') {
     const edit = FAL_VIDEO_MODELS.find(entry => entry.id === model.modelId)?.variants.find(variant => variant.inputMode === 'edit')?.edit;
-    if (edit?.rate.per !== 'second') return undefined;
+    if (edit?.rate?.per !== 'second') return undefined;
     return edit.minSeconds ?? 1;
   }
   if (model.provider !== 'atlas' && model.provider !== 'comet' && model.provider !== 'piapi') return undefined;
   const edit = findModel(model.provider, model.modelId)?.videoEdit;
-  if (!edit || edit.rate.per !== 'second' || edit.rate.usd === undefined) return undefined;
+  if (!edit || edit.rate?.per !== 'second' || edit.rate?.usd === undefined) return undefined;
   return edit.minSeconds ?? 1;
 }
 

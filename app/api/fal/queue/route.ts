@@ -8,6 +8,7 @@ import {
   submitFalTask,
 } from '@/lib/fal/server';
 import { resolveFalVariant, validateFalInput } from '@/lib/fal/catalog';
+import { materializeEditReferences, parseEditReferencePlan, type EditReferenceInput } from '@/lib/providers/edit-references';
 import {
   FalRequestBodyTooLarge,
   parseBoundedFalJson,
@@ -21,7 +22,8 @@ const MAX_QUEUE_BODY_BYTES = 64 * 1024;
 const MAX_API_KEY_LENGTH = 1024;
 const MAX_MODEL_ID_LENGTH = 128;
 const MAX_PROMPT_LENGTH = 20_000;
-const MAX_UPLOAD_URLS = 16;
+// Luma Ray 3.2 takes 64 keyframes plus the source clip. Cloud jobs stay at 16.
+const MAX_UPLOAD_URLS = 65;
 const MAX_UPLOAD_URL_LENGTH = 4096;
 const MAX_VALUE_ENTRIES = 64;
 const MAX_VALUE_KEY_LENGTH = 128;
@@ -80,12 +82,29 @@ function submitFieldsTooLarge(args: {
   );
 }
 
+function editReferencesFor(args: {
+  modelId: string;
+  mediaType: FalMediaType;
+  inputMode: FalInputMode;
+  uploadUrls: string[];
+  plan: unknown;
+}): EditReferenceInput | undefined {
+  if (args.plan === undefined || args.inputMode !== 'edit') return undefined;
+  const variant = resolveFalVariant(args.modelId, args.mediaType, args.inputMode);
+  const spec = variant.edit?.references;
+  if (!spec) throw new Error('This model does not take structured references.');
+  const images = args.uploadUrls.slice(0, Math.max(0, args.uploadUrls.length - 1));
+  const plan = parseEditReferencePlan(args.plan, images.length);
+  return { ...materializeEditReferences(spec, images, plan), video: args.uploadUrls[args.uploadUrls.length - 1] };
+}
+
 function supportsFalRequest(args: {
   modelId: string;
   mediaType: FalMediaType;
   inputMode: FalInputMode;
   prompt: string;
   uploadUrls: string[];
+  references?: EditReferenceInput;
 }): boolean {
   try {
     const variant = resolveFalVariant(args.modelId, args.mediaType, args.inputMode);
@@ -135,7 +154,7 @@ export async function POST(request: NextRequest) {
         !isNonBlankString(body.modelId) ||
         !isMediaType(body.mediaType) ||
         !isInputMode(body.inputMode) ||
-        !isNonBlankString(body.prompt) ||
+        typeof body.prompt !== 'string' ||
         !isUploadUrls(body.uploadUrls) ||
         !isFalValues(body.values)
       ) {
@@ -147,6 +166,18 @@ export async function POST(request: NextRequest) {
       ) {
         return invalidRequest('The submit request contains missing or invalid fields.');
       }
+      let references: EditReferenceInput | undefined;
+      try {
+        references = editReferencesFor({
+          modelId: body.modelId,
+          mediaType: body.mediaType,
+          inputMode: body.inputMode,
+          uploadUrls: body.uploadUrls,
+          plan: body.editReferencePlan,
+        });
+      } catch {
+        return invalidRequest('Invalid edit references.');
+      }
       const submitArgs = {
         apiKey: body.apiKey,
         modelId: body.modelId,
@@ -155,6 +186,7 @@ export async function POST(request: NextRequest) {
         prompt: body.prompt,
         uploadUrls: body.uploadUrls,
         values: body.values,
+        references,
       };
       if (submitFieldsTooLarge(submitArgs)) {
         return NextResponse.json(

@@ -117,6 +117,7 @@ export async function acceptJob(env: Env, owner: string, token: string, request:
     const video=referenceVideos.has(upload.id);
     const audio=referenceAudios.has(upload.id);
     if(video && upload.mime_type==='video/webm')throw new AccountError('WebM is an edit source, not a reference video. Use MP4 or MOV.',400,'invalid_references');
+    if(audio && !isReferenceAudioMime(upload.mime_type))throw new AccountError('Reference audio must be an MP3 or WAV.',400,'invalid_references');
     const roleOk=source ? request.inputMode==='edit'&&isEditVideoMime(upload.mime_type)
       : video ? isReferenceVideoMime(upload.mime_type)
       : audio ? isReferenceAudioMime(upload.mime_type)

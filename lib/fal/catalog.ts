@@ -1,4 +1,5 @@
 // lib/fal/catalog.ts
+import { editPromptMode, editReferenceError, editReferenceFields, materializeEditReferences, type EditReferenceInput } from '../providers/edit-references';
 import { applyProviderModeration } from '../moderation/capabilities';
 import { effectiveModerationLevel } from '../moderation/floors';
 import type {
@@ -400,6 +401,12 @@ const FAL_FILE_CODES: Record<string, string> = {
   'h3-max-turbo': 'h3-max-turbo',
   'kling-o1-edit': 'kling-o1-edit',
   'kling-o3-standard-edit': 'kling-o3-standard-edit',
+  'kling-o3-pro-edit': 'kling-o3-pro-edit',
+  'kling-o3-4k-edit': 'kling-o3-4k-edit',
+  'wan-2-7-edit': 'wan-2_7-edit',
+  'luma-ray-3-2-edit': 'luma-ray-3_2-edit',
+  'h3-max-recast': 'h3-max-recast',
+  'h3-max-relight': 'h3-max-relight',
 };
 
 const KLING_EDIT_MIMES = ['video/mp4', 'video/quicktime'] as const;
@@ -428,6 +435,42 @@ const klingEditLimits = ({
   sourceBounds: { minEdge: 720, maxEdge },
   promptSyntax: 'at-image-index' as const,
   ...(namesSource ? { namesSource: true as const } : {}),
+});
+
+const durationChoices = (values: number[], matchSource = false): FalFieldDefinition => ({
+  key: 'duration',
+  label: 'Output duration',
+  type: 'select',
+  defaultValue: matchSource ? 0 : values[0],
+  description: matchSource ? 'Match source keeps the input length. Any other value clips from the start.' : undefined,
+  options: [
+    ...(matchSource ? [{ label: 'Match source', value: 0 }] : []),
+    ...values.filter((value) => value !== 0).map((value) => ({ label: `${value} seconds`, value })),
+  ],
+});
+
+const editOnlyModel = (
+  id: string,
+  label: string,
+  provider: string,
+  description: string,
+  endpointId: string,
+  edit: NonNullable<FalModelBase['variants'][number]['edit']>,
+  fields: FalFieldDefinition[]
+): FalModelBase => ({
+  id,
+  label,
+  provider,
+  description,
+  mediaType: 'video',
+  variants: [{
+    id: `${id}:edit`,
+    endpointId,
+    inputMode: 'edit',
+    maxInputImages: edit.maxImages,
+    edit,
+    fields,
+  }],
 });
 
 const editVideoModel = (
@@ -651,6 +694,163 @@ export const FAL_VIDEO_MODELS: FalModelDefinition[] = withFileCodes([
     klingEditLimits({ maxSeconds: 15, maxEdge: 3840, usd: 0.126, namesSource: true }),
     true
   ),
+  // Read 2026-10-16 from
+  // https://fal.ai/models/fal-ai/kling-video/o3/pro/video-to-video/edit/llms.txt
+  // and the queue OpenAPI. $0.168/s. mp4/mov, 3–15.05s, 720–3840px, 200MB,
+  // 24–60 fps (fps is not measured here). Prompt max 2,500. image_urls and
+  // elements share a cap of 4. Each element is a frontal image plus 1–3
+  // angles. shot_type is the constant "customize".
+  editOnlyModel(
+    'kling-o3-pro-edit',
+    'Kling O3 Pro Edit',
+    'Kuaishou',
+    'Edit a clip with Kling O3 Pro. Reference the source as @Video1, images as @Image1, and elements as @Element1. $0.168 per second.',
+    'fal-ai/kling-video/o3/pro/video-to-video/edit',
+    {
+      ...klingEditLimits({ maxSeconds: 15.05, maxEdge: 3840, usd: 0.168, namesSource: true }),
+      // File count, not the combined cap of 4. One element is a frontal image
+      // plus up to 3 angles, and four of those is 16 files.
+      maxImages: 16,
+      maxPromptLength: 2500,
+      references: {
+        images: { max: 4, wire: 'image_urls' },
+        elements: { minAngles: 1, maxAngles: 3, combinedMax: 4 },
+        shotTypeCustomize: true,
+      },
+    },
+    [booleanField('keep_audio', 'Keep source audio', true)]
+  ),
+  // https://fal.ai/models/fal-ai/kling-video/o3/4k/video-to-video/edit/llms.txt
+  // Same reference model as Pro. $0.42/s with or without audio.
+  editOnlyModel(
+    'kling-o3-4k-edit',
+    'Kling O3 4K Edit',
+    'Kuaishou',
+    'Edit a clip with Kling O3 at 4K. Same references as Pro: @Video1, @Image1, and @Element1. $0.42 per second.',
+    'fal-ai/kling-video/o3/4k/video-to-video/edit',
+    {
+      ...klingEditLimits({ maxSeconds: 15.05, maxEdge: 3840, usd: 0.42, namesSource: true }),
+      maxImages: 16,
+      maxPromptLength: 2500,
+      references: {
+        images: { max: 4, wire: 'image_urls' },
+        elements: { minAngles: 1, maxAngles: 3, combinedMax: 4 },
+        shotTypeCustomize: true,
+      },
+    },
+    [booleanField('keep_audio', 'Keep source audio', true)]
+  ),
+  // https://fal.ai/models/fal-ai/wan/v2.7/edit-video/llms.txt
+  // One reference_image_url. Source 2–10s, MP4/MOV, 100MB. No pixel cap on
+  // that page. $0.10/s at 720p, $0.15/s at 1080p. Duration 0 matches the source.
+  editOnlyModel(
+    'wan-2-7-edit',
+    'Wan 2.7 Edit',
+    'Alibaba',
+    'Edit a clip with Wan 2.7 and one optional reference image. $0.10 per second at 720p, $0.15 at 1080p.',
+    'fal-ai/wan/v2.7/edit-video',
+    {
+      sizes: [],
+      rate: { per: 'second', usdByResolution: { '720p': 0.1, '1080p': 0.15 } },
+      maxImages: 1,
+      minSeconds: 2,
+      maxSeconds: 10,
+      maxBytes: 100_000_000,
+      mimes: KLING_EDIT_MIMES,
+      requireMeasurement: true,
+      references: { images: { max: 1, wire: 'reference_image_url' } },
+    },
+    [
+      selectField('resolution', 'Resolution', '1080p', ['720p', '1080p']),
+      {
+        key: 'aspect_ratio',
+        label: 'Aspect ratio',
+        type: 'select',
+        defaultValue: '',
+        description: 'Match source keeps the input frame.',
+        options: [{ label: 'Match source', value: '' }, ...options(['16:9', '9:16', '1:1', '4:3', '3:4'])],
+      },
+      durationChoices([2, 3, 4, 5, 6, 7, 8, 9, 10], true),
+      selectField('audio_setting', 'Audio', 'auto', ['auto', 'origin']),
+    ]
+  ),
+  // https://fal.ai/models/luma/agent/ray/v3.2/video-to-video/llms.txt
+  // Output duration is 5s or 10s. Prices are per 5 seconds: $0.72 / $1.08 / $2.16.
+  // Keyframes (up to 64) and start_image_url are mutually exclusive.
+  // Source cap of 18s and 200MB is the Luma agents guide
+  // https://docs.agents.lumalabs.ai/guides/videos/editing/ — fal's schema omits it.
+  // HDR and EXR are account-gated and not offered.
+  editOnlyModel(
+    'luma-ray-3-2-edit',
+    'Luma Ray 3.2',
+    'Luma',
+    'Re-render a clip with Ray 3.2. Guide it with a start frame or with up to 64 keyframes, not both. $0.72 / $1.08 / $2.16 per 5 seconds at 540p / 720p / 1080p.',
+    'luma/agent/ray/v3.2/video-to-video',
+    {
+      sizes: [],
+      rate: { per: 'second', usdByResolution: { '540p': 0.144, '720p': 0.216, '1080p': 0.432 } },
+      maxImages: 64,
+      maxSeconds: 18,
+      maxBytes: 200_000_000,
+      mimes: KLING_EDIT_MIMES,
+      requireMeasurement: true,
+      references: { keyframes: { max: 64, startImage: true } },
+      note: 'The source clip must be 18 seconds or shorter. Output length is 5 or 10 seconds, which is what the price uses.',
+    },
+    [
+      selectField('resolution', 'Resolution', '540p', ['540p', '720p', '1080p']),
+      selectField('duration', 'Duration', '5s', ['5s', '10s']),
+    ]
+  ),
+  // https://fal.ai/models/minimax/h3-max/recast/llms.txt
+  // One photo per person, up to 4, required. Prompt optional. Source 5–30s.
+  // Individual shots must be 15s or less; that cut is not readable from the file.
+  // $0.30/s at 768P, $0.45/s at 1080P. The page publishes no file-size cap.
+  editOnlyModel(
+    'h3-max-recast',
+    'MiniMax H3 Max Recast',
+    'MiniMax',
+    'Replace the people in a clip. One photo per person, up to 4. No shot in the source may be longer than 15 seconds. $0.30 per second at 768P, $0.45 at 1080P.',
+    'minimax/h3-max/recast',
+    {
+      sizes: [],
+      rate: { per: 'second', usdByResolution: { '768P': 0.3, '1080P': 0.45 } },
+      maxImages: 4,
+      minSeconds: 5,
+      maxSeconds: 30,
+      requireMeasurement: true,
+      references: { prompt: 'optional', persons: { min: 1, max: 4 } },
+      note: 'A shot longer than 15 seconds is refused by the model. The file length is what can be checked here.',
+    },
+    [
+      selectField('resolution', 'Resolution', '1080P', ['768P', '1080P']),
+      booleanField('enhance_realism', 'Enhance realism', false),
+    ]
+  ),
+  // https://fal.ai/models/minimax/h3-max/relight/llms.txt
+  // Exactly one lighting-sphere image. No prompt field. Source up to 15s,
+  // and the prepared clip keeps at least about 2.33s. $0.05 / $0.08 / $0.16 / $0.32
+  // per second at 480P / 768P / 1080P / 2K. No published file-size cap.
+  editOnlyModel(
+    'h3-max-relight',
+    'MiniMax H3 Max Relight',
+    'MiniMax',
+    'Relight a clip from one sphere image. The model does not take a prompt. $0.05 / $0.08 / $0.16 / $0.32 per second at 480P / 768P / 1080P / 2K.',
+    'minimax/h3-max/relight',
+    {
+      sizes: [],
+      rate: { per: 'second', usdByResolution: { '480P': 0.05, '768P': 0.08, '1080P': 0.16, '2K': 0.32 } },
+      maxImages: 1,
+      minSeconds: 2.33,
+      maxSeconds: 15,
+      requireMeasurement: true,
+      references: { prompt: 'absent', litSphere: true },
+    },
+    [
+      selectField('resolution', 'Resolution', '768P', ['480P', '768P', '1080P', '2K']),
+      selectField('aspect_ratio', 'Aspect ratio', '16:9', ['adaptive', '21:9', '16:9', '4:3', '1:1', '3:4', '9:16']),
+    ]
+  ),
 ]);
 
 /**
@@ -714,16 +914,26 @@ export function defaultFalValues(variant: FalModelVariant): Record<string, FalVa
 
 export function validateFalInput(
   variant: FalModelVariant,
-  args: { prompt: string; uploadUrls: string[] }
+  args: { prompt: string; uploadUrls: string[]; references?: EditReferenceInput }
 ): string | null {
   const prompt = args.prompt.trim();
-  if (!prompt) return 'Enter a prompt for the selected fal model.';
+  const promptMode = variant.inputMode === 'edit' ? editPromptMode(variant.edit?.references) : 'required';
+  if (promptMode === 'required' && !prompt) return 'Enter a prompt for the selected fal model.';
   if (variant.maxPromptLength !== undefined && prompt.length > variant.maxPromptLength) {
     return `This fal model accepts a prompt of at most ${variant.maxPromptLength} characters.`;
   }
+  if (variant.edit?.maxPromptLength && prompt.length > variant.edit.maxPromptLength) {
+    return `This model's prompt is at most ${variant.edit.maxPromptLength} characters.`;
+  }
   if (variant.inputMode === 'text') return null;
   if (variant.inputMode === 'edit') {
-    if (args.uploadUrls.length < 1) return 'Choose a source video to edit.';
+    if (args.uploadUrls.length < 1 && !args.references?.video) return 'Choose a source video to edit.';
+    const spec = variant.edit?.references;
+    if (spec) {
+      const images = args.uploadUrls.slice(0, Math.max(0, args.uploadUrls.length - 1));
+      const references = args.references ?? materializeEditReferences(spec, images);
+      return editReferenceError(spec, references);
+    }
     const images = args.uploadUrls.length - 1;
     const maxImages = variant.maxInputImages ?? 0;
     if (images > maxImages) return maxImages === 0
@@ -783,18 +993,31 @@ function normalizeFalFieldValue(
     if (!normalized) return undefined;
   }
 
+  if (normalized === '') return undefined;
+
   return normalized;
 }
 
 export function buildFalInput(
   variant: FalModelVariant,
-  args: { prompt: string; uploadUrls: string[]; values: Record<string, FalValue> }
+  args: { prompt: string; uploadUrls: string[]; values: Record<string, FalValue>; references?: EditReferenceInput }
 ): Record<string, unknown> {
-  const input: Record<string, unknown> = { prompt: args.prompt.trim() };
+  const prompt = args.prompt.trim();
+  const promptMode = variant.inputMode === 'edit' ? editPromptMode(variant.edit?.references) : 'required';
+  const input: Record<string, unknown> = {};
+  if (promptMode !== 'absent' && prompt) input.prompt = prompt;
   if (variant.inputMode === 'edit') {
-    input.video_url = args.uploadUrls[args.uploadUrls.length - 1];
-    const images = args.uploadUrls.slice(0, -1);
-    if (images.length > 0 && variant.imageInputKey) input[variant.imageInputKey] = images;
+    const spec = variant.edit?.references;
+    const video = args.references?.video ?? args.uploadUrls[args.uploadUrls.length - 1];
+    if (spec) {
+      const images = args.uploadUrls.slice(0, Math.max(0, args.uploadUrls.length - 1));
+      const references = args.references ?? materializeEditReferences(spec, images);
+      Object.assign(input, editReferenceFields(spec, { ...references, video }));
+    } else {
+      input.video_url = video;
+      const images = args.uploadUrls.slice(0, -1);
+      if (images.length > 0 && variant.imageInputKey) input[variant.imageInputKey] = images;
+    }
   } else if (variant.inputMode === 'frames' && variant.frameInputKeys) {
     input[variant.frameInputKeys.first] = args.uploadUrls[0];
     input[variant.frameInputKeys.last] = args.uploadUrls[1];

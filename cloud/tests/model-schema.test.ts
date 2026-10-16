@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { checkReferences, checkValues, describeModels, findModelDescriptor, sampleRequest, type FieldValue } from '../../lib/account/model-schema';
+import type { CloudJobRequest } from '../../lib/account/contracts';
 import { CLOUD_PROVIDERS, validateRequest } from '../src/providers';
 import type { Env } from '../src/security';
 
@@ -79,6 +80,38 @@ describe('checkValues', () => {
     const range = models.flatMap(model => model.modes).flatMap(mode => mode.fields.map(field => ({ mode, field })))
       .find(({ field }) => field.type === 'number' && field.min !== undefined && field.max !== undefined)!;
     expect(checkValues(range.mode, { [range.field.key]: range.field.max! + 1 })).toMatchObject({ ok: false, field: range.field.key });
+  });
+});
+
+describe('edit reference descriptors', () => {
+  it('advertises only the references an agent can send without a plan', () => {
+    const editOf = (modelId: string) => findModelDescriptor('fal', modelId, 'video')!.modes.find(mode => mode.mode === 'edit')!;
+    expect(editOf('luma-ray-3-2-edit').references).toEqual({ min: 0, max: 1 });
+    expect(editOf('kling-o3-pro-edit').references).toEqual({ min: 0, max: 4 });
+    expect(editOf('kling-o3-4k-edit').references).toEqual({ min: 0, max: 4 });
+    expect(editOf('h3-max-relight').references).toEqual({ min: 1, max: 1 });
+  });
+
+  it('accepts a Luma keyframe plan in the studio and refuses extra images without one', () => {
+    const luma = (count: number, plan?: CloudJobRequest['editReferencePlan']): CloudJobRequest => ({
+      provider: 'fal', modelId: 'luma-ray-3-2-edit', mediaType: 'video', inputMode: 'edit',
+      prompt: 'Relight the street', referenceIds: Array.from({ length: count }, (_, index) => `frame-${index}`),
+      sourceVideoId: 'source', values: { resolution: '540p', duration: '5s' },
+      ...(plan ? { editReferencePlan: plan } : {}),
+    });
+    expect(() => validateRequest(env, luma(1))).not.toThrow();
+    expect(() => validateRequest(env, luma(2))).toThrow(/Review the selected model/);
+    const frames = 17;
+    expect(() => validateRequest(env, luma(frames, {
+      keyframes: Array.from({ length: frames }, (_, index) => ({ image: index, index })),
+    }))).not.toThrow();
+    expect(() => validateRequest(env, luma(65, {
+      keyframes: Array.from({ length: 65 }, (_, index) => ({ image: index, index })),
+    }))).toThrow(/Invalid generation settings/);
+    expect(() => validateRequest(env, {
+      provider: 'fal', modelId: 'h3-max-relight', mediaType: 'video', inputMode: 'edit',
+      prompt: '', referenceIds: ['sphere'], sourceVideoId: 'source', values: { resolution: '1080P' },
+    })).not.toThrow();
   });
 });
 

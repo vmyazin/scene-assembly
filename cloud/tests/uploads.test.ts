@@ -4,7 +4,7 @@ import { adapter } from './database';
 import { memoryBucket } from './bucket';
 import { LOCAL_SCHEMA } from '../src/schema';
 import { acceptJob, finishJob } from '../src/jobs';
-import { cleanupUploads, inputUrls, publicMedia, reserveUpload } from '../src/uploads';
+import { MAX_PENDING_INPUTS, cleanupUploads, inputUrls, publicMedia, reserveUpload } from '../src/uploads';
 import { mediaAccess } from '../src/media';
 import { captureResult, deleteAsset, writeOutput } from '../src/assets';
 import type { Env } from '../src/security';
@@ -20,10 +20,11 @@ const request=(ids:string[])=>({provider:'local-test' as const,modelId:'local-te
 describe('an input outlives only the job that needed it',()=>{
   it('frees the slot once its job has finished, without waiting for the TTL',async()=>{
     // The reported blockage: every background image-to-video run consumed one
-    // of the 32 per-user slots and never gave it back, so a day's work wedged
-    // the account with "Temporary input storage is full" - while the asset
-    // quota it is nothing to do with sat at 62.7 MB of 1 GB.
-    for(let index=0;index<32;index+=1){
+    // per-user slot and never gave it back, so a day's work wedged the account
+    // with "Temporary input storage is full" - while the asset quota it is
+    // nothing to do with sat at 62.7 MB of 1 GB. The ceiling is 80 so one Luma
+    // edit can stage a source plus 64 keyframes.
+    for(let index=0;index<MAX_PENDING_INPUTS;index+=1){
       const upload=await ready();
       const job=await acceptJob(env,'owner',`finished-input-slot-token-${index}`,request([upload.id]));
       await finishJob(env,job.id,'saved',null);

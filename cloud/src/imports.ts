@@ -1,4 +1,5 @@
 import type { CloudJobRequest } from '../../lib/account/contracts';
+import { referenceIdCap } from './providers';
 import { writeOutput } from './assets';
 import { deleteQueuedObject } from './cleanup';
 import { AccountError } from './jobs';
@@ -36,7 +37,7 @@ function canonical(value:unknown):string {
 function validateMetadata(value:unknown,kind:'image'|'video'):CloudJobRequest {
   if(!value||typeof value!=='object'||Array.isArray(value))throw new AccountError('Invalid import metadata.',400,'invalid_import');
   const item=value as Partial<CloudJobRequest>;
-  if(!providers.has(String(item.provider))||typeof item.modelId!=='string'||item.modelId.length>256||item.mediaType!==kind||!['text','image','frames','reference','edit'].includes(String(item.inputMode))||typeof item.prompt!=='string'||item.prompt.length>20_000||!item.values||typeof item.values!=='object'||Array.isArray(item.values)||Object.keys(item.values).length>64||Object.values(item.values).some(entry=>!['string','boolean','number'].includes(typeof entry)||typeof entry==='number'&&!Number.isFinite(entry)||typeof entry==='string'&&entry.length>2048)||!Array.isArray(item.referenceIds)||item.referenceIds.length>16||item.referenceIds.some(id=>typeof id!=='string'||id.length>128))throw new AccountError('Invalid import metadata.',400,'invalid_import');
+  if(!providers.has(String(item.provider))||typeof item.modelId!=='string'||item.modelId.length>256||item.mediaType!==kind||!['text','image','frames','reference','edit'].includes(String(item.inputMode))||typeof item.prompt!=='string'||item.prompt.length>20_000||!item.values||typeof item.values!=='object'||Array.isArray(item.values)||Object.keys(item.values).length>64||Object.values(item.values).some(entry=>!['string','boolean','number'].includes(typeof entry)||typeof entry==='number'&&!Number.isFinite(entry)||typeof entry==='string'&&entry.length>2048)||!Array.isArray(item.referenceIds)||item.referenceIds.length>referenceIdCap(item)||item.referenceIds.some(id=>typeof id!=='string'||id.length>128))throw new AccountError('Invalid import metadata.',400,'invalid_import');
   return item as CloudJobRequest;
 }
 

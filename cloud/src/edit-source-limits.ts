@@ -14,6 +14,7 @@
 import type { CloudJobRequest } from '../../lib/account/contracts';
 import { readContainerVideo } from '../../lib/media/container-duration';
 import { FAL_VIDEO_MODELS } from '../../lib/fal/catalog';
+import { KIE_MODELS } from '../../lib/kie/catalog';
 import { findModel } from '../../lib/providers/catalog';
 import type { ProviderId } from '../../lib/providers/types';
 import { editVideoMaxBytes, validateEditSource, type VideoEditCapability } from '../../lib/providers/video-edit';
@@ -25,6 +26,9 @@ function limitsFor(request: CloudJobRequest): VideoEditCapability | undefined {
   if (request.provider === 'fal') {
     return FAL_VIDEO_MODELS.find((model) => model.id === request.modelId)?.variants.find((variant) => variant.inputMode === 'edit')?.edit;
   }
+  if (request.provider === 'kie') {
+    return KIE_MODELS.find((model) => model.id === request.modelId)?.variants.find((variant) => variant.inputMode === 'edit')?.edit;
+  }
   const catalogProvider = (['runware', 'atlas', 'comet', 'piapi'] as const satisfies readonly ProviderId[]).find((id) => id === request.provider);
   return catalogProvider ? findModel(catalogProvider, request.modelId)?.videoEdit : undefined;
 }
@@ -34,9 +38,11 @@ function formatSeconds(value: number): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
 }
 
-/** Flat per-second edits (Kling, Aleph). Runware reports its own cost, and a resolution table is not this path. */
+/** Per-second edits, including a resolution table. Runware reports its own cost. A missing rate stays unknown. */
 function pricesFromMeasuredLength(request: CloudJobRequest, limits: VideoEditCapability): boolean {
-  return request.provider !== 'runware' && limits.rate.per === 'second' && limits.rate.usd !== undefined;
+  const rate = limits.rate;
+  if (!rate || request.provider === 'runware' || rate.per !== 'second') return false;
+  return rate.usd !== undefined || rate.usdByResolution !== undefined;
 }
 
 export async function assertEditSourceLimits(env: Env, owner: string, request: CloudJobRequest): Promise<number | undefined> {

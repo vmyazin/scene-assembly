@@ -20,6 +20,28 @@ describe('account spend entry builder',()=>{
     expect(entry?.confidence).toBe('estimated');
   });
 
+  it('bills an Atlas Wan edit from the shorter of the output and the source', () => {
+    const wan = (values: CloudJobRequest['values']) => request({
+      provider: 'atlas', modelId: 'alibaba/wan-2.7/video-edit', mediaType: 'video', inputMode: 'edit',
+      prompt: 'Change the coat', values,
+    });
+    const longerOutput = buildAccountSpendEntry({
+      jobId: 'wan-long', at: 1, result: result(),
+      request: wan({ size: '720P', sourceDurationSeconds: 3, outputDuration: 10 }),
+    });
+    const shorterOutput = buildAccountSpendEntry({
+      jobId: 'wan-short', at: 1, result: result(),
+      request: wan({ size: '1080P', sourceDurationSeconds: 10, outputDuration: 3 }),
+    });
+    const matchSource = buildAccountSpendEntry({
+      jobId: 'wan-match', at: 1, result: result(),
+      request: wan({ size: '720P', sourceDurationSeconds: 10, outputDuration: 0 }),
+    });
+    expect(longerOutput?.costUsd).toBeCloseTo(0.3, 6);
+    expect(shorterOutput?.costUsd).toBeCloseTo(0.3, 6);
+    expect(matchSource?.costUsd).toBeCloseTo(1, 6);
+  });
+
   it('keeps an unpriced Atlas resolution unknown with the relevant explanation', () => {
     const entry = buildAccountSpendEntry({
       jobId: 'atlas-unknown', at: 1, result: result(),

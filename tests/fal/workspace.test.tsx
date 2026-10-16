@@ -206,6 +206,18 @@ describe('FalGenerationWorkspace', () => {
     expect(container.textContent).not.toContain('fal-ai/');
   });
 
+  it('keeps one prompt card and swaps its body for an edit model without a prompt', () => {
+    useAppStore.setState({ falVideoModel: 'h3-max-relight' });
+    const view = render(<FalGenerationWorkspace inputMode="edit" onBack={() => undefined} onOpenConnections={() => undefined} />);
+    expect(screen.getByText("This model does not take a prompt. The lighting sphere is the only reference.")).toBeInTheDocument();
+    expect(document.getElementById('fal-video-prompt')).toBeNull();
+
+    useAppStore.getState().setFalVideoModel('kling-o3-pro-edit');
+    view.rerender(<FalGenerationWorkspace inputMode="edit" onBack={() => undefined} onOpenConnections={() => undefined} />);
+    expect(screen.queryByText("This model does not take a prompt. The lighting sphere is the only reference.")).not.toBeInTheDocument();
+    expect(document.getElementById('fal-video-prompt')).not.toBeNull();
+  });
+
   it('persists model selection and resets controls to each mode-specific catalog default', () => {
     const view = renderWorkspace();
     fireEvent.click(screen.getByRole('option', { name: 'MiniMax Hailuo 2.3 Standard' }));

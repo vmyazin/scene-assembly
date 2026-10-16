@@ -70,6 +70,29 @@ describe('Kie model catalog', () => {
     }
   });
 
+  it('builds a Wan 2.7 edit with one reference image and an optional prompt', () => {
+    const variant = resolveKieVariant('wan-2-7', 'edit');
+    expect(variant.modelId).toBe('wan/2-7-videoedit');
+    expect(variant.price).toBe('unknown');
+    expect(variant.edit?.rate).toBeUndefined();
+    const input = buildKieInput(variant, {
+      prompt: '',
+      uploadUrls: ['https://files.example/hat.png', 'https://files.example/clip.mp4'],
+      values: { resolution: '720p', duration: 0, audio_setting: 'origin', prompt_extend: false, aspect_ratio: '' },
+    });
+    expect(input).toMatchObject({
+      video_url: 'https://files.example/clip.mp4',
+      reference_image: 'https://files.example/hat.png',
+      resolution: '720p',
+      duration: 0,
+      audio_setting: 'origin',
+      prompt_extend: false,
+    });
+    expect(input.prompt).toBeUndefined();
+    expect(input.aspect_ratio).toBeUndefined();
+    expect(validateKieInput(variant, { prompt: '', uploadUrls: ['https://files.example/clip.mp4'] })).toBeNull();
+  });
+
   it('validates required reference uploads and model-specific input limits', () => {
     const variant = resolveKieVariant('nano-banana-pro', 'image');
     expect(validateKieInput(variant, { prompt: 'Edit this image', uploadUrls: [] })).toMatch(/at least one/i);

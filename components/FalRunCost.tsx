@@ -1,3 +1,4 @@
+// components/FalRunCost.tsx
 'use client';
 
 import { falSecondsFrom } from '@/lib/fal/pricing';
@@ -12,6 +13,8 @@ interface FalRunCostProps {
   resolution?: string | number | boolean;
   audio?: string | number | boolean;
   duration?: string | number | boolean;
+  /** Output length when it is billed instead of the source. `0` means match source. */
+  outputDuration?: string | number | boolean;
 }
 
 /**
@@ -36,6 +39,7 @@ export default function FalRunCost({
   resolution,
   audio,
   duration,
+  outputDuration,
 }: FalRunCostProps) {
   const cost = falRunCost(
     modelId,
@@ -43,7 +47,7 @@ export default function FalRunCost({
     inputMode,
     typeof resolution === 'string' ? resolution : undefined,
     typeof audio === 'boolean' ? audio : undefined,
-    falSecondsFrom(duration)
+    falSecondsFrom(outputDuration) ?? falSecondsFrom(duration)
   );
   if (!cost) return null;
   return <span className="font-normal opacity-80">{` · ~$${cost.costUsd.toFixed(2)}`}</span>;

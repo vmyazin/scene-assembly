@@ -44,6 +44,7 @@ export async function submitKieJob(args: {
   prompt: string;
   uploadUrls: string[];
   values: Record<string, string | number | boolean>;
+  editReferencePlan?: import('../providers/edit-references').EditReferencePlan;
 }): Promise<Pick<KieJob, 'taskId' | 'protocol'>> {
   const data = await parseKieResponse(
     await fetch('/api/generate', {

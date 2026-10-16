@@ -91,11 +91,11 @@ export async function priceEditDraftSource(ctx: ToolContext, request: CloudJobRe
 function pricesFromFile(request: CloudJobRequest): boolean {
   if (request.inputMode !== 'edit' || request.provider === 'runware') return false;
   if (request.provider === 'fal') {
-    return FAL_VIDEO_MODELS.find((model) => model.id === request.modelId)?.variants.find((variant) => variant.inputMode === 'edit')?.edit?.rate.per === 'second';
+    return FAL_VIDEO_MODELS.find((model) => model.id === request.modelId)?.variants.find((variant) => variant.inputMode === 'edit')?.edit?.rate?.per === 'second';
   }
   if (request.provider !== 'atlas' && request.provider !== 'comet' && request.provider !== 'piapi') return false;
   const rate = findModel(request.provider, request.modelId)?.videoEdit?.rate;
-  return rate?.per === 'second' && rate.usd !== undefined;
+  return rate?.per === 'second' && (rate.usd !== undefined || rate.usdByResolution !== undefined);
 }
 
 export async function priceEditSource(ctx: ToolContext, request: CloudJobRequest, source?: ReferenceInput): Promise<CloudJobRequest> {

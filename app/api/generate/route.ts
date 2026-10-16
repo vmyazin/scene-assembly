@@ -4,6 +4,7 @@ import { pollinationsGenerate } from '@/lib/engines/pollinations';
 import { cloudflareGenerate } from '@/lib/engines/cloudflare';
 import { createKieTask, getKieTask } from '@/lib/kie/client';
 import { resolveKieVariant, validateKieInput } from '@/lib/kie/catalog';
+import { editPromptMode, materializeEditReferences, parseEditReferencePlan } from '@/lib/providers/edit-references';
 import type { KieInputMode, KieProtocol } from '@/lib/kie/types';
 import { fetchAsBase64, getAdapter, isProviderId } from '@/lib/providers';
 import { findModel, resolveModel } from '@/lib/providers/catalog';
@@ -15,7 +16,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isInputMode(value: unknown): value is KieInputMode {
-  return value === 'text' || value === 'image';
+  return value === 'text' || value === 'image' || value === 'edit';
 }
 
 function isProtocol(value: unknown): value is KieProtocol {
@@ -38,7 +39,7 @@ async function handleKieRequest(body: Record<string, unknown>, request: NextRequ
       return NextResponse.json({ success: true, task });
     }
 
-    if (typeof body.modelId !== 'string' || !isInputMode(body.inputMode) || typeof body.prompt !== 'string' || !body.prompt.trim()) {
+    if (typeof body.modelId !== 'string' || !isInputMode(body.inputMode) || typeof body.prompt !== 'string') {
       return NextResponse.json({ success: false, error: 'A Kie model, mode, and prompt are required' }, { status: 400 });
     }
 
@@ -63,7 +64,21 @@ async function handleKieRequest(body: Record<string, unknown>, request: NextRequ
     if (moderation === 'relaxed') values.moderation = 'relaxed';
     else delete values.moderation;
     const variant = resolveKieVariant(body.modelId, body.inputMode);
-    const validationError = validateKieInput(variant, { prompt: body.prompt, uploadUrls });
+    if (editPromptMode(variant.edit?.references) === 'required' && !body.prompt.trim()) {
+      return NextResponse.json({ success: false, error: 'A Kie model, mode, and prompt are required' }, { status: 400 });
+    }
+    let references;
+    try {
+      if (body.inputMode === 'edit' && variant.edit?.references && body.editReferencePlan !== undefined) {
+        const images = uploadUrls.slice(0, Math.max(0, uploadUrls.length - 1));
+        const plan = parseEditReferencePlan(body.editReferencePlan, images.length);
+        references = { ...materializeEditReferences(variant.edit.references, images, plan), video: uploadUrls[uploadUrls.length - 1] };
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid edit references.';
+      return NextResponse.json({ success: false, error: message }, { status: 400 });
+    }
+    const validationError = validateKieInput(variant, { prompt: body.prompt, uploadUrls, references });
     if (validationError) {
       return NextResponse.json({ success: false, error: validationError }, { status: 400 });
     }
@@ -73,6 +88,7 @@ async function handleKieRequest(body: Record<string, unknown>, request: NextRequ
       prompt: body.prompt.trim(),
       uploadUrls,
       values,
+      references,
     });
 
     return NextResponse.json({ success: true, ...task });

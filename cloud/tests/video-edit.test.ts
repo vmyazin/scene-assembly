@@ -176,6 +176,56 @@ it('refuses an Aleph source the provider would reject, and posts the local clip 
   expect(JSON.parse(job.request_json).values.sourceDurationSeconds).toBe(6);
 });
 
+it('submits an Atlas Wan edit at the chosen resolution and only shortens duration below the source', async () => {
+  env.CLOUD_GENERATION_PROVIDERS = 'atlas';
+  await saveConnection(env, 'owner', 'atlas', { apiKey: 'atlas-key' });
+  const source = await stageClip(5, 1280, 720);
+  const image = await upload('owner', 'image/png');
+  const audio = await upload('owner', 'audio/mpeg');
+  const wan = (outputDuration: number): CloudJobRequest => ({
+    provider: 'atlas', modelId: 'alibaba/wan-2.7/video-edit', mediaType: 'video', inputMode: 'edit',
+    prompt: 'Change the coat', referenceIds: [image], referenceAudioIds: [audio], sourceVideoId: source,
+    values: { size: '720P', outputDuration, promptExtend: true, aspectRatio: '16:9' },
+  });
+  expect(validateRequest(env, { ...wan(3), referenceIds: [], referenceAudioIds: ['audio-1'], sourceVideoId: 'source-1' }).referenceAudioIds).toEqual(['audio-1']);
+  const shorter = await acceptJob(env, 'owner', 'atlas-wan-shorter-token', validateRequest(env, wan(3)));
+  expect(JSON.parse(shorter.request_json).values.sourceDurationSeconds).toBe(5);
+  const fetch = vi.fn().mockImplementation(() => Promise.resolve(Response.json({ data: { id: 'pred-wan' } })));
+  vi.stubGlobal('fetch', fetch);
+  await adapterFor(env, 'atlas').submit(env, shorter);
+  const shorterBody = JSON.parse(fetch.mock.calls[0][1].body);
+  expect(shorterBody).toMatchObject({
+    model: 'alibaba/wan-2.7/video-edit', resolution: '720P', ratio: '16:9', duration: 3, prompt_extend: true,
+  });
+  expect(shorterBody.images).toHaveLength(1);
+  expect(shorterBody.audio).toEqual(expect.any(String));
+  expect(shorterBody.video).toEqual(expect.any(String));
+  expect(new Set([shorterBody.images[0], shorterBody.audio, shorterBody.video]).size).toBe(3);
+  const longer = await acceptJob(env, 'owner', 'atlas-wan-longer-token', validateRequest(env, wan(10)));
+  await adapterFor(env, 'atlas').submit(env, longer);
+  const longerBody = JSON.parse(fetch.mock.calls[1][1].body);
+  expect(longerBody.resolution).toBe('720P');
+  expect(longerBody.duration).toBeUndefined();
+});
+
+it('refuses Atlas Wan driving audio that is not MP3 or WAV, or is over 15 MB, before reserve', async () => {
+  env.CLOUD_GENERATION_PROVIDERS = 'atlas';
+  await saveConnection(env, 'owner', 'atlas', { apiKey: 'atlas-key' });
+  const source = await stageClip(5, 1280, 720);
+  const wan = (audioId: string): CloudJobRequest => validateRequest(env, {
+    provider: 'atlas', modelId: 'alibaba/wan-2.7/video-edit', mediaType: 'video', inputMode: 'edit',
+    prompt: 'Change the coat', referenceIds: [], referenceAudioIds: [audioId], sourceVideoId: source,
+    values: { size: '720P', outputDuration: 0 },
+  });
+  const ogg = await upload('owner', 'audio/mpeg');
+  db.prepare("UPDATE account_uploads SET mime_type = 'audio/ogg' WHERE id = ?").run(ogg);
+  await expect(acceptJob(env, 'owner', 'atlas-wan-ogg-token-1', wan(ogg))).rejects.toThrow(/MP3 or WAV/);
+  const huge = await upload('owner', 'audio/mpeg');
+  db.prepare('UPDATE account_uploads SET expected_bytes = ? WHERE id = ?').run(16_000_000, huge);
+  await expect(acceptJob(env, 'owner', 'atlas-wan-huge-token-1', wan(huge))).rejects.toThrow(/15 MB/);
+  expect(db.prepare('SELECT COUNT(*) AS n FROM account_jobs').get()).toMatchObject({ n: 0 });
+});
+
 it('accepts a production Aleph edit larger than the inline image cap and prices it from the file', async () => {
   env.APP_ORIGIN = 'https://studio.example.test';
   env.PUBLIC_WORKER_ORIGIN = 'https://media.example.test';

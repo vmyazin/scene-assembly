@@ -108,6 +108,7 @@ export function clipToken(syntax: VideoPromptSyntax | undefined, token: 'Video' 
   const n = index + 1;
   if (syntax === 'at-image-underscore-index') return `@${token.toLowerCase()}_${n}`;
   if (syntax === 'at-image-index') return `@${token}${n}`;
+  if (syntax === 'triple-angle') return `<<<${token.toLowerCase()}_${n}>>>`;
   return `${token} ${n}`;
 }
 
