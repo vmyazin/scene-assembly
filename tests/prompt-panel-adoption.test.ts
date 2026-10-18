@@ -18,7 +18,9 @@ describe('universal PromptPanel adoption', () => {
       if (file !== 'components/GenerationInterface.tsx') {
         // Props are allowed (a gated workspace passes `paused`); what the guard
         // fixes is that the prompt slot *is* the shared wrapper.
-        expect(source).toMatch(/prompt=\{\s*<PromptPanel[\s>]/);
+        // Kie names it once and places it in either layout (video's columns,
+        // the image workspace's main column), so the slot may hold that name.
+        expect(source).toMatch(/prompt=\{\s*<PromptPanel[\s>]|const promptPanel = \(\s*<PromptPanel[\s>]/);
       }
     });
   }

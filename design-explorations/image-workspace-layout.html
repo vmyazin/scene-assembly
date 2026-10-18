@@ -1,0 +1,719 @@
+<!--
+  Image workspace layout — seven directions (UX audit L1)
+  Source: Scene Assembly UX audit, issue L1 (spacesheep.dev/@vsm/scene-assembly-ux-audit#l1)
+  Date: 2026-10-16
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Image workspace: seven ways to put the work first</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ----------------------------------------------------------------
+       SCENE ASSEMBLY — light adaptation of the repo brand.
+       Source: DESIGN.md ("The Illuminated Workbench") + app/globals.css.
+       The product is a dark teal workbench; the chrome translates that onto
+       light paper — canvas #081012 becomes ink, signal cyan / motion violet /
+       marker yellow become accents, Geist + Geist Mono stay. Quiet enough that
+       a dark variant preview can sit inside it without a fight.
+    ---------------------------------------------------------------- */
+    :root {
+      --brand-50: #e4f2f2;
+      --brand-100: #bfe4e4;
+      --brand-300: #4e8e91;
+      --brand-500: #076c70;   /* signal cyan #00fff9, contrast-fixed for paper */
+      --brand-700: #05494d;
+      --accent-50: #f4e9fd;
+      --accent-500: #7b16aa;  /* motion violet #bd00ff */
+      --accent-700: #5b0f7d;
+      --marker: #ffed4e;      /* marker yellow, used flat on ink only */
+      --magenta: #bd0059;     /* output magenta #ff006e */
+      --ink: #081012;         /* workbench canvas */
+      --ink-soft: #33474a;
+      --ink-mute: #6d8386;
+      --line: #d6e6e6;
+      --line-soft: #e7f0f0;
+      --paper: #ffffff;
+      --bg: #f1f7f7;
+      --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --shadow-sm: 0 1px 2px rgba(8, 16, 18, 0.05), 0 1px 1px rgba(8, 16, 18, 0.03);
+      --shadow-md: 0 16px 40px -26px rgba(8, 16, 18, 0.45), 0 2px 6px rgba(8, 16, 18, 0.04);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-sans);
+      letter-spacing: -0.011em;
+      background: var(--bg);
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      line-height: 1.5;
+    }
+
+    .page {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 72px 48px 160px;
+    }
+
+    /* ---------- Page header ---------- */
+    .doc-header {
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 40px;
+      margin-bottom: 80px;
+    }
+    .doc-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--brand-700);
+      background: var(--brand-50);
+      padding: 6px 12px;
+      border-radius: 999px;
+      margin-bottom: 20px;
+    }
+    .doc-eyebrow::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--brand-500);
+    }
+    .doc-title {
+      font-family: var(--font-sans);
+      font-size: 54px;
+      line-height: 1.02;
+      font-weight: 600;
+      letter-spacing: -0.035em;
+      margin: 0 0 16px;
+      color: var(--ink);
+    }
+    .doc-subtitle {
+      font-size: 19px;
+      color: var(--ink-soft);
+      max-width: 720px;
+      margin: 0 0 32px;
+      line-height: 1.45;
+    }
+    .doc-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--ink-mute);
+    }
+    .doc-meta > div { display: flex; gap: 6px; }
+    .doc-meta b {
+      color: var(--ink-soft);
+      font-weight: 600;
+    }
+
+    /* ---------- Variant section ---------- */
+    .variant {
+      margin-bottom: 96px;
+    }
+    .variant:last-child { margin-bottom: 0; }
+
+    .variant-head {
+      display: grid;
+      grid-template-columns: 64px 1fr;
+      gap: 20px;
+      align-items: start;
+      margin-bottom: 28px;
+    }
+    .variant-letter {
+      width: 48px;
+      height: 48px;
+      border-radius: 999px;
+      background: var(--ink);
+      color: var(--marker);
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 19px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      letter-spacing: -0.02em;
+    }
+    .variant-meta h2 {
+      margin: 4px 0 6px;
+      font-size: 25px;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      color: var(--ink);
+    }
+    .variant-tradeoff {
+      font-size: 15px;
+      color: var(--ink-soft);
+      margin: 0;
+      max-width: 760px;
+    }
+    .variant-tradeoff b {
+      color: var(--brand-500);
+      font-weight: 600;
+    }
+
+    /* ---------- Preview frame ---------- */
+    .preview-frame {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+      margin-left: 84px;
+      position: relative;
+    }
+    .preview-frame::before {
+      content: '';
+      position: absolute;
+      top: 14px;
+      left: 16px;
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: #d5e7e7;
+      box-shadow: 18px 0 0 #d5e7e7, 36px 0 0 #d5e7e7;
+      z-index: 2;
+    }
+    .preview-frame-bar {
+      background: #f5fafa;
+      border-bottom: 1px solid var(--line-soft);
+      padding: 14px 16px 14px 76px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--ink-mute);
+      font-weight: 600;
+    }
+    .preview {
+      padding: 0;
+      min-height: 200px;
+    }
+
+    /* ---------- Analysis ---------- */
+    .variant-analysis {
+      margin: 24px 0 0 84px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 24px;
+    }
+    .analysis-block {
+      padding: 18px 20px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: var(--paper);
+    }
+    .analysis-block h4 {
+      margin: 0 0 6px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--brand-500);
+    }
+    .analysis-block.is-risk h4 { color: var(--magenta); }
+    .analysis-block.is-pick h4 { color: var(--accent-700); }
+    .analysis-block p {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--ink-soft);
+    }
+
+    /* ---------- Decision row ---------- */
+    .decision {
+      position: relative;
+      overflow: hidden;
+      margin-top: 120px;
+      padding: 40px 48px;
+      background: var(--ink);
+      color: #ecf5f5;
+      border-radius: 16px;
+    }
+    .decision::before {
+      content: '';
+      position: absolute;
+      inset: 0 0 auto;
+      height: 1px;
+      background: linear-gradient(to right, transparent, var(--marker), transparent);
+      opacity: 0.45;
+    }
+    .decision h3 {
+      font-family: var(--font-sans);
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      margin: 0 0 8px;
+    }
+    .decision-sub {
+      color: #8fa5a7;
+      font-size: 14px;
+      margin: 0 0 28px;
+    }
+    .decision-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+    }
+    .decision-cell b {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--marker);
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    .decision-cell span {
+      font-size: 15px;
+      color: #ecf5f5;
+      line-height: 1.45;
+    }
+
+    /* ---------- Responsive ---------- */
+    @media (max-width: 900px) {
+      .page { padding: 40px 20px 80px; }
+      .doc-title { font-size: 36px; }
+      .variant-head { grid-template-columns: 48px 1fr; gap: 12px; }
+      .preview-frame { margin-left: 0; }
+      .variant-analysis { margin-left: 0; grid-template-columns: 1fr; }
+    }
+
+    /* ---------- Variant preview reset ----------
+       Anything inside .preview is the variant's own canvas.
+       Use scoped class prefixes per variant (.va-, .vb-, .vc-, .vd-)
+       to avoid cross-bleed of styles between variants.
+    */
+    .sa-screen { width: 1280px; zoom: 0.86; background: #081012; color: #ecf5f5; font-family: var(--font-sans); padding: 18px 40px 28px; box-sizing: border-box; }
+    .sa-screen * { box-sizing: border-box; }
+    .sa-scroll { overflow-x: auto; background: #081012; }
+    .sa-top { display: flex; align-items: center; justify-content: space-between; padding: 4px 0 16px; border-bottom: 1px solid rgba(204,240,242,.075); margin-bottom: 16px; }
+    .sa-word { font-weight: 800; font-style: italic; letter-spacing: -.04em; line-height: .9; font-size: 15px; }
+    .sa-tabs { display: flex; gap: 2px; padding: 3px; border: 1px solid rgba(204,240,242,.075); border-radius: 11px; background: #0d1719; font-size: 13px; }
+    .sa-tabs span { padding: 5px 12px; border-radius: 8px; color: #8fa5a7; }
+    .sa-tabs .on { background: rgba(255,237,78,.15); color: #ffed4e; }
+    .sa-keys { font-size: 12px; padding: 7px 12px; border: 1px solid rgba(204,240,242,.17); border-radius: 9px; color: #ecf5f5; }
+    .sa-panel { background: rgba(204,240,242,.02); border: 1px solid rgba(204,240,242,.075); border-radius: 11px; padding: 14px; }
+    .sa-h { font-weight: 600; font-size: 15px; margin: 0 0 10px; letter-spacing: -.01em; }
+    .sa-eyebrow { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .2em; text-transform: uppercase; color: #7a8d8f; }
+    .sa-engines { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .sa-pill { font-size: 11.5px; padding: 5px 10px; border-radius: 999px; border: 1px solid rgba(204,240,242,.1); color: #c4d4d5; white-space: nowrap; }
+    .sa-pill.on { border-color: rgba(0,255,249,.6); color: #00fff9; background: rgba(0,255,249,.08); }
+    .sa-pill i { font-style: normal; color: #79e09a; font-size: 9px; letter-spacing: .08em; margin-left: 4px; }
+    .sa-models { border: 1px solid rgba(204,240,242,.075); border-radius: 9px; overflow: hidden; font-size: 12.5px; }
+    .sa-models div { display: grid; grid-template-columns: 16px 1fr auto auto; gap: 10px; padding: 7px 10px; align-items: center; border-top: 1px solid rgba(204,240,242,.05); }
+    .sa-models div:first-child { border-top: 0; }
+    .sa-models .sel { background: rgba(255,237,78,.07); }
+    .sa-models b { font-weight: 500; }
+    .sa-models small { font-family: var(--font-mono); font-size: 11px; color: #8fa5a7; }
+    .sa-dot { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid #7a8d8f; }
+    .sa-models .sel .sa-dot { border-color: #ffed4e; background: radial-gradient(circle, #ffed4e 0 3px, transparent 3.5px); }
+    .sa-badge { font-family: var(--font-mono); font-size: 8.5px; letter-spacing: .12em; color: #7a8d8f; border: 1px solid rgba(204,240,242,.12); border-radius: 4px; padding: 1px 4px; margin-left: 6px; }
+    .sa-note { font-size: 12px; color: #8fa5a7; line-height: 1.5; margin: 8px 2px 0; }
+    .sa-note b { color: #ecf5f5; font-weight: 500; }
+    .sa-label { font-size: 12px; color: #c4d4d5; margin: 10px 0 5px; }
+    .sa-select { font-size: 12.5px; border: 1px solid rgba(204,240,242,.14); border-radius: 8px; padding: 8px 10px; color: #ecf5f5; display: flex; justify-content: space-between; }
+    .sa-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .sa-seg span { text-align: center; font-size: 12.5px; padding: 8px 0; border: 1px solid rgba(204,240,242,.1); border-radius: 8px; color: #8fa5a7; }
+    .sa-seg .on { border-color: rgba(0,255,249,.55); color: #00fff9; background: rgba(0,255,249,.06); }
+    .sa-prompt { background: hsl(190 42% 8.8%); border: 1px solid rgba(204,240,242,.14); border-radius: 9px; padding: 11px 12px; font-size: 13.5px; color: #ecf5f5; min-height: 46px; }
+    .sa-gen { background: #00fff9; color: #04191a; font-weight: 600; font-size: 13.5px; text-align: center; padding: 10px; border-radius: 9px; }
+    .sa-cost { font-size: 11px; color: #7a8d8f; text-align: center; margin-top: 5px; }
+    .sa-btn { font-size: 12px; padding: 7px 11px; border: 1px solid rgba(204,240,242,.14); border-radius: 8px; color: #ecf5f5; white-space: nowrap; }
+    .sa-meta { font-family: var(--font-mono); font-size: 10.5px; color: #7a8d8f; }
+    .sa-img { border-radius: 9px; position: relative; overflow: hidden; aspect-ratio: 1; }
+    .sa-img::after { content: attr(data-w); position: absolute; right: 8px; bottom: 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; color: #04191a; background: #ffed4e; padding: 2px 6px; border-radius: 4px; }
+    .sa-nook { background:
+      radial-gradient(circle at 63% 47%, rgba(255,214,150,.95) 0 3%, rgba(255,190,110,.35) 9%, transparent 26%),
+      linear-gradient(90deg, transparent 0 40%, rgba(150,175,190,.75) 40% 47%, transparent 47% 49%, rgba(150,175,190,.75) 49% 56%, transparent 56%),
+      linear-gradient(180deg, transparent 0 18%, rgba(70,90,105,.9) 18% 52%, transparent 52%),
+      linear-gradient(160deg, #2b1c12 0%, #4a3020 55%, #2a1a10 100%); }
+    .sa-snow { background:
+      radial-gradient(circle at 63% 47%, rgba(255,214,150,.95) 0 3%, rgba(255,190,110,.35) 9%, transparent 26%),
+      radial-gradient(circle at 48% 28%, rgba(255,255,255,.35) 0 1px, transparent 1.6px) 0 0/22px 22px,
+      linear-gradient(90deg, transparent 0 40%, rgba(214,228,240,.85) 40% 47%, transparent 47% 49%, rgba(214,228,240,.85) 49% 56%, transparent 56%),
+      linear-gradient(180deg, transparent 0 18%, rgba(160,180,200,.9) 18% 52%, transparent 52%),
+      linear-gradient(160deg, #2b1c12 0%, #4a3020 55%, #2a1a10 100%); }
+    .sa-light { background:
+      radial-gradient(circle at 72% 60%, #ffb36b 0 4%, transparent 12%),
+      linear-gradient(90deg, transparent 0 47%, #c43b2e 47% 53%, transparent 53%) 0 0/100% 70% no-repeat,
+      linear-gradient(180deg, #4b4f8a 0%, #c06a7a 50%, #f0a070 64%, #33405c 66%, #182234 100%); }
+    .sa-note-w { display: inline-block; font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #ffed4e; border: 1px solid rgba(255,237,78,.35); border-radius: 4px; padding: 2px 6px; }
+    .va-grid { display: grid; grid-template-columns: 2fr 3fr; gap: 16px; align-items: start; }
+    .va-left > * + * { margin-top: 12px; }
+    .va-right > * + * { margin-top: 10px; }
+    .va-card { display: grid; gap: 10px; }
+    .va-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .va-actions .sa-meta { margin-left: auto; }
+    .vb-bar { display: grid; grid-template-columns: 1fr 190px; gap: 10px; align-items: stretch; }
+    .vb-bar .sa-gen { display: flex; flex-direction: column; justify-content: center; }
+    .vb-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+    .vb-chip { font-size: 12px; padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(204,240,242,.12); color: #c4d4d5; background: rgba(204,240,242,.02); }
+    .vb-chip b { color: #ecf5f5; font-weight: 500; }
+    .vb-chip.open { border-color: rgba(0,255,249,.55); color: #00fff9; }
+    .vb-pop { position: absolute; z-index: 3; top: 44px; left: 0; width: 520px; background: #0f1a1c; border: 1px solid rgba(204,240,242,.17); border-radius: 11px; padding: 14px; box-shadow: 0 18px 50px -20px rgba(0,0,0,.8); }
+    .vb-wrap { position: relative; }
+    .vb-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 16px; }
+    .vb-grid .sa-panel { padding: 10px; }
+    .vb-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .vc-grid { display: grid; grid-template-columns: 330px 1fr; gap: 16px; align-items: start; }
+    .vc-rail > * + * { margin-top: 10px; }
+    .vc-fold { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; padding: 10px 12px; border: 1px solid rgba(204,240,242,.1); border-radius: 9px; }
+    .vc-fold small { color: #8fa5a7; font-family: var(--font-mono); font-size: 11px; }
+    .vc-stage { display: grid; grid-template-columns: 1fr 190px; gap: 14px; }
+    .vc-side > * + * { margin-top: 8px; }
+    .vc-side .sa-btn { display: block; text-align: center; }
+    .vc-strip { display: flex; gap: 8px; margin-top: 12px; }
+    .vc-strip .sa-img { width: 92px; flex: none; }
+    .vc-strip .sa-img::after { content: none; }
+    .vc-strip .cur { outline: 2px solid #00fff9; outline-offset: 2px; }
+    .vd-top { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; }
+    .vd-drawer { font-size: 12.5px; padding: 9px 12px; border: 1px solid rgba(204,240,242,.12); border-radius: 9px; color: #c4d4d5; white-space: nowrap; }
+    .vd-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+    .vd-pair .sa-panel > * + * { margin-top: 8px; }
+    .vd-tag { font-family: var(--font-mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; }
+    .vd-tag.new { color: #00fff9; }
+    .vd-tag.prev { color: #8fa5a7; }
+    .vd-diff { font-size: 12px; color: #c4d4d5; }
+    .vd-diff mark { background: rgba(255,237,78,.18); color: #ffed4e; padding: 0 3px; border-radius: 3px; }
+
+    .ve-grid { display: grid; grid-template-columns: 290px 1fr; gap: 16px; align-items: start; }
+    .ve-rail { position: sticky; top: 0; }
+    .ve-rail .sa-models div { grid-template-columns: 16px 1fr auto; }
+    .ve-group { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .18em; text-transform: uppercase; color: #7a8d8f; margin: 12px 2px 6px; }
+    .ve-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+    .ve-grid2 .sa-panel { padding: 10px; }
+    .ve-narrow { margin-top: 14px; padding-top: 12px; border-top: 1px dashed rgba(204,240,242,.15); display: flex; gap: 10px; align-items: center; }
+    .vf-grid { display: grid; grid-template-columns: 290px 1fr; gap: 16px; align-items: start; }
+    .vf-engine { display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 9px 11px; border: 1px solid rgba(0,255,249,.45); border-radius: 9px; color: #ecf5f5; background: rgba(0,255,249,.05); }
+    .vf-engine small { font-family: var(--font-mono); font-size: 10.5px; color: #8fa5a7; }
+    .vf-models { margin-top: 10px; display: grid; gap: 4px; }
+    .vf-m { display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; align-items: start; padding: 8px 9px; border-radius: 8px; border: 1px solid transparent; font-size: 12.5px; }
+    .vf-m.sel { background: rgba(255,237,78,.07); border-color: rgba(255,237,78,.25); }
+    .vf-m b { font-weight: 500; display: block; }
+    .vf-m small { font-family: var(--font-mono); font-size: 11px; color: #c4d4d5; }
+    .vf-tags { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+    .vf-tag { font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: #8fa5a7; border: 1px solid rgba(204,240,242,.12); border-radius: 4px; padding: 1px 5px; }
+    .vf-tag.warn { color: #ffed4e; border-color: rgba(255,237,78,.3); }
+    .vf-collapse { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #7a8d8f; margin-top: 12px; text-align: right; }
+    .vf-hero { display: grid; grid-template-columns: 1fr 230px; gap: 14px; margin-top: 14px; }
+    .vf-side > * + * { margin-top: 8px; }
+    .vf-side .sa-btn { display: block; text-align: center; }
+    .vf-hist { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
+    .vf-hist .sa-img::after { content: none; }
+    .vg-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+    .vg-grid2 .sa-panel { padding: 10px; }
+    .vg-new { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: #00fff9; margin-bottom: 6px; display: block; }
+    .vg-old { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: #7a8d8f; margin-bottom: 6px; display: block; }
+  </style>
+</head>
+<body>
+  <main class="page">
+
+    <header class="doc-header">
+      <div class="doc-eyebrow">Design exploration</div>
+      <h1 class="doc-title">Image workspace: seven ways to put the work first</h1>
+      <p class="doc-subtitle">Results render 265–344 px wide on desktop while settings take half the screen (UX audit L1). Seven layouts for text-to-image, all drawn with the same models, prompt and results.</p>
+      <div class="doc-meta">
+        <div><b>Spec</b> UX audit L1 · components/GenerationWorkspaceLayout.tsx</div>
+        <div><b>Generated</b> 2026-10-16</div>
+        <div><b>Variants</b> 7</div>
+      </div>
+    </header>
+
+
+    <section class="variant">
+      <div class="variant-head">
+        <div class="variant-letter">A</div>
+        <div class="variant-meta">
+          <h2>Re-weight the two columns</h2>
+          <p class="variant-tradeoff">
+            <b>Optimizes for</b> the smallest change that fixes it: same layout and code, the work column takes 60%, actions move under the image <b>·  Tradeoff</b> setup gets narrower, so the model table is tighter; one result at a time still dominates the column
+          </p>
+        </div>
+      </div>
+      <div class="preview-frame">
+        <div class="preview-frame-bar">Variant A · text to image · 1440 px desktop, scaled</div>
+        <div class="preview"><div class="sa-scroll"><div class="sa-screen"><div class="sa-top"><div class="sa-word">Scene<br>Assembly</div><div class="sa-tabs"><span class="on">Image</span><span>Video</span><span>Timeline</span></div><div class="sa-keys">✓ API Keys</div></div>
+<div class="va-grid">
+  <div class="va-left">
+    <div class="sa-panel"><div class="sa-engines"><span class="sa-eyebrow">Engine</span><span class="sa-pill on">Google Gemini</span><span class="sa-pill">Pollinations · FLUX<i>FREE</i></span><span class="sa-pill">Cloudflare · FLUX<i>FREE</i></span><span class="sa-pill">Kie.ai</span><span class="sa-pill">Runware</span><span class="sa-pill">Atlas Cloud</span><span class="sa-pill">CometAPI</span><span class="sa-pill">fal.ai</span><span class="sa-pill">PiAPI</span></div></div>
+    <div class="sa-panel"><div class="sa-h">Model</div><div class="sa-models"><div class="sel"><span class="sa-dot"></span><b>Nano Banana 2.1</b><small>$0.034/image</small><small>4K</small></div><div><span class="sa-dot"></span><b>Nano Banana 2<span class="sa-badge">DEPRECATED</span></b><small>$0.067/image</small><small>4K</small></div><div><span class="sa-dot"></span><b>Gemini 3 Pro Image</b><small>$0.134/image</small><small>4K</small></div><div><span class="sa-dot"></span><b>Gemini 3.1 Flash Lite Image</b><small>$0.034/image</small><small>1K</small></div></div><p class="sa-note"><b>Nano Banana 2.1:</b> High-efficiency image generation and editing at 1K, 2K and 4K, with Google Search grounding. The default.</p></div>
+    <div class="sa-panel"><div class="sa-h">Generation Settings</div><div class="sa-label">Aspect Ratio</div><div class="sa-select"><span>1:1 (Square - Instagram Post)</span><span>⌄</span></div><div class="sa-label">Resolution</div><div class="sa-seg"><span class="on">1K</span><span>2K</span><span>4K</span></div></div>
+  </div>
+  <div class="va-right">
+    <div class="sa-panel"><div class="sa-h">Prompt</div><div class="sa-prompt">A cozy reading nook by a rainy window, warm lamp light, 35mm photo</div></div><div><div class="sa-gen">✦ Generate Image</div><div class="sa-cost">Est. ≈ $0.034 / image · Nano Banana 2.1 · Runs in the background · saves to your account</div></div>
+    <div class="sa-panel va-card">
+      <div class="sa-h" style="margin:0">Result <span class="sa-note-w">image ≈ 680 px · was 344</span></div>
+      <div class="sa-img sa-snow" data-w="1024 × 1024"></div>
+      <div class="va-actions"><span class="sa-btn">⤓ Download image</span><span class="sa-btn">✦ Edit this image</span><span class="sa-btn">▶ Use as first frame</span><span class="sa-meta">gemini · gemini-nano-banana-2.1 · 1024×1024 · took 15s · just now</span></div>
+    </div>
+  </div>
+</div></div></div></div>
+      </div>
+      <div class="variant-analysis">
+        <div class="analysis-block"><h4>What works</h4><p>Image grows from ~344 px to ~680 px with no new interaction: same panels, same sticky prompt, same order. The fix is mostly a grid ratio in GenerationWorkspaceLayout plus a below-image action row in ResultStack.</p></div>
+        <div class="analysis-block is-risk"><h4>What risks</h4><p>The 40% setup column still scrolls on a short laptop, and older results still stack below the fold. It solves size, not iteration.</p></div>
+        <div class="analysis-block is-pick"><h4>Pick this if</h4><p>you want L1 fixed this week with no new UI concepts to learn.</p></div>
+      </div>
+    </section>
+    <section class="variant">
+      <div class="variant-head">
+        <div class="variant-letter">B</div>
+        <div class="variant-meta">
+          <h2>Prompt-led, settings in chips</h2>
+          <p class="variant-tradeoff">
+            <b>Optimizes for</b> maximum space for results: no setup column, settings summarised in chips that open in place, a 3-up result grid <b>·  Tradeoff</b> provider differences go one click deeper; the model table with prices is no longer visible at a glance
+          </p>
+        </div>
+      </div>
+      <div class="preview-frame">
+        <div class="preview-frame-bar">Variant B · text to image · 1440 px desktop, scaled</div>
+        <div class="preview"><div class="sa-scroll"><div class="sa-screen"><div class="sa-top"><div class="sa-word">Scene<br>Assembly</div><div class="sa-tabs"><span class="on">Image</span><span>Video</span><span>Timeline</span></div><div class="sa-keys">✓ API Keys</div></div>
+<div class="sa-engines"><span class="sa-eyebrow">Engine</span><span class="sa-pill on">Google Gemini</span><span class="sa-pill">Pollinations · FLUX<i>FREE</i></span><span class="sa-pill">Cloudflare · FLUX<i>FREE</i></span><span class="sa-pill">Kie.ai</span><span class="sa-pill">Runware</span><span class="sa-pill">Atlas Cloud</span><span class="sa-pill">CometAPI</span><span class="sa-pill">fal.ai</span><span class="sa-pill">PiAPI</span></div>
+<div style="margin-top:14px" class="vb-bar"><div class="sa-prompt" style="min-height:58px">A cozy reading nook by a rainy window, warm lamp light, 35mm photo</div><div class="sa-gen">✦ Generate Image<span style="font-weight:400;font-size:11px;opacity:.75">≈ $0.034 · background</span></div></div>
+<div class="vb-wrap">
+  <div class="vb-chips"><span class="vb-chip open">Model · <b>Nano Banana 2.1</b> $0.034 ⌄</span><span class="vb-chip">Shape · <b>1:1</b> ⌄</span><span class="vb-chip">Size · <b>1K</b> ⌄</span><span class="vb-chip">Text to Image</span><span class="sa-meta" style="margin-left:auto">Runs in the background · saves to your account</span></div>
+  <div class="vb-pop"><div class="sa-eyebrow" style="margin-bottom:8px">Model · Google Gemini</div><div class="sa-models"><div class="sel"><span class="sa-dot"></span><b>Nano Banana 2.1</b><small>$0.034/image</small><small>4K</small></div><div><span class="sa-dot"></span><b>Nano Banana 2<span class="sa-badge">DEPRECATED</span></b><small>$0.067/image</small><small>4K</small></div><div><span class="sa-dot"></span><b>Gemini 3 Pro Image</b><small>$0.134/image</small><small>4K</small></div><div><span class="sa-dot"></span><b>Gemini 3.1 Flash Lite Image</b><small>$0.034/image</small><small>1K</small></div></div><p class="sa-note"><b>Nano Banana 2.1:</b> High-efficiency image generation and editing at 1K, 2K and 4K, with Google Search grounding. The default.</p></div>
+</div>
+<div class="vb-grid">
+  <div class="sa-panel"><div class="sa-img sa-snow" data-w="≈ 370 px"></div><div class="vb-row"><span class="sa-btn">⤓</span><span class="sa-btn">✦ Edit</span><span class="sa-btn">▶ First frame</span></div><div class="sa-meta" style="margin-top:6px">Nano Banana 2.1 · 1024×1024 · 15s</div></div>
+  <div class="sa-panel"><div class="sa-img sa-nook" data-w="≈ 370 px"></div><div class="vb-row"><span class="sa-btn">⤓</span><span class="sa-btn">✦ Edit</span><span class="sa-btn">▶ First frame</span></div><div class="sa-meta" style="margin-top:6px">Nano Banana 2.1 · 1024×1024 · 20s</div></div>
+  <div class="sa-panel"><div class="sa-img sa-light" data-w="≈ 370 px"></div><div class="vb-row"><span class="sa-btn">⤓</span><span class="sa-btn">✦ Edit</span><span class="sa-btn">▶ First frame</span></div><div class="sa-meta" style="margin-top:6px">Pollinations · 768×768 · 6s</div></div>
+</div></div></div></div>
+      </div>
+      <div class="variant-analysis">
+        <div class="analysis-block"><h4>What works</h4><p>The page reads prompt → results like Midjourney or Ideogram, and three results compare side by side at ~370 px each. The chip row still states model, price, shape and size, so nothing is hidden, only folded.</p></div>
+        <div class="analysis-block is-risk"><h4>What risks</h4><p>Hiding the model table cuts against "make provider differences legible": the per-model price comparison moves into a popover. Engines with many controls (fal, Kie) need a bigger popover.</p></div>
+        <div class="analysis-block is-pick"><h4>Pick this if</h4><p>you see the studio as an iteration tool and most people pick a model once.</p></div>
+      </div>
+    </section>
+    <section class="variant">
+      <div class="variant-head">
+        <div class="variant-letter">C</div>
+        <div class="variant-meta">
+          <h2>Stage and filmstrip</h2>
+          <p class="variant-tradeoff">
+            <b>Optimizes for</b> one result at full size, with history one click away and every setting summarised in a slim rail <b>·  Tradeoff</b> fewer results visible at once; the full model list needs a click to open
+          </p>
+        </div>
+      </div>
+      <div class="preview-frame">
+        <div class="preview-frame-bar">Variant C · text to image · 1440 px desktop, scaled</div>
+        <div class="preview"><div class="sa-scroll"><div class="sa-screen"><div class="sa-top"><div class="sa-word">Scene<br>Assembly</div><div class="sa-tabs"><span class="on">Image</span><span>Video</span><span>Timeline</span></div><div class="sa-keys">✓ API Keys</div></div>
+<div class="vc-grid">
+  <div class="vc-rail">
+    <div class="sa-panel"><div class="sa-h">Prompt</div><div class="sa-prompt" style="min-height:96px">A cozy reading nook by a rainy window, warm lamp light, 35mm photo</div></div>
+    <div><div class="sa-gen">✦ Generate Image</div><div class="sa-cost">Est. ≈ $0.034 / image · Nano Banana 2.1 · Runs in the background · saves to your account</div></div>
+    <div class="vc-fold"><span>Engine · Google Gemini</span><small>9 engines ▸</small></div>
+    <div class="vc-fold"><span>Model · Nano Banana 2.1</span><small>$0.034/image ▸</small></div>
+    <div class="vc-fold"><span>Shape · 1:1 Square</span><small>1K ▸</small></div>
+  </div>
+  <div>
+    <div class="sa-panel">
+      <div class="vc-stage">
+        <div class="sa-img sa-snow" data-w="image ≈ 620 px"></div>
+        <div class="vc-side">
+          <div class="sa-eyebrow">Newest</div>
+          <span class="sa-btn">⤓ Download image</span><span class="sa-btn">✦ Edit this image</span><span class="sa-btn">▶ Use as first frame</span>
+          <div class="sa-meta" style="line-height:1.7;margin-top:12px">gemini<br>nano-banana-2.1<br>1024×1024<br>took 15s · just now</div>
+        </div>
+      </div>
+      <div class="vc-strip"><div class="sa-img sa-snow cur"></div><div class="sa-img sa-nook"></div><div class="sa-img sa-light"></div><div class="sa-img sa-nook"></div></div>
+    </div>
+  </div>
+</div></div></div></div>
+      </div>
+      <div class="variant-analysis">
+        <div class="analysis-block"><h4>What works</h4><p>The newest result gets the stage (~620 px) with its actions beside it, and the filmstrip makes earlier runs reachable without scrolling. The rail keeps prompt and Generate together and states each setting in one line.</p></div>
+        <div class="analysis-block is-risk"><h4>What risks</h4><p>Comparing two results means switching the stage back and forth. The filmstrip needs a selected-result state that does not exist today.</p></div>
+        <div class="analysis-block is-pick"><h4>Pick this if</h4><p>single-image quality matters most and you want a calm, focused canvas.</p></div>
+      </div>
+    </section>
+    <section class="variant">
+      <div class="variant-head">
+        <div class="variant-letter">D</div>
+        <div class="variant-meta">
+          <h2>Side-by-side compare</h2>
+          <p class="variant-tradeoff">
+            <b>Optimizes for</b> iteration: the newest and previous result at equal size, with what changed between them <b>·  Tradeoff</b> only two results on screen; setup lives in a drawer behind one click
+          </p>
+        </div>
+      </div>
+      <div class="preview-frame">
+        <div class="preview-frame-bar">Variant D · text to image · 1440 px desktop, scaled</div>
+        <div class="preview"><div class="sa-scroll"><div class="sa-screen"><div class="sa-top"><div class="sa-word">Scene<br>Assembly</div><div class="sa-tabs"><span class="on">Image</span><span>Video</span><span>Timeline</span></div><div class="sa-keys">✓ API Keys</div></div>
+<div class="vd-top"><span class="vd-drawer">☰ Setup · Google Gemini · Nano Banana 2.1 · 1:1 · 1K</span><div class="vb-bar"><div class="sa-prompt">A cozy reading nook by a <mark style="background:rgba(255,237,78,.18);color:#ffed4e">snowy</mark> window, warm lamp light, 35mm photo</div><div class="sa-gen">✦ Generate Image<span style="font-weight:400;font-size:11px;opacity:.75;display:block">≈ $0.034</span></div></div></div>
+<div class="vd-pair">
+  <div class="sa-panel"><span class="vd-tag new">Newest</span><div class="sa-img sa-snow" data-w="≈ 560 px"></div><div class="vd-diff">Prompt changed: “<mark>snowy</mark> window”</div><div class="vb-row"><span class="sa-btn">⤓ Download</span><span class="sa-btn">✦ Edit this image</span><span class="sa-btn">Keep this one</span></div></div>
+  <div class="sa-panel"><span class="vd-tag prev">Previous</span><div class="sa-img sa-nook" data-w="≈ 560 px"></div><div class="vd-diff">“rainy window” · Nano Banana 2.1 · 1K</div><div class="vb-row"><span class="sa-btn">⤓ Download</span><span class="sa-btn">✦ Edit this image</span><span class="sa-btn">Restore these settings</span></div></div>
+</div></div></div></div>
+      </div>
+      <div class="variant-analysis">
+        <div class="analysis-block"><h4>What works</h4><p>Most runs are tweaks, so the page answers "was this one better?" directly: two ~560 px results with the prompt difference highlighted and a Restore-settings path for the older one.</p></div>
+        <div class="analysis-block is-risk"><h4>What risks</h4><p>Needs a prompt diff and a "keep" concept the product does not have. A first run has nothing to compare, so the right slot is empty.</p></div>
+        <div class="analysis-block is-pick"><h4>Pick this if</h4><p>your users mostly iterate on one idea, run after run.</p></div>
+      </div>
+    </section>
+    <section class="variant">
+      <div class="variant-head">
+        <div class="variant-letter">E</div>
+        <div class="variant-meta">
+          <h2>B with a model rail on desktop</h2>
+          <p class="variant-tradeoff">
+            <b>Optimizes for</b> B's results-first page while keeping the model choice and its prices visible without a click <b>·  Tradeoff</b> results drop from 3-up to 2-up; shape and size stay folded in chips
+          </p>
+        </div>
+      </div>
+      <div class="preview-frame">
+        <div class="preview-frame-bar">Variant E · text to image · 1440 px desktop, scaled</div>
+        <div class="preview"><div class="sa-scroll"><div class="sa-screen"><div class="sa-top"><div class="sa-word">Scene<br>Assembly</div><div class="sa-tabs"><span class="on">Image</span><span>Video</span><span>Timeline</span></div><div class="sa-keys">✓ API Keys</div></div>
+<div class="sa-engines"><span class="sa-eyebrow">Engine</span><span class="sa-pill on">Google Gemini</span><span class="sa-pill">Pollinations · FLUX<i>FREE</i></span><span class="sa-pill">Cloudflare · FLUX<i>FREE</i></span><span class="sa-pill">Kie.ai</span><span class="sa-pill">Runware</span><span class="sa-pill">Atlas Cloud</span><span class="sa-pill">CometAPI</span><span class="sa-pill">fal.ai</span><span class="sa-pill">PiAPI</span></div>
+<div class="ve-grid" style="margin-top:14px">
+  <div class="ve-rail sa-panel">
+    <div class="sa-h">Model</div>
+    <div class="sa-models"><div class="sel"><span class="sa-dot"></span><b>Nano Banana 2.1</b><small>$0.034</small></div><div><span class="sa-dot"></span><b>Nano Banana 2<span class="sa-badge">DEPRECATED</span></b><small>$0.067</small></div><div><span class="sa-dot"></span><b>Gemini 3 Pro Image</b><small>$0.134</small></div><div><span class="sa-dot"></span><b>Gemini 3.1 Flash Lite Image</b><small>$0.034</small></div></div>
+    <p class="sa-note"><b>Nano Banana 2.1:</b> High-efficiency image generation and editing at 1K, 2K and 4K, with Google Search grounding. The default.</p>
+    <div class="ve-group">Prices per image at 1K</div>
+  </div>
+  <div>
+    <div class="vb-bar"><div class="sa-prompt" style="min-height:58px">A cozy reading nook by a rainy window, warm lamp light, 35mm photo</div><div class="sa-gen">✦ Generate Image<span style="font-weight:400;font-size:11px;opacity:.75">≈ $0.034 · background</span></div></div>
+    <div class="vb-chips"><span class="vb-chip">Shape · <b>1:1</b> ⌄</span><span class="vb-chip">Size · <b>1K</b> ⌄</span><span class="vb-chip">Text to Image</span><span class="sa-meta" style="margin-left:auto">Runs in the background · saves to your account</span></div>
+    <div class="ve-grid2">
+      <div class="sa-panel"><div class="sa-img sa-snow" data-w="≈ 420 px"></div><div class="vb-row"><span class="sa-btn">⤓ Download</span><span class="sa-btn">✦ Edit this image</span><span class="sa-btn">▶ First frame</span></div><div class="sa-meta" style="margin-top:6px">Nano Banana 2.1 · 1024×1024 · 15s</div></div>
+      <div class="sa-panel"><div class="sa-img sa-nook" data-w="≈ 420 px"></div><div class="vb-row"><span class="sa-btn">⤓ Download</span><span class="sa-btn">✦ Edit this image</span><span class="sa-btn">▶ First frame</span></div><div class="sa-meta" style="margin-top:6px">Nano Banana 2.1 · 1024×1024 · 20s</div></div>
+    </div>
+    <div class="ve-narrow"><span class="sa-eyebrow">Below lg (1024 px)</span><span class="vb-chip open">Model · <b>Nano Banana 2.1</b> $0.034 ⌄</span><span class="sa-meta">the rail folds back into this chip, as in B</span></div>
+  </div>
+</div></div></div></div>
+      </div>
+      <div class="variant-analysis">
+        <div class="analysis-block"><h4>What works</h4><p>The model list, the choice that changes price and quality most, stays one glance away with its prices, which answers B's biggest risk. Shape and size, which rarely change between runs, stay folded. Results still get about 420 px each, 2-up.</p></div>
+        <div class="analysis-block is-risk"><h4>What risks</h4><p>Two layouts to maintain: the rail at desktop, the chip below 1024 px. Engines with long model lists (Kie, fal, Runware) need the rail to scroll, and their extra controls still need a home in the chip row.</p></div>
+        <div class="analysis-block is-pick"><h4>Pick this if</h4><p>you like B's page but comparing models by price is part of how people use the studio.</p></div>
+      </div>
+    </section>
+    <section class="variant">
+      <div class="variant-head">
+        <div class="variant-letter">F</div>
+        <div class="variant-meta">
+          <h2>E, refined: one rail, newest first</h2>
+          <p class="variant-tradeoff">
+            <b>Optimizes for</b> the biggest newest result of any rail layout, with engine and model chosen in one place and each model's strengths in words <b>·  Tradeoff</b> older results shrink to a strip; engines fold into a menu instead of a visible row
+          </p>
+        </div>
+      </div>
+      <div class="preview-frame">
+        <div class="preview-frame-bar">Variant F · text to image · 1440 px desktop, scaled</div>
+        <div class="preview"><div class="sa-scroll"><div class="sa-screen"><div class="sa-top"><div class="sa-word">Scene<br>Assembly</div><div class="sa-tabs"><span class="on">Image</span><span>Video</span><span>Timeline</span></div><div class="sa-keys">✓ API Keys</div></div>
+<div class="vf-grid">
+  <div class="sa-panel">
+    <div class="sa-eyebrow" style="margin-bottom:6px">Engine</div>
+    <div class="vf-engine"><span>✦ Google Gemini</span><small>9 engines · 2 free ⌄</small></div>
+    <div class="sa-eyebrow" style="margin:14px 0 2px">Model</div>
+    <div class="vf-models">
+      <div class="vf-m sel"><span class="sa-dot" style="border-color:#ffed4e;background:radial-gradient(circle,#ffed4e 0 3px,transparent 3.5px)"></span><div><b>Nano Banana 2.1</b><div class="vf-tags"><span class="vf-tag">4K</span><span class="vf-tag">Search</span><span class="vf-tag">Default</span></div></div><small>$0.034</small></div>
+      <div class="vf-m"><span class="sa-dot"></span><div><b>Gemini 3 Pro Image</b><div class="vf-tags"><span class="vf-tag">4K</span><span class="vf-tag">Search</span><span class="vf-tag">Text in images</span></div></div><small>$0.134</small></div>
+      <div class="vf-m"><span class="sa-dot"></span><div><b>Gemini 3.1 Flash Lite Image</b><div class="vf-tags"><span class="vf-tag">1K only</span><span class="vf-tag">Fastest</span></div></div><small>$0.034</small></div>
+      <div class="vf-m"><span class="sa-dot"></span><div><b>Nano Banana 2</b><div class="vf-tags"><span class="vf-tag warn">Retired · use 2.1</span></div></div><small>$0.067</small></div>
+    </div>
+    <div class="vf-collapse">« Collapse rail</div>
+  </div>
+  <div>
+    <div class="vb-bar"><div class="sa-prompt" style="min-height:58px">A cozy reading nook by a rainy window, warm lamp light, 35mm photo</div><div class="sa-gen">✦ Generate · $0.034<span style="font-weight:400;font-size:11px;opacity:.75">runs in the background</span></div></div>
+    <div class="vb-chips"><span class="vb-chip">Shape · <b>1:1</b> · 1024 × 1024 ⌄</span><span class="vb-chip">Size · <b>1K</b> ⌄</span><span class="vb-chip">Text to Image</span></div>
+    <div class="vf-hero">
+      <div class="sa-img sa-snow" data-w="newest ≈ 650 px"></div>
+      <div class="vf-side">
+        <div class="sa-eyebrow">Newest · just now</div>
+        <span class="sa-btn">⤓ Download image</span><span class="sa-btn">✦ Edit this image</span><span class="sa-btn">▶ Use as first frame</span>
+        <div class="sa-meta" style="line-height:1.7;margin-top:10px">Nano Banana 2.1<br>1024 × 1024 · took 15s<br>$0.034</div>
+      </div>
+    </div>
+    <div class="vf-hist"><div class="sa-img sa-nook"></div><div class="sa-img sa-light"></div><div class="sa-img sa-nook"></div><div class="sa-img sa-snow"></div></div>
+  </div>
+</div></div></div></div>
+      </div>
+      <div class="variant-analysis">
+        <div class="analysis-block"><h4>What works</h4><p>Moving the engine into the rail frees the full-width engine row, so the newest result reaches about 650 px with its actions beside it, and earlier runs sit one row below. Each model row gives price plus capability tags from catalog data (4K, Search, 1K only), and a retired model points at its successor.</p></div>
+        <div class="analysis-block is-risk"><h4>What risks</h4><p>Engines are a menu now, so "two free engines" is a label rather than visible pills, which cuts into the first-run free path from H1. Comparing two results at full size means clicking between them. On a 900 px-tall screen the history strip starts below the fold; capping the newest result at about 55vh keeps it in view.</p></div>
+        <div class="analysis-block is-pick"><h4>Pick this if</h4><p>you want E's clarity about models with C's focus on the newest result.</p></div>
+      </div>
+    </section>
+    <section class="variant">
+      <div class="variant-head">
+        <div class="variant-letter">G</div>
+        <div class="variant-meta">
+          <h2>F's rail, E's 2-up results</h2>
+          <p class="variant-tradeoff">
+            <b>Optimizes for</b> side-by-side comparison at a generous size, with engine, model, price and strengths in one rail <b>·  Tradeoff</b> no single result is bigger than the rest; engines fold into a menu
+          </p>
+        </div>
+      </div>
+      <div class="preview-frame">
+        <div class="preview-frame-bar">Variant G · text to image · 1440 px desktop, scaled</div>
+        <div class="preview"><div class="sa-scroll"><div class="sa-screen"><div class="sa-top"><div class="sa-word">Scene<br>Assembly</div><div class="sa-tabs"><span class="on">Image</span><span>Video</span><span>Timeline</span></div><div class="sa-keys">✓ API Keys</div></div>
+<div class="vf-grid">
+  <div class="sa-panel">
+    <div class="sa-eyebrow" style="margin-bottom:6px">Engine</div>
+    <div class="vf-engine"><span>✦ Google Gemini</span><small>9 engines · 2 free ⌄</small></div>
+    <div class="sa-eyebrow" style="margin:14px 0 2px">Model</div>
+    <div class="vf-models">
+      <div class="vf-m sel"><span class="sa-dot" style="border-color:#ffed4e;background:radial-gradient(circle,#ffed4e 0 3px,transparent 3.5px)"></span><div><b>Nano Banana 2.1</b><div class="vf-tags"><span class="vf-tag">4K</span><span class="vf-tag">Search</span><span class="vf-tag">Default</span></div></div><small>$0.034</small></div>
+      <div class="vf-m"><span class="sa-dot"></span><div><b>Gemini 3 Pro Image</b><div class="vf-tags"><span class="vf-tag">4K</span><span class="vf-tag">Search</span><span class="vf-tag">Text in images</span></div></div><small>$0.134</small></div>
+      <div class="vf-m"><span class="sa-dot"></span><div><b>Gemini 3.1 Flash Lite Image</b><div class="vf-tags"><span class="vf-tag">1K only</span><span class="vf-tag">Fastest</span></div></div><small>$0.034</small></div>
+      <div class="vf-m"><span class="sa-dot"></span><div><b>Nano Banana 2</b><div class="vf-tags"><span class="vf-tag warn">Retired · use 2.1</span></div></div><small>$0.067</small></div>
+    </div>
+    <div class="vf-collapse">« Collapse rail</div>
+  </div>
+  <div>
+    <div class="vb-bar"><div class="sa-prompt" style="min-height:58px">A cozy reading nook by a rainy window, warm lamp light, 35mm photo</div><div class="sa-gen">✦ Generate · $0.034<span style="font-weight:400;font-size:11px;opacity:.75">runs in the background</span></div></div>
+    <div class="vb-chips"><span class="vb-chip">Shape · <b>1:1</b> · 1024 × 1024 ⌄</span><span class="vb-chip">Size · <b>1K</b> ⌄</span><span class="vb-chip">Text to Image</span></div>
+    <div class="vg-grid2">
+      <div class="sa-panel"><span class="vg-new">Newest · just now</span><div class="sa-img sa-snow" data-w="≈ 420 px"></div><div class="vb-row"><span class="sa-btn">⤓ Download</span><span class="sa-btn">✦ Edit this image</span><span class="sa-btn">▶ First frame</span></div><div class="sa-meta" style="margin-top:6px">Nano Banana 2.1 · 1024×1024 · 15s · $0.034</div></div>
+      <div class="sa-panel"><span class="vg-old">Earlier</span><div class="sa-img sa-nook" data-w="≈ 420 px"></div><div class="vb-row"><span class="sa-btn">⤓ Download</span><span class="sa-btn">✦ Edit this image</span><span class="sa-btn">▶ First frame</span></div><div class="sa-meta" style="margin-top:6px">Nano Banana 2.1 · 1024×1024 · 20s · $0.034</div></div>
+      <div class="sa-panel"><span class="vg-old">Earlier</span><div class="sa-img sa-light" data-w="≈ 420 px"></div><div class="vb-row"><span class="sa-btn">⤓ Download</span><span class="sa-btn">✦ Edit this image</span><span class="sa-btn">▶ First frame</span></div><div class="sa-meta" style="margin-top:6px">Pollinations · 768×768 · 6s · free</div></div>
+      <div class="sa-panel"><span class="vg-old">Earlier</span><div class="sa-img sa-light" data-w="≈ 420 px"></div><div class="vb-row"><span class="sa-btn">⤓ Download</span><span class="sa-btn">✦ Edit this image</span><span class="sa-btn">▶ First frame</span></div><div class="sa-meta" style="margin-top:6px">Pollinations · 768×768 · free</div></div>
+    </div>
+  </div>
+</div></div></div></div>
+      </div>
+      <div class="variant-analysis">
+        <div class="analysis-block"><h4>What works</h4><p>Results stay 2-up and equal at about 420 px, as in E, so this run and the last one compare at a glance. Engine and model become one decision in one place (the space saved is small, about 22 px). Each model row gives price plus capability tags, and the Shape chip names the pixels you'll get.</p></div>
+        <div class="analysis-block is-risk"><h4>What risks</h4><p>The newest result is only marked by its label, not its size. Engines become a menu, so "2 free" is text rather than visible pills on a first visit. "Text in images" and "Fastest" need a short strengths field per model.</p></div>
+        <div class="analysis-block is-pick"><h4>Pick this if</h4><p>you want E's comparison grid with F's tidier, more informative rail.</p></div>
+      </div>
+    </section>
+    <section class="decision">
+      <h3>Which to take forward</h3>
+      <p class="decision-sub">Today the result renders 265–344 px wide on a 1440 px screen while setup takes half the width.</p>
+      <div class="decision-grid">
+        <div class="decision-cell"><b>Fastest fix →</b><span>A. A grid ratio and a below-image action row.</span></div>
+        <div class="decision-cell"><b>Most room for work →</b><span>B. Settings fold into chips, results go 3-up.</span></div>
+        <div class="decision-cell"><b>Focus on one image →</b><span>C. A stage, with history in a filmstrip.</span></div>
+        <div class="decision-cell"><b>Iteration →</b><span>D. Newest beside previous, with the prompt diff.</span></div>
+        <div class="decision-cell"><b>Results first, models in view →</b><span>E. B's page with the model list as a desktop rail.</span></div>
+        <div class="decision-cell"><b>Models in view, newest biggest →</b><span>F. One rail for engine and model, newest result featured.</span></div>
+        <div class="decision-cell"><b>Models in view, results compared →</b><span>G. F's rail with E's 2-up results.</span></div>
+      </div>
+    </section>
+
+  </main>
+</body>
+</html>

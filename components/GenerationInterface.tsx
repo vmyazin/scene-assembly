@@ -3,17 +3,19 @@
 
 import { useState, useRef, useEffect, useId, useMemo } from 'react';
 import { useCloudWorkspace } from '@/lib/account/useCloudWorkspace';
-import { SINGLE_IMAGE_MODELS } from '@/lib/account/models';
+import { SINGLE_IMAGE_MODELS, SINGLE_IMAGE_MODEL_LABELS } from '@/lib/account/models';
 import { featureImagePrompt } from '@/lib/image/feature-prompt';
 import CloudJobPanel from '@/components/account/CloudJobPanel';
-import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
+import ImageWorkspaceLayout, { ImageMainStack } from '@/components/ImageWorkspaceLayout';
+import ChipPopover from '@/components/ChipPopover';
+import { EngineField, ImageRailCard, ImageRailStrip } from '@/components/ImageRail';
 import { motion } from 'framer-motion';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Feature, GenerationConfig } from '@/types';
 import { metaForFeature, slugify } from '@/lib/example-prompts';
 import { falPublishedCost, geminiResolutionCost } from '@/lib/spend/rates';
-import { geminiImageSize, geminiModelsForFeature, resolveGeminiImageModel } from '@/lib/engines/gemini-catalog';
+import { DEFAULT_GEMINI_IMAGE_MODEL, geminiImageSize, geminiModelsForFeature, resolveGeminiImageModel } from '@/lib/engines/gemini-catalog';
 import { requestExamplePrompt, requestPromptSlug } from '@/lib/micro-ai/browser';
 import { extensionForMimeType } from '@/lib/media-download';
 import { downloadImageResult, IMAGE_DOWNLOAD_ERROR } from '@/lib/results/download-image';
@@ -24,25 +26,24 @@ import { FAL_IMAGE_MODEL, FAL_IMAGE_MODELS } from '@/lib/fal/catalog';
 import type { EngineUsage } from '@/lib/engines/gemini';
 import { captureImageResult } from '@/lib/spend/capture';
 import { downloadFilenameBase } from '@/lib/download-name';
-import ProviderLogo from '@/components/ProviderLogo';
 import ConnectionGate from '@/components/ConnectionGate';
 import ReplaceDeprecatedModel from '@/components/ReplaceDeprecatedModel';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import PromptPanel from '@/components/PromptPanel';
 import SavedPromptsButton from '@/components/SavedPromptsButton';
 import { useAppStore } from '@/store/useAppStore';
-import { modelsFor, resolveModel } from '@/lib/providers/catalog';
+import { DEFAULT_MODELS, modelsFor, resolveModel } from '@/lib/providers/catalog';
 import ModelListbox from '@/components/ModelListbox';
-import { GEMINI_IMAGE_COLUMNS, PROVIDER_IMAGE_COLUMNS, falImageSpecs, geminiImageSpecs, providerImageSpecs } from '@/lib/models/listbox-specs';
+import { GEMINI_IMAGE_COLUMNS, PROVIDER_IMAGE_COLUMNS, falImageSpecs, geminiImageSpecs, providerImageSpecs, railTags } from '@/lib/models/listbox-specs';
 import type { ProviderId } from '@/lib/providers/types';
 import { useDraftStore } from '@/store/useDraftStore';
 import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
 import { useGalleryStore } from '@/store/useGalleryStore';
 import { resultBlob } from '@/lib/gallery/capture';
 import { candidatesFromValues, useAutoAspect } from '@/lib/draft/aspect-match';
-import { APPROXIMATE_LEGEND, imageDimensions, isApproximateLabel, withDimensions, pollinationsFreeDimensions } from '@/lib/providers/output-size';
+import { APPROXIMATE_LEGEND, formatDimensions, imageDimensions, isApproximateLabel, withDimensions, pollinationsFreeDimensions } from '@/lib/providers/output-size';
 import { isValueCompatible, type CarryOverField } from '@/lib/draft/carry-over';
-import { enginesForFeature, type EngineId, type EngineMeta } from '@/lib/engines/registry';
+import { enginesForFeature, type EngineId } from '@/lib/engines/registry';
 import KieGenerationWorkspace from '@/components/KieGenerationWorkspace';
 import SegmentedToggleGroup from '@/components/SegmentedToggleGroup';
 import StoredImagePicker from '@/components/StoredImagePicker';
@@ -55,7 +56,6 @@ import { useRelaxedFilter } from '@/lib/moderation/use-relaxed-filter';
 import { playGenerationChime } from '@/lib/notify/chime';
 import ResultStack, { type ResultStackItem } from '@/components/ResultStack';
 import GenerateActions from '@/components/GenerateActions';
-import { WorkspaceCard } from '@/components/WorkspaceCard';
 import { removeReferenceAt, usePromptScope } from '@/hooks/useWorkspaceLifecycle';
 import { AUTO_RETRY_DELAY_SECONDS, isRetryableFailure, useAutoRetry } from '@/lib/providers/auto-retry';
 import { RouteError, routeStatus } from '@/lib/providers/route-error';
@@ -185,52 +185,6 @@ function isAbortError(error: unknown) {
   return error instanceof DOMException && error.name === 'AbortError';
 }
 
-interface EngineSelectorProps {
-  engines: EngineMeta[];
-  accountMode?: boolean;
-  activeEngineId: EngineId;
-  onSelect: (engineId: EngineId) => void;
-}
-
-function EngineSelector({ engines, activeEngineId, onSelect, accountMode = false }: EngineSelectorProps) {
-  if (engines.length <= 1) return null;
-
-  return (
-    <section
-      aria-label="Generation engine"
-      className="glass-card px-3.5 py-2.5 sm:px-4"
-    >
-      <div className="flex flex-wrap items-center gap-2 pt-1">
-        <span className="eyebrow mr-0.5">Engine</span>
-        {engines.map((engine) => {
-          const active = engine.id === activeEngineId;
-          return (
-            <button
-              key={engine.id}
-              type="button"
-              onClick={() => onSelect(engine.id)}
-              title={accountMode && engine.id === 'pollinations' ? 'Background generation uses your saved Pollinations key and provider balance.' : engine.blurb}
-              className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
-                active
-                  ? 'border-[var(--neon-cyan)] text-[var(--neon-cyan)] bg-[var(--neon-cyan)]/10'
-                  : 'border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-hover)] hover:text-[var(--foreground)]'
-              }`}
-            >
-              <ProviderLogo provider={engine.id} size={13} />
-              {engine.label}
-              {engine.free && !(accountMode && engine.id === 'pollinations') && (
-                <span className="text-[0.62rem] uppercase tracking-wide text-emerald-400">
-                  Free
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
 export default function GenerationInterface({ feature, apiKey, onBack, onOpenConnections, onUseAsFirstFrame, onEditImage }: GenerationInterfaceProps) {
   // Only a mode with no reference slot hands results on to editing; a mode
   // that takes references keeps "Use as reference", whose tray is on screen.
@@ -288,6 +242,8 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
   const setGeminiImageModel = useAppStore((s) => s.setGeminiImageModel);
   const falImageModel = useAppStore((s) => s.falImageModel);
   const setFalImageModel = useAppStore((s) => s.setFalImageModel);
+  const railCollapsed = useAppStore((s) => s.imageRailCollapsed);
+  const setRailCollapsed = useAppStore((s) => s.setImageRailCollapsed);
   const hasCfCreds = !!cfAccountId && !!cfToken;
   const availableEngines = enginesForFeature(feature);
   const activeEngine =
@@ -772,12 +728,6 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
           : activeProvider ? !providerKeys[activeProvider].trim()
             : false;
   const needsKey = !cloudWorkspace.checking && (cloudWorkspace.cloud ? !cloudWorkspace.connected : localKeyMissing);
-  // The keyless way forward, offered only where it really is keyless: in the
-  // browser. A background Pollinations job still needs a saved connection.
-  const freeEngine =
-    !cloudWorkspace.cloud && activeEngineId !== 'pollinations'
-      ? availableEngines.find((engine) => engine.id === 'pollinations')
-      : undefined;
 
   // A retired model's successor, offered while the retired one is selected.
   const geminiSuccessor = activeGeminiModel.replacedBy
@@ -793,6 +743,32 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
   // Feeds the format control's "Auto → …" hint, so it names the real outcome
   // for these bytes rather than assuming a PNG source.
   const generatedMimeType = newestResult?.mimeType ?? 'image/png';
+
+  // What the rail says under the model list, and what its folded strip names.
+  const modelNote = isGemini
+    ? activeGeminiModel.note
+    : activeEngineId === 'fal'
+      ? activeFalImageModel.description
+      : activeProviderCatalogModel
+        ? activeProviderCatalogModel.note ??
+          `Billed to your ${activeEngine.label} account at ${activeProviderCatalogModel.price && activeProviderCatalogModel.price !== 'metered' ? activeProviderCatalogModel.price : 'the vendor’s rates'}.`
+        : null;
+  const activeModelLabel = isGemini
+    ? activeGeminiModel.label
+    : activeEngineId === 'fal'
+      ? activeFalImageModel.label
+      : activeEngineId === 'cloudflare' || activeEngineId === 'pollinations'
+        ? SINGLE_IMAGE_MODEL_LABELS[activeEngineId]
+        : activeProviderCatalogModel?.label ?? activeEngine.label;
+  // The chip states the pixels too, where this app publishes the engine's table.
+  const shapeDimensions = optionDimensions(config.aspectRatio ?? DEFAULT_ASPECT_RATIO);
+  const shapeChipValue = shapeDimensions
+    ? `${config.aspectRatio} · ${formatDimensions(shapeDimensions)}`
+    : config.aspectRatio;
+  // The format applies to a browser download; a background job's results are
+  // saved by the Worker and have their own download path.
+  const showFormatControl = !cloudWorkspace.cloud && Boolean(newestResult);
+  const hasMoreSettings = relaxed.offered || (activeEngineId === 'fal' && Boolean(falThinkingField)) || showFormatControl;
   const rawDisplayError =
     error ||
     (!cloudWorkspace.cloud && generateMutation.error instanceof Error &&
@@ -1014,6 +990,16 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
     }
   };
 
+  // Shared with the Kie workspace, so picking Kie leaves the menu where it was.
+  const engineField = (
+    <EngineField
+      engines={availableEngines}
+      activeEngineId={activeEngineId}
+      accountMode={cloudWorkspace.cloud}
+      onSelect={handleEngineSelect}
+    />
+  );
+
   if (activeEngine.id === 'kie') {
     return (
       <KieGenerationWorkspace
@@ -1022,14 +1008,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
         title={feature.name}
         initialPrompt={feature.examplePrompt}
         exampleFeatureId={feature.id}
-        engineSelector={
-          <EngineSelector
-            engines={availableEngines}
-        accountMode={cloudWorkspace.cloud}
-            activeEngineId={activeEngine.id}
-            onSelect={handleEngineSelect}
-          />
-        }
+        engineField={engineField}
         onBack={handleBack}
         onOpenConnections={onOpenConnections}
         onUseAsFirstFrame={onUseAsFirstFrame}
@@ -1067,138 +1046,144 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
         </div>
       </motion.div>
 
-      <EngineSelector
-        engines={availableEngines}
-        accountMode={cloudWorkspace.cloud}
-        activeEngineId={activeEngine.id}
-        onSelect={handleEngineSelect}
-      />
+      {/* Engine and model in a narrow rail, the prompt over the results in
+          the main column (UX audit L1, variant G). The rail stays outside the
+          gate so a person without a key can still switch to an engine that
+          needs none, and compare models and prices before connecting one. */}
+      <ImageWorkspaceLayout
+        collapsed={railCollapsed}
+        rail={
+          <ImageRailCard engineField={engineField} onCollapse={() => setRailCollapsed(true)}>
+              {/* One Google AI Studio key runs every Nano Banana model, so Gemini
+                  gets the same rack every other paid engine has rather than a
+                  fixed model nobody chose. Nano Banana 2.1 is the default. */}
+              {isGemini && (
+                <ModelListbox
+                  label="Model"
+                  accent="image"
+                  layout="rail"
+                  columns={GEMINI_IMAGE_COLUMNS}
+                  rows={geminiModels.map((model) => {
+                    const cells = geminiImageSpecs(model);
+                    return {
+                      id: model.id,
+                      label: model.label,
+                      deprecated: model.deprecated,
+                      cells,
+                      tags: railTags({
+                        cells,
+                        columns: GEMINI_IMAGE_COLUMNS,
+                        isDefault: model.id === DEFAULT_GEMINI_IMAGE_MODEL,
+                        deprecated: model.deprecated,
+                        successorLabel: geminiModels.find((candidate) => candidate.id === model.replacedBy)?.label,
+                        currentLabel: model.label,
+                      }),
+                    };
+                  })}
+                  value={activeGeminiModel.id}
+                  onChange={handleGeminiModelSelect}
+                />
+              )}
 
-      {/* Setup on the left, Prompt directly over the result on the right:
-          the composition the video workspaces already use, so moving between
-          image and video never relocates the prompt. */}
-      {/* The engine row stays outside the gate so a person without a key can
-          still switch to one that needs none. */}
+              {activeEngineId === 'fal' && (
+                <ModelListbox
+                  label="Model"
+                  accent="image"
+                  layout="rail"
+                  columns={PROVIDER_IMAGE_COLUMNS}
+                  rows={FAL_IMAGE_MODELS.map((model) => {
+                    const cells = falImageSpecs(model);
+                    return {
+                      id: model.id,
+                      label: model.label,
+                      deprecated: model.deprecated,
+                      cells,
+                      tags: railTags({
+                        cells,
+                        columns: PROVIDER_IMAGE_COLUMNS,
+                        isDefault: model.id === FAL_IMAGE_MODEL.id,
+                        deprecated: model.deprecated,
+                        successorLabel: FAL_IMAGE_MODELS.find((candidate) => candidate.id === model.replacedBy)?.label,
+                        currentLabel: model.label,
+                      }),
+                    };
+                  })}
+                  value={activeFalImageModel.id}
+                  onChange={(id) => { clearSubmissionFeedback(); setFalImageModel(id); }}
+                />
+              )}
+
+              {activeProvider && (
+                <ModelListbox
+                  label="Model"
+                  accent="image"
+                  layout="rail"
+                  columns={PROVIDER_IMAGE_COLUMNS}
+                  rows={modelsFor(activeProvider, 'image').map((model) => {
+                    const cells = providerImageSpecs(model);
+                    return {
+                      id: model.id,
+                      label: model.label,
+                      deprecated: model.deprecated,
+                      cells,
+                      tags: railTags({
+                        cells,
+                        columns: PROVIDER_IMAGE_COLUMNS,
+                        isDefault: model.id === DEFAULT_MODELS[activeProvider].image,
+                        deprecated: model.deprecated,
+                      }),
+                    };
+                  })}
+                  value={activeProviderModel ?? undefined}
+                  onChange={(id) => { clearSubmissionFeedback(); setProviderModel(activeProvider, 'image', id); }}
+                />
+              )}
+
+              {/* Cloudflare and Pollinations each serve one model here, so the
+                  rail names it instead of drawing a list of one. */}
+              {(activeEngineId === 'cloudflare' || activeEngineId === 'pollinations') && (
+                <p className="rounded-lg border border-[var(--border)] px-3 py-2.5 text-sm">
+                  <span className="font-medium text-[var(--foreground)]">{SINGLE_IMAGE_MODEL_LABELS[activeEngineId]}</span>
+                  <span className="block text-xs text-[var(--foreground-subtle)]">The one model {activeEngine.label} runs here.</span>
+                </p>
+              )}
+
+              {modelNote && (
+                <p className="px-0.5 text-xs leading-relaxed text-[var(--foreground-muted)]">{modelNote}</p>
+              )}
+              {geminiSuccessor && isGemini && (
+                <ReplaceDeprecatedModel
+                  replacementLabel={geminiSuccessor.label}
+                  onSwitch={() => handleGeminiModelSelect(geminiSuccessor.id)}
+                />
+              )}
+              {falSuccessor && activeEngineId === 'fal' && (
+                <ReplaceDeprecatedModel
+                  replacementLabel={falSuccessor.label}
+                  onSwitch={() => { clearSubmissionFeedback(); setFalImageModel(falSuccessor.id); }}
+                />
+              )}
+          </ImageRailCard>
+        }
+        collapsedRail={
+          <ImageRailStrip engineId={activeEngineId} modelLabel={activeModelLabel} onExpand={() => setRailCollapsed(false)} />
+        }
+      >
       <ConnectionGate
         provider={activeEngine.id}
         label={activeEngine.label}
         storage={cloudWorkspace.cloud ? 'account' : 'browser'}
         needsKey={needsKey}
         hasFinishedWork={results.length > 0 || (cloudWorkspace.cloud && cloudWorkspace.hasJobs)}
+        // No "use the free engine instead" button: the rail's engine menu,
+        // outside the gate, lists the free engines with their Free tag.
         onConnect={() => onOpenConnections(activeEngine.id)}
-        alternative={freeEngine && (
-          <button
-            type="button"
-            onClick={() => handleEngineSelect(freeEngine.id)}
-            className="btn-secondary mt-1"
-          >
-            <ProviderLogo provider={freeEngine.id} size={14} />
-            Use {freeEngine.label} instead · free, no key
-          </button>
-        )}
       >
-      <GenerationWorkspaceLayout
-        setup={
-          <>
-            {/* One Google AI Studio key runs every Nano Banana model, so Gemini
-                gets the same rack every other paid engine has rather than a
-                fixed model nobody chose. Nano Banana 2.1 is the default. */}
-            {isGemini && (
-              <WorkspaceCard title="Model">
-                <div className="space-y-2">
-                  <ModelListbox
-                    label="Model"
-                    accent="image"
-                    columns={GEMINI_IMAGE_COLUMNS}
-                    rows={geminiModels.map((model) => ({
-                      id: model.id,
-                      label: model.label,
-                      deprecated: model.deprecated,
-                      cells: geminiImageSpecs(model),
-                    }))}
-                    value={activeGeminiModel.id}
-                    onChange={handleGeminiModelSelect}
-                  />
-                  <p className="px-0.5 text-sm leading-relaxed text-[var(--foreground-muted)]">
-                    <span className="font-medium text-[var(--foreground)]">{activeGeminiModel.label}:</span>{' '}
-                    {activeGeminiModel.note}
-                  </p>
-                  {geminiSuccessor && (
-                    <ReplaceDeprecatedModel
-                      replacementLabel={geminiSuccessor.label}
-                      onSwitch={() => handleGeminiModelSelect(geminiSuccessor.id)}
-                    />
-                  )}
-                </div>
-              </WorkspaceCard>
-            )}
-
-            {activeEngineId === 'fal' && (
-              <WorkspaceCard title="Model">
-                <div className="space-y-2">
-                  <ModelListbox
-                    label="Model"
-                    accent="image"
-                    columns={PROVIDER_IMAGE_COLUMNS}
-                    rows={FAL_IMAGE_MODELS.map((model) => ({
-                      id: model.id,
-                      label: model.label,
-                      deprecated: model.deprecated,
-                      cells: falImageSpecs(model),
-                    }))}
-                    value={activeFalImageModel.id}
-                    onChange={(id) => { clearSubmissionFeedback(); setFalImageModel(id); }}
-                  />
-                  <p className="px-0.5 text-sm leading-relaxed text-[var(--foreground-muted)]">
-                    <span className="font-medium text-[var(--foreground)]">{activeFalImageModel.label}:</span>{' '}
-                    {activeFalImageModel.description}
-                  </p>
-                  {falSuccessor && (
-                    <ReplaceDeprecatedModel
-                      replacementLabel={falSuccessor.label}
-                      onSwitch={() => { clearSubmissionFeedback(); setFalImageModel(falSuccessor.id); }}
-                    />
-                  )}
-                </div>
-              </WorkspaceCard>
-            )}
-
-            {/* Same shape as the Model card in the Kie and fal workspaces: the rack
-                of what this provider serves, with the vendor's own description of the
-                chosen one underneath. */}
-            {activeProvider && (
-              <WorkspaceCard title="Model">
-                <div className="space-y-2">
-                  <ModelListbox
-                    label="Model"
-                    accent="image"
-                    columns={PROVIDER_IMAGE_COLUMNS}
-                    rows={modelsFor(activeProvider, 'image').map((model) => ({
-                      id: model.id,
-                      label: model.label,
-                      deprecated: model.deprecated,
-                      cells: providerImageSpecs(model),
-                    }))}
-                    value={activeProviderModel ?? undefined}
-                    onChange={(id) => { clearSubmissionFeedback(); setProviderModel(activeProvider, 'image', id); }}
-                  />
-                  {activeProviderCatalogModel && (
-                    <p className="px-0.5 text-sm leading-relaxed text-[var(--foreground-muted)]">
-                      <span className="font-medium text-[var(--foreground)]">
-                        {activeProviderCatalogModel.label}:
-                      </span>{' '}
-                      {activeProviderCatalogModel.note ??
-                        `Billed to your ${activeEngine.label} account at ${activeProviderCatalogModel.price && activeProviderCatalogModel.price !== 'metered' ? activeProviderCatalogModel.price : 'the vendor’s rates'}.`}
-                    </p>
-                  )}
-                </div>
-              </WorkspaceCard>
-            )}
-
-            {/* Image Upload */}
-            {feature.requiresImage && (
+      <ImageMainStack
+        references={
+          feature.requiresImage && (
               <div className="glass-card p-3.5 md:p-4 space-y-3">
-                <h3 className="display text-base sm:text-lg font-semibold">
+                <h3 className="display text-base font-semibold">
                   Upload Image{feature.requiresMultipleImages ? 's' : ''}
                 </h3>
 
@@ -1248,114 +1233,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                   />
                 )}
               </div>
-            )}
-
-            {/* Settings Panel — always visible */}
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="glass-card p-4 space-y-3"
-            >
-                  <h3 className="display text-lg font-semibold">
-                    Generation Settings
-                  </h3>
-
-                  <div className="space-y-3">
-                    <RelaxedFilterControl filter={relaxed} />
-
-                    {activeEngine.supportsAspectRatio && (
-                    <div>
-                      <label htmlFor="image-aspect-ratio" className="block text-sm font-medium mb-2 text-[var(--foreground)]">
-                        Aspect Ratio
-                      </label>
-                      <select
-                        id="image-aspect-ratio"
-                        aria-describedby={aspectRatioApproximates ? 'image-aspect-ratio-legend' : undefined}
-                        value={config.aspectRatio}
-                        onChange={(e) => applyConfig({ ...config, aspectRatio: e.target.value as NonNullable<GenerationConfig['aspectRatio']> })}
-                        className="w-full"
-                      >
-                        {aspectRatioOptions.map((option) => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                      {aspectRatioApproximates && (
-                        <span
-                          id="image-aspect-ratio-legend"
-                          className="mt-1.5 block text-xs text-[var(--foreground-subtle)]"
-                        >
-                          {APPROXIMATE_LEGEND}
-                        </span>
-                      )}
-                      {pollinationsFree && (
-                        <span className="mt-1.5 block text-xs text-[var(--foreground-subtle)]">
-                          The free tier returns about 0.6 MP (768 × 768 for a square) and adds a small pollinations.ai mark.
-                        </span>
-                      )}
-                    </div>
-                    )}
-
-                    {activeEngine.id === 'fal' && falThinkingField && (
-                    <div>
-                      <label htmlFor="fal-thinking-level" className="block text-sm font-medium mb-2 text-[var(--foreground)]">
-                        Thinking
-                      </label>
-                      <select
-                        id="fal-thinking-level"
-                        value={falThinkingLevel}
-                        onChange={(e) => applyConfig({
-                          ...config,
-                          thinkingLevel: e.target.value as NonNullable<GenerationConfig['thinkingLevel']>,
-                        })}
-                        className="w-full"
-                      >
-                        {falThinkingField.options?.map((option) => (
-                          <option key={String(option.value)} value={String(option.value)}>{option.label}</option>
-                        ))}
-                      </select>
-                      <span className="mt-1.5 block text-xs text-[var(--foreground-subtle)]">
-                        Medium is fal’s default. High uses more thinking tokens.
-                      </span>
-                    </div>
-                    )}
-
-                    {(activeEngine.supportsImageSize || providerImageSizes) && (
-                    <div className="space-y-2">
-                      <span className="block text-sm font-medium text-[var(--foreground)]">
-                        Resolution
-                      </span>
-                      <SegmentedToggleGroup
-                        label="Resolution"
-                        options={resolutionOptions}
-                        value={selectedImageSize}
-                        onChange={(value) => applyConfig({
-                          ...config,
-                          imageSize: value as NonNullable<GenerationConfig['imageSize']>,
-                        })}
-                      />
-                    </div>
-                    )}
-
-                    {feature.id === 'search-grounding' && (
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                        <div>
-                          <span className="text-sm font-medium">Use Google Search</span>
-                          <p className="text-xs text-[var(--foreground-muted)] mt-0.5">
-                            Ground generation with real-time data
-                          </p>
-                        </div>
-                        <input
-                          type="checkbox"
-                          checked={config.useGoogleSearch}
-                          onChange={(e) => applyConfig({ ...config, useGoogleSearch: e.target.checked })}
-                          className="w-5 h-5"
-                        />
-                      </div>
-                    )}
-                  </div>
-            </motion.div>
-
-          </>
+          )
         }
         prompt={
           <PromptPanel hasPrompt={prompt.trim().length > 0}>
@@ -1449,25 +1327,132 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
             />
           </>
         }
-        results={
-          cloudWorkspace.cloud ? <CloudJobPanel provider={activeEngine.id} mediaType="image" inputMode={cloudInputMode} onEditImage={editResult} /> : <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="glass-card p-4 space-y-3"
-          >
-            <h3 className="display text-lg font-semibold">
-              Generated Image
-            </h3>
-
-            {newestResult && (
-              <ImageFormatControl
-                value={imageFormat}
-                onChange={setImageFormat}
-                sourceMimeType={generatedMimeType}
-              />
+        chips={
+          <>
+            {activeEngine.supportsAspectRatio && (
+              <ChipPopover
+                label="Shape"
+                panelLabel="Aspect ratio"
+                value={shapeChipValue}
+                wide
+              >
+                <div>
+                  <label htmlFor="image-aspect-ratio" className="block text-sm font-medium mb-2 text-[var(--foreground)]">
+                    Aspect Ratio
+                  </label>
+                  <select
+                    id="image-aspect-ratio"
+                    aria-describedby={aspectRatioApproximates ? 'image-aspect-ratio-legend' : undefined}
+                    value={config.aspectRatio}
+                    onChange={(e) => applyConfig({ ...config, aspectRatio: e.target.value as NonNullable<GenerationConfig['aspectRatio']> })}
+                    className="w-full"
+                  >
+                    {aspectRatioOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                  {aspectRatioApproximates && (
+                    <span
+                      id="image-aspect-ratio-legend"
+                      className="mt-1.5 block text-xs text-[var(--foreground-subtle)]"
+                    >
+                      {APPROXIMATE_LEGEND}
+                    </span>
+                  )}
+                  {pollinationsFree && (
+                    <span className="mt-1.5 block text-xs text-[var(--foreground-subtle)]">
+                      The free tier returns about 0.6 MP (768 × 768 for a square) and adds a small pollinations.ai mark.
+                    </span>
+                  )}
+                </div>
+              </ChipPopover>
             )}
 
+            {(activeEngine.supportsImageSize || providerImageSizes) && (
+              <ChipPopover label="Size" panelLabel="Resolution" value={selectedImageSize}>
+                <div className="space-y-2">
+                  <span className="block text-sm font-medium text-[var(--foreground)]">
+                    Resolution
+                  </span>
+                  <SegmentedToggleGroup
+                    label="Resolution"
+                    options={resolutionOptions}
+                    value={selectedImageSize}
+                    onChange={(value) => applyConfig({
+                      ...config,
+                      imageSize: value as NonNullable<GenerationConfig['imageSize']>,
+                    })}
+                  />
+                </div>
+              </ChipPopover>
+            )}
+
+            {/* A switch rather than a menu: it is on or off, and the chip
+                saying which is the whole control. */}
+            {feature.id === 'search-grounding' && (
+              <label
+                className={`inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border px-2.5 text-xs transition-colors ${
+                  config.useGoogleSearch
+                    ? 'border-[var(--neon-cyan)]/55 text-[var(--neon-cyan)]'
+                    : 'border-[var(--border-hover)] text-[var(--foreground-muted)] hover:text-[var(--foreground)]'
+                }`}
+                title="Ground generation with real-time data"
+              >
+                <input
+                  type="checkbox"
+                  checked={config.useGoogleSearch}
+                  onChange={(e) => applyConfig({ ...config, useGoogleSearch: e.target.checked })}
+                  className="h-3.5 w-3.5"
+                />
+                Use Google Search
+              </label>
+            )}
+
+            {hasMoreSettings && (
+              <ChipPopover label="More settings" wide>
+                <RelaxedFilterControl filter={relaxed} />
+
+                {activeEngine.id === 'fal' && falThinkingField && (
+                <div>
+                  <label htmlFor="fal-thinking-level" className="block text-sm font-medium mb-2 text-[var(--foreground)]">
+                    Thinking
+                  </label>
+                  <select
+                    id="fal-thinking-level"
+                    value={falThinkingLevel}
+                    onChange={(e) => applyConfig({
+                      ...config,
+                      thinkingLevel: e.target.value as NonNullable<GenerationConfig['thinkingLevel']>,
+                    })}
+                    className="w-full"
+                  >
+                    {falThinkingField.options?.map((option) => (
+                      <option key={String(option.value)} value={String(option.value)}>{option.label}</option>
+                    ))}
+                  </select>
+                  <span className="mt-1.5 block text-xs text-[var(--foreground-subtle)]">
+                    Medium is fal’s default. High uses more thinking tokens.
+                  </span>
+                </div>
+                )}
+
+                {showFormatControl && (
+                  <ImageFormatControl
+                    value={imageFormat}
+                    onChange={setImageFormat}
+                    sourceMimeType={generatedMimeType}
+                  />
+                )}
+              </ChipPopover>
+            )}
+          </>
+        }
+        results={
+          cloudWorkspace.cloud ? (
+            <CloudJobPanel provider={activeEngine.id} mediaType="image" inputMode={cloudInputMode} onEditImage={editResult} resultLayout="grid" />
+          ) : (
             <ResultStack
+              layout="grid"
               items={results}
               isGenerating={isGenerating}
               onDownload={(item) => downloadImage(item)}
@@ -1476,7 +1461,6 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
               filenameBase={(item) => item.slug || (item.prompt === prompt && filenameSlug) || 'generated-image'}
               onUseAsFirstFrame={onUseAsFirstFrame}
               onEditImage={editResult}
-
               emptyState={
                 <div className="p-5 text-center text-[var(--foreground-muted)]">
                   <Wand2 size={48} className="mx-auto mb-4 opacity-30" />
@@ -1484,10 +1468,11 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                 </div>
               }
             />
-          </motion.div>
+          )
         }
       />
       </ConnectionGate>
+      </ImageWorkspaceLayout>
     </div>
   );
 }

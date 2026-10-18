@@ -394,3 +394,56 @@ export function kieImageSpecs(model: KieModelDefinition, inputMode: KieInputMode
   const editRoute = model.variants.find((variant) => variant.inputMode === 'image');
   return [tier, shapes, editRoute?.maxInputImages === undefined ? DASH : text(String(editRoute.maxInputImages))];
 }
+
+/**
+ * The image rail's tags for one model, read only from its spec cells and
+ * catalog flags — never from prose — so a tag is a fact the catalog states.
+ * "Text in images" or "Fastest" live only in a model's note, so they are not
+ * tags (the G manifest records that cut).
+ */
+export function railTags({
+  cells,
+  columns,
+  isDefault = false,
+  deprecated = false,
+  successorLabel,
+  currentLabel,
+}: {
+  cells: SpecCell[];
+  columns: SpecColumn[];
+  isDefault?: boolean;
+  deprecated?: boolean;
+  /** The model that replaces a retired one, named as the rail names it. */
+  successorLabel?: string;
+  /** This model's own label, so "Nano Banana 2 → Nano Banana 2.1" reads "use 2.1". */
+  currentLabel?: string;
+}): { label: string; tone?: 'warn' }[] {
+  const tags: { label: string; tone?: 'warn' }[] = [];
+  const cellFor = (key: string) => {
+    const index = columns.findIndex((column) => column.key === key);
+    return index === -1 ? undefined : cells[index];
+  };
+  if (deprecated) {
+    tags.push({ label: successorLabel ? `Retired · use ${shortSuccessor(currentLabel, successorLabel)}` : 'Retired', tone: 'warn' });
+    return tags;
+  }
+  const tier = cellFor('tier');
+  if (tier?.kind === 'text' && tier.tone !== 'subtle' && tier.value !== '—') {
+    // A ceiling of 1K is the floor too: there is no other size to pick.
+    tags.push({ label: tier.value === '1K' ? '1K only' : tier.value });
+  }
+  const search = cellFor('search');
+  if (search?.kind === 'mark' && search.on) tags.push({ label: 'Search' });
+  if (isDefault) tags.push({ label: 'Default' });
+  return tags;
+}
+
+/** "Nano Banana 2" replaced by "Nano Banana 2.1" → "2.1": drop the shared leading words. */
+function shortSuccessor(current: string | undefined, successor: string): string {
+  if (!current) return successor;
+  const a = current.split(' ');
+  const b = successor.split(' ');
+  let shared = 0;
+  while (shared < a.length && shared < b.length - 1 && a[shared] === b[shared]) shared += 1;
+  return b.slice(shared).join(' ');
+}

@@ -93,3 +93,71 @@ describe('ModelListbox', () => {
     expect(parseInt(glyphs[1].style.width)).toBeLessThan(parseInt(glyphs[1].style.height));
   });
 });
+
+describe('ModelListbox rail layout', () => {
+  const railColumns: SpecColumn[] = [
+    { key: 'from', label: 'From', align: 'right' },
+    { key: 'tier', label: 'Max' },
+    { key: 'search', label: 'Search' },
+  ];
+  const railRows: ModelListboxRow[] = [
+    {
+      id: 'nb21',
+      label: 'Nano Banana 2.1',
+      cells: [{ kind: 'text', value: '$0.034/image' }, { kind: 'text', value: '4K' }, { kind: 'mark', on: true, label: 'Search' }],
+      tags: [{ label: '4K' }, { label: 'Default' }],
+    },
+    {
+      id: 'nb2',
+      label: 'Nano Banana 2',
+      deprecated: true,
+      cells: [{ kind: 'text', value: '$0.067' }, { kind: 'text', value: '4K' }, { kind: 'mark', on: false, label: 'Search' }],
+      tags: [{ label: 'Retired · use 2.1', tone: 'warn' }],
+    },
+  ];
+
+  it('keeps the price column alone and draws the tags under the name', () => {
+    render(<ModelListbox label="Model" accent="image" layout="rail" columns={railColumns} rows={railRows} value="nb21" onChange={() => undefined} />);
+
+    const rows = screen.getAllByRole('option');
+    expect(rows[0].querySelectorAll('.model-listbox-cell')).toHaveLength(1);
+    // Everything in the image workspace is per image; the rail drops the unit.
+    expect(rows[0].querySelector('.model-listbox-cell')?.textContent).toContain('$0.034');
+    expect(rows[0].textContent).not.toContain('/image');
+    expect(rows[0].textContent).toContain('Default');
+    // The retired row says where to go instead of a bare "deprecated" badge.
+    expect(rows[1].textContent).toContain('Retired · use 2.1');
+    expect(rows[1].textContent).not.toContain('deprecated');
+    expect(rows[1].querySelector('.model-listbox-tag')).toHaveAttribute('data-tone', 'warn');
+  });
+
+  it('keeps the tags out of the option’s name, so history labels stay stable', () => {
+    render(<ModelListbox label="Model" accent="image" layout="rail" columns={railColumns} rows={railRows} value="nb21" onChange={() => undefined} />);
+
+    expect(screen.getByRole('option', { name: 'Nano Banana 2.1' })).toBeTruthy();
+  });
+
+  it('draws no tags in the table layout', () => {
+    render(<ModelListbox label="Model" accent="image" columns={railColumns} rows={railRows} value="nb21" onChange={() => undefined} />);
+
+    expect(document.querySelector('.model-listbox-tag')).toBeNull();
+  });
+});
+
+describe('ModelListbox with no spec column left', () => {
+  it('keeps a valid two-column template, so the dot stays beside the name', () => {
+    render(
+      <ModelListbox
+        label="Model"
+        accent="image"
+        layout="rail"
+        columns={[{ key: 'tier', label: 'Up to' }]}
+        rows={[{ id: 'a', label: 'Nano Banana Pro', cells: [{ kind: 'text', value: '4K' }] }]}
+        value="a"
+        onChange={() => undefined}
+      />
+    );
+
+    expect(screen.getByRole('listbox').style.gridTemplateColumns).toBe('18px minmax(0, 1fr)');
+  });
+});

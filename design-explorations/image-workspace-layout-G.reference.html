@@ -1,0 +1,149 @@
+<!--
+  Reference: image workspace layout, variant G (F's rail with E's 2-up results)
+  Source: design-explorations/image-workspace-layout.html, UX audit L1
+  Date: 2026-10-16
+-->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image workspace, variant G (reference)</title>
+<style>
+    :root {
+      --brand-50: #e4f2f2;
+      --brand-100: #bfe4e4;
+      --brand-300: #4e8e91;
+      --brand-500: #076c70;   /* signal cyan #00fff9, contrast-fixed for paper */
+      --brand-700: #05494d;
+      --accent-50: #f4e9fd;
+      --accent-500: #7b16aa;  /* motion violet #bd00ff */
+      --accent-700: #5b0f7d;
+      --marker: #ffed4e;      /* marker yellow, used flat on ink only */
+      --magenta: #bd0059;     /* output magenta #ff006e */
+      --ink: #081012;         /* workbench canvas */
+      --ink-soft: #33474a;
+      --ink-mute: #6d8386;
+      --line: #d6e6e6;
+      --line-soft: #e7f0f0;
+      --paper: #ffffff;
+      --bg: #f1f7f7;
+      --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --shadow-sm: 0 1px 2px rgba(8, 16, 18, 0.05), 0 1px 1px rgba(8, 16, 18, 0.03);
+      --shadow-md: 0 16px 40px -26px rgba(8, 16, 18, 0.45), 0 2px 6px rgba(8, 16, 18, 0.04);
+    }
+    body { margin: 0; background: #081012; }
+    .sa-scroll { overflow-x: auto; }
+        .sa-screen { width: 1280px; zoom: 0.86; background: #081012; color: #ecf5f5; font-family: var(--font-sans); padding: 18px 40px 28px; box-sizing: border-box; }
+    .sa-screen * { box-sizing: border-box; }
+    .sa-scroll { overflow-x: auto; background: #081012; }
+    .sa-top { display: flex; align-items: center; justify-content: space-between; padding: 4px 0 16px; border-bottom: 1px solid rgba(204,240,242,.075); margin-bottom: 16px; }
+    .sa-word { font-weight: 800; font-style: italic; letter-spacing: -.04em; line-height: .9; font-size: 15px; }
+    .sa-tabs { display: flex; gap: 2px; padding: 3px; border: 1px solid rgba(204,240,242,.075); border-radius: 11px; background: #0d1719; font-size: 13px; }
+    .sa-tabs span { padding: 5px 12px; border-radius: 8px; color: #8fa5a7; }
+    .sa-tabs .on { background: rgba(255,237,78,.15); color: #ffed4e; }
+    .sa-keys { font-size: 12px; padding: 7px 12px; border: 1px solid rgba(204,240,242,.17); border-radius: 9px; color: #ecf5f5; }
+    .sa-panel { background: rgba(204,240,242,.02); border: 1px solid rgba(204,240,242,.075); border-radius: 11px; padding: 14px; }
+    .sa-h { font-weight: 600; font-size: 15px; margin: 0 0 10px; letter-spacing: -.01em; }
+    .sa-eyebrow { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .2em; text-transform: uppercase; color: #7a8d8f; }
+    .sa-engines { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .sa-pill { font-size: 11.5px; padding: 5px 10px; border-radius: 999px; border: 1px solid rgba(204,240,242,.1); color: #c4d4d5; white-space: nowrap; }
+    .sa-pill.on { border-color: rgba(0,255,249,.6); color: #00fff9; background: rgba(0,255,249,.08); }
+    .sa-pill i { font-style: normal; color: #79e09a; font-size: 9px; letter-spacing: .08em; margin-left: 4px; }
+    .sa-models { border: 1px solid rgba(204,240,242,.075); border-radius: 9px; overflow: hidden; font-size: 12.5px; }
+    .sa-models div { display: grid; grid-template-columns: 16px 1fr auto auto; gap: 10px; padding: 7px 10px; align-items: center; border-top: 1px solid rgba(204,240,242,.05); }
+    .sa-models div:first-child { border-top: 0; }
+    .sa-models .sel { background: rgba(255,237,78,.07); }
+    .sa-models b { font-weight: 500; }
+    .sa-models small { font-family: var(--font-mono); font-size: 11px; color: #8fa5a7; }
+    .sa-dot { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid #7a8d8f; }
+    .sa-models .sel .sa-dot { border-color: #ffed4e; background: radial-gradient(circle, #ffed4e 0 3px, transparent 3.5px); }
+    .sa-badge { font-family: var(--font-mono); font-size: 8.5px; letter-spacing: .12em; color: #7a8d8f; border: 1px solid rgba(204,240,242,.12); border-radius: 4px; padding: 1px 4px; margin-left: 6px; }
+    .sa-note { font-size: 12px; color: #8fa5a7; line-height: 1.5; margin: 8px 2px 0; }
+    .sa-note b { color: #ecf5f5; font-weight: 500; }
+    .sa-label { font-size: 12px; color: #c4d4d5; margin: 10px 0 5px; }
+    .sa-select { font-size: 12.5px; border: 1px solid rgba(204,240,242,.14); border-radius: 8px; padding: 8px 10px; color: #ecf5f5; display: flex; justify-content: space-between; }
+    .sa-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .sa-seg span { text-align: center; font-size: 12.5px; padding: 8px 0; border: 1px solid rgba(204,240,242,.1); border-radius: 8px; color: #8fa5a7; }
+    .sa-seg .on { border-color: rgba(0,255,249,.55); color: #00fff9; background: rgba(0,255,249,.06); }
+    .sa-prompt { background: hsl(190 42% 8.8%); border: 1px solid rgba(204,240,242,.14); border-radius: 9px; padding: 11px 12px; font-size: 13.5px; color: #ecf5f5; min-height: 46px; }
+    .sa-gen { background: #00fff9; color: #04191a; font-weight: 600; font-size: 13.5px; text-align: center; padding: 10px; border-radius: 9px; }
+    .sa-cost { font-size: 11px; color: #7a8d8f; text-align: center; margin-top: 5px; }
+    .sa-btn { font-size: 12px; padding: 7px 11px; border: 1px solid rgba(204,240,242,.14); border-radius: 8px; color: #ecf5f5; white-space: nowrap; }
+    .sa-meta { font-family: var(--font-mono); font-size: 10.5px; color: #7a8d8f; }
+    .sa-img { border-radius: 9px; position: relative; overflow: hidden; aspect-ratio: 1; }
+    .sa-img::after { content: attr(data-w); position: absolute; right: 8px; bottom: 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; color: #04191a; background: #ffed4e; padding: 2px 6px; border-radius: 4px; }
+    .sa-nook { background:
+      radial-gradient(circle at 63% 47%, rgba(255,214,150,.95) 0 3%, rgba(255,190,110,.35) 9%, transparent 26%),
+      linear-gradient(90deg, transparent 0 40%, rgba(150,175,190,.75) 40% 47%, transparent 47% 49%, rgba(150,175,190,.75) 49% 56%, transparent 56%),
+      linear-gradient(180deg, transparent 0 18%, rgba(70,90,105,.9) 18% 52%, transparent 52%),
+      linear-gradient(160deg, #2b1c12 0%, #4a3020 55%, #2a1a10 100%); }
+    .sa-snow { background:
+      radial-gradient(circle at 63% 47%, rgba(255,214,150,.95) 0 3%, rgba(255,190,110,.35) 9%, transparent 26%),
+      radial-gradient(circle at 48% 28%, rgba(255,255,255,.35) 0 1px, transparent 1.6px) 0 0/22px 22px,
+      linear-gradient(90deg, transparent 0 40%, rgba(214,228,240,.85) 40% 47%, transparent 47% 49%, rgba(214,228,240,.85) 49% 56%, transparent 56%),
+      linear-gradient(180deg, transparent 0 18%, rgba(160,180,200,.9) 18% 52%, transparent 52%),
+      linear-gradient(160deg, #2b1c12 0%, #4a3020 55%, #2a1a10 100%); }
+    .sa-light { background:
+      radial-gradient(circle at 72% 60%, #ffb36b 0 4%, transparent 12%),
+      linear-gradient(90deg, transparent 0 47%, #c43b2e 47% 53%, transparent 53%) 0 0/100% 70% no-repeat,
+      linear-gradient(180deg, #4b4f8a 0%, #c06a7a 50%, #f0a070 64%, #33405c 66%, #182234 100%); }
+    .sa-note-w { display: inline-block; font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #ffed4e; border: 1px solid rgba(255,237,78,.35); border-radius: 4px; padding: 2px 6px; }
+    .vb-bar { display: grid; grid-template-columns: 1fr 190px; gap: 10px; align-items: stretch; }
+    .vb-bar .sa-gen { display: flex; flex-direction: column; justify-content: center; }
+    .vb-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+    .vb-chip { font-size: 12px; padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(204,240,242,.12); color: #c4d4d5; background: rgba(204,240,242,.02); }
+    .vb-chip b { color: #ecf5f5; font-weight: 500; }
+    .vb-chip.open { border-color: rgba(0,255,249,.55); color: #00fff9; }
+    .vb-pop { position: absolute; z-index: 3; top: 44px; left: 0; width: 520px; background: #0f1a1c; border: 1px solid rgba(204,240,242,.17); border-radius: 11px; padding: 14px; box-shadow: 0 18px 50px -20px rgba(0,0,0,.8); }
+    .vb-wrap { position: relative; }
+    .vb-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 16px; }
+    .vb-grid .sa-panel { padding: 10px; }
+    .vb-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .vf-grid { display: grid; grid-template-columns: 290px 1fr; gap: 16px; align-items: start; }
+    .vf-engine { display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 9px 11px; border: 1px solid rgba(0,255,249,.45); border-radius: 9px; color: #ecf5f5; background: rgba(0,255,249,.05); }
+    .vf-engine small { font-family: var(--font-mono); font-size: 10.5px; color: #8fa5a7; }
+    .vf-models { margin-top: 10px; display: grid; gap: 4px; }
+    .vf-m { display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; align-items: start; padding: 8px 9px; border-radius: 8px; border: 1px solid transparent; font-size: 12.5px; }
+    .vf-m.sel { background: rgba(255,237,78,.07); border-color: rgba(255,237,78,.25); }
+    .vf-m b { font-weight: 500; display: block; }
+    .vf-m small { font-family: var(--font-mono); font-size: 11px; color: #c4d4d5; }
+    .vf-tags { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+    .vf-tag { font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: #8fa5a7; border: 1px solid rgba(204,240,242,.12); border-radius: 4px; padding: 1px 5px; }
+    .vf-tag.warn { color: #ffed4e; border-color: rgba(255,237,78,.3); }
+    .vf-collapse { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #7a8d8f; margin-top: 12px; text-align: right; }
+    .vf-hero { display: grid; grid-template-columns: 1fr 230px; gap: 14px; margin-top: 14px; }
+    .vf-side > * + * { margin-top: 8px; }
+    .vf-side .sa-btn { display: block; text-align: center; }
+    .vf-hist { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
+    .vf-hist .sa-img::after { content: none; }
+    .vg-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+    .vg-grid2 .sa-panel { padding: 10px; }
+    .vg-new { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: #00fff9; margin-bottom: 6px; display: block; }
+    .vg-old { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: #7a8d8f; margin-bottom: 6px; display: block; }
+    .sa-screen { zoom: 1 !important; margin: 0 auto; }
+</style></head><body>
+<div class="sa-scroll"><div class="sa-screen"><div class="sa-top"><div class="sa-word">Scene<br>Assembly</div><div class="sa-tabs"><span class="on">Image</span><span>Video</span><span>Timeline</span></div><div class="sa-keys">✓ API Keys</div></div>
+<div class="vf-grid">
+  <div class="sa-panel">
+    <div class="sa-eyebrow" style="margin-bottom:6px">Engine</div>
+    <div class="vf-engine"><span>✦ Google Gemini</span><small>9 engines · 2 free ⌄</small></div>
+    <div class="sa-eyebrow" style="margin:14px 0 2px">Model</div>
+    <div class="vf-models">
+      <div class="vf-m sel"><span class="sa-dot" style="border-color:#ffed4e;background:radial-gradient(circle,#ffed4e 0 3px,transparent 3.5px)"></span><div><b>Nano Banana 2.1</b><div class="vf-tags"><span class="vf-tag">4K</span><span class="vf-tag">Search</span><span class="vf-tag">Default</span></div></div><small>$0.034</small></div>
+      <div class="vf-m"><span class="sa-dot"></span><div><b>Gemini 3 Pro Image</b><div class="vf-tags"><span class="vf-tag">4K</span><span class="vf-tag">Search</span><span class="vf-tag">Text in images</span></div></div><small>$0.134</small></div>
+      <div class="vf-m"><span class="sa-dot"></span><div><b>Gemini 3.1 Flash Lite Image</b><div class="vf-tags"><span class="vf-tag">1K only</span><span class="vf-tag">Fastest</span></div></div><small>$0.034</small></div>
+      <div class="vf-m"><span class="sa-dot"></span><div><b>Nano Banana 2</b><div class="vf-tags"><span class="vf-tag warn">Retired · use 2.1</span></div></div><small>$0.067</small></div>
+    </div>
+    <div class="vf-collapse">« Collapse rail</div>
+  </div>
+  <div>
+    <div class="vb-bar"><div class="sa-prompt" style="min-height:58px">A cozy reading nook by a rainy window, warm lamp light, 35mm photo</div><div class="sa-gen">✦ Generate · $0.034<span style="font-weight:400;font-size:11px;opacity:.75">runs in the background</span></div></div>
+    <div class="vb-chips"><span class="vb-chip">Shape · <b>1:1</b> · 1024 × 1024 ⌄</span><span class="vb-chip">Size · <b>1K</b> ⌄</span><span class="vb-chip">Text to Image</span></div>
+    <div class="vg-grid2">
+      <div class="sa-panel"><span class="vg-new">Newest · just now</span><div class="sa-img sa-snow" data-w="≈ 420 px"></div><div class="vb-row"><span class="sa-btn">⤓ Download</span><span class="sa-btn">✦ Edit this image</span><span class="sa-btn">▶ First frame</span></div><div class="sa-meta" style="margin-top:6px">Nano Banana 2.1 · 1024×1024 · 15s · $0.034</div></div>
+      <div class="sa-panel"><span class="vg-old">Earlier</span><div class="sa-img sa-nook" data-w="≈ 420 px"></div><div class="vb-row"><span class="sa-btn">⤓ Download</span><span class="sa-btn">✦ Edit this image</span><span class="sa-btn">▶ First frame</span></div><div class="sa-meta" style="margin-top:6px">Nano Banana 2.1 · 1024×1024 · 20s · $0.034</div></div>
+      <div class="sa-panel"><span class="vg-old">Earlier</span><div class="sa-img sa-light" data-w="≈ 420 px"></div><div class="vb-row"><span class="sa-btn">⤓ Download</span><span class="sa-btn">✦ Edit this image</span><span class="sa-btn">▶ First frame</span></div><div class="sa-meta" style="margin-top:6px">Pollinations · 768×768 · 6s · free</div></div>
+      <div class="sa-panel"><span class="vg-old">Earlier</span><div class="sa-img sa-light" data-w="≈ 420 px"></div><div class="vb-row"><span class="sa-btn">⤓ Download</span><span class="sa-btn">✦ Edit this image</span><span class="sa-btn">▶ First frame</span></div><div class="sa-meta" style="margin-top:6px">Pollinations · 768×768 · free</div></div>
+    </div>
+  </div>
+</div></div></div>
+</body></html>

@@ -84,6 +84,13 @@ interface ResultStackProps {
    * reference slot, which turns their reference action into "Edit this image".
    */
   onEditImage?: () => void;
+  /**
+   * `stack` (default): one result per row, actions beside it on a wide panel.
+   * `grid`: two equal columns once the panel is wide enough, each labelled
+   * Newest or Earlier with its actions underneath — the image workspace's
+   * layout, where this run and the last compare side by side (UX audit L1).
+   */
+  layout?: 'stack' | 'grid';
 }
 
 /** How many results are kept on screen; the rest stay in the library. */
@@ -105,6 +112,13 @@ const FRAME_CLASS =
  * lives in a workspace column that is narrow on a wide screen, and a `md:`
  * breakpoint would have split the card while the column was still too tight.
  */
+/** The grid's card, frame and pending slot: one result per cell, image on top. */
+const GRID_CARD_CLASS =
+  'flex flex-col gap-2 rounded-(--radius) border border-[var(--border)] bg-[var(--surface)] p-2.5';
+const GRID_FRAME_CLASS =
+  'group/img relative flex items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--background-elevated)]';
+const GRID_PENDING_CLASS = `${FRAME_CLASS} aspect-square`;
+
 const IMAGE_FRAME_CLASS = `${FRAME_CLASS} group/img @lg:aspect-auto @lg:h-auto @lg:w-fit @lg:max-w-full @lg:min-h-48 @lg:min-w-48`;
 
 export default function ResultStack({
@@ -121,19 +135,42 @@ export default function ResultStack({
   referenceLimit,
   onUseAsFirstFrame,
   onEditImage,
+  layout = 'stack',
 }: ResultStackProps) {
+  const grid = layout === 'grid';
   const [openId, setOpenId] = useState<string | null>(null);
   // Read off the decoded image rather than asked of the caller: it is the one
   // fact none of the three panels record, and the browser knows it for free.
   const [sizes, setSizes] = useState<Record<string, { width: number; height: number }>>({});
 
   const visible = items.slice(0, max);
+  /** Full width under the image in the stack; one of the row's buttons in the grid. */
+  const downloadButton = (item: ResultStackItem, inRow = false) => (
+    <button
+      type="button"
+      onClick={() => void onDownload(item)}
+      // The row's label is short for the width; the full one stays the name.
+      aria-label={inRow && downloadingId !== item.id ? downloadLabel : undefined}
+      className={inRow ? 'btn-secondary flex-1' : 'btn-secondary w-full'}
+    >
+      {downloadingId === item.id ? (
+        <Loader2 className="animate-spin" size={inRow ? 13 : 16} />
+      ) : (
+        <Download size={inRow ? 13 : 16} />
+      )}
+      {downloadingId === item.id ? 'Preparing download…' : inRow ? 'Download' : downloadLabel}
+    </button>
+  );
   const openItem = visible.find((item) => item.id === openId) ?? null;
 
+  // The grid is a child of its container, never the container itself: a
+  // container query cannot style the element that defines the container, so
+  // `@2xl:grid-cols-2` on the same element would never apply.
   return (
-    <div className="@container flex flex-col gap-3">
+    <div className={grid ? '@container' : '@container flex flex-col gap-3'}>
+    <div className={grid ? 'grid grid-cols-1 gap-3.5 @2xl:grid-cols-2' : 'contents'}>
       {isGenerating && (
-        <div className={FRAME_CLASS}>
+        <div className={grid ? GRID_PENDING_CLASS : FRAME_CLASS}>
           <div className="flex flex-col items-center gap-4">
             <div className="loading-spinner" />
             <p className="animate-pulse text-[var(--foreground-muted)]">{pendingLabel}</p>
@@ -142,7 +179,9 @@ export default function ResultStack({
         </div>
       )}
 
-      {!isGenerating && visible.length === 0 && <div className={FRAME_CLASS}>{emptyState}</div>}
+      {!isGenerating && visible.length === 0 && (
+        <div className={grid ? `${FRAME_CLASS} col-span-full` : FRAME_CLASS}>{emptyState}</div>
+      )}
 
       <AnimatePresence initial={false}>
         {visible.map((item, index) => (
@@ -153,9 +192,14 @@ export default function ResultStack({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.98 }}
             transition={{ duration: 0.2 }}
-            className="flex flex-col gap-2 @lg:flex-row @lg:items-start @lg:gap-3"
+            className={grid ? GRID_CARD_CLASS : 'flex flex-col gap-2 @lg:flex-row @lg:items-start @lg:gap-3'}
           >
-            <div className={IMAGE_FRAME_CLASS}>
+            {grid && (
+              <span className={`eyebrow ${index === 0 && !isGenerating ? 'text-[var(--neon-cyan)]' : ''}`}>
+                {index === 0 && !isGenerating ? 'Newest' : 'Earlier'}
+              </span>
+            )}
+            <div className={grid ? GRID_FRAME_CLASS : IMAGE_FRAME_CLASS}>
               {/* A failed image is left in place rather than dropped: a provider
                   URL can expire while the page is open, and removing a result
                   the user just generated reads as data loss. */}
@@ -174,7 +218,11 @@ export default function ResultStack({
                       : { ...current, [item.id]: { width: naturalWidth, height: naturalHeight } }
                   );
                 }}
-                className="h-full w-full cursor-zoom-in object-contain @lg:h-auto @lg:max-h-104 @lg:w-auto @lg:max-w-full"
+                className={
+                  grid
+                    ? 'h-auto max-h-[70vh] w-full cursor-zoom-in object-contain'
+                    : 'h-full w-full cursor-zoom-in object-contain @lg:h-auto @lg:max-h-104 @lg:w-auto @lg:max-w-full'
+                }
               />
               <button
                 type="button"
@@ -193,19 +241,8 @@ export default function ResultStack({
             {/* Beneath the image on a narrow panel, beside it on a wide one —
                 one column either way, so the buttons keep their order and the
                 markup stays a single source. */}
-            <div className="flex flex-col gap-2 @lg:min-w-44 @lg:flex-1 @lg:self-stretch">
-              <button
-                type="button"
-                onClick={() => void onDownload(item)}
-                className="btn-secondary w-full"
-              >
-                {downloadingId === item.id ? (
-                  <Loader2 className="animate-spin" size={16} />
-                ) : (
-                  <Download size={16} />
-                )}
-                {downloadingId === item.id ? 'Preparing download…' : downloadLabel}
-              </button>
+            <div className={grid ? 'flex flex-col gap-2' : 'flex flex-col gap-2 @lg:min-w-44 @lg:flex-1 @lg:self-stretch'}>
+              {!grid && downloadButton(item)}
               {/* The row that makes a result something other than a dead end.
                   Every image panel composes this component, so putting it here
                   rather than in each caller is what gives all three the same
@@ -218,7 +255,8 @@ export default function ResultStack({
                 onUseAsFirstFrame={onUseAsFirstFrame}
                 onEditImage={onEditImage}
                 dense
-                stack
+                stack={!grid}
+                leading={grid ? downloadButton(item, true) : undefined}
               />
               {/* Pinned to the foot of the column — `@lg:mt-auto` against the
                   stretched height — so it lines up with the bottom of the
@@ -235,7 +273,7 @@ export default function ResultStack({
                 relaxed={item.relaxed}
                 width={sizes[item.id]?.width}
                 height={sizes[item.id]?.height}
-                className="@lg:mt-auto"
+                className={grid ? undefined : '@lg:mt-auto'}
               />
             </div>
           </motion.div>
@@ -243,10 +281,12 @@ export default function ResultStack({
       </AnimatePresence>
 
       {items.length > max && (
-        <p className="text-center text-xs text-[var(--foreground-subtle)]">
+        <p className={`text-center text-xs text-[var(--foreground-subtle)]${grid ? ' col-span-full' : ''}`}>
           Showing the last {max}. Everything else is kept in the Library.
         </p>
       )}
+
+    </div>
 
       <ImageLightbox
         src={openItem?.src}

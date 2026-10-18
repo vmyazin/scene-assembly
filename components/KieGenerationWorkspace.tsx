@@ -6,7 +6,7 @@ import { useAccountStore } from '@/store/useAccountStore';
 import CloudJobPanel from '@/components/account/CloudJobPanel';
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Search, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import ReferenceStack from '@/components/ReferenceStack';
 import { requestPromptSlug } from '@/lib/micro-ai/browser';
@@ -15,7 +15,7 @@ import { defaultKieValues, modelsForKieMode, resolveKieVariant, validateKieInput
 import { CLOUD_EDIT_REFERENCE_CAP, editPromptMode } from '@/lib/providers/edit-references';
 import { prepareSubmissionMedia } from '@/lib/providers/edit-submission';
 import ModelListbox from '@/components/ModelListbox';
-import { KIE_IMAGE_COLUMNS, KIE_VIDEO_COLUMNS, kieImageSpecs, kieVideoSpecs } from '@/lib/models/listbox-specs';
+import { KIE_IMAGE_COLUMNS, KIE_VIDEO_COLUMNS, kieImageSpecs, kieVideoSpecs, railTags } from '@/lib/models/listbox-specs';
 import { currentKieTime, isKieJobTerminal } from '@/lib/kie/queue';
 import type { KieFieldDefinition, KieInputMode, KieJob, MediaType } from '@/lib/kie/types';
 import { downloadRemoteMedia, extensionForMedia, isDownloadableMediaUrl } from '@/lib/media-download';
@@ -32,9 +32,13 @@ import ResultStack, { type ResultStackItem } from '@/components/ResultStack';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import PromptPanel from '@/components/PromptPanel';
 import SavedPromptsButton from '@/components/SavedPromptsButton';
-import type { ModelControlField } from '@/components/ModelControls';
+import ModelControls, { type ModelControlField } from '@/components/ModelControls';
 import AspectMismatchNote from '@/components/AspectMismatchNote';
 import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
+import ImageWorkspaceLayout, { ImageMainStack } from '@/components/ImageWorkspaceLayout';
+import { ImageRailCard, ImageRailStrip } from '@/components/ImageRail';
+import ChipPopover from '@/components/ChipPopover';
+import RelaxedFilterControl from '@/components/RelaxedFilterControl';
 import GenerateActions from '@/components/GenerateActions';
 import ResultPanel from '@/components/ResultPanel';
 import { ModelControlsCard, WorkspaceCard } from '@/components/WorkspaceCard';
@@ -67,7 +71,12 @@ interface KieGenerationWorkspaceProps {
   description?: string;
   initialPrompt?: string;
   exampleFeatureId?: string;
-  engineSelector?: ReactNode;
+  /**
+   * The rail's engine menu, from the image workspace that hosts this one, so
+   * picking Kie leaves it where it was. Images only: the video workspaces pick
+   * their engine above this component.
+   */
+  engineField?: ReactNode;
   /** Switch this workspace to image-to-video, for continuing from a last frame. */
   onContinueFromFrame?: () => void;
   /** Switch to image-to-video, seeded with a finished image result. */
@@ -95,7 +104,7 @@ export default function KieGenerationWorkspace({
   description,
   initialPrompt = '',
   exampleFeatureId,
-  engineSelector,
+  engineField,
   onContinueFromFrame,
   onUseAsFirstFrame,
   onEditImage,
@@ -107,6 +116,8 @@ export default function KieGenerationWorkspace({
   const kieVideoModel = useAppStore((state) => state.kieVideoModel);
   const setKieImageModel = useAppStore((state) => state.setKieImageModel);
   const setKieVideoModel = useAppStore((state) => state.setKieVideoModel);
+  const railCollapsed = useAppStore((state) => state.imageRailCollapsed);
+  const setRailCollapsed = useAppStore((state) => state.setImageRailCollapsed);
   const jobs = useKieJobsStore((state) => state.jobs);
   const cloudWorkspace=useCloudWorkspace('kie');
   const needsKey = cloudWorkspace.cloud ? !cloudWorkspace.connected : !kieApiKey.trim();
@@ -381,19 +392,210 @@ export default function KieGenerationWorkspace({
     submitRef.current = () => void submit();
   });
 
+  const referenceCard = inputMode === 'image' && (
+    <WorkspaceCard
+      title={`Reference image${maxInputImages === 1 ? '' : 's'}`}
+      description={`Upload up to ${maxInputImages}; files are forwarded to Kie only for this task. Pick a saved clip and its last frame is used.`}
+    >
+      <ReferencePicker
+        accept="image/*,video/*"
+        multiple={maxInputImages > 1}
+        accent="cyan"
+        idleLabel="Drop, upload, or paste an image or video"
+        referenceCount={references.length}
+        referenceLimit={maxInputImages}
+        intake={{ addFiles: addReferences, isReadingFrame, isFetching, isDragging, dropProps }}
+      />
+      <ReferenceStack
+        layout="grid"
+        replaceLimit={maxInputImages}
+        items={references.map((reference, index) => ({
+          id: reference.id,
+          src: reference.previewUrl,
+          alt: `Reference ${index + 1}`,
+          removeLabel: `Remove reference ${index + 1}`,
+          sourceLabel: reference.sourceLabel,
+        }))}
+        onRemove={removeReferenceAt}
+      />
+    </WorkspaceCard>
+  );
+
+  const promptPanel = (
+    <PromptPanel paused={gated} hasPrompt={prompt.trim().length > 0}>
+      <PromptHeader htmlFor="kie-prompt">
+        <SavedPromptsButton />
+        <GenExampleButton busy={example.generating} onClick={() => void example.generate()} />
+      </PromptHeader>
+      <AutoExpandingPrompt
+        id="kie-prompt"
+        value={prompt}
+        onChange={(event) => setPrompt(event.target.value)}
+        placeholder={mediaType === 'video' ? 'Describe the motion, camera, mood, and scene…' : 'Describe the image you want to create…'}
+      />
+    </PromptPanel>
+  );
+
+  const generateActions = (
+    <GenerateActions
+      workspace={cloudWorkspace}
+      mediaType={mediaType}
+      label={`Generate ${mediaType}`}
+      busy={isSubmitting}
+      busyLabel="Uploading & starting…"
+      onSubmit={() => void submit()}
+      error={error}
+      refusal={{ providerLabel: 'Kie', modelLabel: selectedModel.label, route: { provider: 'kie', modelId: selectedModel.id }, hasReferences: references.length > 0 }}
+      relaxed={relaxed}
+      autoRetry={autoRetry}
+    />
+  );
+
+  const header = (
+    <WorkspaceHeader
+      provider="kie"
+      label="Kie.ai"
+      title={title ?? titleFor(mediaType, inputMode)}
+      description={description}
+      needsKey={needsKey}
+      onBack={onBack}
+      onOpenConnections={onOpenConnections}
+    />
+  );
+
+  if (mediaType === 'image') {
+    // The same rail, chips and 2-up results every other image engine has (UX
+    // audit L1, variant G). Shape and size are on every Kie image model; the
+    // rest of a model's fields go behind More settings.
+    const controlFields = variant.fields.filter(isKieModelControlField);
+    const shapeField = controlFields.find((field) => field.key === 'aspect_ratio');
+    const sizeField = controlFields.find((field) => field.key === 'resolution');
+    const otherFields = controlFields.filter((field) => field !== shapeField && field !== sizeField);
+    const chipValue = (key: string) => (values[key] === undefined || values[key] === '' ? undefined : String(values[key]));
+    const latestFailed = latestJob?.state === 'fail';
+    return (
+      <div className="mx-auto w-full max-w-[1400px] space-y-3.5 sm:space-y-4">
+        {header}
+        <ImageWorkspaceLayout
+          collapsed={railCollapsed}
+          rail={
+            <ImageRailCard engineField={engineField} onCollapse={() => setRailCollapsed(true)}>
+              <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] px-2.5">
+                <Search aria-hidden="true" size={14} className="pointer-events-none shrink-0 text-[var(--foreground-subtle)]" />
+                <input
+                  type="search"
+                  aria-label="Search compatible models"
+                  value={modelSearch}
+                  onChange={(event) => setModelSearch(event.target.value)}
+                  placeholder="Find a model"
+                  className="min-w-0 flex-1 border-0 bg-transparent px-0"
+                />
+              </div>
+              <ModelListbox
+                label="Model"
+                accent="image"
+                layout="rail"
+                columns={KIE_IMAGE_COLUMNS}
+                rows={(matchingModels.length > 0 ? matchingModels : models).map((model) => {
+                  const cells = kieImageSpecs(model, inputMode);
+                  return {
+                    id: model.id,
+                    label: model.label,
+                    cells,
+                    // The first compatible model is the one a fresh browser gets.
+                    tags: railTags({ cells, columns: KIE_IMAGE_COLUMNS, isDefault: model.id === models[0]?.id }),
+                  };
+                })}
+                value={selectedModel.id}
+                onChange={setModel}
+              />
+              <p className="px-0.5 text-xs leading-relaxed text-[var(--foreground-muted)]">{selectedModel.description}</p>
+            </ImageRailCard>
+          }
+          collapsedRail={
+            <ImageRailStrip engineId="kie" modelLabel={selectedModel.label} onExpand={() => setRailCollapsed(false)} />
+          }
+        >
+          <ConnectionGate
+            storage={cloudWorkspace.cloud ? 'account' : 'browser'}
+            provider="kie"
+            label="Kie.ai"
+            needsKey={needsKey}
+            hasFinishedWork={cloudWorkspace.cloud ? cloudWorkspace.hasJobs : jobs.length > 0}
+            onConnect={() => onOpenConnections('kie')}
+          >
+            <ImageMainStack
+              references={referenceCard || undefined}
+              prompt={promptPanel}
+              actions={generateActions}
+              chips={
+                <>
+                  {shapeField && (
+                    <ChipPopover label="Shape" panelLabel="Aspect ratio" value={chipValue('aspect_ratio')} wide>
+                      <ModelControls namespace={`kie-${variantKey}-shape`} fields={[shapeField]} values={values} onChange={updateValues} />
+                      <AspectMismatchNote reference={references[0]} candidates={aspectCandidates} current={values.aspect_ratio} />
+                    </ChipPopover>
+                  )}
+                  {sizeField && (
+                    <ChipPopover label="Size" panelLabel="Resolution" value={chipValue('resolution')}>
+                      <ModelControls namespace={`kie-${variantKey}-size`} fields={[sizeField]} values={values} onChange={updateValues} />
+                    </ChipPopover>
+                  )}
+                  {(otherFields.length > 0 || relaxed.offered) && (
+                    <ChipPopover label="More settings" wide>
+                      <ModelControls namespace={`kie-${variantKey}-more`} fields={otherFields} values={values} onChange={updateValues} />
+                      <RelaxedFilterControl filter={relaxed} />
+                    </ChipPopover>
+                  )}
+                </>
+              }
+              results={
+                cloudWorkspace.cloud ? (
+                  <CloudJobPanel provider="kie" mediaType="image" inputMode={inputMode} resultLayout="grid" />
+                ) : (
+                  <div className="space-y-3">
+                    {/* A failed run is reported above the grid rather than in
+                        place of it: the earlier results are still worth a look. */}
+                    {latestFailed && (
+                      <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-center text-sm text-red-300">
+                        {latestJob?.error || 'Kie could not complete this task. It was not resubmitted.'}
+                      </p>
+                    )}
+                    <ResultStack
+                      layout="grid"
+                      items={imageFeed}
+                      isGenerating={Boolean(latestJob && !isKieJobTerminal(latestJob.state))}
+                      pendingLabel="Kie is working on your image."
+                      pendingDetail={
+                        typeof latestJob?.progress === 'number' ? (
+                          <p className="font-mono text-xs text-[var(--neon-cyan)]">{Math.round(latestJob.progress * 100)}%</p>
+                        ) : undefined
+                      }
+                      onDownload={(item) => downloadResult(item)}
+                      downloadingId={downloadingId}
+                      downloadLabel="Download image"
+                      onUseAsFirstFrame={onUseAsFirstFrame}
+                      onEditImage={onEditImage}
+                      emptyState={
+                        <div className="p-5 text-center text-[var(--foreground-muted)]">
+                          <Sparkles className="mx-auto mb-3 opacity-35" size={46} />
+                          <p>Your generated image will appear here.</p>
+                        </div>
+                      }
+                    />
+                  </div>
+                )
+              }
+            />
+          </ConnectionGate>
+        </ImageWorkspaceLayout>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-3.5 sm:space-y-4">
-      <WorkspaceHeader
-        provider="kie"
-        label="Kie.ai"
-        title={title ?? titleFor(mediaType, inputMode)}
-        description={description}
-        needsKey={needsKey}
-        onBack={onBack}
-        onOpenConnections={onOpenConnections}
-      />
-
-      {engineSelector}
+      {header}
 
       <ConnectionGate
         storage={cloudWorkspace.cloud ? 'account' : 'browser'}
@@ -436,34 +638,7 @@ export default function KieGenerationWorkspace({
               promptSyntax={variant.edit?.promptSyntax}
             />
           )}
-          {inputMode === 'image' && (
-            <WorkspaceCard
-              title={`Reference image${maxInputImages === 1 ? '' : 's'}`}
-              description={`Upload up to ${maxInputImages}; files are forwarded to Kie only for this task. Pick a saved clip and its last frame is used.`}
-            >
-              <ReferencePicker
-                accept="image/*,video/*"
-                multiple={maxInputImages > 1}
-                accent="cyan"
-                idleLabel="Drop, upload, or paste an image or video"
-                referenceCount={references.length}
-                referenceLimit={maxInputImages}
-                intake={{ addFiles: addReferences, isReadingFrame, isFetching, isDragging, dropProps }}
-              />
-              <ReferenceStack
-                layout="grid"
-                replaceLimit={maxInputImages}
-                items={references.map((reference, index) => ({
-                  id: reference.id,
-                  src: reference.previewUrl,
-                  alt: `Reference ${index + 1}`,
-                  removeLabel: `Remove reference ${index + 1}`,
-                  sourceLabel: reference.sourceLabel,
-                }))}
-                onRemove={removeReferenceAt}
-              />
-            </WorkspaceCard>
-          )}
+          {referenceCard}
 
           <ModelControlsCard
             description={`Only controls supported by ${selectedModel.label} are shown.`}
@@ -477,34 +652,8 @@ export default function KieGenerationWorkspace({
           </ModelControlsCard>
           </>
         }
-        prompt={
-          <PromptPanel paused={gated} hasPrompt={prompt.trim().length > 0}>
-            <PromptHeader htmlFor="kie-prompt">
-              <SavedPromptsButton />
-              <GenExampleButton busy={example.generating} onClick={() => void example.generate()} />
-            </PromptHeader>
-            <AutoExpandingPrompt
-              id="kie-prompt"
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              placeholder={mediaType === 'video' ? 'Describe the motion, camera, mood, and scene…' : 'Describe the image you want to create…'}
-            />
-          </PromptPanel>
-        }
-        actions={
-          <GenerateActions
-            workspace={cloudWorkspace}
-            mediaType={mediaType}
-            label={`Generate ${mediaType}`}
-            busy={isSubmitting}
-            busyLabel="Uploading & starting…"
-            onSubmit={() => void submit()}
-            error={error}
-            refusal={{ providerLabel: 'Kie', modelLabel: selectedModel.label, route: { provider: 'kie', modelId: selectedModel.id }, hasReferences: references.length > 0 }}
-            relaxed={relaxed}
-            autoRetry={autoRetry}
-          />
-        }
+        prompt={promptPanel}
+        actions={generateActions}
         results={cloudWorkspace.cloud ? <CloudJobPanel provider="kie" mediaType={mediaType} inputMode={inputMode} onContinueFromFrame={onContinueFromFrame} /> :
           <ResultPanel
             modelLabel={latestJob ? models.find(model => model.id === latestJob.modelId)?.label ?? latestJob.modelId : undefined}

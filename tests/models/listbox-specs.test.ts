@@ -16,6 +16,9 @@ import {
   kieImageSpecs,
   kieVideoSpecs,
   providerImageSpecs,
+  railTags,
+  GEMINI_IMAGE_COLUMNS,
+  PROVIDER_IMAGE_COLUMNS,
   providerVideoSpecs,
   ratioOfSize,
   snapRatio,
@@ -128,5 +131,46 @@ describe('listbox spec derivation', () => {
     expect(falImageSpecs(fal).map(textOf)[0]).toBe('$0.04/image');
     // Its run is priced (above); the rate start still feeds the shared helper.
     expect(rateStartLabel(falRateLabel(h3.variants.find((variant) => variant.inputMode === 'image')!.endpointId))).toBe('$0.025/s');
+  });
+});
+
+describe('railTags', () => {
+  const gemini = (id: string) => GEMINI_IMAGE_MODELS.find((model) => model.id === id)!;
+  const tagsFor = (id: string, isDefault = false) => {
+    const model = gemini(id);
+    return railTags({
+      cells: geminiImageSpecs(model),
+      columns: GEMINI_IMAGE_COLUMNS,
+      isDefault,
+      deprecated: model.deprecated,
+      successorLabel: model.replacedBy ? gemini(model.replacedBy).label : undefined,
+      currentLabel: model.label,
+    }).map((tag) => tag.label);
+  };
+
+  it('names the tier ceiling, search grounding and the default, from the catalog alone', () => {
+    expect(tagsFor('gemini-nano-banana-2.1', true)).toEqual(['4K', 'Search', 'Default']);
+  });
+
+  it('calls a 1K ceiling what it is: the only size there is', () => {
+    expect(tagsFor('gemini-3.1-flash-lite-image')).toContain('1K only');
+  });
+
+  it('points a retired model at its successor by the words that differ, and says nothing else', () => {
+    const model = gemini('gemini-3.1-flash-image');
+    expect(
+      railTags({
+        cells: geminiImageSpecs(model),
+        columns: GEMINI_IMAGE_COLUMNS,
+        deprecated: true,
+        successorLabel: 'Nano Banana 2.1',
+        currentLabel: 'Nano Banana 2',
+      })
+    ).toEqual([{ label: 'Retired · use 2.1', tone: 'warn' }]);
+  });
+
+  it('adds nothing for columns a catalog does not have', () => {
+    const model = findModel('runware', 'runware:z-image@turbo')!;
+    expect(railTags({ cells: providerImageSpecs(model), columns: PROVIDER_IMAGE_COLUMNS })).toEqual([]);
   });
 });

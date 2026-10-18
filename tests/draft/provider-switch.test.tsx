@@ -208,6 +208,8 @@ describe('carrying user input across providers and modes', () => {
 
     renderImageStudio();
 
+    fireEvent.click(screen.getByRole('button', { name: /^Shape/ }));
+
     expect(screen.getByRole('combobox', { name: /Aspect Ratio/i })).toHaveValue('9:16');
   });
 
@@ -220,6 +222,8 @@ describe('carrying user input across providers and modes', () => {
     fal.unmount();
 
     renderImageStudio();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Shape/ }));
 
     expect(screen.getByRole('combobox', { name: /Aspect Ratio/i })).toHaveValue('1:1');
   });

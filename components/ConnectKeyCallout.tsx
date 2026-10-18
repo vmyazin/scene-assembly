@@ -60,7 +60,7 @@ export default function ConnectKeyCallout({
               id="connect-key-callout-title"
               className="display text-base font-semibold text-[var(--foreground)] sm:text-lg"
             >
-              Add your {label} key to start generating
+              Add your {label} key
             </h3>
             <p className="max-w-2xl text-sm leading-relaxed text-[var(--foreground-muted)]">
               {storage==='account'?'Keys are encrypted in your account and used by your background jobs.':'Keys stay in this browser and are sent only with your own generations.'}

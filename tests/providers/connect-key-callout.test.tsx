@@ -38,7 +38,7 @@ describe('the not-connected callout', () => {
     renderAtlas();
 
     expect(
-      screen.getByRole('heading', { name: /add your atlas cloud key to start generating/i })
+      screen.getByRole('heading', { name: /add your atlas cloud key/i })
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Connect key' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /atlascloud\.ai\/console\/api-keys/i })).toHaveAttribute(

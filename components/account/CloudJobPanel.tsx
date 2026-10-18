@@ -22,7 +22,7 @@ import CloudJobCardGrid from './CloudJobCardGrid';
 import CloudJobList from './CloudJobList';
 import { AccountSurface } from './AccountSurface';
 import TemporaryAssetNotice from './TemporaryAssetNotice';
-export default function CloudJobPanel({provider,mediaType,inputMode,onContinueFromFrame,onEditImage}:Pick<CloudJobRequest,'provider'|'mediaType'|'inputMode'> & {onContinueFromFrame?:()=>void;onEditImage?:()=>void}) {
+export default function CloudJobPanel({provider,mediaType,inputMode,onContinueFromFrame,onEditImage,resultLayout='stack'}:Pick<CloudJobRequest,'provider'|'mediaType'|'inputMode'> & {onContinueFromFrame?:()=>void;onEditImage?:()=>void;/** `grid` puts image results and running cards 2-up (the image workspace). */resultLayout?:'stack'|'grid'}) {
   const allJobs=useAccountStore(state=>state.jobs),allAssets=useAccountStore(state=>state.assets);
   const [error,setError]=useState<string|null>(null),[downloading,setDownloading]=useState<string|null>(null);
   // Keep the shared image feed across providers and modes. Video shares results
@@ -98,7 +98,7 @@ export default function CloudJobPanel({provider,mediaType,inputMode,onContinueFr
     {/* A running job is the result arriving, so it is drawn as the card it will
         become, one to a row in this narrow rail. Only what waits on a person or
         has stopped stays a row of text. */}
-    {active&&<CloudJobCardGrid jobs={jobs.filter(isActiveJob)} columns={1} busy={busy} inOwnForm onCancel={id=>void changeJob(id,'cancel')}/>}
+    {active&&<CloudJobCardGrid jobs={jobs.filter(isActiveJob)} columns={resultLayout==='grid'?2:1} busy={busy} inOwnForm onCancel={id=>void changeJob(id,'cancel')}/>}
     <CloudJobList jobs={jobs.filter(job=>isListedJob(job)&&!isActiveJob(job))} busy={busy} onResume={id=>void changeJob(id,'resume')} onCancel={id=>void changeJob(id,'cancel')} onDismiss={id=>{const job=jobs.find(entry=>entry.id===id);if(job)void clearJobs([job]);}} onClear={targets=>void clearJobs(targets)} />
     <TemporaryAssetNotice assets={assets} />
     {/* While a job runs, its card above is the pending state. The result stack's own
@@ -111,7 +111,7 @@ export default function CloudJobPanel({provider,mediaType,inputMode,onContinueFr
       // that reads as one fact fewer rather than a broken row.
       const job=a.jobId?allJobs.find(j=>j.id===a.jobId):undefined;
       return {id:a.id,src:`/api/account/assets/${a.id}/content`,mimeType:a.mimeType,label:a.expiresAt?'Temporary result':undefined,provider:a.metadata.provider,modelId:a.metadata.modelId,relaxed:a.metadata.values.moderation==='relaxed',createdAt:a.createdAt,startedAt:job?.createdAt,finishedAt:job?.updatedAt};
-    })} downloadingId={downloading} filenameBase={item=>{const asset=assets.find(a=>a.id===item.id);return asset?knownAccountAssetFilenameBase(asset):item.id;}} onUseAsFirstFrame={onContinueFromFrame} onEditImage={onEditImage} onDownload={item=>{const asset=assets.find(a=>a.id===item.id);if(asset)return download(asset);}} emptyState={<p className="p-5 text-center text-sm text-[var(--foreground-muted)]">Your saved images will appear here.</p>}/>):assets[0]?<><VideoPlayer crossOrigin label="Saved video" src={`/api/account/assets/${assets[0].id}/content`} className="w-full rounded-xl"/><button type="button" disabled={Boolean(downloading)} onClick={()=>void download(assets[0])} className="btn-secondary"><Download size={16} aria-hidden="true"/>Download video</button></>:active?null:<div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-[var(--foreground-muted)]">Your saved video will appear here.</div>}
+    })} downloadingId={downloading} filenameBase={item=>{const asset=assets.find(a=>a.id===item.id);return asset?knownAccountAssetFilenameBase(asset):item.id;}} onUseAsFirstFrame={onContinueFromFrame} onEditImage={onEditImage} layout={resultLayout} onDownload={item=>{const asset=assets.find(a=>a.id===item.id);if(asset)return download(asset);}} emptyState={<p className="p-5 text-center text-sm text-[var(--foreground-muted)]">Your saved images will appear here.</p>}/>):assets[0]?<><VideoPlayer crossOrigin label="Saved video" src={`/api/account/assets/${assets[0].id}/content`} className="w-full rounded-xl"/><button type="button" disabled={Boolean(downloading)} onClick={()=>void download(assets[0])} className="btn-secondary"><Download size={16} aria-hidden="true"/>Download video</button></>:active?null:<div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-[var(--foreground-muted)]">Your saved video will appear here.</div>}
     {mediaType==='video'&&assets[0]?.draftId&&<FinalizeDraftButton inputMode={assets[0].metadata.inputMode} durationSeconds={seedanceDraftSeconds(assets[0].metadata.values)} busy={busy} onApprove={async()=>{
       const asset=assets[0];
       const seconds=seedanceDraftSeconds(asset.metadata.values);

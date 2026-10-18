@@ -431,7 +431,10 @@ describe('Kie generation workspace', () => {
     );
 
     fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A glass forest' } });
+    // Image settings fold into chips under the prompt (UX audit L1).
+    fireEvent.click(screen.getByRole('button', { name: /^More settings/ }));
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Seed' }), { target: { value: '42' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Size/ }));
     fireEvent.click(screen.getByRole('radio', { name: '2K' }));
     fireEvent.click(screen.getByRole('button', { name: 'Generate image' }));
 
@@ -507,6 +510,8 @@ describe('Kie generation workspace', () => {
         onOpenConnections={() => undefined}
       />
     );
+    // An image's resolution sits behind the Size chip, which states it folded.
+    if (mediaType === 'image') fireEvent.click(screen.getByRole('button', { name: `Size ${selected}` }));
 
     const resolution = screen.getByRole('radiogroup', { name: 'Resolution' });
 
@@ -538,5 +543,41 @@ describe('Kie generation workspace', () => {
     expect(names).toContain('generation_submitted');
     expect(names).not.toContain('generation_result');
     delete (window as { plausible?: unknown }).plausible;
+  });
+});
+
+describe('Kie image workspace layout', () => {
+  it('puts the models in the rail and the settings in chips, outside the key gate', () => {
+    useAppStore.setState({ kieApiKey: '', kieImageModel: 'flux-2-pro', imageRailCollapsed: false });
+    // Finished work lifts the gate, so start from none.
+    useKieJobsStore.setState({ jobs: [] });
+    render(
+      <KieGenerationWorkspace
+        mediaType="image"
+        inputMode="text"
+        engineField={<p>engine field</p>}
+        onBack={() => undefined}
+        onOpenConnections={() => undefined}
+      />
+    );
+
+    const rail = screen.getByRole('region', { name: 'Engine and model' });
+    expect(within(rail).getByText('engine field')).toBeTruthy();
+    expect(within(rail).getByRole('listbox', { name: 'Model' })).toBeTruthy();
+    // Comparing models needs no key; the prompt and its settings wait for one.
+    expect(rail.closest('[inert]')).toBeNull();
+    expect(screen.getByLabelText('Prompt').closest('[inert]')).not.toBeNull();
+    expect(screen.getByRole('button', { name: /^Shape/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Size/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^More settings/ })).toBeTruthy();
+  });
+
+  it('keeps the video workspace on its own layout', () => {
+    render(
+      <KieGenerationWorkspace mediaType="video" inputMode="text" onBack={() => undefined} onOpenConnections={() => undefined} />
+    );
+
+    expect(screen.queryByRole('region', { name: 'Engine and model' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Shape/ })).toBeNull();
   });
 });

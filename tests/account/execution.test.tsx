@@ -136,7 +136,7 @@ describe('account execution and isolation',()=>{
     useAccountStore.getState().applySession(falSession);refresh.mockResolvedValue(falSession);
     useAppStore.setState({engine:'fal',falApiKey:''});
     const {rerender}=render(<QueryClientProvider client={new QueryClient()}><GenerationInterface feature={FEATURES.find(f=>f.id==='text-to-image')!} apiKey="" onBack={()=>{}} onOpenConnections={()=>{}}/></QueryClientProvider>);
-    expect(screen.queryByText('Add your fal.ai key to start generating')).toBeNull();
+    expect(screen.queryByText('Add your fal.ai key')).toBeNull();
     fireEvent.change(screen.getByRole('textbox',{name:'Prompt'}),{target:{value:'Account fal request'}});
     fireEvent.click(screen.getByRole('button',{name:/Generate Image/i}));
     await waitFor(()=>expect(submit).toHaveBeenCalledTimes(1));
@@ -145,7 +145,7 @@ describe('account execution and isolation',()=>{
     const noConnection={...falSession,connections:[]};
     useAccountStore.getState().applySession(noConnection);refresh.mockResolvedValue(noConnection);
     rerender(<QueryClientProvider client={new QueryClient()}><GenerationInterface feature={FEATURES.find(f=>f.id==='text-to-image')!} apiKey="" onBack={()=>{}} onOpenConnections={()=>{}}/></QueryClientProvider>);
-    expect(screen.getByText('Add your fal.ai key to start generating')).toBeTruthy();
+    expect(screen.getByText('Add your fal.ai key')).toBeTruthy();
     expect(screen.getByText('Keys are encrypted in your account and used by your background jobs.')).toBeTruthy();
   });
   it('submits aggregator cloud video without adding a guest video job',async()=>{

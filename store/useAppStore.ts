@@ -83,6 +83,11 @@ interface AppState {
    */
   imageFormat: ImageFormatPreference;
   /**
+   * The image workspace's engine-and-model rail, folded to a strip so results
+   * get the width. Persisted: it is a layout preference, like a sidebar.
+   */
+  imageRailCollapsed: boolean;
+  /**
    * Whether the library re-encodes what it stores. Opt-out because it is the
    * one irreversible conversion: once a record holds WebP the original PNG is
    * gone, and a later "download as PNG" can only re-encode a lossy image.
@@ -132,6 +137,7 @@ interface AppState {
   setProviderApiKey: (provider: ProviderId, key: string) => void;
   setProviderModel: (provider: ProviderId, kind: 'image' | 'video', modelId: string) => void;
   setImageFormat: (preference: ImageFormatPreference) => void;
+  setImageRailCollapsed: (collapsed: boolean) => void;
   setConvertLibraryImages: (convert: boolean) => void;
   setUiSoundsEnabled: (enabled: boolean) => void;
   setAccountKeyOptOut: (provider: ImportableProvider, optedOut: boolean) => void;
@@ -208,6 +214,7 @@ export const useAppStore = create<AppState>()(
       relaxedConsents: {},
       preferredLevel: {},
       imageFormat: 'auto',
+      imageRailCollapsed: false,
       convertLibraryImages: true,
       uiSoundsEnabled: true,
       hasHydrated: false,
@@ -228,6 +235,7 @@ export const useAppStore = create<AppState>()(
       setProviderModel: (provider, kind, modelId) =>
         set({ [MODEL_FIELDS[provider][kind]]: modelId } as Partial<AppState>),
       setImageFormat: (preference) => set({ imageFormat: preference }),
+      setImageRailCollapsed: (collapsed) => set({ imageRailCollapsed: collapsed }),
       setConvertLibraryImages: (convert) => set({ convertLibraryImages: convert }),
       setUiSoundsEnabled: (enabled) => set({ uiSoundsEnabled: enabled }),
       setAccountKeyOptOut: (provider, optedOut) =>
@@ -326,6 +334,7 @@ export const useAppStore = create<AppState>()(
         relaxedConsents: s.relaxedConsents,
         preferredLevel: s.preferredLevel,
         imageFormat: s.imageFormat,
+        imageRailCollapsed: s.imageRailCollapsed,
         convertLibraryImages: s.convertLibraryImages,
         uiSoundsEnabled: s.uiSoundsEnabled,
       }),

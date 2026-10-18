@@ -935,6 +935,36 @@ body::after {
   }
 }
 
+/* The image workspace's rail: name with its tags stacked, price on the right,
+   no header row. The rail is narrow on purpose, so every row is two lines and
+   the price column stays aligned down the list. */
+.model-listbox[data-layout='rail'] .model-listbox-head { display: none; }
+/* The rail scrolls as a whole, so the list grows until it would crowd the
+   screen: Gemini's four models show without an inner scroll, Atlas's twenty
+   still get one. */
+.model-listbox[data-layout='rail'] .model-listbox-scroll { max-height: min(60vh, 34rem); }
+.model-listbox[data-layout='rail'] .model-listbox-row { align-items: start; }
+/* Top-aligned rows put the 14px dot above the name's 18px first line; this
+   centres it on that line, measured: the gap was 3.5px. */
+.model-listbox[data-layout='rail'] .model-listbox-dot { margin-top: 3.5px; }
+.model-listbox[data-layout='rail'] .model-listbox-name { flex-direction: column; align-items: flex-start; gap: 4px; }
+.model-listbox[data-layout='rail'] .model-listbox-name-text { white-space: normal; overflow-wrap: anywhere; }
+.model-listbox[data-layout='rail'] .model-listbox-cell { padding-top: 1px; }
+.model-listbox-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.model-listbox-tag {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  padding: 0 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--foreground-muted);
+  font-weight: 500;
+}
+.model-listbox-tag[data-tone='warn'] { color: var(--brand-accent); border-color: hsl(55 100% 65% / 0.3); }
+
 /* A gradient over the last rows plus a count, so the list admits it scrolls. */
 .model-listbox-more {
   position: absolute;

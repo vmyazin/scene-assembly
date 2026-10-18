@@ -10,6 +10,18 @@ export interface ModelListboxRow {
   cells: SpecCell[];
   /** Drawn beside the name, outside the accessible name, so history labels stay stable. */
   deprecated?: boolean;
+  /**
+   * Short facts drawn under the name in the rail layout ("4K", "Search",
+   * "Retired · use 2.1"). Derived from catalog data by `railTags`, never
+   * hand-written, so a model shows only what its catalog states.
+   */
+  tags?: ModelListboxTag[];
+}
+
+export interface ModelListboxTag {
+  label: string;
+  /** `warn` for a retired model's pointer to its successor. */
+  tone?: 'warn';
 }
 
 export interface ModelListboxProps {
@@ -21,7 +33,16 @@ export interface ModelListboxProps {
   rows: ModelListboxRow[];
   value: string | undefined;
   onChange: (id: string) => void;
+  /**
+   * `table` (default) aligns every spec in columns. `rail` is the image
+   * workspace's narrow side rail: name and tags stacked, price alone on the
+   * right, because a 290px rail has no width for five aligned columns.
+   */
+  layout?: 'table' | 'rail';
 }
+
+/** The columns a rail keeps: price, whichever name the catalog gives it. */
+const RAIL_COLUMNS = new Set(['from', 'run']);
 
 /**
  * The Model card's picker: an always-open rack where every model's headline
@@ -42,15 +63,22 @@ function isEmptyCell(cell: SpecCell | undefined): boolean {
   return false;
 }
 
-export default function ModelListbox({ label, accent, columns: allColumns, rows: allRows, value, onChange }: ModelListboxProps) {
+export default function ModelListbox({ label, accent, columns: allColumns, rows: allRows, value, onChange, layout = 'table' }: ModelListboxProps) {
+  const rail = layout === 'rail';
   const baseId = useId();
   // A column nobody fills is noise, not information: CometAPI meters every
   // model, so its From column would read "metered" eleven times over — the
   // exact line the old select repeated. Only columns with at least one real
   // value survive; a dash beside a neighbour's number still earns its place.
-  const keptIndexes = allColumns.map((_, index) => index).filter((index) => allRows.some((row) => !isEmptyCell(row.cells[index])));
+  const keptIndexes = allColumns
+    .map((_, index) => index)
+    .filter((index) => !rail || RAIL_COLUMNS.has(allColumns[index].key))
+    .filter((index) => allRows.some((row) => !isEmptyCell(row.cells[index])));
   const columns = keptIndexes.map((index) => allColumns[index]);
-  const rows = allRows.map((row) => ({ ...row, cells: keptIndexes.map((index) => row.cells[index]) }));
+  const rows = allRows.map((row) => ({
+    ...row,
+    cells: keptIndexes.map((index) => (rail ? perImageDropped(row.cells[index]) : row.cells[index])),
+  }));
   const scrollRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [hiddenBelow, setHiddenBelow] = useState(0);
@@ -92,10 +120,14 @@ export default function ModelListbox({ label, accent, columns: allColumns, rows:
     rowRefs.current[next]?.focus();
   };
 
-  const template = `18px minmax(0, 1fr) repeat(${columns.length}, max-content)`;
+  // `repeat(0, …)` is invalid and voids the whole template, which stacked the
+  // dot over the name in a rail with no price column (Kie).
+  const template = columns.length > 0
+    ? `18px minmax(0, 1fr) repeat(${columns.length}, max-content)`
+    : '18px minmax(0, 1fr)';
 
   return (
-    <div className="model-listbox" data-accent={accent}>
+    <div className="model-listbox" data-accent={accent} data-layout={layout}>
       <div
         ref={scrollRef}
         role="listbox"
@@ -138,9 +170,18 @@ export default function ModelListbox({ label, accent, columns: allColumns, rows:
                 <span id={nameId} className="model-listbox-name-text">
                   {row.label}
                 </span>
-                {row.deprecated ? (
+                {row.deprecated && !rail ? (
                   <span className="model-listbox-badge" aria-hidden="true">
                     deprecated
+                  </span>
+                ) : null}
+                {rail && row.tags?.length ? (
+                  <span className="model-listbox-tags">
+                    {row.tags.map((tag) => (
+                      <span key={tag.label} className="model-listbox-tag" data-tone={tag.tone}>
+                        {tag.label}
+                      </span>
+                    ))}
                   </span>
                 ) : null}
               </span>
@@ -167,6 +208,16 @@ export default function ModelListbox({ label, accent, columns: allColumns, rows:
       )}
     </div>
   );
+}
+
+/**
+ * "$0.034/image" (or Atlas's "/img") → "$0.034" in the rail. Everything in the image workspace is
+ * priced per image, and at 288px the unit cost every name a line.
+ */
+function perImageDropped(cell: SpecCell): SpecCell {
+  return cell.kind === 'text' && /\/(image|img)$/.test(cell.value)
+    ? { ...cell, value: cell.value.replace(/\/(image|img)$/, '') }
+    : cell;
 }
 
 /** One sentence of the row's specs for assistive tech, since the glyphs say nothing aloud. */

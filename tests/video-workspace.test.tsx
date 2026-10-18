@@ -175,7 +175,7 @@ describe('VideoWorkspace provider selection', () => {
     expect(useAppStore.getState().videoEngine).toBe('gemini');
     expect(screen.getByRole('heading', { name: 'Gemini · Veo 3.1 Lite' })).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: 'Add your Gemini key to start generating' })
+      screen.getByRole('heading', { name: 'Add your Gemini key' })
     ).toBeInTheDocument();
   });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Film, ImageDown, Loader2, SquarePlay, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -44,6 +44,8 @@ export interface ResultActionsProps {
    * buttons sharing 13rem would each be a truncated sliver.
    */
   stack?: boolean;
+  /** Rendered first in the row, so a host's own button (Download) shares it. */
+  leading?: ReactNode;
 }
 
 type Action = 'reference' | 'first-frame' | 'timeline';
@@ -70,6 +72,7 @@ export default function ResultActions({
   onAddToTimeline,
   dense = false,
   stack = false,
+  leading,
 }: ResultActionsProps) {
   const [pending, setPending] = useState<Action | null>(null);
   // Resolved bytes, keyed by source. Extraction is the expensive step, so using
@@ -146,6 +149,7 @@ export default function ResultActions({
 
   return (
     <div className={`flex flex-wrap gap-2${stack ? ' @lg:flex-col @lg:flex-nowrap' : ''}`}>
+      {leading}
       <button
         type="button"
         onClick={() => void applyAsReference()}
