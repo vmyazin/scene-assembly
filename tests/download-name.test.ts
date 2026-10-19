@@ -47,7 +47,7 @@ describe('model filename codes', () => {
     expect(modelFileCode('fal', 'h3-max-turbo')).toBe('h3-max-turbo');
     expect(modelFileCode('gemini', 'gemini-3.1-flash-lite-image')).toBe('gemini-3_1-flash-lite-image');
     expect(modelFileCode('gemini', 'gemini-3-pro-image-preview')).toBe('gemini-3-pro-image');
-    expect(modelFileCode('gemini', 'veo-3.1-lite-generate-preview')).toBe('veo-3_1-lite');
+    expect(modelFileCode('gemini', 'gemini-omni-1.1-flash')).toBe('omni-1_1-flash');
     // A run recorded before the picker existed carries no model id.
     expect(modelFileCode('gemini')).toBe('gemini-3-pro-image');
   });

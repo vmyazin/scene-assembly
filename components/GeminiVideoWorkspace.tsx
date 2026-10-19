@@ -46,7 +46,7 @@ interface GeminiVideoWorkspaceProps {
   onContinueFromFrame?: () => void;
 }
 
-/** Veo image-to-video takes one still; the shared picker and stack enforce it. */
+/** Omni image-to-video takes one still; the shared picker and stack enforce it. */
 const MAX_INPUT_IMAGES = 1;
 
 interface GeminiClip {
@@ -85,20 +85,17 @@ const now = () => Date.now();
 /**
  * Same ModelControls the fal/Kie video workspaces use, so duration sits in a
  * compact field beside resolution toggles instead of a second stacked dropdown.
- * Duration stays a discrete select (4/6/8) because Veo rejects freeform lengths;
- * resolution uses the shared segmented control because Lite only publishes two.
+ * Duration stays a discrete select (3–10) because Omni rejects freeform lengths;
+ * resolution uses the shared segmented control.
  */
-function geminiVideoControlFields(
-  model: GeminiVideoModel,
-  resolution: string
-): ModelControlField[] {
+function geminiVideoControlFields(model: GeminiVideoModel): ModelControlField[] {
   return [
     {
       key: 'duration',
       label: 'Duration',
       type: 'select',
-      defaultValue: geminiVideoDuration(model, undefined, resolution),
-      options: geminiVideoDurationOptions(model, resolution).map((seconds) => ({
+      defaultValue: geminiVideoDuration(model, undefined),
+      options: geminiVideoDurationOptions(model).map((seconds) => ({
         label: String(seconds),
         value: seconds,
       })),
@@ -120,12 +117,12 @@ function geminiVideoControlFields(
   ];
 }
 
-function isGeminiResolution(value: string | number | boolean): value is '720p' | '1080p' {
-  return value === '720p' || value === '1080p';
+function isGeminiResolution(value: string | number | boolean): value is string {
+  return value === '360p' || value === '720p' || value === '1080p' || value === '4k';
 }
 
-function isGeminiDuration(value: string | number | boolean): value is 4 | 6 | 8 {
-  return value === 4 || value === 6 || value === 8;
+function isGeminiDuration(value: string | number | boolean): value is number {
+  return typeof value === 'number' && value >= 3 && value <= 10;
 }
 
 function isGeminiAspectRatio(value: string | number | boolean): value is '16:9' | '9:16' {
@@ -143,8 +140,8 @@ export default function GeminiVideoWorkspace({
   const setPrompt = useDraftStore((state) => state.setPrompt);
   const references = useDraftStore((state) => state.references);
 
-  const [resolution, setResolution] = useState<'720p' | '1080p'>('720p');
-  const [duration, setDuration] = useState<4 | 6 | 8>(8);
+  const [resolution, setResolution] = useState('720p');
+  const [duration, setDuration] = useState(8);
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16'>('16:9');
   const [error, setError] = useState<string | null>(null);
   const [phase, setPhase] = useState<'start' | 'poll' | 'download' | null>(null);
@@ -162,7 +159,7 @@ export default function GeminiVideoWorkspace({
   // Number() tells React Compiler this is a primitive. Otherwise it treats the
   // helper's result as mutable and, because handleGenerate captures it, reports
   // that handler's Date.now() calls as impure work during render.
-  const effectiveDuration = Number(geminiVideoDuration(currentModel, duration, resolution)) as 4 | 6 | 8;
+  const effectiveDuration = Number(geminiVideoDuration(currentModel, duration));
   const costEstimate = geminiVideoCost(geminiVideoModel, resolution, effectiveDuration);
   const rateLabel = geminiVideoRateLabel(geminiVideoModel, resolution);
   const isImageMode = inputMode === 'image';
@@ -187,13 +184,12 @@ export default function GeminiVideoWorkspace({
   });
 
   const updateControl = (key: string, value: string | number | boolean) => {
-    if (key === 'resolution' && isGeminiResolution(value)) {
+    if (key === 'resolution' && isGeminiResolution(value) && currentModel.resolutions.includes(value)) {
       setResolution(value);
-      if (value === '1080p') setDuration(8);
       return;
     }
     if (key === 'duration' && isGeminiDuration(value)) {
-      setDuration(geminiVideoDuration(currentModel, value, resolution) as 4 | 6 | 8);
+      setDuration(geminiVideoDuration(currentModel, value));
       return;
     }
     if (key === 'aspectRatio' && isGeminiAspectRatio(value)) {
@@ -364,7 +360,7 @@ export default function GeminiVideoWorkspace({
           <div className="grid gap-4 sm:grid-cols-2">
             <ModelControls
               namespace="gemini-video"
-              fields={geminiVideoControlFields(currentModel, resolution)}
+              fields={geminiVideoControlFields(currentModel)}
               values={{ duration: effectiveDuration, resolution, aspectRatio }}
               onChange={updateControl}
             />
@@ -409,7 +405,7 @@ export default function GeminiVideoWorkspace({
   );
 
   const phaseLabel =
-    phase === 'download' ? 'Downloading video…' : phase === 'poll' ? 'Waiting for Veo…' : 'Starting…';
+    phase === 'download' ? 'Downloading video…' : phase === 'poll' ? 'Waiting for Omni…' : 'Starting…';
 
   const actions = (
     <div className="space-y-3">

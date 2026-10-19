@@ -70,6 +70,20 @@ const RUNWARE_MODELS: ProviderModel[] = [
     note: 'Cheapest image model here — sub-second, photorealistic, good with text in-image.',
   },
   {
+    // https://runware.ai/docs/models/bfl-flux-3-image-klein — read 2026-10-19.
+    // AIR is `bfl:flux@3-image-klein`. 1024×1024 at the default 16 steps is $0.006.
+    // referenceImages takes 1–4; text-to-image sends width and height instead.
+    id: 'bfl:flux@3-image-klein',
+    label: 'FLUX 3 Image Klein',
+    fileCode: 'flux-3-image-klein',
+    kind: 'image',
+    modes: ['text', 'image'],
+    price: '$0.006 / 1024²',
+    maxInputImages: 4,
+    imageInput: 'reference',
+    note: 'Fast, cheap draft. Text-to-image, or an edit from up to 4 reference images.',
+  },
+  {
     // The model page quotes this AIR; the marketing pages' "bfl:flux@2-dev"
     // spelling is not what the API takes.
     id: 'runware:400@1',

@@ -3,6 +3,21 @@
 Status: Approved design
 Date: 2026-09-21
 
+## Follow-up decision — 2026-10-19
+
+Veo 3.1 Lite (`veo-3.1-lite-generate-preview`) shuts down on 2026-10-22.
+`gemini-omni-1.1-flash` is the catalog default and the fallback for a stored
+or unknown id. Generation is `POST /v1beta/interactions` with the documented
+`response_format` (`type: video`, `aspect_ratio`, `resolution`, `duration`
+as `"3s"`–`"10s"`, `delivery: uri`), then GET the file until `ACTIVE`. This
+overrides the `generateVideos` / `getVideosOperation` boundary below.
+
+720p is priced from the pricing page: 5,792 output tokens per second × $17.50
+per million = $0.10136/s. 360p, 1080p, and 4k stay selectable and unpriced.
+Clip extension and first+last frame stay out of `GeminiVideoWorkspace`: they
+need a video upload or a second still. fal and Runware Veo Lite models are
+unchanged.
+
 ## Follow-up decision — 2026-09-21
 
 This overrides the retry and success-only spend acceptance below. Missing start

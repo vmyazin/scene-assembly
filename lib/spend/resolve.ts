@@ -59,7 +59,7 @@ export function resolveGemini(args: {
   };
 }
 
-/** Catalog rate for a Veo clip: USD/s × duration. No usage metadata on video. */
+/** Catalog rate for an Omni clip: USD/s × duration. No usage metadata on video. */
 export function resolveGeminiVideo(args: {
   modelId?: string;
   resolution?: string;

@@ -69,7 +69,7 @@ describe('Gemini video workspace image-to-video', () => {
     useAppStore.setState({
       apiKey: 'gemini-test-key',
       videoEngine: 'gemini',
-      geminiVideoModel: 'veo-3.1-lite-generate-preview',
+      geminiVideoModel: 'gemini-omni-1.1-flash',
     });
     useDraftStore.getState().reset();
     useSeedFrameStore.getState().clearSeedFrame();
@@ -130,7 +130,8 @@ describe('Gemini video workspace image-to-video', () => {
     renderTextWorkspace();
     expect(screen.queryByText(/coming in the next update/i)).toBeNull();
     expect(screen.queryByText(/use other providers for video generation/i)).toBeNull();
-    expect(screen.getByRole('button', { name: /Generate video/ })).toHaveTextContent(/~\$0\.40/);
+    expect(screen.getByRole('heading', { name: /Omni Flash/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Generate video/ })).toHaveTextContent(/~\$0\.81/);
   });
 
   it('renders duration and resolution through the shared fal-style controls', () => {
@@ -141,15 +142,22 @@ describe('Gemini video workspace image-to-video', () => {
     expect(within(resolution).getAllByRole('radio').map((choice) => choice.textContent)).toEqual([
       '720p',
       '1080p',
+      '4k',
+      '360p',
     ]);
     expect(screen.queryByRole('combobox', { name: 'Resolution' })).toBeNull();
     expect(screen.getByRole('radio', { name: '720p' })).toHaveAttribute('aria-checked', 'true');
 
     const duration = screen.getByRole('combobox', { name: 'Duration' });
     expect([...duration.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
+      '3',
       '4',
+      '5',
       '6',
+      '7',
       '8',
+      '9',
+      '10',
     ]);
     expect(duration).toHaveDisplayValue('8');
     expect(screen.getByRole('combobox', { name: 'Aspect ratio' })).toHaveDisplayValue('16:9');
@@ -161,7 +169,7 @@ describe('Gemini video workspace image-to-video', () => {
       [...screen.getByRole('combobox', { name: 'Duration' }).querySelectorAll('option')].map(
         (option) => option.textContent
       )
-    ).toEqual(['8']);
+    ).toEqual(['3', '4', '5', '6', '7', '8', '9', '10']);
     expect(screen.getByRole('combobox', { name: 'Duration' })).toHaveDisplayValue('8');
   });
 
@@ -177,12 +185,12 @@ describe('Gemini video workspace image-to-video', () => {
     await waitFor(() => expect(geminiGenerateVideoMock).toHaveBeenCalledOnce());
     expect(geminiGenerateVideoMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        config: expect.objectContaining({ resolution: '720p', durationSeconds: 4, aspectRatio: '16:9' }),
+        config: expect.objectContaining({ resolution: '720p', durationSeconds: 3, aspectRatio: '16:9' }),
       })
     );
   });
 
-  it('forces 8s when generating at 1080p', async () => {
+  it('keeps the chosen duration at 1080p', async () => {
     renderTextWorkspace();
 
     const duration = screen.getByRole('combobox', { name: 'Duration' }) as HTMLSelectElement;
@@ -196,7 +204,7 @@ describe('Gemini video workspace image-to-video', () => {
     await waitFor(() => expect(geminiGenerateVideoMock).toHaveBeenCalledOnce());
     expect(geminiGenerateVideoMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        config: expect.objectContaining({ resolution: '1080p', durationSeconds: 8 }),
+        config: expect.objectContaining({ resolution: '1080p', durationSeconds: 3 }),
       })
     );
   });
@@ -223,7 +231,7 @@ describe('Gemini video workspace image-to-video', () => {
         prompt: 'The cat leaps forward',
         image: expect.any(String),
         imageMimeType: 'image/png',
-        model: 'veo-3.1-lite-generate-preview',
+        model: 'gemini-omni-1.1-flash',
         singleAttempt: true,
       })
     );
@@ -238,7 +246,7 @@ describe('Gemini video workspace image-to-video', () => {
     expect(useSpendStore.getState().entries[0]).toMatchObject({
       provider: 'gemini',
       kind: 'video',
-      modelId: 'veo-3.1-lite-generate-preview',
+      modelId: 'gemini-omni-1.1-flash',
       galleryRecordId: useGalleryStore.getState().records[0].id,
     });
   });
@@ -307,7 +315,7 @@ describe('Gemini video workspace image-to-video', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Download failed');
     expect(useSpendStore.getState().entries).toHaveLength(1);
     expect(useSpendStore.getState().entries[0]).toMatchObject({
-      provider: 'gemini', kind: 'video', modelId: 'veo-3.1-lite-generate-preview',
+      provider: 'gemini', kind: 'video', modelId: 'gemini-omni-1.1-flash',
     });
     expect(useGalleryStore.getState().records).toHaveLength(0);
     expect(screen.queryByRole('button', { name: 'Cancel automatic retry' })).toBeNull();

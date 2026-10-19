@@ -71,6 +71,27 @@ describe('per-model image input shape', () => {
     expect(task.inputs).not.toHaveProperty('seedImage');
   });
 
+  it('sends FLUX 3 Image Klein references without a seed image', async () => {
+    const fetchMock = mockGenerateThenDownload();
+
+    await post({
+      engine: 'runware',
+      apiKey: 'rw',
+      prompt: 'a cheap draft of the jacket',
+      model: 'bfl:flux@3-image-klein',
+      aspectRatio: '1:1',
+      images: ['QUJD'],
+    });
+
+    const [task] = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(task.model).toBe('bfl:flux@3-image-klein');
+    expect(task.width).toBe(1024);
+    expect(task.height).toBe(1024);
+    expect(task.inputs.referenceImages).toEqual(['data:image/png;base64,QUJD']);
+    expect(task.inputs).not.toHaveProperty('seedImage');
+    expect(task).not.toHaveProperty('settings');
+  });
+
   it('trims references to the count the model documents', async () => {
     const fetchMock = mockGenerateThenDownload();
 

@@ -41,18 +41,21 @@
   and instead downgrades a relaxed job when `relaxed_consent_at` is missing.
   User-facing copy never says uncensored or NSFW.
 
-- **Gemini / Veo video generation** → first read
-  `docs/cursor/specs/2026-09-21-gemini-veo-video-generation.md`. Start, poll, and
-  download live in `lib/engines/gemini.ts` (`generateVideos`,
-  `getVideosOperation`, then GET `video.uri` with the API key). Catalog
-  constraints belong to `gemini-video-catalog.ts`; rates stay in
-  `lib/spend/rates.ts`. The browser BYOK UI is `GeminiVideoWorkspace`. Duration,
-  resolution and aspect ratio render through `ModelControls` (the same control
-  fal and Kie use) because stacked native selects drifted from the dense
-  duration + 720p/1080p row; Veo duration stays a discrete select because
-  Google rejects freeform lengths, and 1080p still locks to 8s. Do not add
-  Veo to `CLOUD_GENERATION_PROVIDERS` until the live check in
-  `docs/superpowers/plans/2026-09-05-cloud-provider-enablement.md` — video is a
+- **Gemini / Omni video generation** → first read
+  `docs/cursor/specs/2026-09-21-gemini-veo-video-generation.md` (the 2026-10-19
+  follow-up replaces Veo 3.1 Lite). Start, poll, and download live in
+  `lib/engines/gemini.ts` (`POST /v1beta/interactions` for
+  `gemini-omni-1.1-flash`, then GET the file until `ACTIVE`, then GET `video.uri`
+  with the API key). Catalog constraints belong to `gemini-video-catalog.ts`;
+  rates stay in `lib/spend/rates.ts`. The browser BYOK UI is
+  `GeminiVideoWorkspace`. Duration, resolution and aspect ratio render through
+  `ModelControls` (the same control fal and Kie use) because stacked native
+  selects drifted from the dense duration + resolution row; Omni duration stays
+  a discrete select of 3–10s (`"3s"`…`"10s"`) because Google rejects freeform
+  lengths, and 1080p does not lock the length. Clip extension and first+last
+  frame stay off this workspace: they need a video upload or a second still.
+  Do not add Gemini video to `CLOUD_GENERATION_PROVIDERS` until the live check
+  in `docs/superpowers/plans/2026-09-05-cloud-provider-enablement.md` — video is a
   long-running operation, not the synchronous image adapter, and
   `ai.files.download({ downloadPath })` is Node-only.
 
