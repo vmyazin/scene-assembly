@@ -14,10 +14,29 @@ import {
 /** Google's documented Omni file-poll cadence. */
 export const GEMINI_VIDEO_POLL_INTERVAL_MS = 5_000;
 /**
- * Omni does not publish a deadline. Eight minutes stops a stuck tab; the
- * interaction may still finish in AI Studio.
+ * Omni does not publish a deadline. Eight minutes covers the background
+ * interaction poll and the file poll that follows it. The create POST is
+ * bounded separately by `GEMINI_VIDEO_START_TIMEOUT_MS`.
  */
 export const GEMINI_VIDEO_TIMEOUT_MS = 8 * 60 * 1000;
+
+/**
+ * How long the create POST may sit before we stop waiting. A background
+ * interaction returns an id quickly; a hung socket must not occupy the
+ * eight-minute poll budget.
+ */
+export const GEMINI_VIDEO_START_TIMEOUT_MS = 60_000;
+
+/**
+ * Shown when Omni reports a safety block. HTTP 400 blocks that return no
+ * output are not charged (Interactions safety settings, and the billing note
+ * for failed requests that produce no tokens).
+ */
+export const GEMINI_VIDEO_SAFETY_MESSAGE =
+  'Gemini blocked this video for safety. You are not charged when a clip is blocked.';
+
+const GEMINI_VIDEO_MAYBE_STARTED_MESSAGE =
+  'Gemini may have started this video. Check AI Studio before trying again, so a second run is not charged.';
 
 const GEMINI_INTERACTIONS_URL = 'https://generativelanguage.googleapis.com/v1beta/interactions';
 
@@ -149,19 +168,12 @@ export interface GeminiVideoOpts {
   image?: string;
   /** MIME type of `image`. Defaults to image/png. */
   imageMimeType?: string;
-  /** Durable callers must never inherit the SDK's default paid retries. */
-  singleAttempt?: boolean;
   config?: {
     resolution?: string;
     aspectRatio?: string;
     durationSeconds?: number;
   };
   apiKey: string;
-}
-
-interface GeminiVideoClientOpts {
-  apiKey: string;
-  singleAttempt?: boolean;
 }
 
 function requireGeminiApiKey(apiKey: string): string {
@@ -283,7 +295,9 @@ async function readGeminiJson(response: Response, apiKey: string, fallback: stri
     }
   }
   if (!response.ok) {
-    throw new RouteError(sanitizeGeminiMessage(readErrorMessage(body) ?? fallback, fallback, apiKey), response.status);
+    const fault = readInteractionFault(body);
+    if (isSafetyFault(fault)) throw new RouteError(GEMINI_VIDEO_SAFETY_MESSAGE, response.status);
+    throw new RouteError(sanitizeGeminiMessage(fault?.message ?? readErrorMessage(body) ?? fallback, fallback, apiKey), response.status);
   }
   return body;
 }
@@ -294,13 +308,127 @@ export function geminiVideoWait(ms: number = GEMINI_VIDEO_POLL_INTERVAL_MS): Pro
 }
 
 /**
+ * Codes that mean a safety filter rejected the prompt or the clip.
+ * `safety`, `jailbreak`, `prohibited_content`, and `blocklist` are the
+ * Interactions safety-settings codes. `content_blocked` is the code Omni
+ * returns for a blocked video (confirmed on the Gemini API forum).
+ */
+const GEMINI_VIDEO_SAFETY_CODES = new Set([
+  'safety',
+  'jailbreak',
+  'prohibited_content',
+  'blocklist',
+  'content_blocked',
+]);
+
+interface InteractionFault {
+  code?: string;
+  message?: string;
+}
+
+function faultOf(value: unknown): InteractionFault | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as Record<string, unknown>;
+  const code = typeof record.code === 'string' && record.code.trim() ? record.code.trim() : undefined;
+  const message = typeof record.message === 'string' && record.message.trim() ? record.message.trim() : undefined;
+  if (!code && !message) return undefined;
+  return { code, message };
+}
+
+/** `error` on an HTTP failure, or the first entry of a background interaction's `errors`. */
+function readInteractionFault(body: unknown): InteractionFault | undefined {
+  if (!body || typeof body !== 'object') return undefined;
+  const record = body as Record<string, unknown>;
+  const direct = faultOf(record.error);
+  if (direct) return direct;
+  if (!Array.isArray(record.errors)) return undefined;
+  for (const item of record.errors) {
+    const fault = faultOf(item);
+    if (fault) return fault;
+  }
+  return undefined;
+}
+
+function isSafetyFault(fault: InteractionFault | undefined): boolean {
+  if (!fault) return false;
+  if (fault.code && GEMINI_VIDEO_SAFETY_CODES.has(fault.code)) return true;
+  const message = fault.message ?? '';
+  return message.startsWith('Input blocked:') || message.startsWith('Request blocked due to safety');
+}
+
+function safetyOrMessage(fault: InteractionFault | undefined, fallback: string): string {
+  if (isSafetyFault(fault)) return GEMINI_VIDEO_SAFETY_MESSAGE;
+  return fault?.message || fallback;
+}
+
+/**
+ * Turn one Interactions resource into a poll result.
+ *
+ * `completed` with no video is the only "finished without a video" case.
+ * `in_progress`, `queued`, and `requires_action` stay open so the caller
+ * keeps the interaction id. `failed` on a background job carries the block
+ * in `errors`.
+ */
+function resultFromInteraction(body: unknown, fallbackId: string): VideoOperationResult {
+  const record = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+  const status = typeof record.status === 'string' ? record.status : '';
+  const id = typeof record.id === 'string' && record.id.trim() ? record.id.trim() : fallbackId;
+  const fault = readInteractionFault(body);
+  if (status === 'failed' || status === 'cancelled') {
+    return { operation: id, done: true, error: safetyOrMessage(fault, 'Gemini video generation failed.') };
+  }
+  const video = readOmniVideo(body);
+  if (video) return videoResult(id, video);
+  if (status === 'completed' || status === 'incomplete') {
+    return {
+      operation: id,
+      done: true,
+      error: isSafetyFault(fault) ? GEMINI_VIDEO_SAFETY_MESSAGE : 'Gemini finished without a video. Please try again.',
+    };
+  }
+  if (!id) {
+    throw new RouteError(
+      'Gemini did not return a job id. The video may still be running. Check AI Studio before trying again.',
+      502
+    );
+  }
+  return { operation: id, done: false };
+}
+
+function videoResult(operation: string, video: OmniVideoPart): VideoOperationResult {
+  if (video.data && !video.uri) {
+    return { operation, done: true, videoBytes: video.data, mimeType: video.mimeType };
+  }
+  const fileName = video.uri ? fileNameFromUri(video.uri) : null;
+  if (!fileName) throw new RouteError('Gemini returned an unusable video address.', 502);
+  return {
+    operation: fileName,
+    done: false,
+    videoUri: omniDownloadUrl(fileName, video.uri),
+    videoBytes: video.data,
+    mimeType: video.mimeType,
+  };
+}
+
+function startFailure(error: unknown, apiKey: string): RouteError {
+  if (error instanceof RouteError) return error;
+  const name = error instanceof Error ? error.name : '';
+  // A dropped socket or an aborted create can land after Google accepted the
+  // job. Say so, instead of a "could not start" that invites a second charge.
+  if (error instanceof TypeError || name === 'TimeoutError' || name === 'AbortError') {
+    return new RouteError(GEMINI_VIDEO_MAYBE_STARTED_MESSAGE, 0);
+  }
+  return geminiRouteError(error, 'Gemini could not start video generation.', apiKey);
+}
+
+/**
  * Start a Gemini Omni video.
  *
- * POST `/v1beta/interactions` with the documented request: model
- * `gemini-omni-1.1-flash`, text or `[image, text]` input, and
- * `response_format` `{ type, aspect_ratio, resolution, duration, delivery }`.
+ * POST `/v1beta/interactions` with `background: true`. The response is an
+ * interaction id, not the finished clip. `store: true` because that id is
+ * fetched again; `store: false` is for a unary response that is not retrieved.
  * Duration is an integer from 3 to 10 followed by `s` (`"8s"`). URI delivery
- * avoids the 4MB inline cap; poll the file until it is ACTIVE.
+ * avoids the 4MB inline cap.
  */
 export async function geminiGenerateVideo(opts: GeminiVideoOpts): Promise<VideoOperationResult> {
   const apiKey = requireGeminiApiKey(opts.apiKey);
@@ -317,6 +445,7 @@ export async function geminiGenerateVideo(opts: GeminiVideoOpts): Promise<VideoO
     const response = await fetch(GEMINI_INTERACTIONS_URL, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+      signal: AbortSignal.timeout(GEMINI_VIDEO_START_TIMEOUT_MS),
       body: JSON.stringify({
         model: model.id,
         input: opts.image
@@ -332,82 +461,67 @@ export async function geminiGenerateVideo(opts: GeminiVideoOpts): Promise<VideoO
           duration: `${durationSeconds}s`,
           delivery: 'uri',
         },
-        // Unary generation. store stays off because this workspace does not
-        // continue the clip in a later turn.
-        background: false,
-        store: false,
+        background: true,
+        store: true,
         stream: false,
       }),
     });
     const body = await readGeminiJson(response, apiKey, 'Gemini could not start video generation.');
-    const record = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
-    const status = typeof record.status === 'string' ? record.status : '';
-    const id = typeof record.id === 'string' ? record.id : '';
-    if (status === 'failed' || status === 'cancelled' || status === 'incomplete') {
-      return {
-        operation: id,
-        done: true,
-        error: readErrorMessage(body) || 'Gemini video generation failed.',
-      };
-    }
-    const video = readOmniVideo(body);
-    if (!video) {
-      throw new RouteError('Gemini finished without a video. Please try again.', 502);
-    }
-    if (video.data && !video.uri) {
-      return { operation: id, done: true, videoBytes: video.data, mimeType: video.mimeType };
-    }
-    const fileName = video.uri ? fileNameFromUri(video.uri) : null;
-    if (!fileName) throw new RouteError('Gemini returned an unusable video address.', 502);
-    return {
-      operation: fileName,
-      done: false,
-      videoUri: omniDownloadUrl(fileName, video.uri),
-      videoBytes: video.data,
-      mimeType: video.mimeType,
-    };
+    return resultFromInteraction(body, '');
   } catch (error) {
-    throw geminiRouteError(error, 'Gemini could not start video generation.', apiKey);
+    throw startFailure(error, apiKey);
   }
 }
 
+async function pollOmniFile(apiKey: string, fileName: string): Promise<VideoOperationResult> {
+  const response = await fetch(`https://${GEMINI_VIDEO_DOWNLOAD_HOST}/v1beta/${fileName}`, {
+    headers: { 'x-goog-api-key': apiKey },
+  });
+  const body = await readGeminiJson(response, apiKey, 'Gemini could not check this video job.');
+  const state = readFileState(body);
+  const fault = readInteractionFault(body);
+  const videoUri = omniDownloadUrl(fileName);
+  if (state === 'FAILED') {
+    return {
+      operation: fileName,
+      done: true,
+      error: safetyOrMessage(fault, readErrorMessage(body) || 'Gemini video generation failed.'),
+    };
+  }
+  if (state === 'ACTIVE') {
+    return { operation: fileName, done: true, videoUri };
+  }
+  return { operation: fileName, done: false, videoUri };
+}
+
+async function pollOmniInteraction(apiKey: string, interactionId: string): Promise<VideoOperationResult> {
+  const response = await fetch(
+    `${GEMINI_INTERACTIONS_URL}/${encodeURIComponent(interactionId)}`,
+    { headers: { 'x-goog-api-key': apiKey } }
+  );
+  const body = await readGeminiJson(response, apiKey, 'Gemini could not check this video job.');
+  return resultFromInteraction(body, interactionId);
+}
+
 /**
- * Poll a Gemini Omni file until it is ACTIVE.
+ * Poll a background Omni interaction, then its file.
  *
- * The documented check is GET `/v1beta/files/{id}` until `state` is `ACTIVE`
- * or `FAILED`.
+ * An interaction id is GET `/v1beta/interactions/{id}` until the status is
+ * terminal or the clip has a file URI. A `files/…` operation is GET
+ * `/v1beta/files/{id}` until `state` is `ACTIVE` or `FAILED`.
  */
 export async function geminiPollVideoOperation(
   apiKey: string,
-  operationName: string,
-  opts: Pick<GeminiVideoClientOpts, 'singleAttempt'> = {}
+  operationName: string
 ): Promise<VideoOperationResult> {
-  // The file GET does not retry. The flag stays so the workspace keeps one
-  // polling call for a start that must not be sent twice.
-  void opts.singleAttempt;
   const key = requireGeminiApiKey(apiKey);
   const name = operationName.trim();
+  if (!name) throw new RouteError('Missing Gemini video job.', 400);
   const fileName = name.startsWith('files/') ? name : fileNameFromUri(name);
-  if (!fileName) throw new RouteError('Missing Gemini video file.', 400);
 
   try {
-    const response = await fetch(`https://${GEMINI_VIDEO_DOWNLOAD_HOST}/v1beta/${fileName}`, {
-      headers: { 'x-goog-api-key': key },
-    });
-    const body = await readGeminiJson(response, key, 'Gemini could not check this video job.');
-    const state = readFileState(body);
-    const videoUri = omniDownloadUrl(fileName);
-    if (state === 'FAILED') {
-      return {
-        operation: fileName,
-        done: true,
-        error: readErrorMessage(body) || 'Gemini video generation failed.',
-      };
-    }
-    if (state === 'ACTIVE') {
-      return { operation: fileName, done: true, videoUri };
-    }
-    return { operation: fileName, done: false, videoUri };
+    if (fileName && (name.startsWith('files/') || name.includes('/files/'))) return await pollOmniFile(key, fileName);
+    return await pollOmniInteraction(key, name.replace(/^.*\/interactions\//, '').replace(/[/?].*$/, ''));
   } catch (error) {
     throw geminiRouteError(error, 'Gemini could not check this video job.', key);
   }
@@ -443,7 +557,7 @@ function blobFromBase64(base64: string, mimeType?: string): Blob {
 export async function geminiDownloadVideo(
   apiKey: string,
   videoUri: string,
-  opts: Pick<GeminiVideoClientOpts, 'singleAttempt'> & { videoBytes?: string; mimeType?: string } = {}
+  opts: { videoBytes?: string; mimeType?: string } = {}
 ): Promise<Blob> {
   const key = requireGeminiApiKey(apiKey);
   const uri = videoUri.trim();

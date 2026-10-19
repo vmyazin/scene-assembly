@@ -26,7 +26,7 @@ import { playGenerationChime } from '@/lib/notify/chime';
 import { useAutoRetry } from '@/lib/providers/auto-retry';
 import { routeStatus } from '@/lib/providers/route-error';
 import { captureGeminiVideo } from '@/lib/spend/capture';
-import { geminiVideoCost, geminiVideoRateLabel } from '@/lib/spend/rates';
+import { geminiVideoCost, geminiVideoPriceNotice, geminiVideoRateLabel } from '@/lib/spend/rates';
 import { isVideoFile } from '@/lib/video-frame';
 import { useAppStore } from '@/store/useAppStore';
 import { useDraftStore } from '@/store/useDraftStore';
@@ -104,7 +104,7 @@ function geminiVideoControlFields(model: GeminiVideoModel): ModelControlField[] 
       key: 'resolution',
       label: 'Resolution',
       type: 'select',
-      defaultValue: model.resolutions[0],
+      defaultValue: model.defaultResolution,
       options: model.resolutions.map((value) => ({ label: value, value })),
     },
     {
@@ -117,8 +117,8 @@ function geminiVideoControlFields(model: GeminiVideoModel): ModelControlField[] 
   ];
 }
 
-function isGeminiResolution(value: string | number | boolean): value is string {
-  return value === '360p' || value === '720p' || value === '1080p' || value === '4k';
+function isGeminiResolution(value: string | number | boolean, resolutions: readonly string[]): value is string {
+  return typeof value === 'string' && resolutions.includes(value);
 }
 
 function isGeminiDuration(value: string | number | boolean): value is number {
@@ -140,8 +140,8 @@ export default function GeminiVideoWorkspace({
   const setPrompt = useDraftStore((state) => state.setPrompt);
   const references = useDraftStore((state) => state.references);
 
-  const [resolution, setResolution] = useState('720p');
-  const [duration, setDuration] = useState(8);
+  const [resolution, setResolution] = useState(GEMINI_VIDEO_MODELS[0].defaultResolution);
+  const [duration, setDuration] = useState(GEMINI_VIDEO_MODELS[0].defaultDuration);
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16'>('16:9');
   const [error, setError] = useState<string | null>(null);
   const [phase, setPhase] = useState<'start' | 'poll' | 'download' | null>(null);
@@ -161,6 +161,7 @@ export default function GeminiVideoWorkspace({
   // that handler's Date.now() calls as impure work during render.
   const effectiveDuration = Number(geminiVideoDuration(currentModel, duration));
   const costEstimate = geminiVideoCost(geminiVideoModel, resolution, effectiveDuration);
+  const priceNotice = geminiVideoPriceNotice(geminiVideoModel, resolution, effectiveDuration);
   const rateLabel = geminiVideoRateLabel(geminiVideoModel, resolution);
   const isImageMode = inputMode === 'image';
   const isGenerating = phase !== null;
@@ -184,7 +185,7 @@ export default function GeminiVideoWorkspace({
   });
 
   const updateControl = (key: string, value: string | number | boolean) => {
-    if (key === 'resolution' && isGeminiResolution(value) && currentModel.resolutions.includes(value)) {
+    if (key === 'resolution' && isGeminiResolution(value, currentModel.resolutions)) {
       setResolution(value);
       return;
     }
@@ -237,7 +238,6 @@ export default function GeminiVideoWorkspace({
         image,
         imageMimeType,
         apiKey,
-        singleAttempt: true,
         config: { resolution, durationSeconds: effectiveDuration, aspectRatio },
       });
       startedOperation = true;
@@ -258,7 +258,14 @@ export default function GeminiVideoWorkspace({
         setPhase('poll');
         await geminiVideoWait();
         if (!isCurrent()) return;
-        operation = await geminiPollVideoOperation(apiKey, operation.operation, { singleAttempt: true });
+        const polled = await geminiPollVideoOperation(apiKey, operation.operation);
+        // A file poll replaces the interaction result. Keep inline bytes from
+        // the earlier response so a 403 on the URI can still fall back to them.
+        operation = {
+          ...polled,
+          videoBytes: polled.videoBytes ?? operation.videoBytes,
+          mimeType: polled.mimeType ?? operation.mimeType,
+        };
       }
       if (operation.error) throw new Error(operation.error);
       if (!operation.videoUri && !operation.videoBytes) {
@@ -269,7 +276,6 @@ export default function GeminiVideoWorkspace({
       generated = true;
       setPhase('download');
       const blob = await geminiDownloadVideo(apiKey, operation.videoUri ?? '', {
-        singleAttempt: true,
         videoBytes: operation.videoBytes,
         mimeType: operation.mimeType,
       });
@@ -426,12 +432,17 @@ export default function GeminiVideoWorkspace({
           <>
             <Sparkles className="inline-block mr-2 h-4 w-4" />
             Generate video
-            {costEstimate > 0 && (
+            {costEstimate > 0 ? (
               <span className="font-normal opacity-80">{` · ~$${costEstimate.toFixed(2)}`}</span>
-            )}
+            ) : priceNotice ? (
+              <span className="font-normal opacity-80"> · price unknown</span>
+            ) : null}
           </>
         )}
       </button>
+      {priceNotice && !isGenerating && (
+        <p className="text-sm text-[var(--foreground-muted)]">{priceNotice}</p>
+      )}
       {isGenerating && (
         <p className="text-sm text-[var(--foreground-muted)]">
           {phaseLabel}{' '}

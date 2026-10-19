@@ -98,6 +98,8 @@ function geminiVideoRate(modelId: string | undefined): GeminiVideoRate | null {
  * Cost of one Gemini video generation at the given resolution and duration.
  * Returns 0 when the resolution has no published per-second rate. An unknown
  * model id is priced as Omni, because that is the model the request runs.
+ * Callers that need a figure for an unpriced resolution use
+ * `geminiVideoPriceNotice` (a 720p lower bound labelled unknown), not this 0.
  */
 export function geminiVideoCost(
   modelId: string | undefined,
@@ -111,6 +113,29 @@ export function geminiVideoCost(
   const duration = durationSeconds && Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0;
   const cost = usd * duration;
   return Number.isFinite(cost) && cost > 0 ? cost : 0;
+}
+
+/**
+ * What to show beside Generate when this resolution has no published
+ * per-second rate. 1080p and 4k are upscales, so the 720p figure is a labelled
+ * lower bound. 360p is not claimed to cost at least that much. Returns null
+ * when the selection is priced.
+ */
+export function geminiVideoPriceNotice(
+  modelId: string | undefined,
+  resolution: string | undefined,
+  durationSeconds: number | undefined
+): string | null {
+  if (geminiVideoCost(modelId, resolution, durationSeconds) > 0) return null;
+  const floor = geminiVideoCost(modelId, '720p', durationSeconds);
+  if (!resolution || !(floor > 0)) {
+    return 'Price unknown. Google does not publish a per-second rate for this resolution.';
+  }
+  const dollars = `~$${floor.toFixed(2)}`;
+  if (resolution === '1080p' || resolution === '4k') {
+    return `Price unknown for ${resolution}. A 720p clip of this length is at least ${dollars}.`;
+  }
+  return `Price unknown for ${resolution}. Google only publishes a 720p rate (${dollars} for this length).`;
 }
 
 /**

@@ -44,9 +44,11 @@
 - **Gemini / Omni video generation** → first read
   `docs/cursor/specs/2026-09-21-gemini-veo-video-generation.md` (the 2026-10-19
   follow-up replaces Veo 3.1 Lite). Start, poll, and download live in
-  `lib/engines/gemini.ts` (`POST /v1beta/interactions` for
-  `gemini-omni-1.1-flash`, then GET the file until `ACTIVE`, then GET `video.uri`
-  with the API key). Catalog constraints belong to `gemini-video-catalog.ts`;
+  `lib/engines/gemini.ts` (`POST /v1beta/interactions` with `background: true`
+  for `gemini-omni-1.1-flash`, then GET the interaction until it finishes, then
+  GET the file until `ACTIVE`, then GET `video.uri` with the API key). A
+  synchronous POST hid a dropped connection behind "could not start" and invited
+  a second charge. Catalog constraints belong to `gemini-video-catalog.ts`;
   rates stay in `lib/spend/rates.ts`. The browser BYOK UI is
   `GeminiVideoWorkspace`. Duration, resolution and aspect ratio render through
   `ModelControls` (the same control fal and Kie use) because stacked native

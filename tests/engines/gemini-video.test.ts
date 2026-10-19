@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { RouteError } from '../../lib/providers/route-error';
 import {
+  GEMINI_VIDEO_SAFETY_MESSAGE,
   geminiDownloadVideo,
   geminiGenerateVideo,
   geminiPollVideoOperation,
@@ -14,6 +15,7 @@ import {
   RETIRED_GEMINI_VIDEO_MODEL_ID,
   geminiVideoDuration,
   geminiVideoDurationOptions,
+  geminiVideoResolution,
   resolveGeminiVideoModel,
 } from '../../lib/engines/gemini-video-catalog';
 
@@ -44,13 +46,18 @@ describe('gemini video catalog', () => {
     expect(GEMINI_VIDEO_MODELS[0].usdPerSecond['720p']).toBe(GEMINI_OMNI_720P_USD_PER_SECOND);
     expect(GEMINI_VIDEO_MODELS[0].usdPerSecond['1080p']).toBeUndefined();
     expect(GEMINI_VIDEO_MODELS[0].supportsExtension).toBe(false);
+    expect(GEMINI_VIDEO_MODELS[0].resolutions).toEqual(['360p', '720p', '1080p', '4k']);
+    expect(GEMINI_VIDEO_MODELS[0].defaultResolution).toBe('720p');
+    expect(GEMINI_VIDEO_MODELS[0].defaultDuration).toBe(8);
+    expect(geminiVideoResolution(GEMINI_VIDEO_MODELS[0], 'nope')).toBe('720p');
   });
 
-  it('keeps 3–10s at every resolution', () => {
+  it('keeps 3–10s at every resolution and defaults an omitted length to 8s', () => {
     const model = resolveGeminiVideoModel('gemini-omni-1.1-flash');
     expect(geminiVideoDuration(model, 4)).toBe(4);
     expect(geminiVideoDuration(model, 3)).toBe(3);
-    expect(geminiVideoDuration(model, 2)).toBe(3);
+    expect(geminiVideoDuration(model, 2)).toBe(8);
+    expect(geminiVideoDuration(model, undefined)).toBe(8);
     expect(geminiVideoDurationOptions(model)).toEqual([3, 4, 5, 6, 7, 8, 9, 10]);
   });
 });
@@ -71,7 +78,6 @@ describe('geminiGenerateVideo', () => {
         apiKey: 'test-key',
         prompt: 'A moonlit ocean',
         model: RETIRED_GEMINI_VIDEO_MODEL_ID,
-        singleAttempt: true,
         config: { resolution: '720p', durationSeconds: 6, aspectRatio: '16:9' },
       })
     ).resolves.toEqual({
@@ -85,6 +91,7 @@ describe('geminiGenerateVideo', () => {
     expect(fetchMock).toHaveBeenCalledWith('https://generativelanguage.googleapis.com/v1beta/interactions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': 'test-key' },
+      signal: expect.any(AbortSignal),
       body: JSON.stringify({
         model: 'gemini-omni-1.1-flash',
         input: 'A moonlit ocean',
@@ -95,10 +102,48 @@ describe('geminiGenerateVideo', () => {
           duration: '6s',
           delivery: 'uri',
         },
-        background: false,
-        store: false,
+        background: true,
+        store: true,
         stream: false,
       }),
+    });
+  });
+
+  it('keeps an in-progress interaction open so the caller can poll its id', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ id: 'v1_run', status: 'in_progress' })));
+    await expect(geminiGenerateVideo({ apiKey: 'test-key', prompt: 'A moonlit ocean' })).resolves.toEqual({
+      operation: 'v1_run',
+      done: false,
+    });
+  });
+
+  it('reports a completed interaction with no video instead of an open job', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ id: 'v1_empty', status: 'completed' })));
+    await expect(geminiGenerateVideo({ apiKey: 'test-key', prompt: 'A moonlit ocean' })).resolves.toEqual({
+      operation: 'v1_empty',
+      done: true,
+      error: 'Gemini finished without a video. Please try again.',
+    });
+  });
+
+  it('names a safety block from the Interactions error code', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({ error: { code: 'content_blocked', message: 'Input blocked: filters.' } }, 400)
+      )
+    );
+    await expect(geminiGenerateVideo({ apiKey: 'test-key', prompt: 'A moonlit ocean' })).rejects.toMatchObject({
+      message: GEMINI_VIDEO_SAFETY_MESSAGE,
+      status: 400,
+    });
+  });
+
+  it('treats a dropped create request as a job that may already be running', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    await expect(geminiGenerateVideo({ apiKey: 'test-key', prompt: 'A moonlit ocean' })).rejects.toMatchObject({
+      message: expect.stringContaining('may have started'),
+      status: 0,
     });
   });
 
@@ -131,7 +176,7 @@ describe('geminiGenerateVideo', () => {
       { type: 'image', data: 'abc123', mime_type: 'image/jpeg' },
       { type: 'text', text: 'Animate the still' },
     ]);
-    expect(body.response_format.duration).toBe('3s');
+    expect(body.response_format.duration).toBe('8s');
     expect(body.response_format).not.toHaveProperty('personGeneration');
   });
 
@@ -173,6 +218,54 @@ describe('geminiGenerateVideo', () => {
 });
 
 describe('geminiPollVideoOperation', () => {
+  it('polls an in-progress interaction, then a failed background block', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ id: 'v1_run', status: 'queued' }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: 'v1_run',
+          status: 'failed',
+          errors: [{ code: 'safety', message: 'Request blocked due to safety violations.' }],
+        })
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(geminiPollVideoOperation('test-key', 'v1_run')).resolves.toEqual({
+      operation: 'v1_run',
+      done: false,
+    });
+    await expect(geminiPollVideoOperation('test-key', 'v1_run')).resolves.toEqual({
+      operation: 'v1_run',
+      done: true,
+      error: GEMINI_VIDEO_SAFETY_MESSAGE,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://generativelanguage.googleapis.com/v1beta/interactions/v1_run',
+      { headers: { 'x-goog-api-key': 'test-key' } }
+    );
+  });
+
+  it('hands a completed interaction with a file URI to the file poll', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          id: 'v1_done',
+          status: 'completed',
+          output_video: { uri: VIDEO_URI, mime_type: 'video/mp4', data: btoa('mp4') },
+        })
+      )
+    );
+    await expect(geminiPollVideoOperation('test-key', 'v1_done')).resolves.toEqual({
+      operation: 'files/abc',
+      done: false,
+      videoUri: VIDEO_URI,
+      videoBytes: btoa('mp4'),
+      mimeType: 'video/mp4',
+    });
+  });
+
   it('waits until the file is ACTIVE, then returns the download address', async () => {
     const fetchMock = vi
       .fn()
@@ -188,8 +281,6 @@ describe('geminiPollVideoOperation', () => {
       operation: 'files/abc',
       done: true,
       videoUri: 'https://generativelanguage.googleapis.com/v1beta/files/abc:download?alt=media',
-      videoBytes: undefined,
-      mimeType: undefined,
     });
     expect(fetchMock).toHaveBeenCalledWith(FILE_URL, { headers: { 'x-goog-api-key': 'test-key' } });
   });

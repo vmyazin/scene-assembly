@@ -25,16 +25,21 @@ export interface GeminiVideoModel {
   /** Appended to download filenames. */
   fileCode: string;
   /**
-   * Supported output resolutions. The first entry is the documented default
-   * (720p), which is also the only resolution with a published per-second price.
-   * Google's API takes '360p', '720p', '1080p', '4k'.
+   * Supported output resolutions, lowest first. The default is
+   * `defaultResolution`, not the first entry, so reordering this list does
+   * not change the fallback. Google's API takes '360p', '720p', '1080p', '4k'.
+   * 720p is the only resolution with a published per-second price.
    */
   resolutions: string[];
+  /** Documented default output. Omni's default is 720p. */
+  defaultResolution: string;
   /**
    * Supported durations in seconds. Omni output is 3–10s at every resolution.
    * Sent as a duration string such as "8s".
    */
   durations: number[];
+  /** Documented default length. An omitted or invalid duration uses this, not `durations[0]`. */
+  defaultDuration: number;
   /**
    * Supported aspect ratios. Omni supports '16:9' (default) and '9:16'.
    */
@@ -67,8 +72,10 @@ export const GEMINI_VIDEO_MODELS: GeminiVideoModel[] = [
     id: 'gemini-omni-1.1-flash',
     label: 'Omni Flash',
     fileCode: 'omni-1_1-flash',
-    resolutions: ['720p', '1080p', '4k', '360p'],
+    resolutions: ['360p', '720p', '1080p', '4k'],
+    defaultResolution: '720p',
     durations: [3, 4, 5, 6, 7, 8, 9, 10],
+    defaultDuration: 8,
     aspectRatios: ['16:9', '9:16'],
     supports4K: true,
     supportsExtension: false,
@@ -98,11 +105,14 @@ export function resolveGeminiVideoModel(modelId: string | undefined): GeminiVide
 }
 
 /**
- * The chosen resolution if this model supports it, else its default (720p).
+ * The chosen resolution if this model supports it, else `defaultResolution`.
  * Never returns a resolution the model would reject.
  */
 export function geminiVideoResolution(model: GeminiVideoModel, resolution: string | undefined): string {
-  return resolution && model.resolutions.includes(resolution) ? resolution : model.resolutions[0];
+  const fallback = model.resolutions.includes(model.defaultResolution)
+    ? model.defaultResolution
+    : model.resolutions[0];
+  return resolution && model.resolutions.includes(resolution) ? resolution : fallback;
 }
 
 /**
@@ -114,12 +124,14 @@ export function geminiVideoDurationOptions(model: GeminiVideoModel): number[] {
 }
 
 /**
- * The chosen duration if this model supports it, else its first supported
- * duration. Never returns a duration the model would reject. Resolution is
- * not an argument: every published resolution accepts the same lengths.
+ * The chosen duration if this model supports it, else `defaultDuration` (8s).
+ * Never returns a duration the model would reject. An omitted value must not
+ * fall through to the shortest clip. Resolution is not an argument: every
+ * published resolution accepts the same lengths.
  */
 export function geminiVideoDuration(model: GeminiVideoModel, duration: number | undefined): number {
-  return duration && model.durations.includes(duration) ? duration : model.durations[0];
+  const fallback = model.durations.includes(model.defaultDuration) ? model.defaultDuration : model.durations[0];
+  return duration && model.durations.includes(duration) ? duration : fallback;
 }
 
 /**

@@ -3,6 +3,18 @@
 Status: Approved design
 Date: 2026-09-21
 
+## Follow-up decision — 2026-10-19 (review)
+
+Generation uses `background: true` and polls `GET /v1beta/interactions/{id}`
+until the status is terminal. `in_progress` and `queued` stay open. Only
+`completed` with no video is "finished without a video". A safety `error.code`
+(`safety`, `jailbreak`, `prohibited_content`, `blocklist`, `content_blocked`)
+keeps the blocked-clip message. The create POST times out on its own; a
+network failure there says the job may have started. Resolutions are listed
+lowest first, with `defaultResolution: '720p'` and `defaultDuration: 8`.
+Unpriced resolutions show "price unknown" and the 720p figure as a labelled
+lower bound. They are not filed as a charge.
+
 ## Follow-up decision — 2026-10-19
 
 Veo 3.1 Lite (`veo-3.1-lite-generate-preview`) shuts down on 2026-10-22.

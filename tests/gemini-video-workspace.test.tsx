@@ -140,10 +140,10 @@ describe('Gemini video workspace image-to-video', () => {
     const resolution = screen.getByRole('radiogroup', { name: 'Resolution' });
     expect(resolution.className).toContain('flex');
     expect(within(resolution).getAllByRole('radio').map((choice) => choice.textContent)).toEqual([
+      '360p',
       '720p',
       '1080p',
       '4k',
-      '360p',
     ]);
     expect(screen.queryByRole('combobox', { name: 'Resolution' })).toBeNull();
     expect(screen.getByRole('radio', { name: '720p' })).toHaveAttribute('aria-checked', 'true');
@@ -171,6 +171,8 @@ describe('Gemini video workspace image-to-video', () => {
       )
     ).toEqual(['3', '4', '5', '6', '7', '8', '9', '10']);
     expect(screen.getByRole('combobox', { name: 'Duration' })).toHaveDisplayValue('8');
+    expect(screen.getByRole('button', { name: /^Generate video/ })).toHaveTextContent(/price unknown/);
+    expect(screen.getByText(/Price unknown for 1080p/)).toHaveTextContent(/at least ~\$0\.81/);
   });
 
   it('submits a catalog duration chosen from the compact select', async () => {
@@ -232,7 +234,6 @@ describe('Gemini video workspace image-to-video', () => {
         image: expect.any(String),
         imageMimeType: 'image/png',
         model: 'gemini-omni-1.1-flash',
-        singleAttempt: true,
       })
     );
     const image = geminiGenerateVideoMock.mock.calls[0][0].image as string;
@@ -271,7 +272,6 @@ describe('Gemini video workspace image-to-video', () => {
       expect.objectContaining({
         prompt: 'A moonlit ocean',
         image: undefined,
-        singleAttempt: true,
         config: expect.objectContaining({ resolution: '720p', durationSeconds: 8, aspectRatio: '16:9' }),
       })
     );
@@ -280,9 +280,35 @@ describe('Gemini video workspace image-to-video', () => {
     await waitFor(() => expect(geminiDownloadVideoMock).toHaveBeenCalledWith(
       'gemini-test-key',
       VIDEO_URI,
-      expect.objectContaining({ singleAttempt: true })
+      expect.objectContaining({})
     ));
     expect(await screen.findByLabelText('Generated video')).toBeInTheDocument();
+  });
+
+  it('keeps inline bytes when a later poll only returns the file address', async () => {
+    geminiGenerateVideoMock.mockResolvedValue({
+      operation: 'files/abc',
+      done: false,
+      videoUri: VIDEO_URI,
+      videoBytes: 'AAAA',
+      mimeType: 'video/mp4',
+    });
+    geminiPollVideoOperationMock.mockResolvedValue({
+      operation: 'files/abc',
+      done: true,
+      videoUri: VIDEO_URI,
+    });
+
+    renderTextWorkspace();
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A moonlit ocean' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Generate video/ }));
+
+    await waitFor(() =>
+      expect(geminiDownloadVideoMock).toHaveBeenCalledWith('gemini-test-key', VIDEO_URI, {
+        videoBytes: 'AAAA',
+        mimeType: 'video/mp4',
+      })
+    );
   });
 
   it.each([new RouteError('Lost response', 503), new TypeError('Lost response')])(

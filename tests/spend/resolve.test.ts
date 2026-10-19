@@ -79,7 +79,11 @@ describe('resolveGeminiVideo', () => {
         resolution: '1080p',
         durationSeconds: 8,
       })
-    ).toMatchObject({ costUsd: null, confidence: 'unknown' });
+    ).toMatchObject({
+      costUsd: null,
+      confidence: 'unknown',
+      note: expect.stringContaining('at least ~$0.81'),
+    });
   });
 });
 
