@@ -18,12 +18,21 @@ import SubmissionError from '@/components/SubmissionError';
 import { FinishedVideoActions } from '@/components/VideoResult';
 import VideoPlayer from '@/components/video/VideoPlayer';
 import { downloadFilenameBase } from '@/lib/download-name';
-import { GEMINI_VIDEO_TIMEOUT_MS, geminiDownloadVideo, geminiGenerateVideo, geminiPollVideoOperation, geminiVideoWait } from '@/lib/engines/gemini';
+import {
+  GEMINI_VIDEO_POLL_FAILURE_LIMIT,
+  GEMINI_VIDEO_SAFETY_MESSAGE,
+  GEMINI_VIDEO_TIMEOUT_MS,
+  geminiDeleteVideoInteraction,
+  geminiDownloadVideo,
+  geminiGenerateVideo,
+  geminiPollVideoOperation,
+  geminiVideoWait,
+} from '@/lib/engines/gemini';
 import { GEMINI_VIDEO_MODELS, geminiVideoDuration, geminiVideoDurationOptions, type GeminiVideoModel } from '@/lib/engines/gemini-video-catalog';
 import { extensionForMedia } from '@/lib/media-download';
 import { requestPromptSlug } from '@/lib/micro-ai/browser';
 import { playGenerationChime } from '@/lib/notify/chime';
-import { useAutoRetry } from '@/lib/providers/auto-retry';
+import { isRetryableFailure, useAutoRetry } from '@/lib/providers/auto-retry';
 import { routeStatus } from '@/lib/providers/route-error';
 import { captureGeminiVideo } from '@/lib/spend/capture';
 import { geminiVideoCost, geminiVideoPriceNotice, geminiVideoRateLabel } from '@/lib/spend/rates';
@@ -223,6 +232,8 @@ export default function GeminiVideoWorkspace({
     setStartedAt(started);
 
     let startedOperation = false;
+    // Google said the job failed or was blocked, so there is no charge to record.
+    let reportedFailure = false;
     let generated = false;
     let galleryRecordId: string | undefined;
     try {
@@ -247,6 +258,8 @@ export default function GeminiVideoWorkspace({
 
       let operation = startedJob;
       const deadline = started + GEMINI_VIDEO_TIMEOUT_MS;
+      let pollFailures = 0;
+      let skipWait = false;
       while (!operation.done) {
         if (!isCurrent()) return;
         if (now() >= deadline) {
@@ -256,18 +269,36 @@ export default function GeminiVideoWorkspace({
         }
         if (operation.error) break;
         setPhase('poll');
-        await geminiVideoWait();
+        if (!skipWait) await geminiVideoWait();
         if (!isCurrent()) return;
-        const polled = await geminiPollVideoOperation(apiKey, operation.operation);
-        // A file poll replaces the interaction result. Keep inline bytes from
-        // the earlier response so a 403 on the URI can still fall back to them.
-        operation = {
-          ...polled,
-          videoBytes: polled.videoBytes ?? operation.videoBytes,
-          mimeType: polled.mimeType ?? operation.mimeType,
-        };
+        const previousKind = operation.kind;
+        try {
+          operation = await geminiPollVideoOperation(apiKey, operation);
+        } catch (pollError) {
+          // The job is already running and paid for. A blip must not abandon
+          // it, so a retryable failure waits for the next poll.
+          pollFailures += 1;
+          if (isRetryableFailure(pollError) && pollFailures < GEMINI_VIDEO_POLL_FAILURE_LIMIT) {
+            skipWait = false;
+            continue;
+          }
+          const reason = pollError instanceof Error ? pollError.message : 'Gemini could not check this video job.';
+          // A block is Google's answer, not a lost job: nothing to check in AI Studio.
+          if (reason === GEMINI_VIDEO_SAFETY_MESSAGE) {
+            reportedFailure = true;
+            throw pollError;
+          }
+          throw new Error(`${reason} The video may still finish in AI Studio. Check there before trying again.`);
+        }
+        pollFailures = 0;
+        // The interaction just handed over its file, which is often ready
+        // already, so check it without another full wait.
+        skipWait = previousKind === 'interaction' && operation.kind === 'file';
       }
-      if (operation.error) throw new Error(operation.error);
+      if (operation.error) {
+        reportedFailure = true;
+        throw new Error(operation.error);
+      }
       if (!operation.videoUri && !operation.videoBytes) {
         throw new Error('Gemini finished without a video. Please try again.');
       }
@@ -279,6 +310,9 @@ export default function GeminiVideoWorkspace({
         videoBytes: operation.videoBytes,
         mimeType: operation.mimeType,
       });
+      // The clip is local now. Background mode stored the prompt and any
+      // reference image with the interaction, so clear it.
+      void geminiDeleteVideoInteraction(apiKey, operation.interactionId);
       if (!isCurrent()) return;
 
       const slug = await requestPromptSlug(submittedPrompt, apiKey);
@@ -330,7 +364,10 @@ export default function GeminiVideoWorkspace({
         autoRetry.schedule(() => generateRef.current());
       }
     } finally {
-      if (generated) {
+      // A started job that ended without a clip or a reported failure (timed
+      // out, lost its polls, or the tab moved on) may still be billed, so it
+      // gets an unknown-cost row instead of none.
+      if (generated || (startedOperation && !reportedFailure)) {
         captureGeminiVideo({
           modelId: geminiVideoModel,
           prompt: submittedPrompt,
@@ -338,6 +375,7 @@ export default function GeminiVideoWorkspace({
           resolution,
           durationSeconds: effectiveDuration,
           galleryRecordId,
+          ...(generated ? {} : { unconfirmed: true }),
         });
       }
       if (isCurrent()) {

@@ -48,7 +48,11 @@
   for `gemini-omni-1.1-flash`, then GET the interaction until it finishes, then
   GET the file until `ACTIVE`, then GET `video.uri` with the API key). A
   synchronous POST hid a dropped connection behind "could not start" and invited
-  a second charge. Catalog constraints belong to `gemini-video-catalog.ts`;
+  a second charge. Results carry `kind`, and the poll takes the previous result,
+  so the endpoint is never guessed from the id. A retryable poll failure keeps
+  polling, a started job lost without a reported failure files an unknown-cost
+  spend row, and the interaction is deleted after download because
+  `store: true` keeps the prompt and image at Google. Catalog constraints belong to `gemini-video-catalog.ts`;
   rates stay in `lib/spend/rates.ts`. The browser BYOK UI is
   `GeminiVideoWorkspace`. Duration, resolution and aspect ratio render through
   `ModelControls` (the same control fal and Kie use) because stacked native

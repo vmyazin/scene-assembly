@@ -3,6 +3,25 @@
 Status: Approved design
 Date: 2026-09-21
 
+## Follow-up decision — 2026-10-20 (second review)
+
+Each result carries `kind: 'interaction' | 'file'`, and
+`geminiPollVideoOperation` takes the previous result, so the poll picks its
+endpoint from the kind rather than the shape of the id. It also carries the
+interaction id and any inline bytes forward across file polls. A retryable
+poll failure (`isRetryableFailure`) waits for the next poll, up to
+`GEMINI_VIDEO_POLL_FAILURE_LIMIT` in a row, because the job is already paid
+for. Giving up, or any other poll failure except a safety block, points to
+AI Studio. A started job that ends without a clip and without a failure
+reported by Google (timeout, lost polls, the tab moved on) files an
+unknown-cost spend row, because it may still be billed. The first file poll after the interaction hands over its file
+skips the wait. A create timeout says the job may have started; a bare fetch
+`TypeError` leads with the connection, because offline sends and CORS
+rejections throw the same error and never reach Google. After a successful
+download the workspace deletes the interaction (`DELETE
+/v1beta/interactions/{id}`, best effort), because `store: true` keeps the
+prompt and any reference image on Google's side.
+
 ## Follow-up decision — 2026-10-19 (review)
 
 Generation uses `background: true` and polls `GET /v1beta/interactions/{id}`

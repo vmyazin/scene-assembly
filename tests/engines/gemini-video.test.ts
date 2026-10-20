@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RouteError } from '../../lib/providers/route-error';
 import {
   GEMINI_VIDEO_SAFETY_MESSAGE,
+  geminiDeleteVideoInteraction,
   geminiDownloadVideo,
   geminiGenerateVideo,
   geminiPollVideoOperation,
@@ -82,6 +83,8 @@ describe('geminiGenerateVideo', () => {
       })
     ).resolves.toEqual({
       operation: 'files/abc',
+      kind: 'file',
+      interactionId: 'v1_text',
       done: false,
       videoUri: VIDEO_URI,
       videoBytes: undefined,
@@ -113,6 +116,8 @@ describe('geminiGenerateVideo', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ id: 'v1_run', status: 'in_progress' })));
     await expect(geminiGenerateVideo({ apiKey: 'test-key', prompt: 'A moonlit ocean' })).resolves.toEqual({
       operation: 'v1_run',
+      kind: 'interaction',
+      interactionId: 'v1_run',
       done: false,
     });
   });
@@ -121,6 +126,8 @@ describe('geminiGenerateVideo', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ id: 'v1_empty', status: 'completed' })));
     await expect(geminiGenerateVideo({ apiKey: 'test-key', prompt: 'A moonlit ocean' })).resolves.toEqual({
       operation: 'v1_empty',
+      kind: 'interaction',
+      interactionId: 'v1_empty',
       done: true,
       error: 'Gemini finished without a video. Please try again.',
     });
@@ -139,10 +146,19 @@ describe('geminiGenerateVideo', () => {
     });
   });
 
-  it('treats a dropped create request as a job that may already be running', async () => {
+  it('treats a timed-out create request as a job that may already be running', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new DOMException('The operation timed out.', 'TimeoutError')));
+    await expect(geminiGenerateVideo({ apiKey: 'test-key', prompt: 'A moonlit ocean' })).rejects.toMatchObject({
+      message: expect.stringMatching(/^Gemini may have started this video/),
+      status: 0,
+    });
+  });
+
+  it('leads with the connection when the create request never got an answer', async () => {
+    // Offline sends and CORS rejections throw the same TypeError and never reach Google.
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
     await expect(geminiGenerateVideo({ apiKey: 'test-key', prompt: 'A moonlit ocean' })).rejects.toMatchObject({
-      message: expect.stringContaining('may have started'),
+      message: expect.stringMatching(/^Could not reach Gemini\. Check your connection\..*check AI Studio/),
       status: 0,
     });
   });
@@ -231,12 +247,17 @@ describe('geminiPollVideoOperation', () => {
       );
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(geminiPollVideoOperation('test-key', 'v1_run')).resolves.toEqual({
+    const job = { operation: 'v1_run', kind: 'interaction' as const };
+    await expect(geminiPollVideoOperation('test-key', job)).resolves.toEqual({
       operation: 'v1_run',
+      kind: 'interaction',
+      interactionId: 'v1_run',
       done: false,
     });
-    await expect(geminiPollVideoOperation('test-key', 'v1_run')).resolves.toEqual({
+    await expect(geminiPollVideoOperation('test-key', job)).resolves.toEqual({
       operation: 'v1_run',
+      kind: 'interaction',
+      interactionId: 'v1_run',
       done: true,
       error: GEMINI_VIDEO_SAFETY_MESSAGE,
     });
@@ -257,8 +278,12 @@ describe('geminiPollVideoOperation', () => {
         })
       )
     );
-    await expect(geminiPollVideoOperation('test-key', 'v1_done')).resolves.toEqual({
+    await expect(
+      geminiPollVideoOperation('test-key', { operation: 'v1_done', kind: 'interaction' })
+    ).resolves.toEqual({
       operation: 'files/abc',
+      kind: 'file',
+      interactionId: 'v1_done',
       done: false,
       videoUri: VIDEO_URI,
       videoBytes: btoa('mp4'),
@@ -273,24 +298,74 @@ describe('geminiPollVideoOperation', () => {
       .mockResolvedValueOnce(jsonResponse({ state: { name: 'ACTIVE' } }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(geminiPollVideoOperation('test-key', 'files/abc')).resolves.toMatchObject({
+    const job = { operation: 'files/abc', kind: 'file' as const, interactionId: 'v1_done' };
+    await expect(geminiPollVideoOperation('test-key', job)).resolves.toMatchObject({
       operation: 'files/abc',
       done: false,
     });
-    await expect(geminiPollVideoOperation('test-key', 'files/abc')).resolves.toEqual({
+    await expect(geminiPollVideoOperation('test-key', job)).resolves.toEqual({
       operation: 'files/abc',
+      kind: 'file',
+      interactionId: 'v1_done',
       done: true,
       videoUri: 'https://generativelanguage.googleapis.com/v1beta/files/abc:download?alt=media',
+      videoBytes: undefined,
+      mimeType: undefined,
     });
     expect(fetchMock).toHaveBeenCalledWith(FILE_URL, { headers: { 'x-goog-api-key': 'test-key' } });
   });
 
+  it('keeps inline bytes from the interaction when the file poll returns only an address', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ state: 'ACTIVE' })));
+    await expect(
+      geminiPollVideoOperation('test-key', {
+        operation: 'files/abc',
+        kind: 'file',
+        videoBytes: 'AAAA',
+        mimeType: 'video/mp4',
+      })
+    ).resolves.toMatchObject({ done: true, videoBytes: 'AAAA', mimeType: 'video/mp4' });
+  });
+
+  it('polls by the kind the job carries, not the shape of its id', async () => {
+    // An interaction id that happens to contain "files/" still goes to the interactions endpoint.
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: 'v1/files/x', status: 'in_progress' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await geminiPollVideoOperation('test-key', { operation: 'v1/files/x', kind: 'interaction' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://generativelanguage.googleapis.com/v1beta/interactions/v1%2Ffiles%2Fx',
+      { headers: { 'x-goog-api-key': 'test-key' } }
+    );
+  });
+
   it('surfaces a failed file', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ state: 'FAILED', error: { message: 'Unsafe audio' } })));
-    await expect(geminiPollVideoOperation('test-key', 'files/abc')).resolves.toMatchObject({
+    await expect(
+      geminiPollVideoOperation('test-key', { operation: 'files/abc', kind: 'file' })
+    ).resolves.toMatchObject({
       done: true,
       error: 'Unsafe audio',
     });
+  });
+});
+
+describe('geminiDeleteVideoInteraction', () => {
+  it('deletes the stored interaction with the API key', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}));
+    vi.stubGlobal('fetch', fetchMock);
+    await geminiDeleteVideoInteraction('test-key', 'v1_done');
+    expect(fetchMock).toHaveBeenCalledWith('https://generativelanguage.googleapis.com/v1beta/interactions/v1_done', {
+      method: 'DELETE',
+      headers: { 'x-goog-api-key': 'test-key' },
+    });
+  });
+
+  it('never throws, and skips the call without an id', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(geminiDeleteVideoInteraction('test-key', 'v1_done')).resolves.toBeUndefined();
+    await geminiDeleteVideoInteraction('test-key', undefined);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

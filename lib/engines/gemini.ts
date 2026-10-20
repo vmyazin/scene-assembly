@@ -14,6 +14,12 @@ import {
 /** Google's documented Omni file-poll cadence. */
 export const GEMINI_VIDEO_POLL_INTERVAL_MS = 5_000;
 /**
+ * Consecutive failed polls before the workspace stops waiting. The job is
+ * already running and paid for, so a network blip must not abandon it; six
+ * misses is about thirty seconds without an answer.
+ */
+export const GEMINI_VIDEO_POLL_FAILURE_LIMIT = 6;
+/**
  * Omni does not publish a deadline. Eight minutes covers the background
  * interaction poll and the file poll that follows it. The create POST is
  * bounded separately by `GEMINI_VIDEO_START_TIMEOUT_MS`.
@@ -37,6 +43,14 @@ export const GEMINI_VIDEO_SAFETY_MESSAGE =
 
 const GEMINI_VIDEO_MAYBE_STARTED_MESSAGE =
   'Gemini may have started this video. Check AI Studio before trying again, so a second run is not charged.';
+
+/**
+ * A fetch TypeError is also what offline sends and CORS rejections throw, and
+ * those never reach Google. Lead with the connection, and keep the AI Studio
+ * check for the case where it dropped after the request went out.
+ */
+const GEMINI_VIDEO_UNREACHABLE_MESSAGE =
+  'Could not reach Gemini. Check your connection. If it dropped after you clicked Generate, the video may have started, so check AI Studio before trying again.';
 
 const GEMINI_INTERACTIONS_URL = 'https://generativelanguage.googleapis.com/v1beta/interactions';
 
@@ -147,8 +161,15 @@ export async function geminiGenerate(opts: GeminiOpts): Promise<EngineResult> {
  * that is polled until ACTIVE; an inline payload is already the clip.
  */
 export interface VideoOperationResult {
-  /** File resource name (`files/…`) while a URI delivery is still processing. */
+  /** The interaction id while Omni generates, then the file name (`files/…`). */
   operation: string;
+  /**
+   * Which endpoint polls `operation`. Set by the code that produced it, so the
+   * poll never has to guess from the shape of the string.
+   */
+  kind: 'interaction' | 'file';
+  /** The interaction behind this clip, kept so it can be deleted after download. */
+  interactionId?: string;
   /** Whether the clip is ready to download. */
   done: boolean;
   /** File URI if complete, else undefined. */
@@ -374,14 +395,15 @@ function resultFromInteraction(body: unknown, fallbackId: string): VideoOperatio
   const status = typeof record.status === 'string' ? record.status : '';
   const id = typeof record.id === 'string' && record.id.trim() ? record.id.trim() : fallbackId;
   const fault = readInteractionFault(body);
+  const job = { operation: id, kind: 'interaction' as const, ...(id ? { interactionId: id } : {}) };
   if (status === 'failed' || status === 'cancelled') {
-    return { operation: id, done: true, error: safetyOrMessage(fault, 'Gemini video generation failed.') };
+    return { ...job, done: true, error: safetyOrMessage(fault, 'Gemini video generation failed.') };
   }
   const video = readOmniVideo(body);
   if (video) return videoResult(id, video);
   if (status === 'completed' || status === 'incomplete') {
     return {
-      operation: id,
+      ...job,
       done: true,
       error: isSafetyFault(fault) ? GEMINI_VIDEO_SAFETY_MESSAGE : 'Gemini finished without a video. Please try again.',
     };
@@ -392,17 +414,27 @@ function resultFromInteraction(body: unknown, fallbackId: string): VideoOperatio
       502
     );
   }
-  return { operation: id, done: false };
+  return { ...job, done: false };
 }
 
-function videoResult(operation: string, video: OmniVideoPart): VideoOperationResult {
+function videoResult(interactionId: string, video: OmniVideoPart): VideoOperationResult {
+  const owner = interactionId ? { interactionId } : {};
   if (video.data && !video.uri) {
-    return { operation, done: true, videoBytes: video.data, mimeType: video.mimeType };
+    return {
+      operation: interactionId,
+      kind: 'interaction',
+      ...owner,
+      done: true,
+      videoBytes: video.data,
+      mimeType: video.mimeType,
+    };
   }
   const fileName = video.uri ? fileNameFromUri(video.uri) : null;
   if (!fileName) throw new RouteError('Gemini returned an unusable video address.', 502);
   return {
     operation: fileName,
+    kind: 'file',
+    ...owner,
     done: false,
     videoUri: omniDownloadUrl(fileName, video.uri),
     videoBytes: video.data,
@@ -412,12 +444,19 @@ function videoResult(operation: string, video: OmniVideoPart): VideoOperationRes
 
 function startFailure(error: unknown, apiKey: string): RouteError {
   if (error instanceof RouteError) return error;
-  const name = error instanceof Error ? error.name : '';
-  // A dropped socket or an aborted create can land after Google accepted the
-  // job. Say so, instead of a "could not start" that invites a second charge.
-  if (error instanceof TypeError || name === 'TimeoutError' || name === 'AbortError') {
+  // Duck-typed: `AbortSignal.timeout` rejects with a DOMException, which is
+  // not an Error subclass in every runtime.
+  const name =
+    error !== null && typeof error === 'object' && typeof (error as { name?: unknown }).name === 'string'
+      ? (error as { name: string }).name
+      : '';
+  // A create that timed out or was aborted was sent, and Google may have
+  // accepted it. Say so, instead of a "could not start" that invites a second
+  // charge.
+  if (name === 'TimeoutError' || name === 'AbortError') {
     return new RouteError(GEMINI_VIDEO_MAYBE_STARTED_MESSAGE, 0);
   }
+  if (error instanceof TypeError) return new RouteError(GEMINI_VIDEO_UNREACHABLE_MESSAGE, 0);
   return geminiRouteError(error, 'Gemini could not start video generation.', apiKey);
 }
 
@@ -427,6 +466,8 @@ function startFailure(error: unknown, apiKey: string): RouteError {
  * POST `/v1beta/interactions` with `background: true`. The response is an
  * interaction id, not the finished clip. `store: true` because that id is
  * fetched again; `store: false` is for a unary response that is not retrieved.
+ * The workspace deletes the interaction after download
+ * (`geminiDeleteVideoInteraction`) so the prompt and image are not kept.
  * Duration is an integer from 3 to 10 followed by `s` (`"8s"`). URI delivery
  * avoids the 4MB inline cap.
  */
@@ -484,14 +525,15 @@ async function pollOmniFile(apiKey: string, fileName: string): Promise<VideoOper
   if (state === 'FAILED') {
     return {
       operation: fileName,
+      kind: 'file',
       done: true,
       error: safetyOrMessage(fault, readErrorMessage(body) || 'Gemini video generation failed.'),
     };
   }
   if (state === 'ACTIVE') {
-    return { operation: fileName, done: true, videoUri };
+    return { operation: fileName, kind: 'file', done: true, videoUri };
   }
-  return { operation: fileName, done: false, videoUri };
+  return { operation: fileName, kind: 'file', done: false, videoUri };
 }
 
 async function pollOmniInteraction(apiKey: string, interactionId: string): Promise<VideoOperationResult> {
@@ -503,27 +545,53 @@ async function pollOmniInteraction(apiKey: string, interactionId: string): Promi
   return resultFromInteraction(body, interactionId);
 }
 
+/** What a poll needs from the previous result. */
+export type VideoJob = Pick<VideoOperationResult, 'operation' | 'kind' | 'interactionId' | 'videoBytes' | 'mimeType'>;
+
 /**
  * Poll a background Omni interaction, then its file.
  *
- * An interaction id is GET `/v1beta/interactions/{id}` until the status is
- * terminal or the clip has a file URI. A `files/…` operation is GET
- * `/v1beta/files/{id}` until `state` is `ACTIVE` or `FAILED`.
+ * An `interaction` job is GET `/v1beta/interactions/{id}` until the status is
+ * terminal or the clip has a file URI. A `file` job is GET `/v1beta/files/{id}`
+ * until `state` is `ACTIVE` or `FAILED`. The result keeps the interaction id
+ * and any inline bytes from `job`, because a file poll returns neither and a
+ * 403 on the file URI can still fall back to the bytes.
  */
-export async function geminiPollVideoOperation(
-  apiKey: string,
-  operationName: string
-): Promise<VideoOperationResult> {
+export async function geminiPollVideoOperation(apiKey: string, job: VideoJob): Promise<VideoOperationResult> {
   const key = requireGeminiApiKey(apiKey);
-  const name = operationName.trim();
-  if (!name) throw new RouteError('Missing Gemini video job.', 400);
-  const fileName = name.startsWith('files/') ? name : fileNameFromUri(name);
+  const id = job.operation.trim();
+  if (!id) throw new RouteError('Missing Gemini video job.', 400);
 
   try {
-    if (fileName && (name.startsWith('files/') || name.includes('/files/'))) return await pollOmniFile(key, fileName);
-    return await pollOmniInteraction(key, name.replace(/^.*\/interactions\//, '').replace(/[/?].*$/, ''));
+    const next = job.kind === 'file' ? await pollOmniFile(key, id) : await pollOmniInteraction(key, id);
+    return {
+      ...next,
+      interactionId: next.interactionId ?? job.interactionId,
+      videoBytes: next.videoBytes ?? job.videoBytes,
+      mimeType: next.mimeType ?? job.mimeType,
+    };
   } catch (error) {
     throw geminiRouteError(error, 'Gemini could not check this video job.', key);
+  }
+}
+
+/**
+ * Delete a stored interaction once its clip is downloaded. Background mode
+ * needs `store: true`, which keeps the prompt and any reference image on
+ * Google's side; this clears them. Best effort: a failed delete never fails a
+ * generation that already succeeded.
+ */
+export async function geminiDeleteVideoInteraction(apiKey: string, interactionId: string | undefined): Promise<void> {
+  const key = apiKey.trim();
+  const id = interactionId?.trim();
+  if (!key || !id) return;
+  try {
+    await fetch(`${GEMINI_INTERACTIONS_URL}/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { 'x-goog-api-key': key },
+    });
+  } catch {
+    // A failed delete leaves the interaction to Google's stored-interaction retention.
   }
 }
 

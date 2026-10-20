@@ -275,7 +275,16 @@ export interface GeminiVideoCapture {
   resolution: string;
   durationSeconds: number;
   galleryRecordId?: string;
+  /**
+   * The job started but no clip came back and Google reported no failure (a
+   * timeout, lost polls, or the tab moved on). It may still be billed, so the
+   * row is filed at an unknown cost rather than the catalog rate or not at all.
+   */
+  unconfirmed?: boolean;
 }
+
+export const GEMINI_VIDEO_UNCONFIRMED_NOTE =
+  'The app stopped waiting before this video finished. Check AI Studio for whether it was charged.';
 
 export function captureGeminiVideo(args: GeminiVideoCapture): void {
   try {
@@ -291,11 +300,13 @@ export function captureGeminiVideo(args: GeminiVideoCapture): void {
           promptExcerpt: excerpt(args.prompt),
           ...(args.galleryRecordId ? { galleryRecordId: args.galleryRecordId } : {}),
         },
-        resolveGeminiVideo({
-          modelId: args.modelId,
-          resolution: args.resolution,
-          durationSeconds: args.durationSeconds,
-        })
+        args.unconfirmed
+          ? unknownFigure('catalog-rate', GEMINI_VIDEO_UNCONFIRMED_NOTE)
+          : resolveGeminiVideo({
+              modelId: args.modelId,
+              resolution: args.resolution,
+              durationSeconds: args.durationSeconds,
+            })
       )
     );
   } catch {
