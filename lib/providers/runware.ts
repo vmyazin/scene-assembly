@@ -172,7 +172,7 @@ function imageTask(request: ImageRequest, uuid: string): Record<string, unknown>
 
   if (references.length > 0) {
     // Two different input shapes, per model: the editing models (FLUX.2,
-    // Qwen-Image-Edit-Plus) require referenceImages and have no seedImage,
+    // FLUX 3 Image Klein, Qwen-Image-Edit-Plus) require referenceImages and have no seedImage,
     // while the older checkpoints start from seedImage and treat the rest as
     // reference. Sending the wrong field is rejected outright.
     task.inputs =

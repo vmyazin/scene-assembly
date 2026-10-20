@@ -5,6 +5,7 @@
  * isolation. Dependency-free so server routes and client code can both price.
  */
 import { DEFAULT_GEMINI_IMAGE_MODEL } from '../engines/gemini-catalog';
+import { DEFAULT_GEMINI_VIDEO_MODEL, GEMINI_OMNI_720P_USD_PER_SECOND } from '../engines/gemini-video-catalog';
 
 /**
  * https://ai.google.dev/gemini-api/docs/pricing and
@@ -68,23 +69,26 @@ function geminiRate(modelId: string | undefined): GeminiImageRate {
 }
 
 /**
- * https://ai.google.dev/gemini-api/docs/pricing — Veo video models, read
- * 2026-09-21. Video generation is priced per second of output, with audio
- * included in the base rate. Veo 3.1 Lite is the most affordable entry point,
- * at $0.05/s for 720p and $0.08/s for 1080p. 4K is not supported on Lite.
+ * https://ai.google.dev/gemini-api/docs/pricing — Gemini Omni Flash, read
+ * 2026-10-19. Video output is $17.50 per 1M tokens, including thinking tokens.
+ * 720p is billed at 5,792 tokens per second, so one second is
+ * 5792 × 17.50 / 1_000_000 = $0.10136. Google summarizes that as about $0.10/s.
+ * Input tokens are $1.50 per 1M and are not part of this per-second figure.
+ * No per-second token rate is published for 360p, 1080p, or 4k, so those
+ * resolutions are not given a stand-in price.
  */
 export interface GeminiVideoRate {
-  /** USD per second of generated video, by resolution. Audio is always included. */
+  /** USD per second of generated video, by resolution. Audio is included in the output-token rate. */
   usdPerSecond: Record<string, number>;
 }
 
 export const GEMINI_VIDEO_RATES: Record<string, GeminiVideoRate> = {
-  'veo-3.1-lite-generate-preview': {
-    usdPerSecond: { '720p': 0.05, '1080p': 0.08 },
+  'gemini-omni-1.1-flash': {
+    usdPerSecond: { '720p': GEMINI_OMNI_720P_USD_PER_SECOND },
   },
 };
 
-export const DEFAULT_GEMINI_VIDEO_MODEL_ID = 'veo-3.1-lite-generate-preview';
+export const DEFAULT_GEMINI_VIDEO_MODEL_ID = DEFAULT_GEMINI_VIDEO_MODEL;
 
 function geminiVideoRate(modelId: string | undefined): GeminiVideoRate | null {
   return GEMINI_VIDEO_RATES[modelId ?? ''] ?? GEMINI_VIDEO_RATES[DEFAULT_GEMINI_VIDEO_MODEL_ID] ?? null;
@@ -92,7 +96,10 @@ function geminiVideoRate(modelId: string | undefined): GeminiVideoRate | null {
 
 /**
  * Cost of one Gemini video generation at the given resolution and duration.
- * Returns 0 if the model or resolution is unknown.
+ * Returns 0 when the resolution has no published per-second rate. An unknown
+ * model id is priced as Omni, because that is the model the request runs.
+ * Callers that need a figure for an unpriced resolution use
+ * `geminiVideoPriceNotice` (a 720p lower bound labelled unknown), not this 0.
  */
 export function geminiVideoCost(
   modelId: string | undefined,
@@ -100,11 +107,35 @@ export function geminiVideoCost(
   durationSeconds: number | undefined
 ): number {
   const rate = geminiVideoRate(modelId);
-  if (!rate) return 0;
-  const usd = rate.usdPerSecond[resolution ?? '720p'] ?? rate.usdPerSecond['720p'] ?? 0;
+  if (!rate || !resolution) return 0;
+  const usd = rate.usdPerSecond[resolution];
+  if (usd == null) return 0;
   const duration = durationSeconds && Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0;
   const cost = usd * duration;
   return Number.isFinite(cost) && cost > 0 ? cost : 0;
+}
+
+/**
+ * What to show beside Generate when this resolution has no published
+ * per-second rate. 1080p and 4k are upscales, so the 720p figure is a labelled
+ * lower bound. 360p is not claimed to cost at least that much. Returns null
+ * when the selection is priced.
+ */
+export function geminiVideoPriceNotice(
+  modelId: string | undefined,
+  resolution: string | undefined,
+  durationSeconds: number | undefined
+): string | null {
+  if (geminiVideoCost(modelId, resolution, durationSeconds) > 0) return null;
+  const floor = geminiVideoCost(modelId, '720p', durationSeconds);
+  if (!resolution || !(floor > 0)) {
+    return 'Price unknown. Google does not publish a per-second rate for this resolution.';
+  }
+  const dollars = `~$${floor.toFixed(2)}`;
+  if (resolution === '1080p' || resolution === '4k') {
+    return `Price unknown for ${resolution}. A 720p clip of this length is at least ${dollars}.`;
+  }
+  return `Price unknown for ${resolution}. Google only publishes a 720p rate (${dollars} for this length).`;
 }
 
 /**
@@ -114,9 +145,8 @@ export function geminiVideoCost(
 export function geminiVideoRateLabel(modelId: string | undefined, resolution?: string): string | null {
   const rate = geminiVideoRate(modelId);
   if (!rate) return null;
-  const rates = resolution
-    ? [rate.usdPerSecond[resolution] ?? rate.usdPerSecond['720p']]
-    : Object.values(rate.usdPerSecond);
+  const specific = resolution ? rate.usdPerSecond[resolution] : undefined;
+  const rates = resolution ? (specific == null ? [] : [specific]) : Object.values(rate.usdPerSecond);
   const range = usdRange(rates);
   return range && `${range} / s`;
 }

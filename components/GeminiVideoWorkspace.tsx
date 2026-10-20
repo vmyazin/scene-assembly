@@ -18,15 +18,24 @@ import SubmissionError from '@/components/SubmissionError';
 import { FinishedVideoActions } from '@/components/VideoResult';
 import VideoPlayer from '@/components/video/VideoPlayer';
 import { downloadFilenameBase } from '@/lib/download-name';
-import { GEMINI_VIDEO_TIMEOUT_MS, geminiDownloadVideo, geminiGenerateVideo, geminiPollVideoOperation, geminiVideoWait } from '@/lib/engines/gemini';
+import {
+  GEMINI_VIDEO_POLL_FAILURE_LIMIT,
+  GEMINI_VIDEO_SAFETY_MESSAGE,
+  GEMINI_VIDEO_TIMEOUT_MS,
+  geminiDeleteVideoInteraction,
+  geminiDownloadVideo,
+  geminiGenerateVideo,
+  geminiPollVideoOperation,
+  geminiVideoWait,
+} from '@/lib/engines/gemini';
 import { GEMINI_VIDEO_MODELS, geminiVideoDuration, geminiVideoDurationOptions, type GeminiVideoModel } from '@/lib/engines/gemini-video-catalog';
 import { extensionForMedia } from '@/lib/media-download';
 import { requestPromptSlug } from '@/lib/micro-ai/browser';
 import { playGenerationChime } from '@/lib/notify/chime';
-import { useAutoRetry } from '@/lib/providers/auto-retry';
+import { isRetryableFailure, useAutoRetry } from '@/lib/providers/auto-retry';
 import { routeStatus } from '@/lib/providers/route-error';
 import { captureGeminiVideo } from '@/lib/spend/capture';
-import { geminiVideoCost, geminiVideoRateLabel } from '@/lib/spend/rates';
+import { geminiVideoCost, geminiVideoPriceNotice, geminiVideoRateLabel } from '@/lib/spend/rates';
 import { isVideoFile } from '@/lib/video-frame';
 import { useAppStore } from '@/store/useAppStore';
 import { useDraftStore } from '@/store/useDraftStore';
@@ -46,7 +55,7 @@ interface GeminiVideoWorkspaceProps {
   onContinueFromFrame?: () => void;
 }
 
-/** Veo image-to-video takes one still; the shared picker and stack enforce it. */
+/** Omni image-to-video takes one still; the shared picker and stack enforce it. */
 const MAX_INPUT_IMAGES = 1;
 
 interface GeminiClip {
@@ -85,20 +94,17 @@ const now = () => Date.now();
 /**
  * Same ModelControls the fal/Kie video workspaces use, so duration sits in a
  * compact field beside resolution toggles instead of a second stacked dropdown.
- * Duration stays a discrete select (4/6/8) because Veo rejects freeform lengths;
- * resolution uses the shared segmented control because Lite only publishes two.
+ * Duration stays a discrete select (3–10) because Omni rejects freeform lengths;
+ * resolution uses the shared segmented control.
  */
-function geminiVideoControlFields(
-  model: GeminiVideoModel,
-  resolution: string
-): ModelControlField[] {
+function geminiVideoControlFields(model: GeminiVideoModel): ModelControlField[] {
   return [
     {
       key: 'duration',
       label: 'Duration',
       type: 'select',
-      defaultValue: geminiVideoDuration(model, undefined, resolution),
-      options: geminiVideoDurationOptions(model, resolution).map((seconds) => ({
+      defaultValue: geminiVideoDuration(model, undefined),
+      options: geminiVideoDurationOptions(model).map((seconds) => ({
         label: String(seconds),
         value: seconds,
       })),
@@ -107,7 +113,7 @@ function geminiVideoControlFields(
       key: 'resolution',
       label: 'Resolution',
       type: 'select',
-      defaultValue: model.resolutions[0],
+      defaultValue: model.defaultResolution,
       options: model.resolutions.map((value) => ({ label: value, value })),
     },
     {
@@ -120,12 +126,12 @@ function geminiVideoControlFields(
   ];
 }
 
-function isGeminiResolution(value: string | number | boolean): value is '720p' | '1080p' {
-  return value === '720p' || value === '1080p';
+function isGeminiResolution(value: string | number | boolean, resolutions: readonly string[]): value is string {
+  return typeof value === 'string' && resolutions.includes(value);
 }
 
-function isGeminiDuration(value: string | number | boolean): value is 4 | 6 | 8 {
-  return value === 4 || value === 6 || value === 8;
+function isGeminiDuration(value: string | number | boolean): value is number {
+  return typeof value === 'number' && value >= 3 && value <= 10;
 }
 
 function isGeminiAspectRatio(value: string | number | boolean): value is '16:9' | '9:16' {
@@ -143,8 +149,8 @@ export default function GeminiVideoWorkspace({
   const setPrompt = useDraftStore((state) => state.setPrompt);
   const references = useDraftStore((state) => state.references);
 
-  const [resolution, setResolution] = useState<'720p' | '1080p'>('720p');
-  const [duration, setDuration] = useState<4 | 6 | 8>(8);
+  const [resolution, setResolution] = useState(GEMINI_VIDEO_MODELS[0].defaultResolution);
+  const [duration, setDuration] = useState(GEMINI_VIDEO_MODELS[0].defaultDuration);
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16'>('16:9');
   const [error, setError] = useState<string | null>(null);
   const [phase, setPhase] = useState<'start' | 'poll' | 'download' | null>(null);
@@ -162,8 +168,9 @@ export default function GeminiVideoWorkspace({
   // Number() tells React Compiler this is a primitive. Otherwise it treats the
   // helper's result as mutable and, because handleGenerate captures it, reports
   // that handler's Date.now() calls as impure work during render.
-  const effectiveDuration = Number(geminiVideoDuration(currentModel, duration, resolution)) as 4 | 6 | 8;
+  const effectiveDuration = Number(geminiVideoDuration(currentModel, duration));
   const costEstimate = geminiVideoCost(geminiVideoModel, resolution, effectiveDuration);
+  const priceNotice = geminiVideoPriceNotice(geminiVideoModel, resolution, effectiveDuration);
   const rateLabel = geminiVideoRateLabel(geminiVideoModel, resolution);
   const isImageMode = inputMode === 'image';
   const isGenerating = phase !== null;
@@ -187,13 +194,12 @@ export default function GeminiVideoWorkspace({
   });
 
   const updateControl = (key: string, value: string | number | boolean) => {
-    if (key === 'resolution' && isGeminiResolution(value)) {
+    if (key === 'resolution' && isGeminiResolution(value, currentModel.resolutions)) {
       setResolution(value);
-      if (value === '1080p') setDuration(8);
       return;
     }
     if (key === 'duration' && isGeminiDuration(value)) {
-      setDuration(geminiVideoDuration(currentModel, value, resolution) as 4 | 6 | 8);
+      setDuration(geminiVideoDuration(currentModel, value));
       return;
     }
     if (key === 'aspectRatio' && isGeminiAspectRatio(value)) {
@@ -226,6 +232,8 @@ export default function GeminiVideoWorkspace({
     setStartedAt(started);
 
     let startedOperation = false;
+    // Google said the job failed or was blocked, so there is no charge to record.
+    let reportedFailure = false;
     let generated = false;
     let galleryRecordId: string | undefined;
     try {
@@ -241,7 +249,6 @@ export default function GeminiVideoWorkspace({
         image,
         imageMimeType,
         apiKey,
-        singleAttempt: true,
         config: { resolution, durationSeconds: effectiveDuration, aspectRatio },
       });
       startedOperation = true;
@@ -251,6 +258,8 @@ export default function GeminiVideoWorkspace({
 
       let operation = startedJob;
       const deadline = started + GEMINI_VIDEO_TIMEOUT_MS;
+      let pollFailures = 0;
+      let skipWait = false;
       while (!operation.done) {
         if (!isCurrent()) return;
         if (now() >= deadline) {
@@ -260,11 +269,36 @@ export default function GeminiVideoWorkspace({
         }
         if (operation.error) break;
         setPhase('poll');
-        await geminiVideoWait();
+        if (!skipWait) await geminiVideoWait();
         if (!isCurrent()) return;
-        operation = await geminiPollVideoOperation(apiKey, operation.operation, { singleAttempt: true });
+        const previousKind = operation.kind;
+        try {
+          operation = await geminiPollVideoOperation(apiKey, operation);
+        } catch (pollError) {
+          // The job is already running and paid for. A blip must not abandon
+          // it, so a retryable failure waits for the next poll.
+          pollFailures += 1;
+          if (isRetryableFailure(pollError) && pollFailures < GEMINI_VIDEO_POLL_FAILURE_LIMIT) {
+            skipWait = false;
+            continue;
+          }
+          const reason = pollError instanceof Error ? pollError.message : 'Gemini could not check this video job.';
+          // A block is Google's answer, not a lost job: nothing to check in AI Studio.
+          if (reason === GEMINI_VIDEO_SAFETY_MESSAGE) {
+            reportedFailure = true;
+            throw pollError;
+          }
+          throw new Error(`${reason} The video may still finish in AI Studio. Check there before trying again.`);
+        }
+        pollFailures = 0;
+        // The interaction just handed over its file, which is often ready
+        // already, so check it without another full wait.
+        skipWait = previousKind === 'interaction' && operation.kind === 'file';
       }
-      if (operation.error) throw new Error(operation.error);
+      if (operation.error) {
+        reportedFailure = true;
+        throw new Error(operation.error);
+      }
       if (!operation.videoUri && !operation.videoBytes) {
         throw new Error('Gemini finished without a video. Please try again.');
       }
@@ -273,10 +307,12 @@ export default function GeminiVideoWorkspace({
       generated = true;
       setPhase('download');
       const blob = await geminiDownloadVideo(apiKey, operation.videoUri ?? '', {
-        singleAttempt: true,
         videoBytes: operation.videoBytes,
         mimeType: operation.mimeType,
       });
+      // The clip is local now. Background mode stored the prompt and any
+      // reference image with the interaction, so clear it.
+      void geminiDeleteVideoInteraction(apiKey, operation.interactionId);
       if (!isCurrent()) return;
 
       const slug = await requestPromptSlug(submittedPrompt, apiKey);
@@ -328,7 +364,10 @@ export default function GeminiVideoWorkspace({
         autoRetry.schedule(() => generateRef.current());
       }
     } finally {
-      if (generated) {
+      // A started job that ended without a clip or a reported failure (timed
+      // out, lost its polls, or the tab moved on) may still be billed, so it
+      // gets an unknown-cost row instead of none.
+      if (generated || (startedOperation && !reportedFailure)) {
         captureGeminiVideo({
           modelId: geminiVideoModel,
           prompt: submittedPrompt,
@@ -336,6 +375,7 @@ export default function GeminiVideoWorkspace({
           resolution,
           durationSeconds: effectiveDuration,
           galleryRecordId,
+          ...(generated ? {} : { unconfirmed: true }),
         });
       }
       if (isCurrent()) {
@@ -364,7 +404,7 @@ export default function GeminiVideoWorkspace({
           <div className="grid gap-4 sm:grid-cols-2">
             <ModelControls
               namespace="gemini-video"
-              fields={geminiVideoControlFields(currentModel, resolution)}
+              fields={geminiVideoControlFields(currentModel)}
               values={{ duration: effectiveDuration, resolution, aspectRatio }}
               onChange={updateControl}
             />
@@ -409,7 +449,7 @@ export default function GeminiVideoWorkspace({
   );
 
   const phaseLabel =
-    phase === 'download' ? 'Downloading video…' : phase === 'poll' ? 'Waiting for Veo…' : 'Starting…';
+    phase === 'download' ? 'Downloading video…' : phase === 'poll' ? 'Waiting for Omni…' : 'Starting…';
 
   const actions = (
     <div className="space-y-3">
@@ -430,12 +470,17 @@ export default function GeminiVideoWorkspace({
           <>
             <Sparkles className="inline-block mr-2 h-4 w-4" />
             Generate video
-            {costEstimate > 0 && (
+            {costEstimate > 0 ? (
               <span className="font-normal opacity-80">{` · ~$${costEstimate.toFixed(2)}`}</span>
-            )}
+            ) : priceNotice ? (
+              <span className="font-normal opacity-80"> · price unknown</span>
+            ) : null}
           </>
         )}
       </button>
+      {priceNotice && !isGenerating && (
+        <p className="text-sm text-[var(--foreground-muted)]">{priceNotice}</p>
+      )}
       {isGenerating && (
         <p className="text-sm text-[var(--foreground-muted)]">
           {phaseLabel}{' '}

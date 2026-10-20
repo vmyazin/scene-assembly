@@ -4,7 +4,7 @@ import { persist, createJSONStorage, type StateStorage } from 'zustand/middlewar
 import type { EngineId } from '@/lib/engines/registry';
 import { DEFAULT_GEMINI_IMAGE_MODEL } from '@/lib/engines/gemini-catalog';
 import { FAL_IMAGE_MODEL } from '@/lib/fal/catalog';
-import { DEFAULT_GEMINI_VIDEO_MODEL } from '@/lib/engines/gemini-video-catalog';
+import { DEFAULT_GEMINI_VIDEO_MODEL, findGeminiVideoModel } from '@/lib/engines/gemini-video-catalog';
 import type { ImageFormatPreference } from '@/lib/image/policy';
 import { DEFAULT_MODELS } from '@/lib/providers/catalog';
 import type { ProviderId } from '@/lib/providers/types';
@@ -277,8 +277,12 @@ export const useAppStore = create<AppState>()(
        * Version 2 splits `relaxedFilter` into `relaxedConsents` keyed by
        * account. A version 1 blob still runs this migrate; the chime rename
        * stays behind `from < 1` so a later mute is not overwritten.
+       *
+       * Version 3 maps a stored Gemini video model that is no longer in the
+       * catalog — Veo 3.1 Lite shuts down on 2026-10-22 — onto Omni. Leaving
+       * the old id in the blob would keep sending a model Google has turned off.
        */
-      version: 2,
+      version: 3,
       migrate: (persisted, from) => {
         if (!persisted || typeof persisted !== 'object') return persisted;
         let next = persisted as Record<string, unknown>;
@@ -301,6 +305,13 @@ export const useAppStore = create<AppState>()(
           }
           delete next.relaxedFilter;
           next = { ...next, relaxedConsents: consents };
+        }
+        if (
+          from < 3 &&
+          typeof next.geminiVideoModel === 'string' &&
+          !findGeminiVideoModel(next.geminiVideoModel)
+        ) {
+          next = { ...next, geminiVideoModel: DEFAULT_GEMINI_VIDEO_MODEL };
         }
         return next;
       },

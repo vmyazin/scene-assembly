@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { toast } from 'sonner';
 import { RouteError } from '../lib/providers/route-error';
+import { GEMINI_VIDEO_POLL_FAILURE_LIMIT, GEMINI_VIDEO_SAFETY_MESSAGE } from '../lib/engines/gemini';
+import { GEMINI_VIDEO_UNCONFIRMED_NOTE } from '../lib/spend/capture';
 
 import GeminiVideoWorkspace from '../components/GeminiVideoWorkspace';
 import VideoWorkspace from '../components/VideoWorkspace';
@@ -20,12 +22,14 @@ const {
   geminiGenerateVideoMock,
   geminiPollVideoOperationMock,
   geminiDownloadVideoMock,
+  geminiDeleteVideoInteractionMock,
   geminiVideoWaitMock,
   requestPromptSlugMock,
 } = vi.hoisted(() => ({
   geminiGenerateVideoMock: vi.fn(),
   geminiPollVideoOperationMock: vi.fn(),
   geminiDownloadVideoMock: vi.fn(),
+  geminiDeleteVideoInteractionMock: vi.fn(),
   geminiVideoWaitMock: vi.fn(),
   requestPromptSlugMock: vi.fn(),
 }));
@@ -35,6 +39,7 @@ vi.mock('../lib/engines/gemini', async (importOriginal) => ({
   geminiGenerateVideo: geminiGenerateVideoMock,
   geminiPollVideoOperation: geminiPollVideoOperationMock,
   geminiDownloadVideo: geminiDownloadVideoMock,
+  geminiDeleteVideoInteraction: geminiDeleteVideoInteractionMock,
   geminiVideoWait: geminiVideoWaitMock,
 }));
 
@@ -59,17 +64,20 @@ describe('Gemini video workspace image-to-video', () => {
     useGalleryStore.setState({ records: [], hydrated: true, storageError: null });
     useSpendStore.setState({ entries: [] });
     geminiGenerateVideoMock.mockResolvedValue({
-      operation: 'operations/veo-1',
+      operation: 'v1_image',
+      kind: 'interaction',
+      interactionId: 'v1_image',
       done: true,
       videoUri: VIDEO_URI,
     });
+    geminiDeleteVideoInteractionMock.mockResolvedValue(undefined);
     geminiDownloadVideoMock.mockResolvedValue(new Blob(['mp4-bytes'], { type: 'video/mp4' }));
     geminiVideoWaitMock.mockResolvedValue(undefined);
     requestPromptSlugMock.mockResolvedValue('the-cat-leaps-forward');
     useAppStore.setState({
       apiKey: 'gemini-test-key',
       videoEngine: 'gemini',
-      geminiVideoModel: 'veo-3.1-lite-generate-preview',
+      geminiVideoModel: 'gemini-omni-1.1-flash',
     });
     useDraftStore.getState().reset();
     useSeedFrameStore.getState().clearSeedFrame();
@@ -130,7 +138,8 @@ describe('Gemini video workspace image-to-video', () => {
     renderTextWorkspace();
     expect(screen.queryByText(/coming in the next update/i)).toBeNull();
     expect(screen.queryByText(/use other providers for video generation/i)).toBeNull();
-    expect(screen.getByRole('button', { name: /Generate video/ })).toHaveTextContent(/~\$0\.40/);
+    expect(screen.getByRole('heading', { name: /Omni Flash/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Generate video/ })).toHaveTextContent(/~\$0\.81/);
   });
 
   it('renders duration and resolution through the shared fal-style controls', () => {
@@ -139,17 +148,24 @@ describe('Gemini video workspace image-to-video', () => {
     const resolution = screen.getByRole('radiogroup', { name: 'Resolution' });
     expect(resolution.className).toContain('flex');
     expect(within(resolution).getAllByRole('radio').map((choice) => choice.textContent)).toEqual([
+      '360p',
       '720p',
       '1080p',
+      '4k',
     ]);
     expect(screen.queryByRole('combobox', { name: 'Resolution' })).toBeNull();
     expect(screen.getByRole('radio', { name: '720p' })).toHaveAttribute('aria-checked', 'true');
 
     const duration = screen.getByRole('combobox', { name: 'Duration' });
     expect([...duration.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
+      '3',
       '4',
+      '5',
       '6',
+      '7',
       '8',
+      '9',
+      '10',
     ]);
     expect(duration).toHaveDisplayValue('8');
     expect(screen.getByRole('combobox', { name: 'Aspect ratio' })).toHaveDisplayValue('16:9');
@@ -161,8 +177,10 @@ describe('Gemini video workspace image-to-video', () => {
       [...screen.getByRole('combobox', { name: 'Duration' }).querySelectorAll('option')].map(
         (option) => option.textContent
       )
-    ).toEqual(['8']);
+    ).toEqual(['3', '4', '5', '6', '7', '8', '9', '10']);
     expect(screen.getByRole('combobox', { name: 'Duration' })).toHaveDisplayValue('8');
+    expect(screen.getByRole('button', { name: /^Generate video/ })).toHaveTextContent(/price unknown/);
+    expect(screen.getByText(/Price unknown for 1080p/)).toHaveTextContent(/at least ~\$0\.81/);
   });
 
   it('submits a catalog duration chosen from the compact select', async () => {
@@ -177,12 +195,12 @@ describe('Gemini video workspace image-to-video', () => {
     await waitFor(() => expect(geminiGenerateVideoMock).toHaveBeenCalledOnce());
     expect(geminiGenerateVideoMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        config: expect.objectContaining({ resolution: '720p', durationSeconds: 4, aspectRatio: '16:9' }),
+        config: expect.objectContaining({ resolution: '720p', durationSeconds: 3, aspectRatio: '16:9' }),
       })
     );
   });
 
-  it('forces 8s when generating at 1080p', async () => {
+  it('keeps the chosen duration at 1080p', async () => {
     renderTextWorkspace();
 
     const duration = screen.getByRole('combobox', { name: 'Duration' }) as HTMLSelectElement;
@@ -196,7 +214,7 @@ describe('Gemini video workspace image-to-video', () => {
     await waitFor(() => expect(geminiGenerateVideoMock).toHaveBeenCalledOnce());
     expect(geminiGenerateVideoMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        config: expect.objectContaining({ resolution: '1080p', durationSeconds: 8 }),
+        config: expect.objectContaining({ resolution: '1080p', durationSeconds: 3 }),
       })
     );
   });
@@ -223,8 +241,7 @@ describe('Gemini video workspace image-to-video', () => {
         prompt: 'The cat leaps forward',
         image: expect.any(String),
         imageMimeType: 'image/png',
-        model: 'veo-3.1-lite-generate-preview',
-        singleAttempt: true,
+        model: 'gemini-omni-1.1-flash',
       })
     );
     const image = geminiGenerateVideoMock.mock.calls[0][0].image as string;
@@ -238,19 +255,27 @@ describe('Gemini video workspace image-to-video', () => {
     expect(useSpendStore.getState().entries[0]).toMatchObject({
       provider: 'gemini',
       kind: 'video',
-      modelId: 'veo-3.1-lite-generate-preview',
+      modelId: 'gemini-omni-1.1-flash',
       galleryRecordId: useGalleryStore.getState().records[0].id,
     });
   });
 
   it('does not require an image in text-to-video and polls until the operation is done', async () => {
     geminiGenerateVideoMock.mockResolvedValue({
-      operation: 'operations/veo-text',
+      operation: 'v1_text',
+      kind: 'interaction',
+      interactionId: 'v1_text',
       done: false,
     });
     geminiPollVideoOperationMock
-      .mockResolvedValueOnce({ operation: 'operations/veo-text', done: false })
-      .mockResolvedValueOnce({ operation: 'operations/veo-text', done: true, videoUri: VIDEO_URI });
+      .mockResolvedValueOnce({ operation: 'v1_text', kind: 'interaction', interactionId: 'v1_text', done: false })
+      .mockResolvedValueOnce({
+        operation: 'v1_text',
+        kind: 'interaction',
+        interactionId: 'v1_text',
+        done: true,
+        videoUri: VIDEO_URI,
+      });
 
     renderTextWorkspace();
 
@@ -263,7 +288,6 @@ describe('Gemini video workspace image-to-video', () => {
       expect.objectContaining({
         prompt: 'A moonlit ocean',
         image: undefined,
-        singleAttempt: true,
         config: expect.objectContaining({ resolution: '720p', durationSeconds: 8, aspectRatio: '16:9' }),
       })
     );
@@ -272,9 +296,117 @@ describe('Gemini video workspace image-to-video', () => {
     await waitFor(() => expect(geminiDownloadVideoMock).toHaveBeenCalledWith(
       'gemini-test-key',
       VIDEO_URI,
-      expect.objectContaining({ singleAttempt: true })
+      expect.objectContaining({})
     ));
     expect(await screen.findByLabelText('Generated video')).toBeInTheDocument();
+  });
+
+  it('hands the previous result to the next poll so its bytes and interaction carry over', async () => {
+    const started = {
+      operation: 'files/abc',
+      kind: 'file',
+      interactionId: 'v1_text',
+      done: false,
+      videoUri: VIDEO_URI,
+      videoBytes: 'AAAA',
+      mimeType: 'video/mp4',
+    };
+    geminiGenerateVideoMock.mockResolvedValue(started);
+    geminiPollVideoOperationMock.mockResolvedValue({ ...started, done: true });
+
+    renderTextWorkspace();
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A moonlit ocean' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Generate video/ }));
+
+    await waitFor(() =>
+      expect(geminiDownloadVideoMock).toHaveBeenCalledWith('gemini-test-key', VIDEO_URI, {
+        videoBytes: 'AAAA',
+        mimeType: 'video/mp4',
+      })
+    );
+    expect(geminiPollVideoOperationMock).toHaveBeenCalledWith('gemini-test-key', started);
+    await waitFor(() => expect(geminiDeleteVideoInteractionMock).toHaveBeenCalledWith('gemini-test-key', 'v1_text'));
+  });
+
+  it('checks the file right away when the interaction hands it over', async () => {
+    geminiGenerateVideoMock.mockResolvedValue({ operation: 'v1_text', kind: 'interaction', done: false });
+    geminiPollVideoOperationMock
+      .mockResolvedValueOnce({ operation: 'files/abc', kind: 'file', done: false, videoUri: VIDEO_URI })
+      .mockResolvedValueOnce({ operation: 'files/abc', kind: 'file', done: true, videoUri: VIDEO_URI });
+
+    renderTextWorkspace();
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A moonlit ocean' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Generate video/ }));
+
+    expect(await screen.findByLabelText('Generated video')).toBeInTheDocument();
+    expect(geminiPollVideoOperationMock).toHaveBeenCalledTimes(2);
+    // One wait before the interaction poll; none before the first file poll.
+    expect(geminiVideoWaitMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps polling through a transient poll failure', async () => {
+    geminiGenerateVideoMock.mockResolvedValue({ operation: 'v1_text', kind: 'interaction', done: false });
+    geminiPollVideoOperationMock
+      .mockRejectedValueOnce(new RouteError('Gemini could not check this video job.', 0))
+      .mockRejectedValueOnce(new RouteError('Service unavailable', 503))
+      .mockResolvedValueOnce({ operation: 'v1_text', kind: 'interaction', done: true, videoUri: VIDEO_URI });
+
+    renderTextWorkspace();
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A moonlit ocean' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Generate video/ }));
+
+    expect(await screen.findByLabelText('Generated video')).toBeInTheDocument();
+    expect(geminiPollVideoOperationMock).toHaveBeenCalledTimes(3);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('stops after repeated poll failures, points to AI Studio, and files an unknown-cost row', async () => {
+    geminiGenerateVideoMock.mockResolvedValue({ operation: 'v1_text', kind: 'interaction', done: false });
+    geminiPollVideoOperationMock.mockRejectedValue(new RouteError('Gemini could not check this video job.', 0));
+
+    renderTextWorkspace();
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A moonlit ocean' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Generate video/ }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Gemini could not check this video job. The video may still finish in AI Studio.'
+    );
+    expect(geminiPollVideoOperationMock).toHaveBeenCalledTimes(GEMINI_VIDEO_POLL_FAILURE_LIMIT);
+    expect(geminiDownloadVideoMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(useSpendStore.getState().entries).toHaveLength(1));
+    expect(useSpendStore.getState().entries[0]).toMatchObject({
+      provider: 'gemini',
+      kind: 'video',
+      costUsd: null,
+      confidence: 'unknown',
+      note: GEMINI_VIDEO_UNCONFIRMED_NOTE,
+    });
+  });
+
+  it('shows a safety block from a poll as is and files no spend', async () => {
+    geminiGenerateVideoMock.mockResolvedValue({ operation: 'v1_text', kind: 'interaction', done: false });
+    geminiPollVideoOperationMock.mockRejectedValue(new RouteError(GEMINI_VIDEO_SAFETY_MESSAGE, 400));
+
+    renderTextWorkspace();
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A moonlit ocean' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Generate video/ }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(GEMINI_VIDEO_SAFETY_MESSAGE);
+    expect(alert).not.toHaveTextContent('AI Studio');
+    expect(useSpendStore.getState().entries).toHaveLength(0);
+  });
+
+  it('stops at once on a poll failure that will not change', async () => {
+    geminiGenerateVideoMock.mockResolvedValue({ operation: 'v1_text', kind: 'interaction', done: false });
+    geminiPollVideoOperationMock.mockRejectedValue(new RouteError('API key not valid.', 400));
+
+    renderTextWorkspace();
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A moonlit ocean' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Generate video/ }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('API key not valid. The video may still finish in AI Studio.');
+    expect(geminiPollVideoOperationMock).toHaveBeenCalledTimes(1);
   });
 
   it.each([new RouteError('Lost response', 503), new TypeError('Lost response')])(
@@ -307,7 +439,7 @@ describe('Gemini video workspace image-to-video', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Download failed');
     expect(useSpendStore.getState().entries).toHaveLength(1);
     expect(useSpendStore.getState().entries[0]).toMatchObject({
-      provider: 'gemini', kind: 'video', modelId: 'veo-3.1-lite-generate-preview',
+      provider: 'gemini', kind: 'video', modelId: 'gemini-omni-1.1-flash',
     });
     expect(useGalleryStore.getState().records).toHaveLength(0);
     expect(screen.queryByRole('button', { name: 'Cancel automatic retry' })).toBeNull();
@@ -329,7 +461,7 @@ describe('Gemini video workspace image-to-video', () => {
 
   it('does not record spend for a failed operation', async () => {
     geminiGenerateVideoMock.mockResolvedValue({
-      operation: 'operations/blocked', done: true, error: 'Video blocked',
+      operation: 'v1_blocked', kind: 'interaction', done: true, error: 'Video blocked',
     });
     renderTextWorkspace();
     fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A moonlit ocean' } });

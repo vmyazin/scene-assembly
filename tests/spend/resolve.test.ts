@@ -53,15 +53,15 @@ describe('resolveGemini', () => {
 });
 
 describe('resolveGeminiVideo', () => {
-  it('prices Veo 3.1 Lite from the published per-second table', () => {
+  it('prices Omni 720p from 5,792 tokens/s × $17.50/M and leaves other resolutions unpublished', () => {
     expect(
       resolveGeminiVideo({
-        modelId: 'veo-3.1-lite-generate-preview',
+        modelId: 'gemini-omni-1.1-flash',
         resolution: '720p',
         durationSeconds: 8,
       })
     ).toEqual({
-      costUsd: 0.4,
+      costUsd: expect.closeTo(0.81088, 6),
       confidence: 'estimated',
       source: 'catalog-rate',
       quantity: { unit: 'second', value: 8 },
@@ -69,10 +69,21 @@ describe('resolveGeminiVideo', () => {
     expect(
       resolveGeminiVideo({
         modelId: 'veo-3.1-lite-generate-preview',
+        resolution: '720p',
+        durationSeconds: 1,
+      }).costUsd
+    ).toBeCloseTo(0.10136, 6);
+    expect(
+      resolveGeminiVideo({
+        modelId: 'gemini-omni-1.1-flash',
         resolution: '1080p',
         durationSeconds: 8,
-      }).costUsd
-    ).toBeCloseTo(0.64, 6);
+      })
+    ).toMatchObject({
+      costUsd: null,
+      confidence: 'unknown',
+      note: expect.stringContaining('at least ~$0.81'),
+    });
   });
 });
 

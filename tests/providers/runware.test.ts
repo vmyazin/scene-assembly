@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // tests/providers/runware.test.ts
+import { findModel } from '@/lib/providers/catalog';
 import {
   RUNWARE_VEO_LITE_CAPACITY_MESSAGE,
   runwareCreateVideo,
@@ -26,6 +27,20 @@ function sentTasks(fetchMock: ReturnType<typeof vi.fn>): Array<Record<string, un
 }
 
 afterEach(() => vi.unstubAllGlobals());
+
+describe('FLUX 3 Image Klein', () => {
+  it('is a text and reference-image draft at the published 1K price', () => {
+    const model = findModel('runware', 'bfl:flux@3-image-klein');
+    expect(model).toMatchObject({
+      label: 'FLUX 3 Image Klein',
+      kind: 'image',
+      modes: ['text', 'image'],
+      price: '$0.006 / 1024²',
+      maxInputImages: 4,
+      imageInput: 'reference',
+    });
+  });
+});
 
 describe('runware image inference', () => {
   it('sends one task array with the vendor field names', async () => {

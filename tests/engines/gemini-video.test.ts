@@ -1,202 +1,371 @@
 // tests/engines/gemini-video.test.ts
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { generateVideos, getVideosOperation } = vi.hoisted(() => ({
-  generateVideos: vi.fn(),
-  getVideosOperation: vi.fn(),
-}));
-
-// Only the network surface is faked. `GenerateVideosOperation` stays real, because
-// the SDK calls `_fromAPIResponse` on the operation we hand it: a plain object
-// literal passes type-checking and then throws at runtime.
-vi.mock('@google/genai', async () => ({
-  ...(await vi.importActual<typeof import('@google/genai')>('@google/genai')),
-  GoogleGenAI: class {
-    constructor(public readonly options: { apiKey: string; httpOptions?: { retryOptions?: { attempts: number } } }) {}
-    models = { generateVideos };
-    operations = { getVideosOperation };
-  },
-}));
-
-import { GenerateVideosOperation } from '@google/genai';
-
 import { RouteError } from '../../lib/providers/route-error';
 import {
+  GEMINI_VIDEO_SAFETY_MESSAGE,
+  geminiDeleteVideoInteraction,
   geminiDownloadVideo,
   geminiGenerateVideo,
   geminiPollVideoOperation,
 } from '../../lib/engines/gemini';
-import { geminiVideoDuration, geminiVideoDurationOptions, resolveGeminiVideoModel } from '../../lib/engines/gemini-video-catalog';
+import {
+  DEFAULT_GEMINI_VIDEO_MODEL,
+  GEMINI_OMNI_720P_USD_PER_SECOND,
+  GEMINI_VIDEO_MODELS,
+  RETIRED_GEMINI_VIDEO_MODEL_ID,
+  geminiVideoDuration,
+  geminiVideoDurationOptions,
+  geminiVideoResolution,
+  resolveGeminiVideoModel,
+} from '../../lib/engines/gemini-video-catalog';
 
 const VIDEO_URI = 'https://generativelanguage.googleapis.com/v1beta/files/abc:download?alt=media';
+const FILE_URL = 'https://generativelanguage.googleapis.com/v1beta/files/abc';
+
+function jsonResponse(body: unknown, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => JSON.stringify(body),
+    headers: { get: () => 'application/json' },
+    arrayBuffer: async () => new ArrayBuffer(0),
+  };
+}
 
 afterEach(() => {
-  generateVideos.mockReset();
-  getVideosOperation.mockReset();
   vi.unstubAllGlobals();
 });
 
 describe('gemini video catalog', () => {
-  it('forces 8s at 1080p so Google does not reject the paid call', () => {
-    const model = resolveGeminiVideoModel('veo-3.1-lite-generate-preview');
-    expect(geminiVideoDuration(model, 4, '720p')).toBe(4);
-    expect(geminiVideoDuration(model, 4, '1080p')).toBe(8);
-    expect(geminiVideoDuration(model, 6, '1080p')).toBe(8);
-    expect(geminiVideoDurationOptions(model, '720p')).toEqual([4, 6, 8]);
-    expect(geminiVideoDurationOptions(model, '1080p')).toEqual([8]);
+  it('offers Omni and maps the shut-down preview id onto it', () => {
+    expect(GEMINI_VIDEO_MODELS.map((model) => model.id)).toEqual(['gemini-omni-1.1-flash']);
+    expect(DEFAULT_GEMINI_VIDEO_MODEL).toBe('gemini-omni-1.1-flash');
+    expect(resolveGeminiVideoModel(undefined).id).toBe('gemini-omni-1.1-flash');
+    expect(resolveGeminiVideoModel(RETIRED_GEMINI_VIDEO_MODEL_ID).id).toBe('gemini-omni-1.1-flash');
+    expect(GEMINI_OMNI_720P_USD_PER_SECOND).toBeCloseTo(0.10136, 6);
+    expect(GEMINI_VIDEO_MODELS[0].usdPerSecond['720p']).toBe(GEMINI_OMNI_720P_USD_PER_SECOND);
+    expect(GEMINI_VIDEO_MODELS[0].usdPerSecond['1080p']).toBeUndefined();
+    expect(GEMINI_VIDEO_MODELS[0].supportsExtension).toBe(false);
+    expect(GEMINI_VIDEO_MODELS[0].resolutions).toEqual(['360p', '720p', '1080p', '4k']);
+    expect(GEMINI_VIDEO_MODELS[0].defaultResolution).toBe('720p');
+    expect(GEMINI_VIDEO_MODELS[0].defaultDuration).toBe(8);
+    expect(geminiVideoResolution(GEMINI_VIDEO_MODELS[0], 'nope')).toBe('720p');
+  });
+
+  it('keeps 3–10s at every resolution and defaults an omitted length to 8s', () => {
+    const model = resolveGeminiVideoModel('gemini-omni-1.1-flash');
+    expect(geminiVideoDuration(model, 4)).toBe(4);
+    expect(geminiVideoDuration(model, 3)).toBe(3);
+    expect(geminiVideoDuration(model, 2)).toBe(8);
+    expect(geminiVideoDuration(model, undefined)).toBe(8);
+    expect(geminiVideoDurationOptions(model)).toEqual([3, 4, 5, 6, 7, 8, 9, 10]);
   });
 });
 
 describe('geminiGenerateVideo', () => {
-  it('starts text-to-video with catalog-narrowed config and singleAttempt', async () => {
-    generateVideos.mockResolvedValue({
-      name: 'operations/veo-text',
-      done: false,
-    });
+  it('starts text-to-video on the Interactions API with a duration string', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        id: 'v1_text',
+        status: 'completed',
+        output_video: { uri: VIDEO_URI, mime_type: 'video/mp4' },
+      })
+    );
+    vi.stubGlobal('fetch', fetchMock);
 
     await expect(
       geminiGenerateVideo({
         apiKey: 'test-key',
         prompt: 'A moonlit ocean',
-        model: 'veo-3.1-lite-generate-preview',
-        singleAttempt: true,
+        model: RETIRED_GEMINI_VIDEO_MODEL_ID,
         config: { resolution: '720p', durationSeconds: 6, aspectRatio: '16:9' },
       })
     ).resolves.toEqual({
-      operation: 'operations/veo-text',
+      operation: 'files/abc',
+      kind: 'file',
+      interactionId: 'v1_text',
       done: false,
-      videoUri: undefined,
+      videoUri: VIDEO_URI,
       videoBytes: undefined,
-      mimeType: undefined,
+      mimeType: 'video/mp4',
     });
 
-    expect(generateVideos).toHaveBeenCalledWith({
-      model: 'veo-3.1-lite-generate-preview',
-      prompt: 'A moonlit ocean',
-      config: {
-        numberOfVideos: 1,
-        resolution: '720p',
-        aspectRatio: '16:9',
-        durationSeconds: 6,
-        personGeneration: 'allow_all',
-      },
+    expect(fetchMock).toHaveBeenCalledWith('https://generativelanguage.googleapis.com/v1beta/interactions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': 'test-key' },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify({
+        model: 'gemini-omni-1.1-flash',
+        input: 'A moonlit ocean',
+        response_format: {
+          type: 'video',
+          aspect_ratio: '16:9',
+          resolution: '720p',
+          duration: '6s',
+          delivery: 'uri',
+        },
+        background: true,
+        store: true,
+        stream: false,
+      }),
     });
   });
 
-  it('passes the still as imageBytes on the image-to-video path', async () => {
-    generateVideos.mockResolvedValue({
-      name: 'operations/veo-i2v',
+  it('keeps an in-progress interaction open so the caller can poll its id', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ id: 'v1_run', status: 'in_progress' })));
+    await expect(geminiGenerateVideo({ apiKey: 'test-key', prompt: 'A moonlit ocean' })).resolves.toEqual({
+      operation: 'v1_run',
+      kind: 'interaction',
+      interactionId: 'v1_run',
       done: false,
     });
+  });
+
+  it('reports a completed interaction with no video instead of an open job', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ id: 'v1_empty', status: 'completed' })));
+    await expect(geminiGenerateVideo({ apiKey: 'test-key', prompt: 'A moonlit ocean' })).resolves.toEqual({
+      operation: 'v1_empty',
+      kind: 'interaction',
+      interactionId: 'v1_empty',
+      done: true,
+      error: 'Gemini finished without a video. Please try again.',
+    });
+  });
+
+  it('names a safety block from the Interactions error code', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({ error: { code: 'content_blocked', message: 'Input blocked: filters.' } }, 400)
+      )
+    );
+    await expect(geminiGenerateVideo({ apiKey: 'test-key', prompt: 'A moonlit ocean' })).rejects.toMatchObject({
+      message: GEMINI_VIDEO_SAFETY_MESSAGE,
+      status: 400,
+    });
+  });
+
+  it('treats a timed-out create request as a job that may already be running', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new DOMException('The operation timed out.', 'TimeoutError')));
+    await expect(geminiGenerateVideo({ apiKey: 'test-key', prompt: 'A moonlit ocean' })).rejects.toMatchObject({
+      message: expect.stringMatching(/^Gemini may have started this video/),
+      status: 0,
+    });
+  });
+
+  it('leads with the connection when the create request never got an answer', async () => {
+    // Offline sends and CORS rejections throw the same TypeError and never reach Google.
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    await expect(geminiGenerateVideo({ apiKey: 'test-key', prompt: 'A moonlit ocean' })).rejects.toMatchObject({
+      message: expect.stringMatching(/^Could not reach Gemini\. Check your connection\..*check AI Studio/),
+      status: 0,
+    });
+  });
+
+  it('sends one still plus the prompt as the image-to-video input', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        id: 'v1_i2v',
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: btoa('mp4') }],
+          },
+        ],
+      })
+    );
+    vi.stubGlobal('fetch', fetchMock);
 
     await geminiGenerateVideo({
       apiKey: 'test-key',
       prompt: 'Animate the still',
       image: 'abc123',
       imageMimeType: 'image/jpeg',
-      model: 'veo-3.1-lite-generate-preview',
+      model: 'gemini-omni-1.1-flash',
     });
 
-    expect(generateVideos).toHaveBeenCalledWith(
-      expect.objectContaining({
-        prompt: 'Animate the still',
-        image: { imageBytes: 'abc123', mimeType: 'image/jpeg' },
-        config: expect.objectContaining({ personGeneration: 'allow_adult', durationSeconds: 4 }),
-      })
-    );
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.model).toBe('gemini-omni-1.1-flash');
+    expect(body.input).toEqual([
+      { type: 'image', data: 'abc123', mime_type: 'image/jpeg' },
+      { type: 'text', text: 'Animate the still' },
+    ]);
+    expect(body.response_format.duration).toBe('8s');
+    expect(body.response_format).not.toHaveProperty('personGeneration');
   });
 
-  it('clamps 1080p starts to 8 seconds', async () => {
-    generateVideos.mockResolvedValue({ name: 'operations/veo-1080', done: false });
+  it('does not rewrite a short clip when the resolution is 1080p', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ output_video: { uri: VIDEO_URI } }));
+    vi.stubGlobal('fetch', fetchMock);
     await geminiGenerateVideo({
       apiKey: 'test-key',
       prompt: 'Wide coastal road',
       config: { resolution: '1080p', durationSeconds: 4 },
     });
-    expect(generateVideos.mock.calls[0][0].config).toMatchObject({
-      resolution: '1080p',
-      durationSeconds: 8,
-    });
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.response_format).toMatchObject({ resolution: '1080p', duration: '4s' });
   });
 
-  it('rejects a missing API key without calling the SDK', async () => {
+  it('rejects a missing API key without calling Gemini', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
     await expect(geminiGenerateVideo({ apiKey: '  ', prompt: 'A moonlit ocean' })).rejects.toMatchObject({
       message: 'A Gemini API key is required.',
       status: 401,
     });
-    expect(generateVideos).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('wraps SDK failures as RouteError with the vendor status', async () => {
-    generateVideos.mockRejectedValue(Object.assign(new Error('Veo is overloaded'), { status: 503 }));
+  it('wraps HTTP failures as RouteError with the vendor status', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ error: { message: 'Omni is overloaded' } }, 503))
+    );
     await expect(geminiGenerateVideo({ apiKey: 'test-key', prompt: 'A moonlit ocean' })).rejects.toBeInstanceOf(
       RouteError
     );
     await expect(geminiGenerateVideo({ apiKey: 'test-key', prompt: 'A moonlit ocean' })).rejects.toMatchObject({
-      message: 'Veo is overloaded',
+      message: 'Omni is overloaded',
       status: 503,
     });
   });
 });
 
 describe('geminiPollVideoOperation', () => {
-  it('returns the video URI when the operation completes', async () => {
-    getVideosOperation.mockResolvedValue({
-      name: 'operations/veo-text',
-      done: true,
-      response: { generatedVideos: [{ video: { uri: VIDEO_URI, mimeType: 'video/mp4' } }] },
-    });
+  it('polls an in-progress interaction, then a failed background block', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ id: 'v1_run', status: 'queued' }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: 'v1_run',
+          status: 'failed',
+          errors: [{ code: 'safety', message: 'Request blocked due to safety violations.' }],
+        })
+      );
+    vi.stubGlobal('fetch', fetchMock);
 
-    await expect(geminiPollVideoOperation('test-key', 'operations/veo-text', { singleAttempt: true })).resolves.toEqual({
-      operation: 'operations/veo-text',
+    const job = { operation: 'v1_run', kind: 'interaction' as const };
+    await expect(geminiPollVideoOperation('test-key', job)).resolves.toEqual({
+      operation: 'v1_run',
+      kind: 'interaction',
+      interactionId: 'v1_run',
+      done: false,
+    });
+    await expect(geminiPollVideoOperation('test-key', job)).resolves.toEqual({
+      operation: 'v1_run',
+      kind: 'interaction',
+      interactionId: 'v1_run',
       done: true,
+      error: GEMINI_VIDEO_SAFETY_MESSAGE,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://generativelanguage.googleapis.com/v1beta/interactions/v1_run',
+      { headers: { 'x-goog-api-key': 'test-key' } }
+    );
+  });
+
+  it('hands a completed interaction with a file URI to the file poll', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          id: 'v1_done',
+          status: 'completed',
+          output_video: { uri: VIDEO_URI, mime_type: 'video/mp4', data: btoa('mp4') },
+        })
+      )
+    );
+    await expect(
+      geminiPollVideoOperation('test-key', { operation: 'v1_done', kind: 'interaction' })
+    ).resolves.toEqual({
+      operation: 'files/abc',
+      kind: 'file',
+      interactionId: 'v1_done',
+      done: false,
       videoUri: VIDEO_URI,
-      videoBytes: undefined,
+      videoBytes: btoa('mp4'),
       mimeType: 'video/mp4',
     });
-    expect(getVideosOperation).toHaveBeenCalledWith({ operation: { name: 'operations/veo-text' } });
   });
 
-  it('hands the SDK a real operation so it can convert the raw poll response', async () => {
-    // Mirrors @google/genai: it converts the wire payload by calling
-    // `_fromAPIResponse` on the very operation the caller passed in.
-    getVideosOperation.mockImplementation(async ({ operation }: { operation: GenerateVideosOperation }) =>
-      operation._fromAPIResponse({
-        apiResponse: {
-          name: 'operations/veo-raw',
-          done: true,
-          response: { generateVideoResponse: { generatedSamples: [{ video: { uri: VIDEO_URI } }] } },
-        },
-        _isVertexAI: false,
+  it('waits until the file is ACTIVE, then returns the download address', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ state: 'PROCESSING' }))
+      .mockResolvedValueOnce(jsonResponse({ state: { name: 'ACTIVE' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const job = { operation: 'files/abc', kind: 'file' as const, interactionId: 'v1_done' };
+    await expect(geminiPollVideoOperation('test-key', job)).resolves.toMatchObject({
+      operation: 'files/abc',
+      done: false,
+    });
+    await expect(geminiPollVideoOperation('test-key', job)).resolves.toEqual({
+      operation: 'files/abc',
+      kind: 'file',
+      interactionId: 'v1_done',
+      done: true,
+      videoUri: 'https://generativelanguage.googleapis.com/v1beta/files/abc:download?alt=media',
+      videoBytes: undefined,
+      mimeType: undefined,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(FILE_URL, { headers: { 'x-goog-api-key': 'test-key' } });
+  });
+
+  it('keeps inline bytes from the interaction when the file poll returns only an address', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ state: 'ACTIVE' })));
+    await expect(
+      geminiPollVideoOperation('test-key', {
+        operation: 'files/abc',
+        kind: 'file',
+        videoBytes: 'AAAA',
+        mimeType: 'video/mp4',
       })
-    );
-
-    await expect(geminiPollVideoOperation('test-key', 'operations/veo-raw', { singleAttempt: true })).resolves.toMatchObject({
-      operation: 'operations/veo-raw',
-      done: true,
-      videoUri: VIDEO_URI,
-    });
+    ).resolves.toMatchObject({ done: true, videoBytes: 'AAAA', mimeType: 'video/mp4' });
   });
 
-  it('surfaces operation errors and RAI blocks', async () => {
-    getVideosOperation.mockResolvedValueOnce({
-      name: 'operations/fail',
-      done: true,
-      error: { message: 'The prompt was blocked.' },
-    });
-    await expect(geminiPollVideoOperation('test-key', 'operations/fail')).resolves.toMatchObject({
-      done: true,
-      error: 'The prompt was blocked.',
-    });
+  it('polls by the kind the job carries, not the shape of its id', async () => {
+    // An interaction id that happens to contain "files/" still goes to the interactions endpoint.
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: 'v1/files/x', status: 'in_progress' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await geminiPollVideoOperation('test-key', { operation: 'v1/files/x', kind: 'interaction' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://generativelanguage.googleapis.com/v1beta/interactions/v1%2Ffiles%2Fx',
+      { headers: { 'x-goog-api-key': 'test-key' } }
+    );
+  });
 
-    getVideosOperation.mockResolvedValueOnce({
-      name: 'operations/rai',
+  it('surfaces a failed file', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ state: 'FAILED', error: { message: 'Unsafe audio' } })));
+    await expect(
+      geminiPollVideoOperation('test-key', { operation: 'files/abc', kind: 'file' })
+    ).resolves.toMatchObject({
       done: true,
-      response: { raiMediaFilteredCount: 1, raiMediaFilteredReasons: ['Unsafe audio'] },
-    });
-    await expect(geminiPollVideoOperation('test-key', 'operations/rai')).resolves.toMatchObject({
       error: 'Unsafe audio',
     });
+  });
+});
+
+describe('geminiDeleteVideoInteraction', () => {
+  it('deletes the stored interaction with the API key', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}));
+    vi.stubGlobal('fetch', fetchMock);
+    await geminiDeleteVideoInteraction('test-key', 'v1_done');
+    expect(fetchMock).toHaveBeenCalledWith('https://generativelanguage.googleapis.com/v1beta/interactions/v1_done', {
+      method: 'DELETE',
+      headers: { 'x-goog-api-key': 'test-key' },
+    });
+  });
+
+  it('never throws, and skips the call without an id', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(geminiDeleteVideoInteraction('test-key', 'v1_done')).resolves.toBeUndefined();
+    await geminiDeleteVideoInteraction('test-key', undefined);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

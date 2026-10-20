@@ -14,6 +14,7 @@ import {
   geminiResolutionCost,
   geminiTokenCost,
   geminiVideoCost,
+  geminiVideoPriceNotice,
   KIE_USD_PER_CREDIT,
   type FalRunControls,
 } from './rates';
@@ -59,7 +60,7 @@ export function resolveGemini(args: {
   };
 }
 
-/** Catalog rate for a Veo clip: USD/s × duration. No usage metadata on video. */
+/** Catalog rate for an Omni clip: USD/s × duration. No usage metadata on video. */
 export function resolveGeminiVideo(args: {
   modelId?: string;
   resolution?: string;
@@ -68,7 +69,7 @@ export function resolveGeminiVideo(args: {
   const durationSeconds = args.durationSeconds;
   const costUsd = geminiVideoCost(args.modelId, args.resolution, durationSeconds);
   if (!(costUsd > 0) || durationSeconds === undefined || !Number.isFinite(durationSeconds) || !(durationSeconds > 0)) {
-    return unknownFigure('catalog-rate');
+    return unknownFigure('catalog-rate', geminiVideoPriceNotice(args.modelId, args.resolution, durationSeconds) ?? undefined);
   }
   return {
     costUsd,

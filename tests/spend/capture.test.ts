@@ -62,9 +62,9 @@ describe('captureImageResult', () => {
     });
   });
 
-  it('files a Gemini Veo clip from the catalog rate', () => {
+  it('files a Gemini Omni clip from the derived 720p rate', () => {
     captureGeminiVideo({
-      modelId: 'veo-3.1-lite-generate-preview',
+      modelId: 'gemini-omni-1.1-flash',
       prompt: 'A moonlit ocean',
       inputMode: 'text',
       resolution: '720p',
@@ -73,10 +73,10 @@ describe('captureImageResult', () => {
     });
     expect(entries()[0]).toMatchObject({
       provider: 'gemini',
-      modelId: 'veo-3.1-lite-generate-preview',
+      modelId: 'gemini-omni-1.1-flash',
       kind: 'video',
       inputMode: 'text',
-      costUsd: 0.4,
+      costUsd: expect.closeTo(0.81088, 6),
       confidence: 'estimated',
       source: 'catalog-rate',
       quantity: { unit: 'second', value: 8 },
