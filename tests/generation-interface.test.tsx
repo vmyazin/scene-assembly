@@ -10,6 +10,7 @@ import { falPublishedCost } from '../lib/spend/rates';
 import { DEFAULT_GEMINI_IMAGE_MODEL } from '../lib/engines/gemini-catalog';
 import { useAppStore } from '../store/useAppStore';
 import { useDraftStore } from '../store/useDraftStore';
+import { useMasterPromptStore } from '../store/useMasterPromptStore';
 import { FEATURES, type Feature } from '../types';
 
 vi.mock('@/lib/fal/browser', () => ({
@@ -493,6 +494,35 @@ describe('GenerationInterface fal image generation', () => {
       expect(fetchMock).not.toHaveBeenCalled();
     }
   );
+
+  it('sends a session-edited master prompt around the typed text', async () => {
+    useMasterPromptStore.setState({ overrides: {} });
+    useAppStore.setState({ engine: 'gemini' });
+    mockedRunFalImage.mockResolvedValue({
+      url: 'https://v3.fal.media/files/fox.webp',
+      mimeType: 'image/webp',
+    });
+    vi.stubGlobal('fetch', vi.fn());
+    renderInterface(textToImage);
+
+    chooseEngine(/^fal\.ai$/i);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Prompt' }), {
+      target: { value: 'a red fox' },
+    });
+    fireEvent.click(screen.getByText('Master prompt'));
+    const template = await screen.findByRole('textbox', { name: 'Template' });
+    expect(template).toHaveValue('{prompt}');
+    fireEvent.change(template, { target: { value: 'Studio lighting. {prompt}' } });
+    expect(screen.getByText('Edited for this session')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Image' }));
+
+    await waitFor(() => expect(mockedRunFalImage).toHaveBeenCalledTimes(1));
+    expect(mockedRunFalImage).toHaveBeenCalledWith(
+      expect.objectContaining({ prompt: 'Studio lighting. a red fox' }),
+      expect.anything(),
+    );
+    useMasterPromptStore.setState({ overrides: {} });
+  });
 
   it('routes text-only generation through fal with the exact mapped values', async () => {
     useAppStore.setState({ engine: 'gemini' });

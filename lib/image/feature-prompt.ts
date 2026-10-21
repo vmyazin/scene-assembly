@@ -1,27 +1,69 @@
-/** Keep feature prompt expansion identical for guest and account execution. */
-export function featureImagePrompt(featureId: string, prompt: string, imageCount: number): string {
-  let finalPrompt = prompt;
-  if (featureId === 'social-media-thumbnail') {
-    finalPrompt = `Create a VIRAL YouTube/Social Media thumbnail with these elements:
+/**
+ * The instruction a mode wraps around what the user typed before it reaches the
+ * model. Every mode has one so a session can add its own; most are `{prompt}`,
+ * which sends the text as written.
+ */
+export interface MasterPrompt {
+  /** `{prompt}` is the typed text; `{references}` says what each upload is for. */
+  template: string;
+  /** Sent instead of the template when the prompt box is empty. */
+  whenEmpty?: string;
+}
+
+export const PROMPT_TOKEN = '{prompt}';
+export const REFERENCES_TOKEN = '{references}';
+
+const THUMBNAIL_TEMPLATE = `Create a VIRAL YouTube/Social Media thumbnail with these elements:
 - DRAMATIC, eye-catching scene with shocked/surprised facial expression
 - BIG, BOLD text overlays with key phrases (use vibrant colors like yellow, red, white)
 - Arrows, circles, or highlighting elements pointing to important parts
 - High contrast and saturated colors for maximum impact
 - Professional editing style that screams "CLICK ME!"
 - Energy and urgency in the composition
-${thumbnailReferenceRoles(imageCount)}
-User's custom requirements: ${prompt}
+${REFERENCES_TOKEN}
+User's custom requirements: ${PROMPT_TOKEN}
 
 Style: Photorealistic, professional thumbnail editing, viral content aesthetics`;
-  } else if (featureId === 'style-transfer') {
+
+/**
+ * The built-in master prompt. Style transfer's empty-prompt fallback depends on
+ * how many images are attached, so the default is resolved per run and the
+ * editor shows the one that would be sent now.
+ */
+export function defaultMasterPrompt(featureId: string, imageCount: number): MasterPrompt {
+  if (featureId === 'social-media-thumbnail') return { template: THUMBNAIL_TEMPLATE };
+  if (featureId === 'style-transfer') {
     if (imageCount === 2) {
-      finalPrompt = prompt || 'Apply the artistic style and aesthetic from the first image to the content and composition of the second image. Preserve the subject matter of the second image while adopting the color palette, brushstrokes, texture, and artistic techniques of the first image.';
-    } else if (imageCount === 1) {
-      finalPrompt = prompt || 'Transform this image into an artistic masterpiece. Apply creative stylization while maintaining the core composition and subject matter.';
+      return {
+        template: PROMPT_TOKEN,
+        whenEmpty: 'Apply the artistic style and aesthetic from the first image to the content and composition of the second image. Preserve the subject matter of the second image while adopting the color palette, brushstrokes, texture, and artistic techniques of the first image.',
+      };
+    }
+    if (imageCount === 1) {
+      return {
+        template: PROMPT_TOKEN,
+        whenEmpty: 'Transform this image into an artistic masterpiece. Apply creative stylization while maintaining the core composition and subject matter.',
+      };
     }
   }
+  return { template: PROMPT_TOKEN };
+}
 
-  return finalPrompt;
+/**
+ * Keep feature prompt expansion identical for guest and account execution.
+ * `master` is the session's edited copy, when there is one.
+ */
+export function featureImagePrompt(
+  featureId: string,
+  prompt: string,
+  imageCount: number,
+  master: MasterPrompt = defaultMasterPrompt(featureId, imageCount),
+): string {
+  if (!prompt && master.whenEmpty) return master.whenEmpty;
+  // Function replacers, so a `$&` the user typed is not read as a pattern.
+  return master.template
+    .replaceAll(REFERENCES_TOKEN, () => thumbnailReferenceRoles(imageCount))
+    .replaceAll(PROMPT_TOKEN, () => prompt);
 }
 
 /**
