@@ -468,6 +468,12 @@
       "runtimeExecutable": "env",
       "runtimeArgs": ["ACCOUNT_WORKER_PORT=8931", "DEV_FAKE_GENERATION=1", "npm", "run", "dev", "--", "--port", "3331"],
       "port": 3331
+    },
+    {
+      "name": "Last prompt persistence smoke test",
+      "runtimeExecutable": "env",
+      "runtimeArgs": ["ACCOUNT_WORKER_PORT=8933", "DEV_FAKE_GENERATION=1", "npm", "run", "dev", "--", "--port", "3333"],
+      "port": 3333
     }
   ],
   "version": "0.0.1"

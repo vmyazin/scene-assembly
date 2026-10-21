@@ -15,6 +15,7 @@ import { setUiSoundsEnabled } from '@/lib/notify/chime';
 import { useAccountStore } from '@/store/useAccountStore';
 import { useAppStore } from '@/store/useAppStore';
 import { useConnectionsDialog } from '@/store/useConnectionsDialog';
+import { useDraftStore } from '@/store/useDraftStore';
 import { useLibraryDialog } from '@/store/useLibraryDialog';
 import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
 
@@ -88,6 +89,8 @@ export default function StudioHeader({
     useAppStore.persist.rehydrate();
     // Its own call: each persisted store defers hydration separately.
     void usePromptLibraryStore.persist.rehydrate();
+    // Brings back the last prompt; its merge keeps anything typed or restored first.
+    void useDraftStore.persist.rehydrate();
   }, []);
 
   /**

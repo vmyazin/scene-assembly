@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useDraftStore } from '../../store/useDraftStore';
+import { mergeSavedPrompt, useDraftStore } from '../../store/useDraftStore';
 
 const revokeObjectURL = vi.fn();
 let created = 0;
@@ -258,6 +258,40 @@ describe('useDraftStore', () => {
       useDraftStore.getState().setReplaceTarget(1);
       useDraftStore.getState().reset();
       expect(useDraftStore.getState().replaceTarget).toBeNull();
+    });
+  });
+
+  describe('remembering the last prompt', () => {
+    const saved = { prompt: 'A neon tiger in the rain', promptScope: 'image' as const, promptByScope: { video: 'Slow push in' } };
+
+    it('brings the saved prompt back on a fresh load', () => {
+      const merged = mergeSavedPrompt(saved, useDraftStore.getState());
+      expect(merged).toMatchObject(saved);
+    });
+
+    it('gives a workspace that claimed its scope first the prompt saved for that scope', () => {
+      useDraftStore.getState().enterPromptScope('video');
+      const merged = mergeSavedPrompt(saved, useDraftStore.getState());
+      expect(merged.prompt).toBe('Slow push in');
+      // The image prompt is filed away, ready for the trip back.
+      expect(merged.promptByScope.image).toBe('A neon tiger in the rain');
+    });
+
+    it('never replaces a prompt written before the saved one arrived', () => {
+      useDraftStore.getState().enterPromptScope('image');
+      useDraftStore.getState().setPrompt('Restored from the gallery');
+      expect(mergeSavedPrompt(saved, useDraftStore.getState()).prompt).toBe('Restored from the gallery');
+    });
+
+    it('reads the saved prompt on rehydrate and saves each edit after it', async () => {
+      const key = 'scene-assembly-draft-prompt';
+      localStorage.setItem(key, JSON.stringify({ state: saved, version: 0 }));
+
+      await useDraftStore.persist.rehydrate();
+      expect(useDraftStore.getState().prompt).toBe('A neon tiger in the rain');
+
+      useDraftStore.getState().setPrompt('A neon tiger at dawn');
+      expect(JSON.parse(localStorage.getItem(key) ?? '{}').state.prompt).toBe('A neon tiger at dawn');
     });
   });
 });

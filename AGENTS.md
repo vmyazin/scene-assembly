@@ -266,6 +266,7 @@
   download; never name a file after an asset id, and never send the browser Gemini key
   from the cloud path.
 - **Signed-in generation** → reuse `useCloudWorkspace`, `CloudExecutionNotice`, `CloudJobPanel` and `CloudJobList`; keep account jobs in the memory-only `useAccountStore`, never a guest job store. Pass `storage="account"` to `ConnectionGate` for cloud execution so its key-storage explanation stays accurate. Prompt-library recording for cloud jobs lives in `useCloudWorkspace.submit`, not in the workspace, because every workspace's cloud branch returns early and the four copies of `remember()` below those returns were all skipped.
+- **The last prompt after a reload** → `useDraftStore` persists only `prompt`, `promptScope` and `promptByScope` (key `scene-assembly-draft-prompt`), never references or control values, because File handles and object URLs do not serialize. Hydration is deferred and kicked from `StudioHeader`; its storage skips writes until hydrated and `mergeSavedPrompt` keeps whatever a workspace claimed or restored first, because a workspace enters its scope on mount before the header's effect, and an early write would replace the saved prompt with an empty one.
 - **A link from a background job to where it is looked at** → `lib/account/job-location.ts`
   is the one answer, because a job has two homes and the wrong one is a dead end. While it
   runs, that is the studio form it was started from — the `CloudJobPanel` matching its
