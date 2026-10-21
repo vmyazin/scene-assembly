@@ -9,7 +9,7 @@ export function featureImagePrompt(featureId: string, prompt: string, imageCount
 - High contrast and saturated colors for maximum impact
 - Professional editing style that screams "CLICK ME!"
 - Energy and urgency in the composition
-
+${thumbnailReferenceRoles(imageCount)}
 User's custom requirements: ${prompt}
 
 Style: Photorealistic, professional thumbnail editing, viral content aesthetics`;
@@ -22,4 +22,18 @@ Style: Photorealistic, professional thumbnail editing, viral content aesthetics`
   }
 
   return finalPrompt;
+}
+
+/**
+ * Says what each thumbnail upload is for. Without it the model treats a second
+ * photo as a candidate subject and blends the two faces, or invents a new one.
+ */
+function thumbnailReferenceRoles(imageCount: number): string {
+  if (imageCount === 0) return '';
+  const subject = '- Image 1 is the main subject. Keep their face and identity recognizable; expression, pose and lighting may change to fit the thumbnail.';
+  if (imageCount === 1) return `\nReference image:\n${subject}\n`;
+  const others = imageCount === 2
+    ? 'Image 2 is a supporting element (a product, logo, prop, background or style to match). Place it in the scene; never merge it into'
+    : `Images 2–${imageCount} are supporting elements (a product, logo, prop, background or style to match). Place them in the scene; never merge them into`;
+  return `\nReference images:\n${subject}\n- ${others} the subject's face.\n`;
 }

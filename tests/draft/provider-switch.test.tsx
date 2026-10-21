@@ -238,10 +238,10 @@ describe('carrying user input across providers and modes', () => {
     await waitFor(() => expect(useDraftStore.getState().references).toHaveLength(2));
     kie.unmount();
 
-    // fal video takes exactly one reference image.
+    // fal video takes exactly one reference image; the first one stays.
     renderFal('image');
 
     await waitFor(() => expect(useDraftStore.getState().references).toHaveLength(1));
-    expect(useDraftStore.getState().references[0].file.name).toBe('b.png');
+    expect(useDraftStore.getState().references[0].file.name).toBe('a.png');
   });
 });

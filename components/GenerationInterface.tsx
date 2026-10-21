@@ -431,14 +431,28 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
     if (slug) setFilenameSlug(slug);
   };
 
-  const maxImages = feature.maxImages || 1;
+  /**
+   * The tray holds what the feature asks for, but never more than the model on
+   * screen accepts: Runware trims anything past its cap without a word, so a
+   * fifth reference would be paid for and ignored. Absent means the catalog
+   * documents no cap, and the feature's own limit stands.
+   */
+  const modelMaxImages = isGemini
+    ? activeGeminiModel.maxInputImages
+    : activeEngineId === 'fal'
+      ? activeFalImageModel.variants.find((variant) => variant.inputMode === 'image')?.maxInputImages
+      : activeProviderCatalogModel?.maxInputImages;
+  const featureMaxImages = feature.maxImages || 1;
+  const maxImages = Math.min(featureMaxImages, modelMaxImages ?? featureMaxImages);
   const { addFiles: addImageFiles, isDragging, isFetching, dropProps } = useReferenceIntake({
     referenceCount: references.length,
     maxImages,
     accept: (file) => file.type.startsWith('image/'),
     // A drop can carry anything at all, and a dead zone reads as a broken one.
     unusableMessage: 'Drop an image file, or an image dragged from a web page.',
-    tooManyMessage: `Maximum ${maxImages} images allowed`,
+    tooManyMessage: maxImages < featureMaxImages
+      ? `This model accepts up to ${maxImages} reference image${maxImages === 1 ? '' : 's'}.`
+      : `Maximum ${maxImages} images allowed`,
     pasteEnabled: feature.requiresImage,
     dropDisabled: !feature.requiresImage,
     // fal refuses a reference over 20 MiB. Judged on the re-encoded file, which
@@ -1184,14 +1198,19 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
           feature.requiresImage && (
               <div className="glass-card p-3.5 md:p-4 space-y-3">
                 <h3 className="display text-base font-semibold">
-                  Upload Image{feature.requiresMultipleImages ? 's' : ''}
+                  Upload Image{maxImages > 1 ? 's' : ''}
                 </h3>
+                {feature.id === 'social-media-thumbnail' && maxImages > 1 && (
+                  <p className="text-xs text-[var(--foreground-subtle)]">
+                    The first image is the subject. Add a product, logo or style reference after it.
+                  </p>
+                )}
 
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept="image/*"
-                  multiple={feature.requiresMultipleImages}
+                  multiple={maxImages > 1}
                   onChange={handleImageUpload}
                   className="hidden"
                 />
@@ -1209,20 +1228,20 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                         ? 'Fetching dropped image…'
                         : isDragging
                           ? 'Drop to use as a source'
-                          : `Drop or click to upload${feature.requiresMultipleImages ? ` (max ${feature.maxImages})` : ''}`}
+                          : `Drop or click to upload${maxImages > 1 ? ` (max ${maxImages})` : ''}`}
                     </span>
                     <span className="text-xs text-[var(--foreground-subtle)]">
                       or paste with ⌘V / Ctrl+V
                     </span>
                   </button>
-                  {references.length < (feature.maxImages || 1) && (
-                    <StoredImagePicker referenceLimit={feature.maxImages || 1} />
+                  {references.length < maxImages && (
+                    <StoredImagePicker referenceLimit={maxImages} />
                   )}
                 </div>
 
                 {images.length > 0 && (
                   <ReferenceStack
-                    replaceLimit={feature.maxImages || 1}
+                    replaceLimit={maxImages}
                     items={images.map((image, index) => ({
                       id: image.id,
                       src: image.dataUrl,

@@ -89,7 +89,10 @@ export const FEATURES: Feature[] = [
     thumbnail: '/thumbnails/viral-youtube-thumbnail.jpg',
     category: 'special',
     requiresImage: true,
+    // One photo is enough; the rest are optional props, logos or style. The
+    // first upload is the subject (see featureImagePrompt).
     requiresMultipleImages: false,
+    maxImages: 4,
     examplePrompt: 'Person with shocked, excited expression discovering something amazing, dramatic lighting, with energy and urgency in the scene',
   },
   {

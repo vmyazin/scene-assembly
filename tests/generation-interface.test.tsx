@@ -46,6 +46,7 @@ vi.mock('@/components/KieGenerationWorkspace', () => ({
 const textToImage = FEATURES.find((feature) => feature.id === 'text-to-image')!;
 const searchGrounding = FEATURES.find((feature) => feature.id === 'search-grounding')!;
 const multiImageCompose = FEATURES.find((feature) => feature.id === 'multi-image-compose')!;
+const socialThumbnail = FEATURES.find((feature) => feature.id === 'social-media-thumbnail')!;
 const mockedRunFalImage = vi.mocked(runFalImage);
 const mockedCancelFalJob = vi.mocked(cancelFalJob);
 
@@ -106,6 +107,9 @@ const SOCIAL_THUMBNAIL_PROMPT = (prompt: string) => `Create a VIRAL YouTube/Soci
 - High contrast and saturated colors for maximum impact
 - Professional editing style that screams "CLICK ME!"
 - Energy and urgency in the composition
+
+Reference image:
+- Image 1 is the main subject. Keep their face and identity recognizable; expression, pose and lighting may change to fit the thumbnail.
 
 User's custom requirements: ${prompt}
 
@@ -242,6 +246,32 @@ describe('GenerationInterface engine selection', () => {
     renderInterface(multiImageCompose);
 
     expect(screen.getByRole('button', { name: 'From library' })).toBeInTheDocument();
+  });
+
+  it('takes up to four thumbnail references and says the first is the subject', () => {
+    useAppStore.setState({ engine: 'gemini' });
+    renderInterface(socialThumbnail);
+
+    expect(screen.getByText('Drop or click to upload (max 4)')).toBeInTheDocument();
+    expect(screen.getByText(/The first image is the subject/)).toBeInTheDocument();
+    expect(document.querySelector('input[type="file"]')).toHaveProperty('multiple', true);
+  });
+
+  it('holds the tray to the active model’s reference cap', async () => {
+    // Qwen-Image-Edit-Plus takes three; Runware drops anything past its cap unannounced.
+    useAppStore.setState({ engine: 'runware', runwareApiKey: 'rw_test_key', runwareImageModel: 'runware:108@22' });
+    renderInterface(socialThumbnail);
+
+    expect(screen.getByText('Drop or click to upload (max 3)')).toBeInTheDocument();
+    const files = Array.from({ length: 4 }, (_, index) =>
+      new File([`ref-${index}`], `ref-${index}.png`, { type: 'image/png' })
+    );
+    fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files } });
+
+    await waitFor(() =>
+      expect(screen.getByText('This model accepts up to 3 reference images.')).toBeInTheDocument()
+    );
+    expect(useDraftStore.getState().references).toHaveLength(0);
   });
 
   it('starts the image-generation prompt at two rows with the shared expansion cap', () => {

@@ -63,8 +63,23 @@ describe('useDraftStore', () => {
 
     useDraftStore.getState().limitReferences(1);
 
-    expect(useDraftStore.getState().references.map((r) => r.file.name)).toEqual(['b.png']);
-    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith('blob:draft-1');
+    expect(useDraftStore.getState().references.map((r) => r.file.name)).toEqual(['a.png']);
+    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith('blob:draft-2');
+  });
+
+  it('keeps the leading references, so image 1 stays the subject', () => {
+    useDraftStore.getState().addReferences(
+      ['subject.png', 'logo.png', 'product.png', 'style.png'].map(reference),
+      4
+    );
+
+    useDraftStore.getState().limitReferences(3);
+
+    expect(useDraftStore.getState().references.map((r) => r.file.name)).toEqual([
+      'subject.png',
+      'logo.png',
+      'product.png',
+    ]);
   });
 
   it('leaves references alone when the new ceiling is roomier', () => {
