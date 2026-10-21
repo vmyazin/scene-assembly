@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
 import type { DraftValue } from '@/lib/draft/carry-over';
 import { measureImageUrl } from '@/lib/draft/reference-dimensions';
@@ -30,8 +31,9 @@ export type PromptScope = 'image' | 'video';
 interface DraftState {
   /**
    * What the user has typed and chosen, independent of which provider or mode
-   * is on screen. Intentionally session-local and not persisted: it holds File
-   * handles and object URLs, neither of which survive serialization.
+   * is on screen. Only the prompt fields are persisted, so a reload brings the
+   * last prompt back; references and control values stay session-local because
+   * File handles and object URLs do not survive serialization.
    */
   prompt: string;
   /**
@@ -110,117 +112,167 @@ function release(references: DraftReference[]) {
   for (const reference of references) URL.revokeObjectURL(reference.previewUrl);
 }
 
-export const useDraftStore = create<DraftState>((set, get) => ({
-  prompt: '',
-  promptScope: null,
-  promptByScope: {},
-  references: [],
-  replaceTarget: null,
-  controlValues: {},
+const STORAGE_KEY = 'scene-assembly-draft-prompt';
 
-  setPrompt: (prompt) => set({ prompt }),
+type PersistedPrompt = Pick<DraftState, 'prompt' | 'promptScope' | 'promptByScope'>;
 
-  setReplaceTarget: (index) => set({ replaceTarget: index }),
+/**
+ * Lays the saved prompt under whatever this session has already done.
+ *
+ * Hydration is deferred, so a workspace may have claimed its scope - or a
+ * gallery restore may have written a prompt - before the saved one arrives.
+ * Something already in the field wins; an empty field takes the saved prompt
+ * for the scope on screen, so last session's video prompt never lands in the
+ * image workspace.
+ */
+export function mergeSavedPrompt(saved: PersistedPrompt | undefined, current: DraftState): DraftState {
+  if (!saved) return current;
+  if (current.promptScope === null && !current.prompt) return { ...current, ...saved };
+  // A prompt saved before any workspace claimed it belongs to whichever opens.
+  const savedScope = saved.promptScope ?? current.promptScope;
+  const filed = { ...saved.promptByScope, ...(savedScope ? { [savedScope]: saved.prompt } : {}) };
+  const promptByScope = { ...filed, ...current.promptByScope };
+  if (current.prompt || current.promptScope === null) return { ...current, promptByScope };
+  return { ...current, prompt: filed[current.promptScope] ?? '', promptByScope };
+}
 
-  enterPromptScope: (scope) =>
-    set((state) => {
-      if (state.promptScope === scope) return {};
-      // Nothing has claimed the field yet, so whatever is in it was put there
-      // for the workspace now opening — a gallery restore or a prompt inserted
-      // from the library. Adopt it rather than file it under a scope that never
-      // existed and hand the user an empty field.
-      if (state.promptScope === null) return { promptScope: scope };
-      return {
-        promptScope: scope,
-        promptByScope: { ...state.promptByScope, [state.promptScope]: state.prompt },
-        prompt: state.promptByScope[scope] ?? '',
-      };
-    }),
-
-  addReferences: (entries, limit) => {
-    const created = entries.map(createReference);
-    for (const reference of created) {
-      void measureImageUrl(reference.previewUrl).then((dimensions) => {
-        if (!dimensions) return;
-        // The reference may have been dropped or trimmed while decoding.
-        set((state) => ({
-          references: state.references.map((candidate) =>
-            candidate.id === reference.id ? { ...candidate, ...dimensions } : candidate
-          ),
-        }));
-      });
-    }
-    // Swapping one slot, not adding to the set: the pending target takes the
-    // first pick and the limit is irrelevant, since the count cannot change.
-    // Cleared either way, so a cancelled pick cannot leak into the next add.
-    const { replaceTarget } = get();
-    if (replaceTarget !== null) {
-      const next = [...get().references];
-      if (created.length > 0 && replaceTarget >= 0 && replaceTarget < next.length) {
-        release([next[replaceTarget]]);
-        next[replaceTarget] = created[0];
-        // Anything past the first has nowhere to go in a swap.
-        release(created.slice(1));
-        set({ references: next, replaceTarget: null });
-        return;
-      }
-      set({ replaceTarget: null });
-    }
-
-    const combined = [...get().references, ...created];
-    if (combined.length <= limit) {
-      set({ references: combined });
-      return;
-    }
-    // Keep the most recent, since the newest pick is the one just asked for.
-    const kept = combined.slice(combined.length - limit);
-    release(combined.filter((reference) => !kept.includes(reference)));
-    set({ references: kept });
-  },
-
-  limitReferences: (limit) => {
-    const { references } = get();
-    if (references.length <= limit) return;
-    const kept = references.slice(0, limit);
-    release(references.filter((reference) => !kept.includes(reference)));
-    set({ references: kept });
-  },
-
-  reorderReference: (from, to) => {
-    const { references } = get();
-    const isInRange = (index: number) => Number.isInteger(index) && index >= 0 && index < references.length;
-    if (from === to || !isInRange(from) || !isInRange(to)) return;
-    const next = [...references];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved);
-    set({ references: next });
-  },
-
-  removeReference: (id) => {
-    const { references } = get();
-    const removed = references.filter((reference) => reference.id === id);
-    if (removed.length === 0) return;
-    release(removed);
-    set({ references: references.filter((reference) => reference.id !== id) });
-  },
-
-  clearReferences: () => {
-    release(get().references);
-    set({ references: [] });
-  },
-
-  rememberControlValues: (values) =>
-    set((state) => ({ controlValues: { ...state.controlValues, ...values } })),
-
-  reset: () => {
-    release(get().references);
-    set({
+export const useDraftStore = create<DraftState>()(
+  persist(
+    (set, get) => ({
       prompt: '',
       promptScope: null,
       promptByScope: {},
       references: [],
       replaceTarget: null,
       controlValues: {},
-    });
-  },
-}));
+
+      setPrompt: (prompt) => set({ prompt }),
+
+      setReplaceTarget: (index) => set({ replaceTarget: index }),
+
+      enterPromptScope: (scope) =>
+        set((state) => {
+          if (state.promptScope === scope) return {};
+          // Nothing has claimed the field yet, so whatever is in it was put there
+          // for the workspace now opening — a gallery restore or a prompt inserted
+          // from the library. Adopt it rather than file it under a scope that never
+          // existed and hand the user an empty field.
+          if (state.promptScope === null) return { promptScope: scope };
+          return {
+            promptScope: scope,
+            promptByScope: { ...state.promptByScope, [state.promptScope]: state.prompt },
+            prompt: state.promptByScope[scope] ?? '',
+          };
+        }),
+
+      addReferences: (entries, limit) => {
+        const created = entries.map(createReference);
+        for (const reference of created) {
+          void measureImageUrl(reference.previewUrl).then((dimensions) => {
+            if (!dimensions) return;
+            // The reference may have been dropped or trimmed while decoding.
+            set((state) => ({
+              references: state.references.map((candidate) =>
+                candidate.id === reference.id ? { ...candidate, ...dimensions } : candidate
+              ),
+            }));
+          });
+        }
+        // Swapping one slot, not adding to the set: the pending target takes the
+        // first pick and the limit is irrelevant, since the count cannot change.
+        // Cleared either way, so a cancelled pick cannot leak into the next add.
+        const { replaceTarget } = get();
+        if (replaceTarget !== null) {
+          const next = [...get().references];
+          if (created.length > 0 && replaceTarget >= 0 && replaceTarget < next.length) {
+            release([next[replaceTarget]]);
+            next[replaceTarget] = created[0];
+            // Anything past the first has nowhere to go in a swap.
+            release(created.slice(1));
+            set({ references: next, replaceTarget: null });
+            return;
+          }
+          set({ replaceTarget: null });
+        }
+
+        const combined = [...get().references, ...created];
+        if (combined.length <= limit) {
+          set({ references: combined });
+          return;
+        }
+        // Keep the most recent, since the newest pick is the one just asked for.
+        const kept = combined.slice(combined.length - limit);
+        release(combined.filter((reference) => !kept.includes(reference)));
+        set({ references: kept });
+      },
+
+      limitReferences: (limit) => {
+        const { references } = get();
+        if (references.length <= limit) return;
+        const kept = references.slice(0, limit);
+        release(references.filter((reference) => !kept.includes(reference)));
+        set({ references: kept });
+      },
+
+      reorderReference: (from, to) => {
+        const { references } = get();
+        const isInRange = (index: number) => Number.isInteger(index) && index >= 0 && index < references.length;
+        if (from === to || !isInRange(from) || !isInRange(to)) return;
+        const next = [...references];
+        const [moved] = next.splice(from, 1);
+        next.splice(to, 0, moved);
+        set({ references: next });
+      },
+
+      removeReference: (id) => {
+        const { references } = get();
+        const removed = references.filter((reference) => reference.id === id);
+        if (removed.length === 0) return;
+        release(removed);
+        set({ references: references.filter((reference) => reference.id !== id) });
+      },
+
+      clearReferences: () => {
+        release(get().references);
+        set({ references: [] });
+      },
+
+      rememberControlValues: (values) =>
+        set((state) => ({ controlValues: { ...state.controlValues, ...values } })),
+
+      reset: () => {
+        release(get().references);
+        set({
+          prompt: '',
+          promptScope: null,
+          promptByScope: {},
+          references: [],
+          replaceTarget: null,
+          controlValues: {},
+        });
+      },
+    }),
+    {
+      name: STORAGE_KEY,
+      storage: createJSONStorage(() => ({
+        getItem: (name) => localStorage.getItem(name),
+        // Every set writes, and a workspace claims its scope on mount, which can
+        // come before the header's rehydrate. Writing then would replace the
+        // saved prompt with an empty one before it was ever read.
+        setItem: (name, value) => {
+          if (useDraftStore.persist.hasHydrated()) localStorage.setItem(name, value);
+        },
+        removeItem: (name) => localStorage.removeItem(name),
+      })),
+      partialize: (state): PersistedPrompt => ({
+        prompt: state.prompt,
+        promptScope: state.promptScope,
+        promptByScope: state.promptByScope,
+      }),
+      merge: (saved, current) => mergeSavedPrompt(saved as PersistedPrompt | undefined, current),
+      // Same deferred hydration as useAppStore: kicked from StudioHeader's mount
+      // effect so the server and first client render agree.
+      skipHydration: true,
+    }
+  )
+);

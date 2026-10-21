@@ -13,3 +13,8 @@ beforeEach(()=>useAccountStore.setState(state=>({session:{account:null,googleEna
 // results would appear in the next test's panel.
 import { useImageResultsStore } from '@/store/useImageResultsStore';
 beforeEach(() => useImageResultsStore.setState({ items: [] }));
+
+// The draft store saves the prompt to localStorage once hydrated, so without
+// this a prompt typed in one test would be rehydrated into the next.
+// Node-environment tests have no localStorage.
+beforeEach(() => globalThis.localStorage?.removeItem('scene-assembly-draft-prompt'));
