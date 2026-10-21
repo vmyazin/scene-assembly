@@ -5,6 +5,8 @@ import { useState, useRef, useEffect, useId, useMemo } from 'react';
 import { useCloudWorkspace } from '@/lib/account/useCloudWorkspace';
 import { SINGLE_IMAGE_MODELS, SINGLE_IMAGE_MODEL_LABELS } from '@/lib/account/models';
 import { featureImagePrompt } from '@/lib/image/feature-prompt';
+import { resolveMasterPrompt, useMasterPromptStore } from '@/store/useMasterPromptStore';
+import MasterPromptEditor from '@/components/MasterPromptEditor';
 import CloudJobPanel from '@/components/account/CloudJobPanel';
 import ImageWorkspaceLayout, { ImageMainStack } from '@/components/ImageWorkspaceLayout';
 import ChipPopover from '@/components/ChipPopover';
@@ -196,6 +198,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
   // outlive this line and block what those effects set.
   usePromptScope('image');
   const references = useDraftStore((state) => state.references);
+  const masterOverride = useMasterPromptStore((state) => state.overrides[feature.id]);
   // The id travels with the bytes rather than living in a parallel array: the
   // read is async, so for one render after a removal a bare `string[]` would
   // be longer than `references` and item i would pair the wrong reference's
@@ -511,7 +514,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
       startedAtRef.current = now();
     },
     mutationFn: async (): Promise<{ dataUrl: string; ext: string; mimeType: string; usage?: EngineUsage; cost?: number }> => {
-      const finalPrompt = featureImagePrompt(feature.id, prompt, images.length);
+      const finalPrompt = featureImagePrompt(feature.id, prompt, images.length, resolveMasterPrompt(feature.id, images.length, masterOverride));
 
       if (activeEngine.id === 'fal') {
         generationAbortRef.current?.abort();
@@ -873,7 +876,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
       setError(null);
       setCloudSubmitting(true);
       try {
-        const cloudPrompt = featureImagePrompt(feature.id, prompt, references.length) || 'Edit this image while preserving its subject and composition.';
+        const cloudPrompt = featureImagePrompt(feature.id, prompt, references.length, resolveMasterPrompt(feature.id, references.length, masterOverride)) || 'Edit this image while preserving its subject and composition.';
         const values: Record<string,string|number|boolean> = activeEngine.id === 'fal'
           ? falImageValues(config, falThinkingLevel, relaxed.attach())
           : activeProvider || activeEngine.id === 'pollinations'
@@ -1318,6 +1321,8 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                 </p>
               </div>
             )}
+
+            <MasterPromptEditor featureId={feature.id} imageCount={images.length} />
           </PromptPanel>
         }
         actions={
