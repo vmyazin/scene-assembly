@@ -82,6 +82,13 @@
   unnoticed (UX audit H5, 2026-10-15). The timeline workspace's own rail keeps `addClip`,
   since the clip is placed in view there.
 
+- **A card's secondary actions** (download, delete, reuse settings, last-frame tools) →
+  `ActionMenu` behind a ⋯ button, one primary action left on the card; the cloud library
+  card's is `CloudAssetMenu`. Paid steps (Finalize draft) stay on the card. Inside a modal
+  the menu portals into the modal's panel, because `useAccessibleDialog` pulls focus back
+  from anything outside it, and it catches Escape before the dialog would close the sheet.
+  Last-frame save/copy/continue come from `useLastFrame`, so menu and button row decode alike.
+
 - **A result's reference action in a mode with no reference slot** (text-to-image, search
   grounding) → pass `onEditImage` down `GenerationInterface` → `ResultStack`/`CloudJobPanel`/
   `KieGenerationWorkspace` → `ResultActions`, which then offers "Edit this image" and opens

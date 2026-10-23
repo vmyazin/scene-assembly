@@ -1,0 +1,967 @@
+<!--
+  Library card actions — five ways to fold them
+  Source: components/account/CloudAssetGrid.tsx, components/LastFrameActions.tsx
+  Date: 2026-10-23
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Library Card Actions</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ----------------------------------------------------------------
+       SCENE ASSEMBLY — light adaptation of the repo brand.
+       Source: DESIGN.md ("The Illuminated Workbench") + app/globals.css.
+       The product is a dark teal workbench; the chrome translates that onto
+       light paper — canvas #081012 becomes ink, signal cyan / motion violet /
+       marker yellow become accents, Geist + Geist Mono stay. Quiet enough that
+       a dark variant preview can sit inside it without a fight.
+    ---------------------------------------------------------------- */
+    :root {
+      --brand-50: #e4f2f2;
+      --brand-100: #bfe4e4;
+      --brand-300: #4e8e91;
+      --brand-500: #076c70;   /* signal cyan #00fff9, contrast-fixed for paper */
+      --brand-700: #05494d;
+      --accent-50: #f4e9fd;
+      --accent-500: #7b16aa;  /* motion violet #bd00ff */
+      --accent-700: #5b0f7d;
+      --marker: #ffed4e;      /* marker yellow, used flat on ink only */
+      --magenta: #bd0059;     /* output magenta #ff006e */
+      --ink: #081012;         /* workbench canvas */
+      --ink-soft: #33474a;
+      --ink-mute: #6d8386;
+      --line: #d6e6e6;
+      --line-soft: #e7f0f0;
+      --paper: #ffffff;
+      --bg: #f1f7f7;
+      --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --shadow-sm: 0 1px 2px rgba(8, 16, 18, 0.05), 0 1px 1px rgba(8, 16, 18, 0.03);
+      --shadow-md: 0 16px 40px -26px rgba(8, 16, 18, 0.45), 0 2px 6px rgba(8, 16, 18, 0.04);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-sans);
+      letter-spacing: -0.011em;
+      background: var(--bg);
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      line-height: 1.5;
+    }
+
+    .page {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 72px 48px 160px;
+    }
+
+    /* ---------- Page header ---------- */
+    .doc-header {
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 40px;
+      margin-bottom: 80px;
+    }
+    .doc-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--brand-700);
+      background: var(--brand-50);
+      padding: 6px 12px;
+      border-radius: 999px;
+      margin-bottom: 20px;
+    }
+    .doc-eyebrow::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--brand-500);
+    }
+    .doc-title {
+      font-family: var(--font-sans);
+      font-size: 54px;
+      line-height: 1.02;
+      font-weight: 600;
+      letter-spacing: -0.035em;
+      margin: 0 0 16px;
+      color: var(--ink);
+    }
+    .doc-subtitle {
+      font-size: 19px;
+      color: var(--ink-soft);
+      max-width: 720px;
+      margin: 0 0 32px;
+      line-height: 1.45;
+    }
+    .doc-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--ink-mute);
+    }
+    .doc-meta > div { display: flex; gap: 6px; }
+    .doc-meta b {
+      color: var(--ink-soft);
+      font-weight: 600;
+    }
+
+    /* ---------- Variant section ---------- */
+    .variant {
+      margin-bottom: 96px;
+    }
+    .variant:last-child { margin-bottom: 0; }
+
+    .variant-head {
+      display: grid;
+      grid-template-columns: 64px 1fr;
+      gap: 20px;
+      align-items: start;
+      margin-bottom: 28px;
+    }
+    .variant-letter {
+      width: 48px;
+      height: 48px;
+      border-radius: 999px;
+      background: var(--ink);
+      color: var(--marker);
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 19px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      letter-spacing: -0.02em;
+    }
+    .variant-meta h2 {
+      margin: 4px 0 6px;
+      font-size: 25px;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      color: var(--ink);
+    }
+    .variant-tradeoff {
+      font-size: 15px;
+      color: var(--ink-soft);
+      margin: 0;
+      max-width: 760px;
+    }
+    .variant-tradeoff b {
+      color: var(--brand-500);
+      font-weight: 600;
+    }
+
+    /* ---------- Preview frame ---------- */
+    .preview-frame {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+      margin-left: 84px;
+      position: relative;
+    }
+    .preview-frame::before {
+      content: '';
+      position: absolute;
+      top: 14px;
+      left: 16px;
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: #d5e7e7;
+      box-shadow: 18px 0 0 #d5e7e7, 36px 0 0 #d5e7e7;
+      z-index: 2;
+    }
+    .preview-frame-bar {
+      background: #f5fafa;
+      border-bottom: 1px solid var(--line-soft);
+      padding: 14px 16px 14px 76px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--ink-mute);
+      font-weight: 600;
+    }
+    .preview {
+      padding: 0;
+      min-height: 200px;
+    }
+
+    /* ---------- Analysis ---------- */
+    .variant-analysis {
+      margin: 24px 0 0 84px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 24px;
+    }
+    .analysis-block {
+      padding: 18px 20px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: var(--paper);
+    }
+    .analysis-block h4 {
+      margin: 0 0 6px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--brand-500);
+    }
+    .analysis-block.is-risk h4 { color: var(--magenta); }
+    .analysis-block.is-pick h4 { color: var(--accent-700); }
+    .analysis-block p {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--ink-soft);
+    }
+
+    /* ---------- Decision row ---------- */
+    .decision {
+      position: relative;
+      overflow: hidden;
+      margin-top: 120px;
+      padding: 40px 48px;
+      background: var(--ink);
+      color: #ecf5f5;
+      border-radius: 16px;
+    }
+    .decision::before {
+      content: '';
+      position: absolute;
+      inset: 0 0 auto;
+      height: 1px;
+      background: linear-gradient(to right, transparent, var(--marker), transparent);
+      opacity: 0.45;
+    }
+    .decision h3 {
+      font-family: var(--font-sans);
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      margin: 0 0 8px;
+    }
+    .decision-sub {
+      color: #8fa5a7;
+      font-size: 14px;
+      margin: 0 0 28px;
+    }
+    .decision-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+    }
+    .decision-cell b {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--marker);
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    .decision-cell span {
+      font-size: 15px;
+      color: #ecf5f5;
+      line-height: 1.45;
+    }
+
+    /* ---------- Responsive ---------- */
+    @media (max-width: 900px) {
+      .page { padding: 40px 20px 80px; }
+      .doc-title { font-size: 36px; }
+      .variant-head { grid-template-columns: 48px 1fr; gap: 12px; }
+      .preview-frame { margin-left: 0; }
+      .variant-analysis { margin-left: 0; grid-template-columns: 1fr; }
+    }
+
+    /* ---------- Variant preview reset ----------
+       Anything inside .preview is the variant's own canvas.
+       Use scoped class prefixes per variant (.va-, .vb-, .vc-, .vd-)
+       to avoid cross-bleed of styles between variants.
+    */
+
+    .stage {
+      --s-bg: hsl(190 38% 5%);
+      --s-card: hsl(190 32% 8% / 0.8);
+      --s-overlay: hsl(190 10% 16%);
+      --s-fg: #ecf5f5;
+      --s-muted: #8fa5a7;
+      --s-subtle: #7a8d8f;
+      --s-line: hsl(190 60% 85% / 0.14);
+      --s-line-hover: hsl(190 60% 85% / 0.24);
+      --s-fill: hsl(190 60% 85% / 0.03);
+      --s-fill-hover: hsl(190 60% 85% / 0.07);
+      --s-cyan: #00fff9;
+      --s-meta: #a5f3fc;
+      --s-danger: #fca5a5;
+      background: var(--s-bg);
+      color: var(--s-fg);
+      padding: 32px 32px 40px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      align-items: flex-start;
+      font-family: var(--font-sans);
+      letter-spacing: -0.006em;
+    }
+    .stage-note {
+      flex-basis: 100%;
+      margin: 0;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--s-subtle);
+    }
+    .stage svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .stage svg.sm { width: 13px; height: 13px; }
+
+    .sa-card {
+      position: relative;
+      width: 340px;
+      max-width: 100%;
+      border: 1px solid rgba(103, 232, 249, 0.25);
+      border-radius: 12px;
+      background: var(--s-card);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .sa-card:hover { border-color: rgba(103, 232, 249, 0.5); }
+    .sa-media {
+      position: relative;
+      aspect-ratio: 16 / 9;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      justify-content: center;
+    }
+    .sa-frame {
+      height: 100%;
+      aspect-ratio: 1 / 1;
+      background:
+        radial-gradient(ellipse 28% 34% at 50% 52%, #d9b49a 0 60%, transparent 62%),
+        radial-gradient(ellipse 30% 14% at 50% 22%, #1f5a50 0 70%, transparent 72%),
+        repeating-linear-gradient(0deg, #8a4a33 0 9px, #b9785c 9px 10px),
+        #8a4a33;
+    }
+    .sa-still {
+      width: 100%;
+      background:
+        radial-gradient(circle at 80% 58%, #d9b49a 0 11%, transparent 12%),
+        radial-gradient(ellipse 12% 6% at 80% 40%, #1f5a50 0 80%, transparent 82%),
+        linear-gradient(90deg, #f3f6f7 0 62%, #dfe7ea 62%),
+        #f3f6f7;
+    }
+    .sa-still::before {
+      content: '';
+      position: absolute;
+      left: 7%; top: 18%;
+      width: 44%; height: 58%;
+      border-radius: 4px;
+      background: linear-gradient(#cfe0e6 0 14%, #fff 14%);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    }
+    .sa-controls {
+      position: absolute;
+      left: 10px; right: 10px; bottom: 8px;
+      display: flex; align-items: center; gap: 10px;
+      color: #fff;
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+    .sa-controls i {
+      flex: 1;
+      height: 4px;
+      border-radius: 99px;
+      background: linear-gradient(90deg, var(--s-cyan) 0 8%, rgba(255,255,255,0.35) 8%);
+    }
+    .sa-prompt {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .sa-meta { margin: 4px 0 0; font-size: 12px; color: var(--s-meta); }
+
+    .sa-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 34px;
+      padding: 6px 13px;
+      border-radius: 8px;
+      border: 1px solid var(--s-line);
+      background: var(--s-fill);
+      color: var(--s-fg);
+      font: 500 14px/1.2 var(--font-sans);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .sa-btn:hover, .sa-btn[aria-expanded="true"] { background: var(--s-fill-hover); border-color: var(--s-line-hover); }
+    .sa-btn:focus-visible, .sa-text:focus-visible, .sa-mi:focus-visible { outline: 2px solid var(--s-cyan); outline-offset: 2px; }
+    .sa-icon { width: 34px; padding: 0; }
+
+    .sa-anchor { position: relative; }
+    .sa-menu {
+      display: none;
+      position: absolute;
+      z-index: 20;
+      min-width: 236px;
+      padding: 6px;
+      border-radius: 11px;
+      border: 1px solid var(--s-line);
+      background: var(--s-overlay);
+      box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.7), 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+    .sa-menu.is-open { display: block; }
+    .sa-mi {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border: 0;
+      border-radius: 7px;
+      background: none;
+      color: var(--s-fg);
+      font: 400 14px/1.3 var(--font-sans);
+      text-align: left;
+      cursor: pointer;
+    }
+    .sa-mi svg { color: var(--s-muted); }
+    .sa-mi:hover { background: hsl(190 60% 85% / 0.08); }
+    .sa-mi.is-danger, .sa-mi.is-danger svg { color: var(--s-danger); }
+    .sa-mi kbd {
+      margin-left: auto;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--s-subtle);
+    }
+    .sa-mlabel {
+      padding: 8px 10px 4px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--s-subtle);
+    }
+    .sa-msep { height: 1px; margin: 6px 4px; background: var(--s-line); }
+    .sa-text {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 2px;
+      border: 0;
+      background: none;
+      color: var(--s-muted);
+      font: 500 13px/1.2 var(--font-sans);
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .sa-text:hover, .sa-text[aria-expanded="true"] { color: var(--s-fg); }
+    .sa-text svg { width: 13px; height: 13px; transition: transform 0.15s; }
+    .sa-text[aria-expanded="true"] svg { transform: rotate(180deg); }
+
+    .va-row { display: flex; gap: 8px; }
+    .va-row .sa-btn:first-child { flex: 1; }
+    .va-row .sa-menu { top: calc(100% + 6px); right: 0; }
+
+    .vb-split { display: flex; }
+    .vb-split .sa-btn:first-child { flex: 1; border-radius: 8px 0 0 8px; }
+    .vb-split .sa-btn:last-child { width: 38px; padding: 0; border-left-color: transparent; border-radius: 0 8px 8px 0; box-shadow: inset 1px 0 0 var(--s-line); }
+    .vb-split .sa-menu { top: calc(100% + 6px); left: 0; right: 0; }
+    .vb-mi { align-items: flex-start; }
+    .vb-mi svg { margin-top: 2px; }
+    .vb-mi span { display: flex; flex-direction: column; gap: 2px; }
+    .vb-mi small { font-size: 12px; color: var(--s-subtle); }
+
+    .vc-primary { width: 100%; }
+    .vc-foot { display: flex; align-items: center; gap: 14px; margin-top: -2px; }
+    .vc-foot .sa-menu { top: calc(100% + 6px); left: -6px; }
+
+    .vd-tools {
+      position: absolute;
+      top: 8px; right: 8px;
+      display: flex; gap: 6px;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .sa-card:hover .vd-tools, .sa-card:focus-within .vd-tools, .vd-tools.is-shown { opacity: 1; }
+    .vd-tool {
+      width: 32px; height: 32px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
+      background: rgba(8, 16, 18, 0.72);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      cursor: pointer;
+    }
+    .vd-tool:hover, .vd-tool[aria-expanded="true"] { background: rgba(8, 16, 18, 0.92); border-color: rgba(255, 255, 255, 0.3); }
+    .vd-tools .sa-menu { top: calc(100% + 6px); right: 0; }
+    .vd-primary { width: 100%; }
+    .vd-media-wrap { position: relative; }
+
+    .ve-metarow { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .ve-metarow .sa-meta { margin: 0; }
+    .ve-metarow .sa-menu { top: calc(100% + 6px); right: 0; }
+    .ve-row { display: flex; gap: 8px; }
+    .ve-row .sa-btn { flex: 1; }
+
+    .stage.has-open-menu { padding-bottom: 300px; }
+    @media (max-width: 900px) {
+      .stage { padding: 20px 16px 32px; }
+      .stage.has-open-menu { padding-bottom: 320px; }
+    }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-film" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18M3 7.5h4M3 12h18M3 16.5h4M17 3v18M17 7.5h4M17 16.5h4"/></symbol>
+    <symbol id="i-wand" viewBox="0 0 24 24"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3M5 6v4M19 14v4M10 2v2M7 8H3M21 16h-4M11 3H9"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6"/></symbol>
+    <symbol id="i-imgdown" viewBox="0 0 24 24"><path d="M10.3 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10l-3.1-3.1a2 2 0 0 0-2.814.014L6 21"/><path d="m14 19 3 3v-5.5M17 22l3-3"/><circle cx="9" cy="9" r="2"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+    <symbol id="i-caret" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+  </svg>
+
+  <main class="page">
+
+    <header class="doc-header">
+      <div class="doc-eyebrow">Design exploration</div>
+      <h1 class="doc-title">Library card actions: five ways to fold them</h1>
+      <p class="doc-subtitle">A finished clip card shows eight buttons today, three of them full-width. Each direction keeps one primary action on the card and moves the rest into a per-card menu. The directions differ in how that menu is triggered, where it sits, and what counts as non-essential.</p>
+      <div class="doc-meta">
+        <div><b>Source</b> components/account/CloudAssetGrid.tsx · LastFrameActions.tsx</div>
+        <div><b>Generated</b> 2026-10-23</div>
+        <div><b>Surface</b> Library asset card (browse mode)</div>
+        <div><b>Variants</b> 5</div>
+      </div>
+    </header>
+
+    <section class="variant">
+      <div class="variant-head">
+        <div class="variant-letter">A</div>
+        <div class="variant-meta">
+          <h2>Kebab overflow</h2>
+          <p class="variant-tradeoff">
+            <b>Optimizes for</b> the familiar pattern: one primary, one ⋯ next to it, and a sectioned menu <b>·  Tradeoff</b> "Continue from last frame", the action that keeps a story going, is now two clicks away and hidden behind an unlabeled icon.
+          </p>
+        </div>
+      </div>
+      <div class="preview-frame">
+        <div class="preview-frame-bar">Variant A · preview</div>
+        <div class="preview">
+          <div class="stage has-open-menu">
+            <p class="stage-note">Video card with menu open · image card at rest</p>
+            <article class="sa-card">
+              <div class="sa-media"><div class="sa-frame"></div><div class="sa-controls"><svg class="sm"><use href="#i-play"/></svg><i></i>0:00 / 0:05</div></div>
+              <div><p class="sa-prompt">Static webcam shot. The man stands right behind an invisible pane of glass, as if inside the viewer's screen. He raises one hand…</p><p class="sa-meta">atlas · video · 1.6 MB · via Claude Code (scene-assembly)</p></div>
+              <div class="va-row sa-anchor">
+                <button class="sa-btn" type="button"><svg><use href="#i-film"/></svg>Add to timeline</button>
+                <button class="sa-btn sa-icon" type="button" aria-label="More actions" aria-haspopup="menu" aria-expanded="true" data-menu><svg><use href="#i-more"/></svg></button>
+                <div class="sa-menu is-open" role="menu">
+                  <div class="sa-mlabel">Last frame</div>
+                  <button class="sa-mi" role="menuitem"><svg><use href="#i-film"/></svg>Continue from last frame</button>
+                  <button class="sa-mi" role="menuitem"><svg><use href="#i-imgdown"/></svg>Save last frame</button>
+                  <button class="sa-mi" role="menuitem"><svg><use href="#i-clip"/></svg>Copy last frame</button>
+                  <div class="sa-msep"></div>
+                  <button class="sa-mi" role="menuitem"><svg><use href="#i-wand"/></svg>Restore settings</button>
+                  <button class="sa-mi" role="menuitem"><svg><use href="#i-download"/></svg>Download</button>
+                  <div class="sa-msep"></div>
+                  <button class="sa-mi is-danger" role="menuitem"><svg><use href="#i-trash"/></svg>Delete…</button>
+                </div>
+              </div>
+            </article>
+            <article class="sa-card">
+              <div class="sa-media"><div class="sa-still"></div></div>
+              <div><p class="sa-prompt">A still frame from a friendly founder's screen-share explainer video, 16:9. Right third: the man from the reference photo (keep his face, round dark glasses…</p><p class="sa-meta">atlas · image · 1.4 MB · via Claude Code (scene-assembly)</p></div>
+              <div class="va-row sa-anchor">
+                <button class="sa-btn" type="button"><svg><use href="#i-imgdown"/></svg>Use as ref</button>
+                <button class="sa-btn sa-icon" type="button" aria-label="More actions" aria-haspopup="menu" aria-expanded="false" data-menu><svg><use href="#i-more"/></svg></button>
+                <div class="sa-menu" role="menu">
+                  <button class="sa-mi" role="menuitem"><svg><use href="#i-wand"/></svg>Restore settings</button>
+                  <button class="sa-mi" role="menuitem"><svg><use href="#i-download"/></svg>Download</button>
+                  <div class="sa-msep"></div>
+                  <button class="sa-mi is-danger" role="menuitem"><svg><use href="#i-trash"/></svg>Delete…</button>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </div>
+      <div class="variant-analysis">
+        <div class="analysis-block">
+          <h4>What works</h4>
+          <p>The card drops from five rows of controls to one. It reads the same in the 4-column dense grid, where "Restore settings" is already squeezed to a bare icon. Section labels keep the last-frame actions grouped the way <code>LastFrameActions</code> groups them today.</p>
+        </div>
+        <div class="analysis-block is-risk">
+          <h4>What risks</h4>
+          <p>A bare ⋯ is the least discoverable trigger. People who chain clips with "Continue from last frame" lose a visible button they use often. The inline "Copied" confirmation and error line also have to move to toasts.</p>
+        </div>
+        <div class="analysis-block is-pick">
+          <h4>Pick this if</h4>
+          <p>Continuing from the last frame is a minority path, and you want the convention people already know from Drive, Figma and Linear.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="variant">
+      <div class="variant-head">
+        <div class="variant-letter">B</div>
+        <div class="variant-meta">
+          <h2>Split button</h2>
+          <p class="variant-tradeoff">
+            <b>Optimizes for</b> one control that reads as "use this clip ▾", with menu items that say what each one does <b>·  Tradeoff</b> it buries Delete and Download inside a "use" control, where they don't belong, and its rich menu is the tallest of the five.
+          </p>
+        </div>
+      </div>
+      <div class="preview-frame">
+        <div class="preview-frame-bar">Variant B · preview</div>
+        <div class="preview">
+          <div class="stage has-open-menu">
+            <p class="stage-note">Caret opens a full-width menu with one-line explanations</p>
+            <article class="sa-card">
+              <div class="sa-media"><div class="sa-frame"></div><div class="sa-controls"><svg class="sm"><use href="#i-play"/></svg><i></i>0:00 / 0:05</div></div>
+              <div><p class="sa-prompt">Static webcam shot. The man stands right behind an invisible pane of glass, as if inside the viewer's screen. He raises one hand…</p><p class="sa-meta">atlas · video · 1.6 MB · via Claude Code (scene-assembly)</p></div>
+              <div class="vb-split sa-anchor">
+                <button class="sa-btn" type="button"><svg><use href="#i-film"/></svg>Add to timeline</button>
+                <button class="sa-btn" type="button" aria-label="More ways to use this clip" aria-haspopup="menu" aria-expanded="true" data-menu><svg><use href="#i-caret"/></svg></button>
+                <div class="sa-menu is-open" role="menu">
+                  <button class="sa-mi vb-mi" role="menuitem"><svg><use href="#i-film"/></svg><span>Continue from last frame<small>Start a new clip from where this one ends</small></span></button>
+                  <button class="sa-mi vb-mi" role="menuitem"><svg><use href="#i-imgdown"/></svg><span>Save last frame<small>Download the closing frame as a PNG</small></span></button>
+                  <button class="sa-mi vb-mi" role="menuitem"><svg><use href="#i-clip"/></svg><span>Copy last frame<small>Copy the closing frame as an image</small></span></button>
+                  <button class="sa-mi vb-mi" role="menuitem"><svg><use href="#i-wand"/></svg><span>Restore settings<small>Load this prompt and its settings into the draft</small></span></button>
+                  <div class="sa-msep"></div>
+                  <button class="sa-mi" role="menuitem"><svg><use href="#i-download"/></svg>Download video</button>
+                  <button class="sa-mi is-danger" role="menuitem"><svg><use href="#i-trash"/></svg>Delete…</button>
+                </div>
+              </div>
+            </article>
+            <article class="sa-card">
+              <div class="sa-media"><div class="sa-still"></div></div>
+              <div><p class="sa-prompt">A still frame from a friendly founder's screen-share explainer video, 16:9. Right third: the man from the reference photo (keep his face, round dark glasses…</p><p class="sa-meta">atlas · image · 1.4 MB · via Claude Code (scene-assembly)</p></div>
+              <div class="vb-split sa-anchor">
+                <button class="sa-btn" type="button"><svg><use href="#i-imgdown"/></svg>Use as reference</button>
+                <button class="sa-btn" type="button" aria-label="More ways to use this image" aria-haspopup="menu" aria-expanded="false" data-menu><svg><use href="#i-caret"/></svg></button>
+                <div class="sa-menu" role="menu">
+                  <button class="sa-mi vb-mi" role="menuitem"><svg><use href="#i-wand"/></svg><span>Restore settings<small>Load this prompt and its settings into the draft</small></span></button>
+                  <div class="sa-msep"></div>
+                  <button class="sa-mi" role="menuitem"><svg><use href="#i-download"/></svg>Download image</button>
+                  <button class="sa-mi is-danger" role="menuitem"><svg><use href="#i-trash"/></svg>Delete…</button>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </div>
+      <div class="variant-analysis">
+        <div class="analysis-block">
+          <h4>What works</h4>
+          <p>It's the most compact option that still has a clear trigger: the caret sits on the primary itself, so the menu reads as part of the main action. The one-line explanations finally say what "Restore settings" does without a tooltip.</p>
+        </div>
+        <div class="analysis-block is-risk">
+          <h4>What risks</h4>
+          <p>Split buttons are often misclicked on the wrong half, especially at the 4-column size. The explanations make the menu tall, so it will need to flip upward near the bottom of the library sheet.</p>
+        </div>
+        <div class="analysis-block is-pick">
+          <h4>Pick this if</h4>
+          <p>You want the card to have exactly one control, and you think people get lost because they don't know what the actions do.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="variant">
+      <div class="variant-head">
+        <div class="variant-letter">C</div>
+        <div class="variant-meta">
+          <h2>Noun menus — "Last frame ▾" · "File ▾"</h2>
+          <p class="variant-tradeoff">
+            <b>Optimizes for</b> scent: each text label names what its menu acts on, so you know where to look before you click <b>·  Tradeoff</b> two triggers per video card instead of one, and the quiet text labels are easy to skim past.
+          </p>
+        </div>
+      </div>
+      <div class="preview-frame">
+        <div class="preview-frame-bar">Variant C · preview</div>
+        <div class="preview">
+          <div class="stage has-open-menu">
+            <p class="stage-note">Text label + caret, grouped by object · "Last frame" open</p>
+            <article class="sa-card">
+              <div class="sa-media"><div class="sa-frame"></div><div class="sa-controls"><svg class="sm"><use href="#i-play"/></svg><i></i>0:00 / 0:05</div></div>
+              <div><p class="sa-prompt">Static webcam shot. The man stands right behind an invisible pane of glass, as if inside the viewer's screen. He raises one hand…</p><p class="sa-meta">atlas · video · 1.6 MB · via Claude Code (scene-assembly)</p></div>
+              <button class="sa-btn vc-primary" type="button"><svg><use href="#i-film"/></svg>Add to timeline</button>
+              <div class="vc-foot">
+                <div class="sa-anchor">
+                  <button class="sa-text" type="button" aria-haspopup="menu" aria-expanded="true" data-menu>Last frame<svg><use href="#i-caret"/></svg></button>
+                  <div class="sa-menu is-open" role="menu">
+                    <button class="sa-mi" role="menuitem"><svg><use href="#i-film"/></svg>Continue from it</button>
+                    <button class="sa-mi" role="menuitem"><svg><use href="#i-imgdown"/></svg>Save as PNG</button>
+                    <button class="sa-mi" role="menuitem"><svg><use href="#i-clip"/></svg>Copy to clipboard</button>
+                  </div>
+                </div>
+                <div class="sa-anchor">
+                  <button class="sa-text" type="button" aria-haspopup="menu" aria-expanded="false" data-menu>File<svg><use href="#i-caret"/></svg></button>
+                  <div class="sa-menu" role="menu">
+                    <button class="sa-mi" role="menuitem"><svg><use href="#i-wand"/></svg>Restore settings</button>
+                    <button class="sa-mi" role="menuitem"><svg><use href="#i-download"/></svg>Download</button>
+                    <div class="sa-msep"></div>
+                    <button class="sa-mi is-danger" role="menuitem"><svg><use href="#i-trash"/></svg>Delete…</button>
+                  </div>
+                </div>
+              </div>
+            </article>
+            <article class="sa-card">
+              <div class="sa-media"><div class="sa-still"></div></div>
+              <div><p class="sa-prompt">A still frame from a friendly founder's screen-share explainer video, 16:9. Right third: the man from the reference photo (keep his face, round dark glasses…</p><p class="sa-meta">atlas · image · 1.4 MB · via Claude Code (scene-assembly)</p></div>
+              <button class="sa-btn vc-primary" type="button"><svg><use href="#i-imgdown"/></svg>Use as reference</button>
+              <div class="vc-foot">
+                <div class="sa-anchor">
+                  <button class="sa-text" type="button" aria-haspopup="menu" aria-expanded="false" data-menu>File<svg><use href="#i-caret"/></svg></button>
+                  <div class="sa-menu" role="menu">
+                    <button class="sa-mi" role="menuitem"><svg><use href="#i-wand"/></svg>Restore settings</button>
+                    <button class="sa-mi" role="menuitem"><svg><use href="#i-download"/></svg>Download</button>
+                    <div class="sa-msep"></div>
+                    <button class="sa-mi is-danger" role="menuitem"><svg><use href="#i-trash"/></svg>Delete…</button>
+                  </div>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </div>
+      <div class="variant-analysis">
+        <div class="analysis-block">
+          <h4>What works</h4>
+          <p>"Last frame ▾" tells you three actions are waiting inside without listing them, and its items can be shortened ("Save as PNG") because the label already supplies the noun. Image cards simply don't get that label, so the difference between kinds is visible at a glance.</p>
+        </div>
+        <div class="analysis-block is-risk">
+          <h4>What risks</h4>
+          <p>Muted 13px text is the weakest affordance on a dark card, and "File" is a loose name for something that contains Restore settings. It also adds a row: a video card is one line taller than in A.</p>
+        </div>
+        <div class="analysis-block is-pick">
+          <h4>Pick this if</h4>
+          <p>You liked the text-label-with-caret idea and want the last-frame actions to stay discoverable as a group without the space they take today.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="variant">
+      <div class="variant-head">
+        <div class="variant-letter">D</div>
+        <div class="variant-meta">
+          <h2>Media overlay toolbar</h2>
+          <p class="variant-tradeoff">
+            <b>Optimizes for</b> the quietest card: utilities float on the thumbnail when you hover or focus, and the body keeps one button <b>·  Tradeoff</b> nothing hints that actions exist until you hover, and on touch the toolbar must stay visible, covering part of the media.
+          </p>
+        </div>
+      </div>
+      <div class="preview-frame">
+        <div class="preview-frame-bar">Variant D · preview</div>
+        <div class="preview">
+          <div class="stage">
+            <p class="stage-note">Left card in hover state with ⋯ open · hover the right card to reveal its toolbar</p>
+            <article class="sa-card">
+              <div class="vd-media-wrap">
+                <div class="sa-media"><div class="sa-frame"></div><div class="sa-controls"><svg class="sm"><use href="#i-play"/></svg><i></i>0:00 / 0:05</div></div>
+                <div class="vd-tools is-shown sa-anchor">
+                  <button class="vd-tool" type="button" aria-label="Download"><svg><use href="#i-download"/></svg></button>
+                  <button class="vd-tool" type="button" aria-label="More actions" aria-haspopup="menu" aria-expanded="true" data-menu><svg><use href="#i-more"/></svg></button>
+                  <div class="sa-menu is-open" role="menu">
+                    <button class="sa-mi" role="menuitem"><svg><use href="#i-film"/></svg>Continue from last frame</button>
+                    <button class="sa-mi" role="menuitem"><svg><use href="#i-imgdown"/></svg>Save last frame</button>
+                    <button class="sa-mi" role="menuitem"><svg><use href="#i-clip"/></svg>Copy last frame</button>
+                    <div class="sa-msep"></div>
+                    <button class="sa-mi" role="menuitem"><svg><use href="#i-wand"/></svg>Restore settings</button>
+                    <div class="sa-msep"></div>
+                    <button class="sa-mi is-danger" role="menuitem"><svg><use href="#i-trash"/></svg>Delete…</button>
+                  </div>
+                </div>
+              </div>
+              <div><p class="sa-prompt">Static webcam shot. The man stands right behind an invisible pane of glass, as if inside the viewer's screen. He raises one hand…</p><p class="sa-meta">atlas · video · 1.6 MB · via Claude Code (scene-assembly)</p></div>
+              <button class="sa-btn vd-primary" type="button"><svg><use href="#i-film"/></svg>Add to timeline</button>
+            </article>
+            <article class="sa-card">
+              <div class="vd-media-wrap">
+                <div class="sa-media"><div class="sa-still"></div></div>
+                <div class="vd-tools sa-anchor">
+                  <button class="vd-tool" type="button" aria-label="Download"><svg><use href="#i-download"/></svg></button>
+                  <button class="vd-tool" type="button" aria-label="More actions" aria-haspopup="menu" aria-expanded="false" data-menu><svg><use href="#i-more"/></svg></button>
+                  <div class="sa-menu" role="menu">
+                    <button class="sa-mi" role="menuitem"><svg><use href="#i-wand"/></svg>Restore settings</button>
+                    <div class="sa-msep"></div>
+                    <button class="sa-mi is-danger" role="menuitem"><svg><use href="#i-trash"/></svg>Delete…</button>
+                  </div>
+                </div>
+              </div>
+              <div><p class="sa-prompt">A still frame from a friendly founder's screen-share explainer video, 16:9. Right third: the man from the reference photo (keep his face, round dark glasses…</p><p class="sa-meta">atlas · image · 1.4 MB · via Claude Code (scene-assembly)</p></div>
+              <button class="sa-btn vd-primary" type="button"><svg><use href="#i-imgdown"/></svg>Use as reference</button>
+            </article>
+          </div>
+        </div>
+      </div>
+      <div class="variant-analysis">
+        <div class="analysis-block">
+          <h4>What works</h4>
+          <p>The grid looks most like a media library (Photos, Frame.io): content first, chrome on demand. Download, the most common utility, stays one click away, and the card is the shortest of the five, so more fits in the two-column sheet.</p>
+        </div>
+        <div class="analysis-block is-risk">
+          <h4>What risks</h4>
+          <p>The toolbar shares space with <code>VideoPlayer</code>'s own controls and its fullscreen corner, which invites misclicks. Hover-only reveal also has to fall back to always-visible on touch screens and when a keyboard user tabs in.</p>
+        </div>
+        <div class="analysis-block is-pick">
+          <h4>Pick this if</h4>
+          <p>Library browsing is mostly visual scanning, and you want the grid to feel like a gallery, not a control panel.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="variant">
+      <div class="variant-head">
+        <div class="variant-letter">E</div>
+        <div class="variant-meta">
+          <h2>Two forward actions + "More ▾" in the meta line</h2>
+          <p class="variant-tradeoff">
+            <b>Optimizes for</b> the generate → continue loop: both ways to send a clip onward stay visible, and the rest sits behind a text caret <b>·  Tradeoff</b> it trims the card less than A–D, and the trigger shares a line with metadata that can wrap.
+          </p>
+        </div>
+      </div>
+      <div class="preview-frame">
+        <div class="preview-frame-bar">Variant E · preview</div>
+        <div class="preview">
+          <div class="stage has-open-menu">
+            <p class="stage-note">"More" sits beside the provider line · menu open on the video card</p>
+            <article class="sa-card">
+              <div class="sa-media"><div class="sa-frame"></div><div class="sa-controls"><svg class="sm"><use href="#i-play"/></svg><i></i>0:00 / 0:05</div></div>
+              <div>
+                <p class="sa-prompt">Static webcam shot. The man stands right behind an invisible pane of glass, as if inside the viewer's screen. He raises one hand…</p>
+                <div class="ve-metarow sa-anchor" style="margin-top:4px">
+                  <p class="sa-meta">atlas · video · 1.6 MB · via Claude Code</p>
+                  <button class="sa-text" type="button" aria-haspopup="menu" aria-expanded="true" data-menu>More<svg><use href="#i-caret"/></svg></button>
+                  <div class="sa-menu is-open" role="menu">
+                    <div class="sa-mlabel">Last frame</div>
+                    <button class="sa-mi" role="menuitem"><svg><use href="#i-imgdown"/></svg>Save last frame</button>
+                    <button class="sa-mi" role="menuitem"><svg><use href="#i-clip"/></svg>Copy last frame</button>
+                    <div class="sa-msep"></div>
+                    <button class="sa-mi" role="menuitem"><svg><use href="#i-wand"/></svg>Restore settings</button>
+                    <button class="sa-mi" role="menuitem"><svg><use href="#i-download"/></svg>Download</button>
+                    <div class="sa-msep"></div>
+                    <button class="sa-mi is-danger" role="menuitem"><svg><use href="#i-trash"/></svg>Delete…</button>
+                  </div>
+                </div>
+              </div>
+              <div class="ve-row">
+                <button class="sa-btn" type="button"><svg><use href="#i-film"/></svg>Add to timeline</button>
+                <button class="sa-btn" type="button"><svg><use href="#i-film"/></svg>Continue</button>
+              </div>
+            </article>
+            <article class="sa-card">
+              <div class="sa-media"><div class="sa-still"></div></div>
+              <div>
+                <p class="sa-prompt">A still frame from a friendly founder's screen-share explainer video, 16:9. Right third: the man from the reference photo (keep his face, round dark glasses…</p>
+                <div class="ve-metarow sa-anchor" style="margin-top:4px">
+                  <p class="sa-meta">atlas · image · 1.4 MB · via Claude Code</p>
+                  <button class="sa-text" type="button" aria-haspopup="menu" aria-expanded="false" data-menu>More<svg><use href="#i-caret"/></svg></button>
+                  <div class="sa-menu" role="menu">
+                    <button class="sa-mi" role="menuitem"><svg><use href="#i-wand"/></svg>Restore settings</button>
+                    <button class="sa-mi" role="menuitem"><svg><use href="#i-download"/></svg>Download</button>
+                    <div class="sa-msep"></div>
+                    <button class="sa-mi is-danger" role="menuitem"><svg><use href="#i-trash"/></svg>Delete…</button>
+                  </div>
+                </div>
+              </div>
+              <div class="ve-row">
+                <button class="sa-btn" type="button"><svg><use href="#i-imgdown"/></svg>Use as reference</button>
+              </div>
+            </article>
+          </div>
+        </div>
+      </div>
+      <div class="variant-analysis">
+        <div class="analysis-block">
+          <h4>What works</h4>
+          <p>The decision about what's essential is explicit: anything that sends the clip forward stays visible, and anything about the file goes in the menu. Putting "More" on the meta line costs no extra row, and it sits next to the facts about the file, which is what most of its items act on.</p>
+        </div>
+        <div class="analysis-block is-risk">
+          <h4>What risks</h4>
+          <p>"Continue" alone is ambiguous next to "Add to timeline" (continue what?). Long meta lines (YouTube ranges, "Relaxed", "Temporary", agent names) will compete with the trigger for width in the dense grid.</p>
+        </div>
+        <div class="analysis-block is-pick">
+          <h4>Pick this if</h4>
+          <p>Chaining clips from the last frame is a core loop for you, and you only want to hide the file housekeeping.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="decision">
+      <h3>How to pick a direction</h3>
+      <p class="decision-sub">The first question is whether "Continue from last frame" is essential. The second is how visible the trigger should be.</p>
+      <div class="decision-grid">
+        <div class="decision-cell"><b>A · Kebab</b><span>A familiar convention, and Continue is a minority path.</span></div>
+        <div class="decision-cell"><b>B · Split button</b><span>One control per card, with menu items that explain themselves.</span></div>
+        <div class="decision-cell"><b>C · Noun menus</b><span>Text labels with carets that say what's inside.</span></div>
+        <div class="decision-cell"><b>D · Overlay</b><span>A gallery-like grid; actions appear when you need them.</span></div>
+        <div class="decision-cell"><b>E · Two forward</b><span>Continue stays one click; only the file housekeeping is hidden.</span></div>
+      </div>
+    </section>
+
+  </main>
+  <script>
+    document.addEventListener('click', function (event) {
+      var trigger = event.target.closest('[data-menu]');
+      var inMenu = event.target.closest('.sa-menu');
+      if (inMenu && !trigger) return;
+      document.querySelectorAll('[data-menu][aria-expanded="true"]').forEach(function (open) {
+        if (open === trigger) return;
+        open.setAttribute('aria-expanded', 'false');
+        var menu = open.parentElement.querySelector('.sa-menu');
+        if (menu) menu.classList.remove('is-open');
+      });
+      if (!trigger) return;
+      var menu = trigger.parentElement.querySelector('.sa-menu');
+      var next = trigger.getAttribute('aria-expanded') !== 'true';
+      trigger.setAttribute('aria-expanded', String(next));
+      menu.classList.toggle('is-open', next);
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key !== 'Escape') return;
+      document.querySelectorAll('[data-menu][aria-expanded="true"]').forEach(function (open) {
+        open.setAttribute('aria-expanded', 'false');
+        open.parentElement.querySelector('.sa-menu').classList.remove('is-open');
+      });
+    });
+  </script>
+</body>
+</html>

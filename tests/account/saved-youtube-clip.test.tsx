@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CloudAssetGrid from '@/components/account/CloudAssetGrid';
 import { knownAccountAssetFilenameBase } from '@/lib/account/asset-name';
@@ -19,12 +19,14 @@ describe('a YouTube section saved to the library', () => {
     useAccountStore.getState().applySession({ account: { id: 'owner-1', name: 'Ada', email: 'ada@example.test' }, googleEnabled: true, localSignIn: true, providers: [], connections: [] });
   });
 
-  it('shows its title and where it came from, and offers no settings to restore', () => {
+  it('shows its title and where it came from, and offers no settings to reuse', () => {
     render(<CloudAssetGrid assets={[clip]} ownerId="owner-1" onChanged={vi.fn()} />);
     const card = screen.getByText('Big Buck Bunny 60fps 4K').closest('li')!;
     expect(within(card).getByRole('link', { name: 'From YouTube · 1:02.0–1:14.4' })).toHaveAttribute('href', 'https://www.youtube.com/watch?v=aqz-KE-bpKQ&t=62s');
-    expect(within(card).queryByRole('button', { name: /Restore settings/ })).toBeNull();
-    expect(within(card).getByRole('button', { name: /Download/ })).toBeInTheDocument();
+    fireEvent.click(within(card).getByRole('button', { name: 'More actions' }));
+    const menu = screen.getByRole('menu', { name: 'More actions' });
+    expect(within(menu).queryByRole('menuitem', { name: 'Reuse settings' })).toBeNull();
+    expect(within(menu).getByRole('menuitem', { name: 'Download video' })).toBeInTheDocument();
   });
 
   it('counts as uploaded media and downloads under the name it was imported with', () => {

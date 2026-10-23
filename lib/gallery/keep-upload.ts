@@ -81,7 +81,7 @@ async function keepOne(entry: DraftReferenceInput): Promise<void> {
         slug: slugify(title),
         // Never generated, so it carries no settings to replay — the same
         // provider an imported clip uses, and the one GalleryGrid hides
-        // "Restore settings" for.
+        // "Reuse settings" for.
         provider: LOCAL_PROVIDER,
         controlValues: {},
         mimeType: file.type,

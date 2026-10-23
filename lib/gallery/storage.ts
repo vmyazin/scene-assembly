@@ -14,7 +14,7 @@ export interface GalleryRecord {
   provider: string;
   modelId?: string;
   inputMode?: string;
-  /** Replayed onto the current model by "Restore settings". */
+  /** Replayed onto the current model by "Reuse settings". */
   controlValues: Record<string, DraftValue>;
   mimeType: string;
   /**

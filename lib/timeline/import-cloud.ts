@@ -121,7 +121,7 @@ export async function saveCloudVideoToGallery(
     provider: asset.metadata.provider,
     modelId: asset.metadata.modelId,
     inputMode: asset.metadata.inputMode,
-    // Carried across so "Restore settings" still works on the local copy.
+    // Carried across so "Reuse settings" still works on the local copy.
     controlValues: asset.metadata.values,
     mimeType: blob.type || asset.mimeType,
     blob,

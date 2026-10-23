@@ -92,7 +92,7 @@ describe('GalleryGrid', () => {
     expect(screen.queryByText('expired image')).toBeNull();
     expect(screen.getAllByRole('button', { name: 'Use image' })).toHaveLength(1);
     expect(screen.queryByRole('button', { name: 'Pin result' })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Restore settings/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'More actions' })).toBeNull();
   });
 
   it('has an image-specific empty state when nothing durable can be picked', () => {
@@ -137,7 +137,8 @@ describe('GalleryGrid', () => {
     useGalleryStore.setState({ records: [record()] });
     render(<GalleryGrid />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Restore settings/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Reuse settings' }));
 
     const draft = useDraftStore.getState();
     expect(draft.prompt).toBe('A brass diving bell descending through kelp');
@@ -152,9 +153,36 @@ describe('GalleryGrid', () => {
     });
     render(<GalleryGrid />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Use as reference/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Use as reference' }));
 
     await waitFor(() => expect(useDraftStore.getState().references).toHaveLength(0));
+  });
+
+  it('keeps one action on the face of a kept clip and the rest in the menu', () => {
+    useGalleryStore.setState({
+      records: [record({ kind: 'video', mimeType: 'video/mp4', blob: new Blob(['video'], { type: 'video/mp4' }) })],
+    });
+    render(<GalleryGrid />);
+
+    expect(screen.getByRole('button', { name: /Add to timeline/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Use as reference/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Download/ })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+    expect(screen.getAllByRole('menuitem').map((item) => item.getAttribute('aria-label'))).toEqual([
+      'Use as reference', 'Reuse settings', 'Download video', 'Remove',
+    ]);
+  });
+
+  it('removes a record from the menu', async () => {
+    useGalleryStore.setState({ records: [record()] });
+    render(<GalleryGrid />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }));
+
+    await waitFor(() => expect(useGalleryStore.getState().records).toHaveLength(0));
   });
 
   it('keeps a linked clip with one download, deriving the poster from it', async () => {
