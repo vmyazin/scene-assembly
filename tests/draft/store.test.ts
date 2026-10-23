@@ -173,7 +173,7 @@ describe('useDraftStore', () => {
     });
 
     it('adopts a prompt put there before any workspace claimed the field', () => {
-      // "Restore settings" and the prompt library both write while the picker
+      // "Reuse settings" and the prompt library both write while the picker
       // is open. Filing that under a scope that never existed would hand the
       // workspace it was meant for an empty field.
       useDraftStore.getState().setPrompt('Restored from the library');

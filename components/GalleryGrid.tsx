@@ -10,6 +10,7 @@ import { downloadRemoteMedia, extensionForMedia, fallbackFilenameBase } from '@/
 import { downloadFilenameBase } from '@/lib/download-name';
 import { extractLastFrameFromBlob } from '@/lib/video-frame';
 import { LOCAL_PROVIDER } from '@/lib/timeline/import-local';
+import ActionMenu, { type ActionMenuItem } from '@/components/ActionMenu';
 import RecoverMediaDropZone from '@/components/RecoverMediaDropZone';
 import VideoPlayer from '@/components/video/VideoPlayer';
 import FinalizeDraftButton from '@/components/FinalizeDraftButton';
@@ -195,7 +196,7 @@ export default function GalleryGrid({
     // Replayed through the same guard as a provider switch, so a control the
     // current model cannot express falls back to its default.
     draft.rememberControlValues(record.controlValues);
-    toast.success('Prompt and settings restored');
+    toast.success('Prompt and settings loaded');
     onUsedReference?.();
   };
 
@@ -225,6 +226,51 @@ export default function GalleryGrid({
         imageFormat,
       });
     }
+  };
+
+  /** The ⋯ menu's two groups: other ways to use the result, then the file itself. */
+  const menuSections = (record: GalleryRecord): ActionMenuItem[][] => {
+    const use: ActionMenuItem[] = [];
+    if (record.kind === 'video') {
+      use.push({
+        id: 'reference',
+        label: 'Use as reference',
+        description: 'Add the closing frame to the reference images',
+        icon: ImageDown,
+        onSelect: () => void sendAsReference(record),
+      });
+    }
+    // An imported clip was never generated, so it carries no prompt or settings
+    // to replay — offering the action would be a button that silently does nothing.
+    if (record.provider !== LOCAL_PROVIDER) {
+      use.push({
+        id: 'reuse',
+        label: 'Reuse settings',
+        description: 'Load this prompt and its settings into the draft',
+        icon: Wand2,
+        onSelect: () => restore(record),
+      });
+    }
+    return [
+      use,
+      [
+        {
+          id: 'download',
+          label: record.kind === 'video' ? 'Download video' : 'Download image',
+          icon: Download,
+          // A toast, because the menu that started it has already closed.
+          onSelect: () => void download(record).catch(() => toast.error('This result could not be downloaded.')),
+        },
+        {
+          id: 'remove',
+          label: 'Remove',
+          description: 'Delete it from this browser',
+          icon: Trash2,
+          onSelect: () => void useGalleryStore.getState().remove(record.id),
+          danger: true,
+        },
+      ],
+    ];
   };
 
   return (
@@ -313,100 +359,72 @@ export default function GalleryGrid({
                   <Film size={13} /> {onPickVideo ? 'Use video' : 'Add to timeline'}
                 </button>
               ) : (
-                <div className="flex w-full items-start gap-1.5">
-                {/* Labelled actions wrap among themselves; download and delete
-                    hold the first row's right edge as a pair. In one shared
-                    wrapping row the trash button fell onto a line of its own
-                    (UX audit L3). */}
-                <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+                <>
+                {/* One action on the face, the rest in the ⋯ menu, the same split
+                    the cloud tab's cards make (`CloudAssetMenu`). Keep stays out
+                    beside it while the bytes are only a provider link: that link
+                    expires, so keeping is the one thing that cannot wait. */}
+                <div className="flex w-full gap-2">
                   {!stored && record.sourceUrl && (
                     <button
                       type="button"
                       onClick={() => void keep(record)}
                       disabled={busy}
-                      className="btn-secondary"
+                      className="btn-secondary min-w-0 flex-1"
                     >
                       {busy ? <Loader2 className="animate-spin" size={13} /> : <ImageDown size={13} />}
                       {busy ? 'Keeping…' : 'Keep'}
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => void sendAsReference(record)}
-                    className="btn-secondary"
-                  >
-                    <ImageDown size={13} /> Use as reference
-                  </button>
                   {/* Only once the bytes are here: a link-only clip has nothing
                       for the timeline to resolve, and Keep sits right alongside. */}
-                  {record.kind === 'video' && stored && (
+                  {record.kind === 'video' ? stored && (
                     <button
                       type="button"
                       onClick={() => {
-                    if (onPickVideo && record.blob) void onPickVideo(new File([record.blob], `${fallbackFilenameBase(record.prompt, 'video')}.${extensionForMedia('video', record.blob.type || record.mimeType)}`, {type: record.blob.type || record.mimeType})).catch(error => toast.error(error instanceof Error ? error.message : 'Could not select video.'));
-                    else void addToTimeline(record);
-                  }}
-                      className="btn-secondary"
+                        if (onPickVideo && record.blob) void onPickVideo(new File([record.blob], `${fallbackFilenameBase(record.prompt, 'video')}.${extensionForMedia('video', record.blob.type || record.mimeType)}`, {type: record.blob.type || record.mimeType})).catch(error => toast.error(error instanceof Error ? error.message : 'Could not select video.'));
+                        else void addToTimeline(record);
+                      }}
+                      className="btn-secondary min-w-0 flex-1"
                     >
                       <Film size={13} /> {onPickVideo ? 'Use video' : 'Add to timeline'}
                     </button>
-                  )}
-                  {/* An imported clip was never generated, so it carries no prompt
-                      or settings to replay — offering the action would be a button
-                      that silently does nothing. */}
-                  {record.provider !== LOCAL_PROVIDER && (
+                  ) : (
                     <button
                       type="button"
-                      onClick={() => restore(record)}
-                      className="btn-secondary"
+                      onClick={() => void sendAsReference(record)}
+                      className="btn-secondary min-w-0 flex-1"
                     >
-                      <Wand2 size={13} /> Restore settings
+                      <ImageDown size={13} /> Use as reference
                     </button>
                   )}
-                  {record.draftId && record.provider === 'runware' && record.kind === 'video' && (
-                    <FinalizeDraftButton
-                      inputMode={record.inputMode ?? 'text'}
-                      durationSeconds={seedanceDraftSeconds(record.controlValues)}
-                      busy={finalizingId === record.id}
-                      onApprove={async () => {
-                        const seconds = seedanceDraftSeconds(record.controlValues);
-                        const apiKey = useAppStore.getState().runwareApiKey;
-                        const inputMode = record.inputMode === 'image' || record.inputMode === 'frames' || record.inputMode === 'reference' || record.inputMode === 'edit' ? record.inputMode : 'text';
-                        if (!apiKey.trim()) throw new Error('Connect your Runware key before finalizing.');
-                        if (!record.draftId || seconds === undefined) throw new Error('This draft has no saved length, so it cannot be priced.');
-                        setFinalizingId(record.id);
-                        try {
-                          await runGuestFinalize({
-                            apiKey, modelId: record.modelId ?? 'bytedance:seedance@2.5', prompt: record.prompt,
-                            inputMode, draftId: record.draftId, durationSeconds: seconds,
-                          });
-                          toast.success('1080p video ready.');
-                        } finally {
-                          setFinalizingId(null);
-                        }
-                      }}
-                    />
-                  )}
+                  <ActionMenu label="More actions" sections={menuSections(record)} />
                 </div>
-                <div className="flex shrink-0 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => void download(record)}
-                    aria-label={`Download ${titleOf(record)}`}
-                    className="btn-secondary"
-                  >
-                    <Download size={13} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void useGalleryStore.getState().remove(record.id)}
-                    aria-label={`Remove ${titleOf(record)}`}
-                    className="btn-secondary"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-                </div>
+                {record.draftId && record.provider === 'runware' && record.kind === 'video' && (
+                  <FinalizeDraftButton
+                    inputMode={record.inputMode ?? 'text'}
+                    durationSeconds={seedanceDraftSeconds(record.controlValues)}
+                    busy={finalizingId === record.id}
+                    onApprove={async () => {
+                      const seconds = seedanceDraftSeconds(record.controlValues);
+                      const apiKey = useAppStore.getState().runwareApiKey;
+                      const inputMode = record.inputMode === 'image' || record.inputMode === 'frames' || record.inputMode === 'reference' || record.inputMode === 'edit' ? record.inputMode : 'text';
+                      if (!apiKey.trim()) throw new Error('Connect your Runware key before finalizing.');
+                      if (!record.draftId || seconds === undefined) throw new Error('This draft has no saved length, so it cannot be priced.');
+                      setFinalizingId(record.id);
+                      try {
+                        await runGuestFinalize({
+                          apiKey, modelId: record.modelId ?? 'bytedance:seedance@2.5', prompt: record.prompt,
+                          inputMode, draftId: record.draftId, durationSeconds: seconds,
+                        });
+                        toast.success('1080p video ready.');
+                      } finally {
+                        setFinalizingId(null);
+                      }
+                    }}
+                  />
+                )}
+                </>
               )}
             </div>
           </li>

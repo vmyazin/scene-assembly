@@ -480,6 +480,12 @@
       "runtimeExecutable": "env",
       "runtimeArgs": ["ACCOUNT_WORKER_PORT=8935", "DEV_FAKE_GENERATION=1", "npm", "run", "dev", "--", "--port", "3335"],
       "port": 3335
+    },
+    {
+      "name": "Card action menu smoke test",
+      "runtimeExecutable": "env",
+      "runtimeArgs": ["ACCOUNT_WORKER_PORT=8937", "DEV_FAKE_GENERATION=1", "npm", "run", "dev", "--", "--port", "3337"],
+      "port": 3337
     }
   ],
   "version": "0.0.1"

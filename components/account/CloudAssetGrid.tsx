@@ -1,11 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Download, Film, ImageDown, Loader2, Trash2, Wand2 } from 'lucide-react';
+import { Film, ImageDown, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import ImageLightbox from '@/components/ImageLightbox';
-import LastFrameActions from '@/components/LastFrameActions';
 import FinalizeDraftButton from '@/components/FinalizeDraftButton';
 import { submitSeedanceFinalize } from '@/lib/account/finalize-draft';
 import { seedanceDraftSeconds } from '@/lib/providers/seedance-draft';
@@ -14,7 +13,6 @@ import type { VideoEditCapability } from '@/lib/providers/video-edit';
 import { accountRequest } from '@/lib/account/client';
 import type { CloudAsset } from '@/lib/account/contracts';
 import { downloadAccountAsset } from '@/lib/account/download';
-import { knownAccountAssetFilenameBase } from '@/lib/account/asset-name';
 import { addAccountAssetAsReference } from '@/lib/account/reference';
 import { formatAccountBytes } from '@/lib/account/use-library';
 import { formatClock, watchUrl } from '@/lib/youtube/clip';
@@ -24,6 +22,7 @@ import { useDraftStore } from '@/store/useDraftStore';
 import { placeClipOnTimeline } from '@/lib/timeline/place-clip';
 import VideoPlayer from '@/components/video/VideoPlayer';
 import { libraryGridClass } from './library-grid';
+import CloudAssetMenu from './CloudAssetMenu';
 import TemporaryAssetNotice from './TemporaryAssetNotice';
 
 export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLimit=8,columns=2,highlightAssetId,onUsedReference,onAddedToTimeline,onPickVideo,editCapability,onChanged}: {
@@ -47,6 +46,9 @@ export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLi
   onChanged:()=>void;
 }) {
   const [busy,setBusy]=useState<string|null>(null);
+  // Which control started the running action, so the spinner lands on it: an
+  // extraction started from the ⋯ menu read as "Add to timeline" working.
+  const [busyInMenu,setBusyInMenu]=useState(false);
   const [removing,setRemoving]=useState<CloudAsset|null>(null);
   // Held by id, not by object, so a library refresh or a deletion resolves the
   // open preview away instead of leaving a stale copy on screen.
@@ -77,8 +79,8 @@ export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLi
    * invisible at the moment it is written: a rejected "Use image" read as a
    * button that does nothing at all, which is exactly how it was reported.
    */
-  async function run(asset:CloudAsset,action:()=>Promise<unknown>){
-    if(pending.current)return;pending.current=true;setBusy(asset.id);
+  async function run(asset:CloudAsset,action:()=>Promise<unknown>,fromMenu=false){
+    if(pending.current)return;pending.current=true;setBusy(asset.id);setBusyInMenu(fromMenu);
     try{assertOwner();await action();}
     catch(error){toast.error(error instanceof Error&&error.message?error.message:'Please try again.');}
     finally{pending.current=false;if(mounted.current)setBusy(null);}
@@ -92,10 +94,10 @@ export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLi
    * a clip added while the timeline is closed is already resolved when it opens.
    */
   function addToTimeline(asset:CloudAsset){return run(asset,async()=>{const recordId=await saveCloudVideoToGallery(asset,ownerId);assertOwner();await placeClipOnTimeline(recordId);onAddedToTimeline?.();});}
-  function restore(asset:CloudAsset){
+  function reuseSettings(asset:CloudAsset){
     if(useAccountStore.getState().session?.account?.id!==ownerId)return;
     const draft=useDraftStore.getState();draft.setPrompt(asset.metadata.prompt);draft.rememberControlValues(asset.metadata.values);
-    toast.success('Prompt and settings restored');onUsedReference?.();
+    toast.success('Prompt and settings loaded');onUsedReference?.();
   }
   async function remove(asset:CloudAsset){
     await run(asset,async()=>{await accountRequest(`assets/${asset.id}`,{method:'DELETE',headers:{'X-Account-Id':ownerId}});assertOwner();if(mounted.current)setRemoving(null);onChanged();});
@@ -117,29 +119,35 @@ export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLi
             <VideoPlayer crossOrigin reveal="always" src={`/api/account/assets/${asset.id}/content`} label={asset.metadata.prompt||'Saved cloud video'} className="h-full w-full"/>}
         </div>
         <div><p className={`line-clamp-2 font-medium text-[var(--foreground)] ${dense?'text-[0.8125rem] leading-snug':'text-sm'}`}>{asset.metadata.prompt||'Untitled result'}</p><p className={`mt-1 text-cyan-200 ${dense?'text-[0.625rem]':'text-xs'}`}>{asset.origin?<a href={watchUrl(asset.origin)} target="_blank" rel="noreferrer noopener" className="underline-offset-2 hover:underline">From YouTube · {formatClock(asset.origin.startSeconds)}–{formatClock(asset.origin.endSeconds)}</a>:asset.metadata.provider} · {asset.kind} · {formatAccountBytes(asset.bytes)}{asset.metadata.values.moderation === 'relaxed' ? ' · Relaxed' : ''}{asset.expiresAt?' · Temporary':''}{asset.startedBy?` · via ${asset.startedBy.name??'an agent'}`:''}</p></div>
-        <div className={`flex flex-wrap ${dense?'gap-1.5':'gap-2'}`}>
-          {/* Shortened on the face, spelled out for assistive tech: the full
-              phrase stays the accessible name, and it still contains the
-              visible words so voice control matches what is on screen. */}
-          {asset.kind==='image'&&mode!=='pick-clip'&&<button type="button" disabled={busy!==null} onClick={()=>void reference(asset)} aria-label={mode==='pick-image'?undefined:'Use as reference'} className="btn-secondary">{busy===asset.id?<Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true"/>:<ImageDown size={13} aria-hidden="true"/>}{mode==='pick-image'?'Use image':'Use as ref'}</button>}
+        <div className={`flex ${dense?'gap-1.5':'gap-2'}`}>
+          {/* One action on the face of the card; the rest wait in the ⋯ menu.
+              Shortened on the face in the dense grid, spelled out for assistive
+              tech: the full phrase stays the accessible name, and it still
+              contains the visible words so voice control matches what is on screen. */}
+          {asset.kind==='image'&&mode!=='pick-clip'&&<button type="button" disabled={busy!==null} onClick={()=>void reference(asset)} aria-label={mode==='pick-image'||!dense?undefined:'Use as reference'} className={`btn-secondary${mode==='browse'?' min-w-0 flex-1':''}`}>{busy===asset.id&&!busyInMenu?<Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true"/>:<ImageDown size={13} aria-hidden="true"/>}{mode==='pick-image'?'Use image':dense?'Use as ref':'Use as reference'}</button>}
           {/* The action this grid existed without: a finished cloud clip had no
               route into the editor at all, so the only way to cut one was to
               download it and re-upload it through "Add files from your device". */}
-          {asset.kind==='video'&&mode!=='pick-image'&&<button type="button" disabled={busy!==null} onClick={()=>void (onPickVideo ? run(asset,async()=>{const file=await videoFileFromAccount(asset,ownerId,editCapability);assertOwner();await onPickVideo(file);}) : addToTimeline(asset))} aria-label={dense?'Add to timeline':undefined} className="btn-secondary">{busy===asset.id?<Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true"/>:<Film size={13} aria-hidden="true"/>}{onPickVideo?'Use video':dense?'Timeline':'Add to timeline'}</button>}
-          {mode==='browse'&&<>
-            {/* A saved YouTube section has no generation settings to restore. */}
-            {!asset.origin&&<button type="button" onClick={()=>restore(asset)} aria-label={dense?`Restore settings from ${asset.metadata.prompt||'cloud asset'}`:undefined} title={dense?'Restore settings':undefined} className={`btn-secondary ${dense?'':''}`}><Wand2 size={13} aria-hidden="true"/>{!dense&&'Restore settings'}</button>}
-            <button type="button" disabled={busy!==null} onClick={()=>void run(asset,()=>downloadAccountAsset(asset))} aria-label={`Download ${asset.metadata.prompt||'cloud asset'}`} title="Download" className={`btn-secondary ${dense?'':''}`}><Download size={13} aria-hidden="true"/></button>
-            <button type="button" disabled={busy!==null} onClick={()=>setRemoving(asset)} aria-label={`Delete ${asset.metadata.prompt||'cloud asset'}`} title="Delete" className={`btn-secondary ${dense?'':''}`}><Trash2 size={13} aria-hidden="true"/></button>
-            {asset.draftId && asset.kind==='video' && <FinalizeDraftButton inputMode={asset.metadata.inputMode} durationSeconds={seedanceDraftSeconds(asset.metadata.values)} busy={busy!==null} onApprove={async()=>{
-              const seconds=seedanceDraftSeconds(asset.metadata.values);
-              if(!asset.draftId||seconds===undefined)throw new Error('This draft has no saved length, so it cannot be priced.');
-              await submitSeedanceFinalize({prompt:asset.metadata.prompt,inputMode:asset.metadata.inputMode,modelId:asset.metadata.modelId,draftId:asset.draftId,durationSeconds:seconds});
-              toast.success('Finalize started. It saves to your account.');
-            }}/>}
-          </>}
+          {asset.kind==='video'&&mode!=='pick-image'&&<button type="button" disabled={busy!==null} onClick={()=>void (onPickVideo ? run(asset,async()=>{const file=await videoFileFromAccount(asset,ownerId,editCapability);assertOwner();await onPickVideo(file);}) : addToTimeline(asset))} aria-label={dense?'Add to timeline':undefined} className={`btn-secondary${mode==='browse'?' min-w-0 flex-1':''}`}>{busy===asset.id&&!busyInMenu?<Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true"/>:<Film size={13} aria-hidden="true"/>}{onPickVideo?'Use video':dense?'Timeline':'Add to timeline'}</button>}
+          {mode==='browse'&&<CloudAssetMenu
+            asset={asset}
+            disabled={busy!==null}
+            busy={busy===asset.id&&busyInMenu}
+            run={task=>run(asset,task,true)}
+            // A saved YouTube section has no generation settings to reuse.
+            onReuseSettings={asset.origin?undefined:()=>reuseSettings(asset)}
+            onDownload={()=>downloadAccountAsset(asset)}
+            onDelete={()=>setRemoving(asset)}
+            onContinue={onUsedReference}
+          />}
         </div>
-        {mode==='browse'&&asset.kind==='video'&&<LastFrameActions videoUrl={`/api/account/assets/${asset.id}/content`} filenameBase={knownAccountAssetFilenameBase(asset)} onContinue={onUsedReference}/>}
+        {/* A paid step, so it stays on the card rather than in the menu. */}
+        {mode==='browse'&&asset.draftId && asset.kind==='video' && <FinalizeDraftButton inputMode={asset.metadata.inputMode} durationSeconds={seedanceDraftSeconds(asset.metadata.values)} busy={busy!==null} onApprove={async()=>{
+          const seconds=seedanceDraftSeconds(asset.metadata.values);
+          if(!asset.draftId||seconds===undefined)throw new Error('This draft has no saved length, so it cannot be priced.');
+          await submitSeedanceFinalize({prompt:asset.metadata.prompt,inputMode:asset.metadata.inputMode,modelId:asset.metadata.modelId,draftId:asset.draftId,durationSeconds:seconds});
+          toast.success('Finalize started. It saves to your account.');
+        }}/>}
       </li>;})}</ul>}
     <ImageLightbox
       src={preview?`/api/account/assets/${preview.id}/content`:null}

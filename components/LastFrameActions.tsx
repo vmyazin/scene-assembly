@@ -3,9 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Clipboard, Film, ImageDown, Loader2 } from 'lucide-react';
 
-import { extractLastFrame, FRAME_EXTRACTION_ERROR, lastFrameFilename } from '@/lib/video-frame';
-import { useSeedFrameStore } from '@/store/useSeedFrameStore';
-import { saveBlobAs } from '@/lib/save-file';
+import { FRAME_EXTRACTION_ERROR } from '@/lib/video-frame';
+import { useLastFrame } from '@/lib/use-last-frame';
 
 interface LastFrameActionsProps {
   videoUrl: string;
@@ -18,13 +17,6 @@ interface LastFrameActionsProps {
   onContinue?: () => void;
 }
 
-const COPY_UNSUPPORTED = 'This browser cannot copy images to the clipboard.';
-
-/** Image clipboard writes need a secure context, and PNG is the only safe type. */
-function canCopyImages() {
-  return typeof ClipboardItem !== 'undefined' && typeof navigator?.clipboard?.write === 'function';
-}
-
 /**
  * Save or copy the closing frame of a finished clip. Extraction is cached per
  * URL so using both buttons, or retrying, refetches nothing.
@@ -35,13 +27,9 @@ export default function LastFrameActions({
   onContinue,
 }: LastFrameActionsProps) {
   const [pending, setPending] = useState<'save' | 'copy' | 'continue' | null>(null);
-  const setSeedFrame = useSeedFrameStore((state) => state.setSeedFrame);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Safe to detect during render: this only mounts once a job has finished in
-  // the browser, so it is never part of the server-rendered HTML.
-  const [copySupported] = useState(canCopyImages);
-  const frameRef = useRef<{ url: string; blob: Blob } | null>(null);
+  const frame = useLastFrame(videoUrl, filenameBase);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -50,13 +38,6 @@ export default function LastFrameActions({
       mountedRef.current = false;
     };
   }, []);
-
-  const ensureFrame = async () => {
-    if (frameRef.current?.url === videoUrl) return frameRef.current.blob;
-    const blob = await extractLastFrame(videoUrl);
-    frameRef.current = { url: videoUrl, blob };
-    return blob;
-  };
 
   const run = async (action: 'save' | 'copy' | 'continue', task: () => Promise<void>) => {
     if (pending) return;
@@ -74,28 +55,13 @@ export default function LastFrameActions({
     }
   };
 
-  const save = () =>
-    run('save', async () => {
-      const blob = await ensureFrame();
-      saveBlobAs(blob, lastFrameFilename(filenameBase));
-    });
+  const save = () => run('save', frame.save);
 
-  const copy = () =>
-    run('copy', async () => {
-      if (!canCopyImages()) throw new Error(COPY_UNSUPPORTED);
-      // Safari only honours a write started in the gesture's task, so it gets the
-      // pending extraction rather than an awaited blob.
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': ensureFrame() })]);
-    });
+  const copy = () => run('copy', frame.copy);
 
   const continueFrom = () =>
     run('continue', async () => {
-      const blob = await ensureFrame();
-      const name = lastFrameFilename(filenameBase);
-      setSeedFrame({
-        file: new File([blob], name, { type: 'image/png' }),
-        sourceLabel: filenameBase,
-      });
+      await frame.seed();
       onContinue?.();
     });
 
@@ -111,7 +77,7 @@ export default function LastFrameActions({
           {pending === 'save' ? <Loader2 className="animate-spin" size={15} /> : <ImageDown size={15} />}
           {pending === 'save' ? 'Reading frame…' : 'Save last frame'}
         </button>
-        {copySupported && (
+        {frame.copySupported && (
           <button
             type="button"
             onClick={() => void copy()}

@@ -82,7 +82,7 @@ export async function importLocalVideo(file: File): Promise<ImportResult> {
     slug: slugify(title),
     provider: LOCAL_PROVIDER,
     // Nothing to replay: an imported clip was never generated with settings.
-    // `GalleryGrid` hides "Restore settings" for this provider rather than
+    // `GalleryGrid` hides "Reuse settings" for this provider rather than
     // offering a button that would silently do nothing.
     controlValues: {},
     mimeType: file.type || 'video/mp4',
