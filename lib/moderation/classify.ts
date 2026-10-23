@@ -8,10 +8,11 @@ export type FailureKind = 'policy' | 'floor' | 'other';
 /**
  * Provider text → why it stopped. Policy is a host or model filter. Floor is
  * our own refusal. Anything else (a bad key, a 503, a rejected control) stays
- * `other` so auto-retry can still tell a blip from a decision.
+ * `other` so auto-retry can still tell a blip from a decision. fal's Seedance
+ * real-person filter says "may contain likenesses of real people".
  */
 const POLICY =
-  /image_safety|image_prohibited_content|prohibited_content|raimediafiltered|moderation_blocked|content policy|content filter|safety filter|safety checker|\bsafety\b|\bnsfw\b/i;
+  /image_safety|image_prohibited_content|prohibited_content|raimediafiltered|moderation_blocked|content policy|content filter|safety filter|safety checker|\bsafety\b|\bnsfw\b|likenesses? of real people/i;
 
 export function classifyFailure(message: string | null | undefined): { kind: FailureKind } {
   const text = message ?? '';
