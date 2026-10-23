@@ -138,6 +138,7 @@ describe('refusal copy', () => {
       'prompt violates content policy',
       'blocked by the safety checker',
       'nsfw',
+      'image_url: The images or videos provided may contain likenesses of real people',
     ]) {
       expect(
         refusalPresentation(sample, {

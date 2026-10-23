@@ -3,7 +3,7 @@ import { editReferenceError, materializeEditReferences, parseEditReferencePlan, 
 import { inputUrls } from '../uploads';
 import { buildFalInput, resolveFalVariant, validateFalInput } from '../../../lib/fal/catalog';
 import type { FalInputMode } from '../../../lib/fal/types';
-import { getFalTask, submitFalTask } from '../../../lib/fal/server';
+import { FalApiError, getFalTask, submitFalTask } from '../../../lib/fal/server';
 import { KIE_MODELS, resolveKieVariant, validateKieInput } from '../../../lib/kie/catalog';
 import { createKieTask, getKieTask } from '../../../lib/kie/client';
 import type { CloudJobRequest } from '../../../lib/account/contracts';
@@ -91,7 +91,17 @@ export const falAdapter: GenerationAdapter = {
   },
   async poll(env, job, handle) {
     const r = request(job);
-    const result = await getFalTask({...r, inputMode:falInputMode(r), requestId:handle.id, apiKey:await credentials(env,job)});
+    const apiKey = await credentials(env, job);
+    // fal marks a refused request COMPLETED and answers its result with a 422
+    // (a rejected input, or its real-person filter). That is fal's verdict, not
+    // a status read that broke: retrying it only ran out the tracking budget and
+    // left a Resume that could never succeed. A 401 or 5xx still throws, because
+    // a reconnected key or a recovered fal can still return the result.
+    const result = await getFalTask({...r, inputMode:falInputMode(r), requestId:handle.id, apiKey}).catch(error => {
+      if (error instanceof FalApiError && error.status === 422) return {state:'fail', error:error.message} as const;
+      throw error;
+    });
+    if (result.state === 'fail') return {state:'failed', ...(result.error ? {reason:result.error} : {})};
     if (result.state !== 'success') return {state:'running'};
     if (!result.resultUrl) throw new Error('Missing output');
     return {state:'success',result:{sources:[{url:result.resultUrl,mimeType:result.mimeType}]}};

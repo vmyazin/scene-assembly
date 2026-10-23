@@ -59,6 +59,19 @@ describe('queued native adapters',()=>{
     expect(await outcome).toBeInstanceOf(Error);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+  it('reports fal refusing a completed request as failed, not a status read to retry',async()=>{
+    await saveConnection(env,'owner','fal',{apiKey:'fal-test-secret'});
+    const r:CloudJobRequest={...request,provider:'fal',modelId:modelsForFalMode('image','text')[0].id};
+    const job=await acceptJob(env,'owner','fal-refusal-test-token',r);
+    const requestId='fal-request-0001';
+    const detail='The images or videos provided may contain likenesses of real people';
+    vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>String(input instanceof Request?input.url:input).includes('/status')
+      ?Response.json({status:'COMPLETED',request_id:requestId})
+      :Response.json({detail:[{loc:['body','image_url'],msg:detail,type:'content_policy_violation'}]},{status:422})));
+    const status=await adapterFor(env,'fal').poll(env,job,{id:requestId});
+    expect(status.state).toBe('failed');
+    expect(status.reason).toContain(detail);
+  });
   it('refuses to use changed or revoked connections for existing jobs',async()=>{
     const job=await acceptJob(env,'owner','queued-adapter-test',request);
     await saveConnection(env,'owner','kie',{apiKey:'replacement-secret'});
