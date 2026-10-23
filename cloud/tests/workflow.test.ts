@@ -70,6 +70,10 @@ describe('background generation and capture',()=>{
     expect(safeResultUrl('https://dashscope-463f.oss-accelerate.aliyuncs.com/1d/out.mp4').hostname).toBe('dashscope-463f.oss-accelerate.aliyuncs.com');
     for(const url of ['https://someone-else.oss-accelerate.aliyuncs.com/file','https://oss-accelerate.aliyuncs.com/file','https://dashscope-463f.oss-us-west-1.aliyuncs.com/file'])expect(()=>safeResultUrl(url)).toThrow();
   });
+  it('accepts the ModelArk bucket Atlas Seedance delivers from, and no other bucket on Volcengine TOS',()=>{
+    expect(safeResultUrl('https://ark-acg-ap-southeast-1.tos-ap-southeast-1.volces.com/doubao-seedance-2-0/out.mp4').hostname).toBe('ark-acg-ap-southeast-1.tos-ap-southeast-1.volces.com');
+    for(const url of ['https://someone-else.tos-ap-southeast-1.volces.com/file','https://tos-ap-southeast-1.volces.com/file','https://volces.com/file'])expect(()=>safeResultUrl(url)).toThrow();
+  });
 });
 
 describe('private video range downloads',()=>{
