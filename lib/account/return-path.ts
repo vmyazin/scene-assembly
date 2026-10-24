@@ -7,7 +7,9 @@
 export function returnPath(value: unknown): string {
   if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.includes('\\') || /[\x00-\x1f]/.test(value)) return '/';
   const url = new URL(value, 'https://return.invalid');
-  return url.origin === 'https://return.invalid' && !url.pathname.startsWith('/api/') ? `${url.pathname}${url.search}` : '/';
+  // Check the parsed path, not the raw string: dot segments collapse during
+  // parsing, so '/..//evil.com' only becomes the protocol-relative '//evil.com' here.
+  return url.origin === 'https://return.invalid' && !url.pathname.startsWith('//') && !url.pathname.startsWith('/api/') ? `${url.pathname}${url.search}` : '/';
 }
 
 /** Where a person lands after signing in: the page that sent them, or their account. */

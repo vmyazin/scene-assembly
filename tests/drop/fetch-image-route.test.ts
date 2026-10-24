@@ -7,11 +7,12 @@ const { lookupMock } = vi.hoisted(() => ({ lookupMock: vi.fn() }));
 
 vi.mock('node:dns/promises', () => ({ lookup: lookupMock }));
 
-import { POST } from '../../app/api/fetch-image/route';
+import { FETCH_IMAGE_RATE_LIMIT, POST, resetFetchImageRateLimit } from '../../app/api/fetch-image/route';
 
-function request(body: unknown): NextRequest {
+function request(body: unknown, headers: Record<string, string> = {}): NextRequest {
   return new Request('http://localhost/api/fetch-image', {
     method: 'POST',
+    headers,
     body: typeof body === 'string' ? body : JSON.stringify(body),
   }) as NextRequest;
 }
@@ -28,6 +29,7 @@ const PUBLIC_LOOKUP = [{ address: '93.184.216.34', family: 4 }];
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  resetFetchImageRateLimit();
   lookupMock.mockResolvedValue(PUBLIC_LOOKUP);
   fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
@@ -139,5 +141,25 @@ describe('POST /api/fetch-image', () => {
     expect((await POST(request('not json'))).status).toBe(400);
     expect((await POST(request({}))).status).toBe(400);
     expect((await POST(request({ url: `https://example.com/${'a'.repeat(2100)}` }))).status).toBe(400);
+  });
+});
+
+describe('POST /api/fetch-image abuse limits', () => {
+  it('refuses a request posted from another site', async () => {
+    const response = await POST(request({ url: 'https://example.com/a.png' }, { 'Sec-Fetch-Site': 'cross-site' }));
+
+    expect(response.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('limits how many fetches one address can start', async () => {
+    fetchMock.mockImplementation(async () => imageResponse(new Uint8Array([1])));
+    for (let attempt = 0; attempt < FETCH_IMAGE_RATE_LIMIT; attempt += 1) {
+      await POST(request({ url: 'https://example.com/a.png' }, { 'X-Real-IP': '203.0.113.9' }));
+    }
+
+    const limited = await POST(request({ url: 'https://example.com/a.png' }, { 'X-Real-IP': '203.0.113.9' }));
+    expect(limited.status).toBe(429);
+    expect(fetchMock).toHaveBeenCalledTimes(FETCH_IMAGE_RATE_LIMIT);
   });
 });

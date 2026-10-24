@@ -105,6 +105,31 @@ it('prices a finalize from the saved draft length and refuses a shorter claim', 
   expect(stored.values.durationSeconds).toBe(30);
 });
 
+it('prices a bare draftId from the account\'s saved draft, not from the agent\'s claim', async () => {
+  const { db, env, agent } = setup({ budgetUsd: 40 });
+  const saved = await acceptJob(env, OWNER, 'seedance-draft-bare-long', { ...draftRequest, values: { draft: true, size: '480p · 16:9', durationSeconds: 30 } });
+  db.prepare('UPDATE account_jobs SET state = ?, result_json = ? WHERE id = ?').run('saved', JSON.stringify({ sources: [{}], draftId: 'draft-bare-long' }), saved.id);
+  const client = await connectAgent(env, await agent);
+  const refused = structured<{ code: string }>(await client.callTool({ name: 'finalize_draft', arguments: { draftId: 'draft-bare-long', durationSeconds: 4, inputMode: 'text', idempotencyKey: 'fin-bare-short' } }));
+  expect(refused.code).toBe('invalid_field');
+  expect(db.prepare('SELECT COUNT(*) AS n FROM account_agent_charges').get()).toMatchObject({ n: 0 });
+  const result = await client.callTool({ name: 'finalize_draft', arguments: { draftId: 'draft-bare-long', idempotencyKey: 'fin-bare-saved' } });
+  expect(result.isError).toBeFalsy();
+  expect(structured<{ estimate: { costUsd: number } }>(result).estimate.costUsd).toBeCloseTo(18.42, 2);
+  const stored = JSON.parse((db.prepare('SELECT request_json FROM account_jobs WHERE id != ?').get(saved.id) as { request_json: string }).request_json);
+  expect(stored.values).toEqual({ finalize: true, draftId: 'draft-bare-long', durationSeconds: 30 });
+});
+
+it('reserves a draftId with no saved job at the longest length and costliest mode', async () => {
+  const { db, env, agent } = setup({ budgetUsd: 40 });
+  const client = await connectAgent(env, await agent);
+  const result = await client.callTool({ name: 'finalize_draft', arguments: { draftId: 'draft-from-elsewhere', durationSeconds: 4, inputMode: 'text', idempotencyKey: 'fin-unknown' } });
+  expect(result.isError).toBeFalsy();
+  expect(structured<{ estimate: { costUsd: number } }>(result).estimate.costUsd).toBeGreaterThanOrEqual(18.42);
+  const stored = JSON.parse((db.prepare('SELECT request_json FROM account_jobs').get() as { request_json: string }).request_json);
+  expect(stored.values.durationSeconds).toBe(30);
+});
+
 it('refuses to finalize a draft that has no saved length', async () => {
   const { db, env, agent } = setup();
   const saved = await acceptJob(env, OWNER, 'seedance-draft-nolength', { ...draftRequest, values: { draft: true, size: '480p · 16:9' } });

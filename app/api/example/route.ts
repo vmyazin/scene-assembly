@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { buildExamplePrompt } from '@/lib/example-prompts';
 import { GEMINI_MICRO_MODEL } from '@/lib/micro-ai/models';
-import { runMicroTask } from '@/lib/micro-ai/server';
+import { consumeMicroAiAllowance, runMicroTask } from '@/lib/micro-ai/server';
 import { examplePromptTask, validateExamplePrompt } from '@/lib/micro-ai/tasks';
 import type { MicroAiEnvelope } from '@/lib/micro-ai/types';
 
@@ -14,7 +14,9 @@ import type { MicroAiEnvelope } from '@/lib/micro-ai/types';
 export async function POST(request: NextRequest) {
   const { featureId, apiKey, seed } = await request.json();
 
-  const micro = await runMicroTask(examplePromptTask(String(featureId ?? ''), seed));
+  const micro = consumeMicroAiAllowance(request)
+    ? await runMicroTask(examplePromptTask(String(featureId ?? ''), seed))
+    : null;
   if (micro) {
     return NextResponse.json({
       prompt: micro.value,

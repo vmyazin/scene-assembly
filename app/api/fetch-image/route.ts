@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { isGateFailure, requireApprovedAccount } from '@/lib/auth/guard';
+import { proxyRefusal } from '@/lib/server/proxy-guard';
 import { fetchPublicMedia } from '@/lib/server/public-media-fetch';
+import { createRateLimiter } from '@/lib/server/rate-limit';
 
 // node:dns rules this out of the edge runtime, and the address check is the whole point.
 export const runtime = 'nodejs';
@@ -20,6 +22,13 @@ const MAX_URL_LENGTH = 2048;
 
 const GENERIC_ERROR = 'That image could not be fetched from its source.';
 const BLOCKED_ERROR = 'That address cannot be fetched.';
+
+/** Dropped links can point anywhere, so no host list here; the window bounds how much one address fetches. */
+export const FETCH_IMAGE_RATE_LIMIT = 120;
+const fetches = createRateLimiter(FETCH_IMAGE_RATE_LIMIT, 10 * 60 * 1000);
+export function resetFetchImageRateLimit() {
+  fetches.reset();
+}
 
 function fail(status: number, error: string) {
   return NextResponse.json({ success: false, error }, { status });
@@ -63,6 +72,8 @@ export async function POST(request: NextRequest) {
   // open fetch proxy to anyone who finds the URL.
   const gate = requireApprovedAccount(request);
   if (isGateFailure(gate)) return gate.response;
+  const refused = proxyRefusal(request, fetches);
+  if (refused) return refused;
 
   let body: unknown;
   try {

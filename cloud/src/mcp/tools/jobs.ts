@@ -170,7 +170,7 @@ export const generate = defineTool({
 export const finalizeDraft = defineTool({
   name: 'finalize_draft',
   title: 'Finalize a Seedance draft',
-  description: 'Render one Seedance 2.5 480p draft at 1080p. This starts a new job and a separate charge against the 24-hour limit. The estimate uses the documented 1080p rate, because Runware does not publish a finalize price. Pass the draft job\'s jobId (the length is taken from that job; a different durationSeconds is refused) or its draftId, inputMode, and durationSeconds. Do not resend the prompt or any media. Pass an idempotencyKey you reuse when retrying the same finalize.',
+  description: 'Render one Seedance 2.5 480p draft at 1080p. This starts a new job and a separate charge against the 24-hour limit. The estimate uses the documented 1080p rate, because Runware does not publish a finalize price. Pass the draft job\'s jobId or its draftId: the length and input mode are taken from that job, and a different durationSeconds or inputMode is refused. A draftId that matches no job on this account is reserved at the longest length and the costliest input mode. Do not resend the prompt or any media. Pass an idempotencyKey you reuse when retrying the same finalize.',
   kind: 'submit',
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   input: z.object({
@@ -191,8 +191,18 @@ export const finalizeDraft = defineTool({
     let draftId = args.draftId?.trim();
     let modelId = 'bytedance:seedance@2.5';
     let durationSeconds = args.durationSeconds;
-    if (args.jobId) {
-      const savedJob = await getJob(env, args.jobId, agent.user_id);
+    // A bare draftId is resolved to the account's own draft job, so its length and
+    // mode come from what was saved rather than from the agent's claim: Runware's
+    // finalize sends only the draftId, and a claimed 4 s would reserve a 30 s
+    // render at a fraction of its price.
+    let jobId = args.jobId;
+    if (!jobId && draftId) {
+      const match = await env.DB.prepare("SELECT id FROM account_jobs WHERE user_id = ? AND deleted = 0 AND (CASE WHEN json_valid(result_json) THEN json_extract(result_json, '$.draftId') END) = ? ORDER BY created_at DESC LIMIT 1")
+        .bind(agent.user_id, draftId).first<{ id: string }>();
+      jobId = match?.id;
+    }
+    if (jobId) {
+      const savedJob = await getJob(env, jobId, agent.user_id);
       if (!savedJob) throw new ToolError('not_found', 'No job with that id on this account.');
       const saved = JSON.parse(savedJob.request_json) as CloudJobRequest;
       const fromResult = resultDraftId(savedJob.result_json);
@@ -216,10 +226,13 @@ export const finalizeDraft = defineTool({
       if (saved.prompt.trim()) prompt = saved.prompt.trim();
     }
     if (!draftId) throw new ToolError('invalid_field', 'Pass the draft jobId, or the draftId from that job.', { field: 'draftId' });
-    if (!inputMode) throw new ToolError('invalid_field', 'Pass inputMode when you pass a draftId without a jobId, so the price uses the right 1080p rate.', { field: 'inputMode' });
-    if (durationSeconds === undefined) {
-      throw new ToolError('invalid_field', 'Pass durationSeconds when you pass a draftId without a jobId, from 4 to 30 seconds.', { field: 'durationSeconds' });
+    if (!jobId) {
+      // No saved draft to read (one made outside this account): reserve the most
+      // it could cost. A reported provider cost still settles the charge.
+      durationSeconds = SEEDANCE_MAX_SECONDS;
+      inputMode = costliestFinalizeMode(modelId, draftId);
     }
+    if (!inputMode || durationSeconds === undefined) throw new ToolError('invalid_field', 'Pass the draft jobId, or the draftId from that job.', { field: 'draftId' });
     const valuesError = seedanceFinalizeValuesError({ finalize: true, draftId, durationSeconds });
     if (valuesError) throw new ToolError('invalid_field', valuesError, { field: 'durationSeconds' });
     const request: CloudJobRequest = {
@@ -234,6 +247,22 @@ export const finalizeDraft = defineTool({
     }));
   },
 });
+
+const SEEDANCE_MAX_SECONDS = 30;
+const FINALIZE_MODES = ['text', 'image', 'frames', 'reference', 'edit'] as const;
+
+/** The input mode whose 1080p finalize rate is highest, for a draft with no saved job. */
+function costliestFinalizeMode(modelId: string, draftId: string): CloudJobRequest['inputMode'] {
+  let costliest: { mode: CloudJobRequest['inputMode']; cost: number } | undefined;
+  for (const mode of FINALIZE_MODES) {
+    const cost = estimateCloudJob({
+      provider: 'runware', modelId, mediaType: 'video', inputMode: mode, prompt: 'Finalize Seedance draft',
+      values: { finalize: true, draftId, durationSeconds: SEEDANCE_MAX_SECONDS }, referenceIds: [],
+    }).costUsd;
+    if (cost !== null && (!costliest || cost > costliest.cost)) costliest = { mode, cost };
+  }
+  return costliest?.mode ?? 'edit';
+}
 
 export const getJobTool = defineTool({
   name: 'get_job',
