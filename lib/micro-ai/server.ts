@@ -1,6 +1,7 @@
 // lib/micro-ai/server.ts
 import { MICRO_AI_MODELS, readModelUsage, readUsage, VISION_MODEL, type MicroAiUsage } from '@/lib/micro-ai/models';
 import type { MicroAiTask } from '@/lib/micro-ai/tasks';
+import { clientAddress, createRateLimiter } from '@/lib/server/rate-limit';
 
 /**
  * Server-only client for the OpenAI-compatible Hugging Face router.
@@ -21,6 +22,37 @@ export function microAiToken(): string {
 /** True when the deployment has an app-owned token configured. */
 export function isMicroAiConfigured(): boolean {
   return microAiToken().length > 0;
+}
+
+/**
+ * The slug and example routes are open to anonymous callers, so a loop could
+ * spend `HF_TOKEN` without end. Each address gets this many shared-tier calls
+ * per ten minutes, and past it the route skips to the visitor's own Gemini key
+ * (or the slugifier) instead of failing.
+ */
+export const MICRO_AI_RATE_LIMIT = 60;
+const perAddress = createRateLimiter(MICRO_AI_RATE_LIMIT, 10 * 60 * 1000);
+
+/**
+ * Every router call an instance makes, across all callers, per hour. Rotating
+ * addresses gets past the per-address window; this bounds what one instance
+ * spends regardless. `HF_HOURLY_CALL_LIMIT` overrides the default.
+ */
+const DEFAULT_HOURLY_CALL_LIMIT = 1_000;
+function hourlyCallLimit(): number {
+  const configured = Number(process.env.HF_HOURLY_CALL_LIMIT);
+  return Number.isInteger(configured) && configured > 0 ? configured : DEFAULT_HOURLY_CALL_LIMIT;
+}
+let hourly = createRateLimiter(hourlyCallLimit(), 60 * 60 * 1000);
+
+/** True when this caller may use the shared tier for a text micro-task right now. */
+export function consumeMicroAiAllowance(request: { headers?: { get(name: string): string | null } }): boolean {
+  return perAddress.consume(clientAddress(request)).ok;
+}
+
+export function resetMicroAiLimits(): void {
+  perAddress.reset();
+  hourly = createRateLimiter(hourlyCallLimit(), 60 * 60 * 1000);
 }
 
 function baseUrl(): string {
@@ -51,12 +83,13 @@ function messageText(payload: unknown): string {
 
 type RouterPost =
   | { ok: true; payload: unknown }
-  | { ok: false; reason: 'unconfigured' | 'http' | 'network' };
+  | { ok: false; reason: 'unconfigured' | 'limited' | 'http' | 'network' };
 
 /** One router call. Failures stay structured so a vision caller can tell "not configured" from "the model ran and failed". */
 async function postChat(body: unknown, timeoutMs: number): Promise<RouterPost> {
   const token = microAiToken();
   if (!token) return { ok: false, reason: 'unconfigured' };
+  if (!hourly.consume('all').ok) return { ok: false, reason: 'limited' };
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -142,13 +175,13 @@ export interface VisionTask {
 const VISION_TIMEOUT_MS = 25_000;
 
 /**
- * `skipped` means the shared tier was not asked (no token, or a video part it
- * cannot read) and the caller should try Gemini. `failed` means it was asked
+ * `skipped` means the shared tier was not asked (no token, the instance's
+ * hourly ceiling, or a video part it cannot read) and the caller should try Gemini. `failed` means it was asked
  * and did not produce a prompt; `usage` is whatever that call already spent.
  */
 export type VisionRun =
   | { status: 'ok'; value: string; usage: MicroAiUsage; model: string }
-  | { status: 'skipped'; reason: 'unconfigured' | 'unsupported' }
+  | { status: 'skipped'; reason: 'unconfigured' | 'limited' | 'unsupported' }
   | { status: 'failed'; reason: 'provider' | 'empty' | 'rejected'; usage?: MicroAiUsage; model: string };
 
 function visionUsage(payload: unknown): MicroAiUsage | undefined {
@@ -192,7 +225,7 @@ export async function runVisionTask(task: VisionTask): Promise<VisionRun> {
   );
 
   if (!posted.ok) {
-    if (posted.reason === 'unconfigured') return { status: 'skipped', reason: 'unconfigured' };
+    if (posted.reason === 'unconfigured' || posted.reason === 'limited') return { status: 'skipped', reason: posted.reason };
     return { status: 'failed', reason: 'provider', model: VISION_MODEL.id };
   }
 

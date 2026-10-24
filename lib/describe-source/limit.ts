@@ -1,4 +1,5 @@
 // lib/describe-source/limit.ts
+import { clientAddress, createRateLimiter } from '@/lib/server/rate-limit';
 
 const WINDOW_MS = 10 * 60 * 1000;
 
@@ -11,47 +12,17 @@ const WINDOW_MS = 10 * 60 * 1000;
  */
 export const DESCRIBE_RATE_LIMIT = 12;
 
-interface Bucket {
-  start: number;
-  count: number;
-}
-
-const buckets = new Map<string, Bucket>();
+const limiter = createRateLimiter(DESCRIBE_RATE_LIMIT, WINDOW_MS);
 
 export function resetDescribeRateLimit(): void {
-  buckets.clear();
+  limiter.reset();
 }
 
-export function describeClientKey(request: { headers?: { get(name: string): string | null } }): string {
-  const headers = request.headers;
-  if (!headers || typeof headers.get !== 'function') return 'unknown';
-  const real = headers.get('x-real-ip')?.trim();
-  if (real) return real;
-  const forwarded = headers.get('x-forwarded-for');
-  if (forwarded) {
-    const first = forwarded.split(',')[0]?.trim();
-    if (first) return first;
-  }
-  return 'unknown';
-}
+export const describeClientKey = clientAddress;
 
 export function consumeDescribeRateLimit(
   key: string,
   now = Date.now()
 ): { ok: true } | { ok: false; retryAfter: number } {
-  for (const [name, bucket] of buckets) {
-    if (now - bucket.start >= WINDOW_MS) buckets.delete(name);
-  }
-
-  const current = buckets.get(key);
-  if (!current || now - current.start >= WINDOW_MS) {
-    buckets.set(key, { start: now, count: 1 });
-    return { ok: true };
-  }
-  if (current.count >= DESCRIBE_RATE_LIMIT) {
-    const retryAfter = Math.max(1, Math.ceil((current.start + WINDOW_MS - now) / 1000));
-    return { ok: false, retryAfter };
-  }
-  current.count += 1;
-  return { ok: true };
+  return limiter.consume(key, now);
 }

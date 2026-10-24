@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { acceptedResultUrl } from '@/lib/account/result-location';
 import { isGateFailure, requireApprovedAccount } from '@/lib/auth/guard';
 import {
   extensionForMedia,
   MAX_REMOTE_VIDEO_BYTES,
   normalizedMimeType,
 } from '@/lib/media-download';
+import { proxyRefusal } from '@/lib/server/proxy-guard';
 import { fetchPublicMedia } from '@/lib/server/public-media-fetch';
+import { createRateLimiter } from '@/lib/server/rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -23,6 +26,13 @@ const VIDEO_MIMES = new Set([
   'video/quicktime',
   'video/x-matroska',
 ]);
+
+/** Each download can stream 512 MiB on our bandwidth; a timeline import fetches a few clips at once. */
+export const DOWNLOAD_RATE_LIMIT = 60;
+const downloads = createRateLimiter(DOWNLOAD_RATE_LIMIT, 10 * 60 * 1000);
+export function resetDownloadRateLimit() {
+  downloads.reset();
+}
 
 function fail(status: number, error: string) {
   return NextResponse.json({ success: false, error }, { status });
@@ -71,6 +81,8 @@ function cappedStream(source: ReadableStream<Uint8Array>, maxBytes: number) {
 export async function POST(request: NextRequest) {
   const gate = requireApprovedAccount(request);
   if (isGateFailure(gate)) return gate.response;
+  const refused = proxyRefusal(request, downloads);
+  if (refused) return refused;
 
   let form: FormData;
   try {
@@ -103,6 +115,12 @@ export async function POST(request: NextRequest) {
     || Boolean(url.password)
   ) {
     return fail(400, 'That address cannot be downloaded.');
+  }
+  // This route exists for provider results the browser cannot fetch itself, so
+  // only the provider hosts capture already trusts are proxied. An open list
+  // made it a free 512 MiB relay for any file on the internet.
+  if (!acceptedResultUrl(url.href)) {
+    return fail(403, 'That address cannot be downloaded.');
   }
 
   const result = await fetchPublicMedia(url, {

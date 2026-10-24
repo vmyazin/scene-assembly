@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { buildSlugPrompt, cleanSlug, slugify } from '@/lib/example-prompts';
 import { GEMINI_MICRO_MODEL } from '@/lib/micro-ai/models';
-import { runMicroTask } from '@/lib/micro-ai/server';
+import { consumeMicroAiAllowance, runMicroTask } from '@/lib/micro-ai/server';
 import { slugTask, validateSlug } from '@/lib/micro-ai/tasks';
 import type { MicroAiEnvelope } from '@/lib/micro-ai/types';
 
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   }
   const text = String(prompt);
 
-  const micro = await runMicroTask(slugTask(text));
+  const micro = consumeMicroAiAllowance(request) ? await runMicroTask(slugTask(text)) : null;
   if (micro) {
     return NextResponse.json({
       slug: micro.value,

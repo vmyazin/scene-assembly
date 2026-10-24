@@ -13,9 +13,10 @@ vi.mock('@google/genai', () => ({
 
 import { POST as examplePost } from '../../app/api/example/route';
 import { POST as slugPost } from '../../app/api/slug/route';
+import { MICRO_AI_RATE_LIMIT, resetMicroAiLimits } from '@/lib/micro-ai/server';
 
-function request(body: unknown): NextRequest {
-  return { json: async () => body } as unknown as NextRequest;
+function request(body: unknown, address = '203.0.113.7'): NextRequest {
+  return { json: async () => body, headers: new Headers({ 'x-real-ip': address }) } as unknown as NextRequest;
 }
 
 function microCompletion(content: string) {
@@ -35,7 +36,9 @@ function geminiText(text: string) {
 describe('POST /api/slug', () => {
   beforeEach(() => {
     delete process.env.HF_TOKEN;
+    delete process.env.HF_HOURLY_CALL_LIMIT;
     generateContent.mockReset();
+    resetMicroAiLimits();
   });
 
   afterEach(() => {
@@ -91,6 +94,36 @@ describe('POST /api/slug', () => {
     expect(JSON.stringify(body)).not.toContain('quota exceeded');
   });
 
+  it('stops spending the shared tier on one address past its window and falls back', async () => {
+    process.env.HF_TOKEN = 'hf_token';
+    const fetchMock = vi.fn().mockImplementation(async () => microCompletion('cyberpunk-neon-alley'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    for (let attempt = 0; attempt < MICRO_AI_RATE_LIMIT; attempt += 1) {
+      await slugPost(request({ prompt: 'Cyberpunk neon alley' }));
+    }
+    const limited = await slugPost(request({ prompt: 'A quiet ocean at dusk' }));
+    expect(await limited.json()).toEqual({ slug: 'a-quiet-ocean-at-dusk', source: 'deterministic' });
+    expect(fetchMock).toHaveBeenCalledTimes(MICRO_AI_RATE_LIMIT);
+
+    // Another address still has its own window.
+    const other = await slugPost(request({ prompt: 'Cyberpunk neon alley' }, '198.51.100.4'));
+    expect((await other.json()).source).toBe('micro-ai');
+  });
+
+  it('caps router calls per instance per hour across every address', async () => {
+    process.env.HF_TOKEN = 'hf_token';
+    process.env.HF_HOURLY_CALL_LIMIT = '2';
+    resetMicroAiLimits();
+    const fetchMock = vi.fn().mockImplementation(async () => microCompletion('cyberpunk-neon-alley'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    for (const address of ['192.0.2.1', '192.0.2.2', '192.0.2.3']) {
+      await slugPost(request({ prompt: 'Cyberpunk neon alley' }, address));
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('rejects an empty prompt', async () => {
     const response = await slugPost(request({ prompt: '   ' }));
     expect(response.status).toBe(400);
@@ -100,7 +133,9 @@ describe('POST /api/slug', () => {
 describe('POST /api/example', () => {
   beforeEach(() => {
     delete process.env.HF_TOKEN;
+    delete process.env.HF_HOURLY_CALL_LIMIT;
     generateContent.mockReset();
+    resetMicroAiLimits();
   });
 
   afterEach(() => {
