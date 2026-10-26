@@ -185,6 +185,15 @@ function videoImageFields(
     return { image: opening, ...(closing ? { end_image: closing } : {}) };
   }
   if (field === 'referenceImages') return { reference_images: images };
+  if (model === 'kwaivgi/kling-v4.0/image-to-video') {
+    // The first and final still are bookends; every intervening still matters.
+    // The legacy two-frame destructuring silently discarded frames 3–10.
+    return {
+      image: images[0],
+      ...(images.length > 2 ? { middle_images: images.slice(1, -1) } : {}),
+      ...(images.length > 1 ? { last_image: images.at(-1) } : {}),
+    };
+  }
   const [first, last] = images;
   return { image: first, ...(last ? { last_image: last } : {}) };
 }
@@ -299,6 +308,14 @@ export async function atlasGenerateImage(
  * output is shorter than the source.
  */
 export function atlasEditBody(request: VideoRequest): Record<string, unknown> {
+  if (request.model === 'kwaivgi/kling-v4.0/video-edit') {
+    return {
+      model: request.model, prompt: request.prompt, video: request.sourceVideo,
+      duration: request.outputDuration ?? 5,
+      resolution: request.resolution ?? '720p',
+      ...(request.images?.length ? { reference_images: request.images } : {}),
+    };
+  }
   const kling = request.model.includes('kling-video-o3');
   const wan = request.model.includes('wan-2.7');
   const body: Record<string, unknown> = {
@@ -335,7 +352,7 @@ export async function atlasCreateVideo(request: VideoRequest): Promise<{ taskId:
     ...videoImageFields(request.model, request.inputField, request.images ?? []),
     ...(request.durationSeconds ? { duration: request.durationSeconds } : {}),
     ...(request.resolution ? { resolution: request.resolution } : {}),
-    ...(request.aspectRatio ? { [ratioField(request.model)]: request.aspectRatio } : {}),
+    ...(request.aspectRatio && request.model !== 'kwaivgi/kling-v4.0/image-to-video' ? { [ratioField(request.model)]: request.aspectRatio } : {}),
     ...(request.referenceVideos?.length ? { reference_videos: request.referenceVideos } : {}),
     ...(request.referenceAudios?.length ? { reference_audios: request.referenceAudios } : {}),
   });

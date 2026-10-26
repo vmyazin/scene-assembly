@@ -142,6 +142,17 @@ describe('captureFalJob', () => {
     });
   });
 
+  it('captures a sale job using its submission time after fal estimates are unavailable', async () => {
+    estimateFalJobCost.mockRejectedValue(new Error('offline'));
+    captureFalJob({
+      ...job, modelId: 'h3-max-turbo',
+      createdAt: Date.parse('2026-10-26T12:00:00Z'),
+      controlValues: { duration: 5, resolution: '768P' },
+    }, 'fal-key');
+    await vi.waitFor(() => expect(entries()).toHaveLength(1));
+    expect(entries()[0]).toMatchObject({ source: 'catalog-rate', costUsd: expect.closeTo(5.7 * 0.026, 8) });
+  });
+
   it("falls back to fal's published rate when the estimate cannot answer", async () => {
     estimateFalJobCost.mockRejectedValue(new Error('offline'));
     // A real job carries every control the variant defines, defaults included.

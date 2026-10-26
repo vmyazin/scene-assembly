@@ -50,7 +50,7 @@ import { followProviderVideo } from '@/lib/providers/follow-video';
 import { findModel, modelsFor } from '@/lib/providers/catalog';
 import ModelListbox from '@/components/ModelListbox';
 import { PROVIDER_VIDEO_COLUMNS, providerVideoSpecs } from '@/lib/models/listbox-specs';
-import { frameSlotLabel } from '@/lib/providers/frames';
+import { frameSlotLabel, keyframeSlotLabel } from '@/lib/providers/frames';
 import type { ProviderId, ProviderMode, ProviderModel } from '@/lib/providers/types';
 import type { EngineId } from '@/lib/engines/registry';
 import { isVideoFile } from '@/lib/video-frame';
@@ -377,8 +377,11 @@ export default function ProviderVideoWorkspace({
     : imageReferencesOnly
       ? (inputCapability?.clientMaxImages ?? Math.min(inputCapability?.maxImages ?? 5, 5))
       : (inputCapability?.maxImages ?? selectedModel?.maxInputImages ?? 1);
-  const referenceToken = (index: number) =>
-    inputCapability?.promptSyntax === 'at-image-underscore-index' ? `@image_${index + 1}` : inputCapability?.promptSyntax === 'at-image-index' ? `@Image${index + 1}` : `Image ${index + 1}`;
+  const isKeyframes = inputMode === 'image' && inputCapability?.orderedKeyframes === true;
+  const referenceToken = (index: number) => clipToken(
+    isEdit ? (selectedModel?.videoEdit?.plainReferences ? 'image-index' : selectedModel?.videoEdit?.promptSyntax ?? 'at-image-index') : inputCapability?.promptSyntax,
+    'Image', index,
+  );
   const matchingModels = models.filter((model) =>
     `${model.label} ${model.id}`.toLowerCase().includes(modelSearch.toLowerCase())
   );
@@ -598,6 +601,10 @@ export default function ProviderVideoWorkspace({
     const floor = inspectPrompt(prompt, relaxed.levelRef.current);
     if (floor.blocked && floor.message) {
       setError(floor.message);
+      return;
+    }
+    if (selectedModel.maxPromptLength && prompt.trim().length > selectedModel.maxPromptLength) {
+      setError(`Use at most ${selectedModel.maxPromptLength.toLocaleString()} characters for ${selectedModel.label}.`);
       return;
     }
     if (inputMode === 'image' && references.length === 0) {
@@ -910,12 +917,14 @@ export default function ProviderVideoWorkspace({
             <WorkspaceCard
               title={isEdit ? 'Replacement images (optional)' : isFrames
                 ? 'First and last frame'
-                : isReference
+                : isKeyframes ? 'Keyframes in order' : isReference
                   ? 'Add character views'
                   : `Reference image${maxInputImages === 1 ? '' : 's'}`}
-              description={isEdit ? `Add up to ${maxInputImages} character, product, or setting images to guide the edit. Address images as ${selectedModel?.videoEdit?.promptSyntax === 'image-index' || selectedModel?.videoEdit?.plainReferences ? 'image 1, image 2' : '@Image1, @Image2'}, and so on.` : isFrames
+              description={isEdit ? `Add up to ${maxInputImages} character, product, or setting images to guide the edit. Address images as ${referenceToken(0)}, ${referenceToken(1)}, and so on.` : isFrames
                 ? 'Two images, in order: the frame the clip opens on, then the one it ends on. The model builds the motion between them.'
-                : isReference
+                : isKeyframes
+                  ? 'Add the opening frame first and the closing frame last, with up to eight middle frames between them. One image supplies only the opening frame.'
+                  : isReference
                   ? `Add up to ${maxInputImages} front, three-quarter, or profile views. Their order becomes ${referenceToken(0)}, ${referenceToken(1)}, and so on in your prompt.`
                   : `Upload up to ${maxInputImages}; files are forwarded to ${label} only for this task. Pick a saved clip and its last frame is used.`}
             >
@@ -937,7 +946,7 @@ export default function ProviderVideoWorkspace({
                 items={references.map((reference, index) => ({
                   id: reference.id,
                   src: reference.previewUrl,
-                  caption: isFrames ? frameSlotLabel(index) : isEdit ? (selectedModel?.videoEdit?.promptSyntax === 'image-index' || selectedModel?.videoEdit?.plainReferences ? `Image ${index + 1}` : `@Image${index + 1}`) : isReference ? referenceToken(index) : undefined,
+                  caption: isFrames ? frameSlotLabel(index) : isKeyframes ? keyframeSlotLabel(index, references.length) : isEdit || isReference ? referenceToken(index) : undefined,
                   alt: isFrames
                     ? frameSlotLabel(index)
                     : isReference
@@ -973,7 +982,11 @@ export default function ProviderVideoWorkspace({
 
           {(fields.length > 0 || relaxed.offered) && (
             <ModelControlsCard
-              description={isEdit ? 'Duration and aspect ratio match the source video.' : `Only the lengths and sizes ${selectedModel?.label} publishes are offered.`}
+              description={isEdit
+                ? editHasControl(selectedModel?.videoEdit, 'outputDuration')
+                  ? 'Choose the output duration; aspect ratio follows the source video.'
+                  : 'Duration and aspect ratio match the source video.'
+                : `Only the lengths and sizes ${selectedModel?.label} publishes are offered.`}
               namespace={`provider-${modelKey}`}
               fields={shownFields}
               values={values}
@@ -1039,7 +1052,7 @@ export default function ProviderVideoWorkspace({
               id="provider-video-prompt"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              placeholder={isEdit ? (selectedModel?.videoEdit?.promptSyntax === 'triple-angle' ? 'Describe the edit. Address the source as <<<video_1>>> and images as <<<image_1>>>.' : selectedModel?.videoEdit?.namesSource ? 'Describe what to change in @Video1 and what to keep…' : 'Describe what to change in the source video and what to keep…') : clipCapability ? `Describe the motion. Address clips as ${clipToken(clipSyntax, 'Video', 0)} and ${clipToken(clipSyntax, 'Audio', 0)}.` : "Describe the motion, camera, mood, and scene…"}
+              placeholder={isEdit ? (selectedModel?.videoEdit?.namesSource ? `Describe what to change in ${clipToken(selectedModel.videoEdit.promptSyntax ?? 'at-image-index', 'Video', 0)} and what to keep…` : 'Describe what to change in the source video and what to keep…') : clipCapability ? `Describe the motion. Address clips as ${clipToken(clipSyntax, 'Video', 0)} and ${clipToken(clipSyntax, 'Audio', 0)}.` : "Describe the motion, camera, mood, and scene…"}
             />
           </PromptPanel>
         }

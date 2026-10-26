@@ -964,6 +964,91 @@ function lumaUni1(variant: 'standard' | 'max'): ProviderModel[] {
   ];
 }
 
+/**
+ * Verified 2026-10-26 against /models/kwaivgi/kling-v4.0/{mode}/llms.txt.
+ * The public catalog advertises $0.11/s, but Atlas's own /model/calculate
+ * quotes $0.71435 / $1.06925 for 5s at 720p / 1080p (10s doubles both).
+ * Use those resolution-specific quotes so the estimate does not understate
+ * the provider's current calculator. No published promotion end date.
+ */
+function kling40(): ProviderModel[] {
+  const sizes = [{ label: '720p', preset: '720p' }, { label: '1080p', preset: '1080p' }];
+  const shared = {
+    kind: 'video' as const,
+    label: 'Kling 4.0',
+    price: '$0.14287 / s @ 720p · $0.21385 / s @ 1080p',
+    rate: { per: 'second' as const, usdByResolution: { '720p': 0.14287, '1080p': 0.21385 } },
+    duration: { type: 'range' as const, min: 3, max: 30, default: 5 },
+    sizes,
+    // Atlas describes 26,000 English / 11,000 non-English characters.
+    // One conservative cap keeps mixed-language prompts inside both limits.
+    maxPromptLength: 11_000,
+  };
+  const pricing = 'Atlas advertises $0.11/s (30% off, no end date), but its calculator quotes $0.14287/s at 720p and $0.21385/s at 1080p. Estimates use the calculator.';
+  return [
+    {
+      ...shared,
+      id: 'kwaivgi/kling-v4.0/text-to-video',
+      fileCode: 'kling-4_0-t2v',
+      modes: ['text'],
+      aspectRatios: ['16:9', '9:16', '1:1', '21:9'],
+      note: `Premium Kling with generated audio and 3–30 second clips. ${pricing}`,
+    },
+    {
+      ...shared,
+      id: 'kwaivgi/kling-v4.0/image-to-video',
+      aspectRatios: [], // The output shape comes from the opening image.
+      fileCode: 'kling-4_0-i2v',
+      modes: ['image', 'frames'],
+      maxInputImages: 10,
+      videoInputs: {
+        image: { field: 'frameImages', maxImages: 10, orderedKeyframes: true },
+        frames: { field: 'frameImages', maxImages: 2 },
+      },
+      note: `Premium Kling with generated audio. Add an opening frame, up to eight middle frames, then a closing frame; the frame sets the output shape. ${pricing}`,
+    },
+    {
+      ...shared,
+      id: 'kwaivgi/kling-v4.0/reference-to-video',
+      fileCode: 'kling-4_0-r2v',
+      modes: ['reference'],
+      maxInputImages: 10,
+      aspectRatios: ['16:9', '9:16', '1:1', '21:9'],
+      videoInputs: { reference: { field: 'referenceImages', maxImages: 10, clientMaxImages: 10, promptSyntax: 'at-image-underscore-index' } },
+      note: `Up to 10 image references with generated audio. Atlas's 15-reference limit includes mixed media; this integration accepts images. ${pricing}`,
+    },
+    {
+      id: 'kwaivgi/kling-v4.0/video-edit',
+      label: 'Kling 4.0 Edit',
+      fileCode: 'kling-4_0-edit',
+      kind: 'video',
+      modes: ['edit'],
+      price: 'price unknown',
+      videoEdit: {
+        sizes,
+        // Atlas bills input duration too but publishes no complete formula.
+        // Omitting the rate keeps both budget and spend estimates unknown.
+        maxImages: 10,
+        minSeconds: 3,
+        maxSeconds: 30,
+        maxBytes: 200_000_000, // App upload ceiling; Atlas itself accepts 300 MB.
+        mimes: ['video/mp4', 'video/quicktime'],
+        requireMeasurement: true,
+        sourceBounds: { minEdge: 700, maxEdge: 4553 },
+        maxPromptLength: 11_000,
+        promptSyntax: 'at-image-underscore-index',
+        namesSource: true,
+        controls: [{
+          key: 'outputDuration', label: 'Output duration', kind: 'select', defaultValue: 5,
+          options: Array.from({ length: 28 }, (_, index) => ({ label: `${index + 3} seconds`, value: index + 3 })),
+          description: 'Choose 3–30 seconds; this can differ from the source length.',
+        }],
+        note: 'Premium Kling editing in a background job. Address the source as @video_1 and images as @image_1. Choose an output length of 3–30 seconds. Input video duration is billed too; the full pricing formula is unverified, so the total estimate is unavailable. Source files are limited to 200 MB in this app.',
+      },
+    },
+  ];
+}
+
 const ATLAS_MODELS: ProviderModel[] = [
   {
     id: 'black-forest-labs/flux-schnell',
@@ -1074,6 +1159,7 @@ const ATLAS_MODELS: ProviderModel[] = [
   ...gptImage25Developer('sunburst'),
   ...gptImage25Developer('flare'),
   ...minimaxH3Developer(),
+  ...kling40(),
   // Added 2026-09-29 from Atlas's LTX-2 / Luma drop. See each block above.
   ...ltx2('2.3', 'fast'),
   ...ltx2('2.3', 'pro'),

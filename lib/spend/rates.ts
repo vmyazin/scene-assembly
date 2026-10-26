@@ -338,13 +338,40 @@ export const FAL_RATES: Record<string, FalRate> = {
   'fal-ai/wan/v2.7/text-to-video': seedanceRate({ '720p': 0.1, '1080p': 0.15 }),
   'fal-ai/wan/v2.7/image-to-video': seedanceRate({ '720p': 0.1, '1080p': 0.15 }),
 
-  // https://fal.ai/models/minimax/h3-max-turbo/image-to-video — read 2026-10-15.
-  // Promo rates ended that day. Regular prices: $0.025/s at 480P, $0.04/s at
-  // 768P, $0.08/s at 1080P. One endpoint covers text, image and frames.
+  // https://fal.ai/models/minimax/h3-max-turbo/image-to-video — read 2026-10-26.
+  // Regular prices; falRateAt applies the 35% offer through October 31.
+  // One endpoint covers text, image and frames.
   // fal bills output seconds, and the clip can run up to about 0.7 s longer
   // than requested; falPublishedCost adds that overrun for this endpoint.
   'minimax/h3-max-turbo/image-to-video': seedanceRate({ '480P': 0.025, '768P': 0.04, '1080P': 0.08 }),
 };
+
+/**
+ * Verified 2026-10-26 on fal's H3 Max Turbo page. The provider names October 31
+ * but no timezone; this app expires the offer at November 1, 00:00 UTC. The
+ * known window starts on the verification date so late capture never invents
+ * a discount for older jobs. H3 Max Recast/Relight are different endpoints and
+ * still publish full prices; the generation offer does not cover those edits.
+ */
+export const FAL_H3_TURBO_PROMOTION = {
+  startsAt: Date.parse('2026-10-26T00:00:00Z'),
+  endsAt: Date.parse('2026-11-01T00:00:00Z'),
+  rate: seedanceRate({ '480P': 0.01625, '768P': 0.026, '1080P': 0.052 }),
+};
+
+function falPromotionActive(endpointId: string, at: number): boolean {
+  return endpointId === 'minimax/h3-max-turbo/image-to-video'
+    && at >= FAL_H3_TURBO_PROMOTION.startsAt && at < FAL_H3_TURBO_PROMOTION.endsAt;
+}
+
+export function falPromotionNote(endpointId: string, at = Date.now()): string | null {
+  return falPromotionActive(endpointId, at) ? '35% off through Oct 31.' : null;
+}
+
+/** Resolve at call time, never module load: a long-running Worker outlives a sale. */
+function falRateAt(endpointId: string, at: number): FalRate | undefined {
+  return falPromotionActive(endpointId, at) ? FAL_H3_TURBO_PROMOTION.rate : FAL_RATES[endpointId];
+}
 
 /**
  * fal's H3 page: "The output can run up to about 0.7 s longer than requested."
@@ -365,6 +392,8 @@ export function falBilledSeconds(endpointId: string, requestedSeconds: number): 
 
 /** The run controls that move a fal price, read from a job's control values. */
 export interface FalRunControls {
+  /** Submission time for saved jobs; omitted for a current run estimate. */
+  pricedAt?: number;
   resolution?: string;
   audio?: boolean;
   durationSeconds?: number;
@@ -390,7 +419,7 @@ export function falPublishedCost(
   endpointId: string,
   controls: FalRunControls
 ): FalPublishedCost | null {
-  const rate = FAL_RATES[endpointId];
+  const rate = falRateAt(endpointId, controls.pricedAt ?? Date.now());
   if (!rate) return null;
 
   if (rate.unit === 'image') {
@@ -426,18 +455,18 @@ export function falPublishedCost(
 }
 
 /** `$0.08` → `$0.08`; `$0.081` → `$0.081`. Trailing zeros carry no information. */
-function usd(value: number): string {
-  const fixed = value >= 0.01 ? value.toFixed(3) : value.toFixed(4);
+function usd(value: number, precision?: number): string {
+  const fixed = value.toFixed(precision ?? (value >= 0.01 ? 3 : 4));
   return `$${fixed.replace(/0+$/, '').replace(/\.$/, '')}`;
 }
 
 /** `0.1`–`0.4` → `$0.1–0.4`, or a single figure when the range collapses. */
-function usdRange(values: number[]): string | null {
+function usdRange(values: number[], precision?: number): string | null {
   const finite = values.filter(value => Number.isFinite(value) && value > 0);
   if (finite.length === 0) return null;
   const low = Math.min(...finite);
   const high = Math.max(...finite);
-  return low === high ? usd(low) : `${usd(low)}–${usd(high).replace('$', '')}`;
+  return low === high ? usd(low, precision) : `${usd(low, precision)}–${usd(high, precision).replace('$', '')}`;
 }
 
 /**
@@ -450,8 +479,8 @@ function usdRange(values: number[]): string | null {
  * the rate genuinely moves with resolution, audio or duration: a single figure
  * would be a guess presented as a fact.
  */
-export function falRateLabel(endpointId: string): string | null {
-  const rate = FAL_RATES[endpointId];
+export function falRateLabel(endpointId: string, at = Date.now()): string | null {
+  const rate = falRateAt(endpointId, at);
   if (!rate) return null;
 
   if (rate.unit === 'image') {
@@ -462,7 +491,8 @@ export function falRateLabel(endpointId: string): string | null {
 
   if (rate.unit === 'second') {
     const perSecond = Object.values(rate.usdPerSecond).flatMap(entry => [entry.audioOff, entry.audioOn]);
-    const range = usdRange(perSecond);
+    // Keep the full promotional $0.01625, rather than rounding it to $0.016.
+    const range = usdRange(perSecond, falPromotionActive(endpointId, at) ? 5 : undefined);
     return range && `${range} / s`;
   }
 

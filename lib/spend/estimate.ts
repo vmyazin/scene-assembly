@@ -22,7 +22,7 @@ const UNKNOWN_NOTES: Partial<Record<CloudJobRequest['provider'], string>> = {
 const GEMINI_NOTE = 'Gemini bills by tokens. This uses its published per-image rate; the final figure comes from the run and can be slightly higher.';
 
 export function estimateCloudJob(request: CloudJobRequest): SpendFigure {
-  const entry = buildAccountSpendEntry({ jobId: 'estimate', request, result: { sources: [{}] }, at: 0 });
+  const entry = buildAccountSpendEntry({ jobId: 'estimate', request, result: { sources: [{}] }, at: Date.now() });
   if (!entry) return unknownFigure('catalog-rate', 'This job cannot be priced.');
   const figure: SpendFigure = {
     costUsd: entry.costUsd, confidence: entry.confidence, source: entry.source,

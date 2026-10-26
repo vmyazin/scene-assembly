@@ -14,7 +14,7 @@ export async function recordAccountSpend(env:Env,job:JobRow):Promise<boolean> {
     const result=JSON.parse(job.result_json) as PersistedProviderResult;
     if(!Array.isArray(result.sources)||result.sources.length===0)return false;
     const first=await env.DB.prepare('SELECT id FROM account_assets WHERE user_id=? AND job_id=? AND deleted=0 ORDER BY created_at,id LIMIT 1').bind(job.user_id,job.id).first<{id:string}>();
-    const entry=buildAccountSpendEntry({jobId:job.id,request:JSON.parse(job.request_json),result,at:job.updated_at,...(first?{firstAssetId:first.id}:{})});
+    const entry=buildAccountSpendEntry({jobId:job.id,request:JSON.parse(job.request_json),result,at:job.updated_at,pricedAt:job.created_at,...(first?{firstAssetId:first.id}:{})});
     if(!entry)return false;
     const inserted=await env.DB.prepare(`INSERT OR IGNORE INTO account_spend (id,user_id,job_id,entry_json,at)
       SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM account_users WHERE id=?)`)

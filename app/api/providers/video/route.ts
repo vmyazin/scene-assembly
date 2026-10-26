@@ -163,6 +163,18 @@ export async function POST(request: NextRequest) {
     );
   }
   const modelRecord = findModel(body.provider, model);
+  if (modelRecord?.maxPromptLength !== undefined && prompt.length > modelRecord.maxPromptLength) {
+    return NextResponse.json(
+      { success: false, error: `${modelRecord.label} prompts can be up to ${modelRecord.maxPromptLength.toLocaleString('en-US')} characters.` },
+      { status: 400 }
+    );
+  }
+  if (modelRecord?.aspectRatios?.length === 0 && body.aspectRatio !== undefined) {
+    return NextResponse.json(
+      { success: false, error: 'This model takes its output shape from the input image. Omit aspectRatio.' },
+      { status: 400 }
+    );
+  }
   // Old clients did not send a semantic mode; preserve their route behavior.
   // New clients always send it and receive capability/count validation here.
   if (hasExplicitInputMode && !modelRecord?.modes.includes(inputMode)) {

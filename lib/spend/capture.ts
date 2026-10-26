@@ -180,6 +180,7 @@ export function captureFalJob(job: FalJob, apiKey: string): void {
           estimate,
           endpointId,
           controls: {
+            pricedAt: job.createdAt,
             resolution:
               typeof controlValues.resolution === 'string' ? controlValues.resolution : undefined,
             audio: controlValues.generate_audio !== false,

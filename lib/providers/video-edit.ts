@@ -68,6 +68,7 @@ export function editPromptShortcuts(capability?: Pick<VideoEditCapability, 'maxI
     // plainReferences names the picture in words. @Image is Seedance's token, and
     // these Runware edit pages do not document it.
     if (capability?.promptSyntax === 'image-index' || capability?.plainReferences) return [label, text.replace('@Video1', 'the source video').replace(/@Image(\d+)/g, 'image $1')];
+    if (capability?.promptSyntax === 'at-image-underscore-index') return [label, text.replace('@Video1', '@video_1').replace(/@Image(\d+)/g, '@image_$1')];
     if (capability?.promptSyntax === 'triple-angle') return [label, text.replace('@Video1', '<<<video_1>>>').replace(/@Image(\d+)/g, (_, n: string) => `<<<image_${n}>>>`)];
     return [label, text];
   });
@@ -191,6 +192,7 @@ export function editSourceSummary(capability: VideoEditCapability): string {
       : bounds?.minEdge !== undefined ? ` · at least ${bounds.minEdge}px` : '';
   const tail = capability.promptSyntax === 'triple-angle'
     ? 'Reference this clip as <<<video_1>>>.'
+    : capability.promptSyntax === 'at-image-underscore-index' ? 'Reference this clip as @video_1.'
     : capability.namesSource ? 'Reference this clip as @Video1.' : 'Describe how to change the source video.';
   return `${mimes} · ${seconds} · up to ${Math.round(editVideoMaxBytes(capability) / 1_000_000)} MB${pixels}. ${tail}`;
 }

@@ -144,6 +144,19 @@ describe('FalGenerationWorkspace', () => {
     expect(screen.getByText('Inputs and outputs use public, temporary URLs.')).toBeInTheDocument();
   });
 
+  it('shows the H3 Turbo offer and discounted run estimate, then drops both at expiry', () => {
+    vi.mocked(Date.now).mockReturnValue(Date.parse('2026-10-31T12:00:00Z'));
+    useAppStore.setState({ falVideoModel: 'h3-max-turbo' });
+    const { rerender } = renderWorkspace();
+    expect(screen.getByText(/35% off through Oct 31/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Generate.*\$0\.15/ })).toBeInTheDocument();
+
+    vi.mocked(Date.now).mockReturnValue(Date.parse('2026-11-01T00:00:00Z'));
+    rerender(<FalGenerationWorkspace inputMode="text" onBack={() => undefined} onOpenConnections={() => undefined} />);
+    expect(screen.queryByText(/35% off through Oct 31/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Generate.*\$0\.23/ })).toBeInTheDocument();
+  });
+
   it('places the prompt card in the jobs column immediately before jobs', () => {
     renderWorkspace();
 

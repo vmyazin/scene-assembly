@@ -39,6 +39,8 @@ export interface BuildAccountSpendEntryArgs {
   request: CloudJobRequest;
   result: PersistedProviderResult;
   at: number;
+  /** Original submission time, retained when a completed job is reconciled later. */
+  pricedAt?: number;
   /** Pass only after this asset row is known to exist. */
   firstAssetId?: string;
 }
@@ -113,6 +115,7 @@ export function buildAccountSpendEntry(args: BuildAccountSpendEntryArgs): Accoun
         endpointId,
         outputImages: outputs,
         controls: {
+          pricedAt: args.pricedAt ?? args.at,
           resolution: typeof request.values.resolution === 'string' ? request.values.resolution : undefined,
           audio: request.values.generate_audio !== false,
           durationSeconds: falDurationSeconds(request.values),

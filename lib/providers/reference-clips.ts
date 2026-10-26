@@ -104,7 +104,7 @@ export function referenceClipsFor(model: ProviderModel | undefined, mode: Provid
   return clips;
 }
 
-export function clipToken(syntax: VideoPromptSyntax | undefined, token: 'Video' | 'Audio', index: number): string {
+export function clipToken(syntax: VideoPromptSyntax | undefined, token: 'Video' | 'Audio' | 'Image', index: number): string {
   const n = index + 1;
   if (syntax === 'at-image-underscore-index') return `@${token.toLowerCase()}_${n}`;
   if (syntax === 'at-image-index') return `@${token}${n}`;

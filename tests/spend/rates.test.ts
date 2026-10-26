@@ -118,13 +118,13 @@ describe('fal published rates', () => {
   it('prices MiniMax H3 Max Turbo at the regular per-second rates, plus the documented overrun', () => {
     const endpoint = 'minimax/h3-max-turbo/image-to-video';
     // The clip can run up to about 0.7 s longer than requested, and fal bills output seconds.
-    expect(falPublishedCost(endpoint, { resolution: '480P', durationSeconds: 1 })).toEqual({
+    expect(falPublishedCost(endpoint, { resolution: '480P', durationSeconds: 1, pricedAt: Date.parse('2026-11-01T00:00:00Z') })).toEqual({
       costUsd: expect.closeTo(1.7 * 0.025, 6),
       unit: 'second',
       quantity: 1.7,
     });
-    expect(falPublishedCost(endpoint, { resolution: '768P', durationSeconds: 5 })?.costUsd).toBeCloseTo(5.7 * 0.04, 6);
-    expect(falPublishedCost(endpoint, { resolution: '1080P', durationSeconds: 1 })?.costUsd).toBeCloseTo(1.7 * 0.08, 6);
+    expect(falPublishedCost(endpoint, { resolution: '768P', durationSeconds: 5, pricedAt: Date.parse('2026-11-01T00:00:00Z') })?.costUsd).toBeCloseTo(5.7 * 0.04, 6);
+    expect(falPublishedCost(endpoint, { resolution: '1080P', durationSeconds: 1, pricedAt: Date.parse('2026-11-01T00:00:00Z') })?.costUsd).toBeCloseTo(1.7 * 0.08, 6);
     expect(falPublishedCost(endpoint, { resolution: '720p', durationSeconds: 5 })).toBeNull();
   });
 

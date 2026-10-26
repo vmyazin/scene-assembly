@@ -37,7 +37,7 @@ describe('estimateCloudJob', () => {
     const models = describeModels(['fal', 'kie', 'runware', 'atlas', 'comet', 'piapi', 'gemini', 'cloudflare', 'pollinations']);
     for (const model of models) for (const mode of model.modes) {
       const sample = sampleRequest(model, mode);
-      const ledger = buildAccountSpendEntry({ jobId: 'x', request: sample, result: { sources: [{}] }, at: 0 });
+      const ledger = buildAccountSpendEntry({ jobId: 'x', request: sample, result: { sources: [{}] }, at: Date.now() });
       expect(estimateCloudJob(sample).costUsd, `${model.provider} ${model.modelId} ${mode.mode}`).toBe(ledger?.confidence === 'unknown' ? null : ledger?.costUsd ?? null);
     }
   });

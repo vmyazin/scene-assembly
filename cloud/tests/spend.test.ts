@@ -48,6 +48,20 @@ describe('persistent account spend',()=>{
     expect(JSON.parse(saved.entry_json)).toMatchObject({costUsd:0.04,confidence:'exact'});
   });
 
+  it('reconciles a fal sale job using its creation time and leaves the saved amount unchanged', async () => {
+    const row = job('fal-sale', 'owner', {
+      provider: 'fal', created_at: Date.parse('2026-10-26T12:00:00Z'), updated_at: Date.parse('2026-11-02T12:00:00Z'),
+      request_json: JSON.stringify({ ...request('fal'), modelId: 'h3-max-turbo', mediaType: 'video', values: { duration: 5, resolution: '768P' } }),
+      result_json: JSON.stringify({ sources: [{}] }),
+    });
+    insertJob(row);
+    expect(await reconcileSpend(env)).toBe(1);
+    const saved = db.prepare('SELECT entry_json FROM account_spend WHERE job_id=?').get(row.id) as { entry_json: string };
+    expect(JSON.parse(saved.entry_json)).toMatchObject({ costUsd: expect.closeTo(0.026 * 5.7, 8), at: row.updated_at });
+    expect(await reconcileSpend(env)).toBe(0);
+    expect(db.prepare('SELECT entry_json FROM account_spend WHERE job_id=?').get(row.id)).toEqual(saved);
+  });
+
   it('reconciles only confirmed results and skips the free local fixture',async()=>{
     insertJob(job('paid'));
     insertJob(job('ambiguous','owner',{provider:'runware',result_json:null,error_code:'submission_ambiguous'}));

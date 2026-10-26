@@ -72,6 +72,8 @@ export interface ProviderVideoInputCapability {
   field: VideoInputField;
   maxImages: number;
   clientMaxImages?: number;
+  /** Ordered opening, intermediate, and closing frames, rather than subject references. */
+  orderedKeyframes?: boolean;
   promptSyntax?: VideoPromptSyntax;
 }
 
@@ -275,6 +277,8 @@ export interface ProviderModel {
     /** Extra settings this edit accepts. Keys not listed here are refused. */
     controls?: readonly EditControl[];
   };
+  /** Conservative prompt character limit accepted by every supported language. */
+  maxPromptLength?: number;
   /** Max reference images the model accepts, when the vendor documents one. */
   maxInputImages?: number;
   /** Per-mode video input contracts, when a model has more than the legacy frame input. */
@@ -385,7 +389,7 @@ export interface VideoRequest {
   keepOriginalSound?: boolean;
   /** Fixed output preset from the catalog, not a control the caller picks. */
   outputResolution?: string;
-  /** Atlas Wan output length. `0` and omitted both mean “match the source”. */
+  /** Explicit output length. Wan uses 0 to match the source; Kling 4 requires 3–30. */
   outputDuration?: number;
   /** Measured source length. Wan sends `duration` only when the output is shorter. */
   sourceDurationSeconds?: number;

@@ -653,15 +653,15 @@ export const FAL_VIDEO_MODELS: FalModelDefinition[] = withFileCodes([
   // `image_url` for the first frame, `end_image_url` for the last. Duration is
   // 0.92–15 seconds (default 5). Resolution is 480P, 768P (default) or 1080P.
   // Prompt is required, at most 50,000 characters. prompt_expansion_mode is
-  // required: disabled, balanced (default) or quality. Regular prices, the
-  // promo having ended 2026-10-15: $0.025 / $0.04 / $0.08 per second.
+  // required: disabled, balanced (default) or quality. Current pricing and the
+  // time-limited offer live in spend/rates.ts so every cost display agrees.
   withPromptLimit(
     withFrames(
       videoModel(
         'h3-max-turbo',
         'MiniMax H3 Max Turbo',
         'MiniMax',
-        'Image to video on fal. Optional closing frame. $0.025/s at 480p, $0.04/s at 768p, $0.08/s at 1080p.',
+        'Text or image to video with an optional closing frame. Billed by output duration, which can run about 0.7 seconds longer than requested.',
         'minimax/h3-max-turbo/image-to-video',
         'minimax/h3-max-turbo/image-to-video',
         H3_MAX_TURBO_FIELDS

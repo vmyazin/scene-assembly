@@ -43,6 +43,11 @@ describe('provider catalog rates', () => {
       'openai/gpt-image-2.5-flare-developer/edit': { usd: 0.03, per: 'image' },
       // The two `-sr` upscales are deliberately absent: Atlas publishes no
       // price for them, and an absent tier must not bill at the cheapest one.
+      // Resolution-specific quotes from Atlas's public calculator, not its headline.
+      'kwaivgi/kling-v4.0/text-to-video': { per: 'second', usdByResolution: { '720p': 0.14287, '1080p': 0.21385 } },
+      'kwaivgi/kling-v4.0/image-to-video': { per: 'second', usdByResolution: { '720p': 0.14287, '1080p': 0.21385 } },
+      'kwaivgi/kling-v4.0/reference-to-video': { per: 'second', usdByResolution: { '720p': 0.14287, '1080p': 0.21385 } },
+      'kwaivgi/kling-v4.0/video-edit': undefined,
       'minimax/h3-developer/text-to-video': { usdByResolution: { '480P': 0.015, '768P': 0.015 }, per: 'second' },
       'minimax/h3-developer/image-to-video': { usdByResolution: { '480P': 0.015, '768P': 0.015 }, per: 'second' },
       'minimax/h3-developer/reference-to-video': { usdByResolution: { '480P': 0.015, '768P': 0.015 }, per: 'second' },
@@ -271,5 +276,21 @@ describe('Runware tiers reach the same resolver as Atlas', () => {
     expect(resolveCatalogRate(ltx, 4, 1, { size: '720p · 16:9' }).costUsd).toBeCloseTo(0.36, 6);
     expect(resolveCatalogRate(ltx, 4, 1, { size: '4K · 16:9' })).toMatchObject({ costUsd: null, confidence: 'unknown' });
     expect(resolveCatalogRate(seedance, 4, 1)).toMatchObject({ costUsd: null, confidence: 'unknown' });
+  });
+});
+
+
+describe('Atlas Kling 4 calculator estimates', () => {
+  it.each(['text-to-video', 'image-to-video', 'reference-to-video'])('prices %s using the quoted native tiers', (mode) => {
+    const model = findModel('atlas', `kwaivgi/kling-v4.0/${mode}`);
+    expect(resolveCatalogRate(model, 5, 1, { size: '720p' }).costUsd).toBeCloseTo(0.71435, 8);
+    expect(resolveCatalogRate(model, 10, 1, { size: '1080p' }).costUsd).toBeCloseTo(2.1385, 8);
+    expect(resolveCatalogRate(model, 5, 1, { size: '4k' }).confidence).toBe('unknown');
+    expect(resolveCatalogRate(model, 5).confidence).toBe('unknown');
+  });
+
+  it('does not treat an edit as an output-only generation price', () => {
+    expect(resolveCatalogRate(findModel('atlas', 'kwaivgi/kling-v4.0/video-edit'), 5, 1, { inputMode: 'edit', size: '720p' }))
+      .toMatchObject({ costUsd: null, confidence: 'unknown' });
   });
 });

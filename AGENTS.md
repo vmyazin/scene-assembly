@@ -16,6 +16,13 @@
 
 ## Auto-load routing
 
+- **Atlas Kling 4.0 or fal H3 promotional pricing** → first read
+  `docs/codex/specs/2026-10-26-kling4-atlas-h3-pricing.md`. Atlas's live quote
+  differs from its headline; preserve the documented pricing evidence and unknown
+  edit totals. Keyframes use `middle_images`, and an explicit empty `aspectRatios`
+  means the input fixes the shape. fal promotions resolve at call time and saved
+  job time, because a running Worker can outlive the sale.
+
 - **A selected source/reference video exceeds model duration** → first read
   `docs/codex/specs/2026-10-15-auto-trim-ref-clip.md`. Use
   `lib/media/trim-video.ts` before accepting the selection and revalidate its output,

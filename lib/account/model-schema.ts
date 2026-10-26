@@ -163,7 +163,9 @@ function aggregatorImageFields(provider: ProviderId, model: ProviderModel): Mode
 
 function aggregatorVideoFields(provider: ProviderId, model: ProviderModel): ModelField[] {
   const fields: ModelField[] = [];
-  if (!(model.aspectRatios?.length && sizeNamesAspect(model))) fields.push(aspectRatioField(provider, model));
+  // An explicit empty list means the source defines the shape. Undefined
+  // retains the legacy generic ratio choices for older catalog entries.
+  if (model.aspectRatios?.length !== 0 && !(model.aspectRatios?.length && sizeNamesAspect(model))) fields.push(aspectRatioField(provider, model));
   if (model.sizes?.length) fields.push(select('size', 'Output size', model.sizes.map(size => size.label), { default: model.sizes[0].label }));
   const duration = model.duration;
   if (duration?.type === 'options' && duration.values.length) fields.push(select('durationSeconds', 'Duration (seconds)', duration.values, { default: duration.values[0] }));

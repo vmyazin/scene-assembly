@@ -41,6 +41,7 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
   if (moderationError) return invalid(moderationError);
   if (model.kind !== r.mediaType) return invalid(`${model.label} makes ${model.kind}s, not ${r.mediaType}s. Pick a ${r.mediaType} model.`);
   if (!model.modes.includes(r.inputMode)) return invalid(`${model.label} does not offer ${describeMode(r.inputMode)}. Pick another model or input mode.`);
+  if (model.maxPromptLength !== undefined && r.prompt.length > model.maxPromptLength) return invalid(`${model.label} prompts can be up to ${model.maxPromptLength.toLocaleString('en-US')} characters.`);
   const count = r.referenceIds.length;
   const referenceVideos = r.referenceVideoIds ?? [];
   const referenceAudios = r.referenceAudioIds ?? [];

@@ -486,6 +486,13 @@
       "runtimeExecutable": "env",
       "runtimeArgs": ["ACCOUNT_WORKER_PORT=8937", "DEV_FAKE_GENERATION=1", "npm", "run", "dev", "--", "--port", "3337"],
       "port": 3337
+    },
+    {
+      "name": "Atlas Kling 4 and fal H3 promotion",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "ACCOUNT_WORKER_PORT=8931 DEV_FAKE_GENERATION=1 npm run dev -- --port 3331",
+      "cwd": "${workspaceFolder}"
     }
   ],
   "version": "0.0.1"

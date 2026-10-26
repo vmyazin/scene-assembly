@@ -1,6 +1,6 @@
 import { resolveFalVariant } from '@/lib/fal/catalog';
 import type { FalInputMode, FalMediaType } from '@/lib/fal/types';
-import { falPublishedCost, type FalPublishedCost } from '@/lib/spend/rates';
+import { falPublishedCost, falPromotionNote, type FalPublishedCost } from '@/lib/spend/rates';
 
 /**
  * What one run of a fal model costs, addressed the way a workspace holds it.
@@ -36,4 +36,13 @@ export function falRunCost(
     return null;
   }
   return falPublishedCost(endpointId, { resolution, audio, durationSeconds });
+}
+
+/** Sale copy follows the selected endpoint and expires with the shared rate. */
+export function falRunPromotion(modelId: string, mediaType: FalMediaType, inputMode: FalInputMode): string | null {
+  try {
+    return falPromotionNote(resolveFalVariant(modelId, mediaType, inputMode).endpointId);
+  } catch {
+    return null;
+  }
 }

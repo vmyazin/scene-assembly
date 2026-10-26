@@ -42,6 +42,7 @@ import { candidatesFromValues, useAutoAspect } from '@/lib/draft/aspect-match';
 import ModelListbox from '@/components/ModelListbox';
 import { FAL_VIDEO_COLUMNS, falVideoSpecs } from '@/lib/models/listbox-specs';
 import FalRunCost from '@/components/FalRunCost';
+import { falRunPromotion } from '@/lib/fal/run-cost';
 import { isVideoFile } from '@/lib/video-frame';
 import type { EngineId } from '@/lib/engines/registry';
 import VideoSourceInput, { type SourceVideo } from '@/components/VideoSourceInput';
@@ -631,7 +632,9 @@ function FalGenerationWorkspaceSession({
             {matchingModels.length === 0 ? (
               <p role="status" className="text-sm text-[var(--foreground-muted)]">No fal video models match your search.</p>
             ) : (
-              <ModelNote label={selectedModel.label}>{selectedModel.description}</ModelNote>
+              <ModelNote label={selectedModel.label}>
+                {selectedModel.description} {falRunPromotion(selectedModel.id, 'video', inputMode)}
+              </ModelNote>
             )}
           </ModelPickerCard>
 

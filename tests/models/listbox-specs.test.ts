@@ -130,7 +130,7 @@ describe('listbox spec derivation', () => {
     expect(geminiImageSpecs(gemini).map(textOf)[0]).toBe('$0.034/image');
     expect(falImageSpecs(fal).map(textOf)[0]).toBe('$0.04/image');
     // Its run is priced (above); the rate start still feeds the shared helper.
-    expect(rateStartLabel(falRateLabel(h3.variants.find((variant) => variant.inputMode === 'image')!.endpointId))).toBe('$0.025/s');
+    expect(rateStartLabel(falRateLabel(h3.variants.find((variant) => variant.inputMode === 'image')!.endpointId, Date.parse('2026-11-01T00:00:00Z')))).toBe('$0.025/s');
   });
 });
 
