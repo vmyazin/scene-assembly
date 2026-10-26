@@ -493,6 +493,13 @@
       "request": "launch",
       "command": "ACCOUNT_WORKER_PORT=8931 DEV_FAKE_GENERATION=1 npm run dev -- --port 3331",
       "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Provider ranking review",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "ACCOUNT_WORKER_PORT=8941 DEV_FAKE_GENERATION=1 npm run dev -- --port 3341",
+      "cwd": "${workspaceFolder}"
     }
   ],
   "version": "0.0.1"

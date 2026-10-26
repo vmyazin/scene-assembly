@@ -16,6 +16,8 @@
 
 ## Auto-load routing
 
+- **Provider display order or ranking** → first read `docs/codex/specs/2026-10-26-provider-ranking.md`. Rank the exposed image and video catalogs separately, because platform-wide model counts misrepresent the choices here; preserve saved selections and distinguish integration evidence from measured reliability.
+
 - **Atlas Kling 4.0 or fal H3 promotional pricing** → first read
   `docs/codex/specs/2026-10-26-kling4-atlas-h3-pricing.md`. Atlas's live quote
   differs from its headline; preserve the documented pricing evidence and unknown

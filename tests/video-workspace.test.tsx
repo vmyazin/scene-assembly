@@ -73,11 +73,11 @@ describe('VideoWorkspace provider selection', () => {
       />
     );
     expect(screen.getAllByRole('radio').map((radio) => radio.textContent?.trim())).toEqual([
+      'fal.ai',
+      'Atlas Cloud',
       'Runware',
       'Kie.ai',
-      'fal.ai',
       'Gemini',
-      'Atlas Cloud',
       'CometAPI',
       'PiAPI',
     ]);
@@ -142,14 +142,13 @@ describe('VideoWorkspace provider selection', () => {
     );
 
     const providers = screen.getByRole('radiogroup', { name: 'Generation engine' });
-    // Runware leads as the cheapest per second, then Kie and fal; Gemini is
-    // the BYOK option in the fourth slot, then the remaining aggregators.
+    // Overall video value determines display order; the saved choice stays selected.
     expect(screen.getAllByRole('radio').map((radio) => radio.textContent?.trim())).toEqual([
+      'fal.ai',
+      'Atlas Cloud',
       'Runware',
       'Kie.ai',
-      'fal.ai',
       'Gemini',
-      'Atlas Cloud',
       'CometAPI',
       'PiAPI',
     ]);
@@ -189,14 +188,14 @@ describe('VideoWorkspace provider selection', () => {
       />
     );
     const kie = screen.getByRole('radio', { name: /Kie\.ai/i });
-    const fal = screen.getByRole('radio', { name: /fal\.ai/i });
+    const gemini = screen.getByRole('radio', { name: /^Gemini$/ });
     expect(kie).toHaveAttribute('tabindex', '0');
-    expect(fal).toHaveAttribute('tabindex', '-1');
+    expect(gemini).toHaveAttribute('tabindex', '-1');
     kie.focus();
     fireEvent.keyDown(kie, { key: 'ArrowRight' });
-    expect(fal).toHaveAttribute('aria-checked', 'true');
-    expect(fal).toHaveFocus();
-    expect(useAppStore.getState().videoEngine).toBe('fal');
+    expect(gemini).toHaveAttribute('aria-checked', 'true');
+    expect(gemini).toHaveFocus();
+    expect(useAppStore.getState().videoEngine).toBe('gemini');
   });
 
   it('persists provider changes and forwards navigation callbacks to the active workspace', () => {
@@ -343,6 +342,6 @@ describe('VideoWorkspace provider selection', () => {
     );
     expect(screen.getByRole('radio', { name: /Kie\.ai/i })).toBeDisabled();
     expect(screen.queryByTestId('kie-workspace')).not.toBeInTheDocument();
-    expect(useAppStore.getState().videoEngine).toBe('runware');
+    expect(useAppStore.getState().videoEngine).toBe('fal');
   });
 });

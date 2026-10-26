@@ -13,15 +13,14 @@ interface ProviderSelectorProps {
 }
 
 export const VIDEO_PROVIDERS = [
-  // No blurbs: the model counts they carried drifted from the catalogs, and a
-  // provider's name is the whole of what this control chooses. Runware leads as
-  // the cheapest per second, then Kie and fal; Gemini is the BYOK option in
-  // the fourth slot, then the remaining aggregators in their established order.
+  // Rank the implemented video offering, not the vendor's entire catalog.
+  // See docs/codex/specs/2026-10-26-provider-ranking.md. This order also picks
+  // the first compatible engine when a direction cannot use the saved choice.
+  { id: 'fal' as const, label: 'fal.ai' },
+  { id: 'atlas' as const, label: 'Atlas Cloud' },
   { id: 'runware' as const, label: 'Runware' },
   { id: 'kie' as const, label: 'Kie.ai' },
-  { id: 'fal' as const, label: 'fal.ai' },
   { id: 'gemini' as const, label: 'Gemini' },
-  { id: 'atlas' as const, label: 'Atlas Cloud' },
   { id: 'comet' as const, label: 'CometAPI' },
   { id: 'piapi' as const, label: 'PiAPI' },
 ];
