@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 
-import { DEFAULT_GALLERY_BUDGET, selectEvictions, type GalleryBudget } from '@/lib/gallery/eviction';
+import { DEFAULT_GALLERY_BUDGET, planEvictions, type GalleryBudget } from '@/lib/gallery/eviction';
 import { createIndexedDbGalleryStorage, isIndexedDbAvailable } from '@/lib/gallery/idb-storage';
 import { createMemoryGalleryStorage } from '@/lib/gallery/memory-storage';
 import { recordBytes, type GalleryRecord, type GalleryStorage } from '@/lib/gallery/storage';
 import { convertImageBlob } from '@/lib/image/convert';
+import type { Rating } from '@/lib/results/rating';
 import { DEFAULT_QUALITY, targetFormat } from '@/lib/image/policy';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -33,6 +34,13 @@ interface GalleryState {
   keep: (id: string, blob: Blob, posterBlob?: Blob) => Promise<void>;
   /** Protects (or releases) a record that already has bytes, such as an image. */
   setPinned: (id: string, pinned: boolean) => Promise<void>;
+  /**
+   * Judges a result, or clears the judgement with `null`. Good and Great pin
+   * it, because losing a result you rated to cleanup defeats the rating. A miss
+   * releases the pin: you have said you do not want the file, only the memory.
+   * Clearing leaves the pin as it was, since it may predate the rating.
+   */
+  setRating: (id: string, rating: Rating | null) => Promise<void>;
   /** Caches probed dimensions so the timeline does not re-decode on every visit. */
   setDimensions: (
     id: string,
@@ -137,15 +145,26 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
       return null;
     }
 
-    const evicted = selectEvictions([...get().records, record], budget);
-    await Promise.all(evicted.map((stale) => galleryStorage().remove(stale.id).catch(() => {})));
+    const plan = planEvictions([...get().records, record], budget);
+    const stripped = new Map(
+      plan.strip.map((miss): [string, GalleryRecord] => [
+        miss.id,
+        { ...miss, blob: undefined, posterBlob: undefined, bytes: 0 },
+      ])
+    );
+    await Promise.all([
+      ...plan.remove.map((stale) => galleryStorage().remove(stale.id).catch(() => {})),
+      ...[...stripped.values()].map((miss) => galleryStorage().put(miss).catch(() => {})),
+    ]);
 
-    const dropped = new Set(evicted.map((stale) => stale.id));
+    const dropped = new Set(plan.remove.map((stale) => stale.id));
     set((state) => ({
-      records: [record, ...state.records].filter((existing) => !dropped.has(existing.id)),
+      records: [record, ...state.records]
+        .filter((existing) => !dropped.has(existing.id))
+        .map((existing) => stripped.get(existing.id) ?? existing),
       storageError: null,
     }));
-    return record;
+    return stripped.get(record.id) ?? record;
   },
 
   keep: async (id, blob, posterBlob) => {
@@ -184,6 +203,23 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
       await galleryStorage().put(updated);
     } catch {
       set({ storageError: 'Could not update this result.' });
+      return;
+    }
+    set((state) => ({
+      records: state.records.map((record) => (record.id === id ? updated : record)),
+    }));
+  },
+
+  setRating: async (id, rating) => {
+    const existing = get().records.find((record) => record.id === id);
+    if (!existing) return;
+
+    const pinned = rating === 'good' || rating === 'great' ? true : rating === 'down' ? false : existing.pinned;
+    const updated: GalleryRecord = { ...existing, rating: rating ?? undefined, pinned };
+    try {
+      await galleryStorage().put(updated);
+    } catch {
+      set({ storageError: 'Could not save this rating.' });
       return;
     }
     set((state) => ({

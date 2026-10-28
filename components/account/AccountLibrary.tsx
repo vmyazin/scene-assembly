@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Cloud } from 'lucide-react';
 import { accountRequest } from '@/lib/account/client';
-import { formatAccountBytes as size, useAccountLibrary } from '@/lib/account/use-library';
+import { formatAccountBytes as size, useAccountLibrary, type ModelFilter } from '@/lib/account/use-library';
+import type { RatingFilter } from '@/lib/results/rating';
+import RatingFilterBar from '@/components/RatingFilterBar';
 import { useAccountStore } from '@/store/useAccountStore';
 import { isActiveJob, isListedJob } from '@/lib/account/job-status';
 import type { CloudAssetCounts, CloudJobView } from '@/lib/account/contracts';
@@ -13,7 +15,7 @@ import CloudAssetGrid from './CloudAssetGrid';
 import { AccountSurface } from './AccountSurface';
 import type { VideoEditCapability } from '@/lib/providers/video-edit';
 
-export default function AccountLibrary({localTest=false,ownerId,mode='browse',referenceLimit,onUsedReference,onAddedToTimeline,onPickVideo,editCapability,onCounts}: {
+export default function AccountLibrary({localTest=false,ownerId,mode='browse',referenceLimit,onUsedReference,onAddedToTimeline,onPickVideo,editCapability,onCounts,onOpenStudio}: {
   localTest?:boolean;ownerId:string;mode?:'browse'|'pick-image'|'pick-clip';referenceLimit?:number;onUsedReference?:()=>void;
   onAddedToTimeline?:()=>void;
   onPickVideo?:(file:File)=>Promise<void>;
@@ -21,8 +23,13 @@ export default function AccountLibrary({localTest=false,ownerId,mode='browse',re
   editCapability?:Pick<VideoEditCapability,'mimes'|'maxBytes'>;
   /** Account-wide asset counts, for a host that labels this library from outside it. */
   onCounts?:(counts:CloudAssetCounts)=>void;
+  /** Opens the studio where "Reuse settings" selected an asset's model. */
+  onOpenStudio?:(href:string)=>void;
 }) {
-  const library=useAccountLibrary(ownerId,onPickVideo?'video':'all');
+  const [rating,setRating]=useState<RatingFilter>('all'),[model,setModel]=useState<ModelFilter|null>(null),[grouped,setGrouped]=useState(false);
+  // Pickers choose an input; narrowing them by rating would hide most of them.
+  const browsing=mode==='browse';
+  const library=useAccountLibrary(ownerId,onPickVideo?'video':'all',browsing?{rating,model}:{});
   const {jobs,assets,storage,cursor,nextCursor,loading,counts}=library;
   useEffect(()=>{if(counts)onCounts?.(counts);},[counts,onCounts]);
   const [error,setError]=useState<string|null>(null),[busy,setBusy]=useState(false);
@@ -70,7 +77,8 @@ export default function AccountLibrary({localTest=false,ownerId,mode='browse',re
         job is not something to attach. */}
     {mode==='browse'&&jobs.some(isActiveJob)&&<div className="mt-5"><CloudJobCardGrid jobs={jobs.filter(isActiveJob)} columns={2} busy={busy} onCancel={id=>void action(`jobs/${id}/cancel`)}/></div>}
     {mode==='browse'&&<div className="mt-5"><CloudJobList jobs={jobs.filter(job=>isListedJob(job)&&!isActiveJob(job))} limit={10} busy={busy} onResume={id=>void action(`jobs/${id}/resume`)} onCancel={id=>void action(`jobs/${id}/cancel`)} onDismiss={id=>{const job=jobs.find(entry=>entry.id===id);if(job)void clearJobs([job]);}} onClear={targets=>void clearJobs(targets)}/></div>}
-    <div className="mt-5">{loading?<p role="status" className="py-6 text-center text-sm text-[var(--foreground-muted)]">Loading cloud assets…</p>:<CloudAssetGrid assets={assets} ownerId={ownerId} mode={mode} referenceLimit={referenceLimit} onUsedReference={onUsedReference} onAddedToTimeline={onAddedToTimeline} onPickVideo={onPickVideo} editCapability={editCapability} onChanged={library.refresh}/>}</div>
+    {browsing&&<RatingFilterBar counts={counts?.ratings??null} rating={rating} onRating={setRating} models={counts?.models??[]} model={model} onModel={choice=>setModel(choice as ModelFilter|null)} grouped={grouped} onGrouped={setGrouped} groupNote={cursor||nextCursor?'Groups cover the 50 results on this page.':undefined}/>}
+    <div className="mt-5">{loading?<p role="status" className="py-6 text-center text-sm text-[var(--foreground-muted)]">Loading cloud assets…</p>:<CloudAssetGrid assets={assets} ownerId={ownerId} mode={mode} referenceLimit={referenceLimit} onUsedReference={onUsedReference} onAddedToTimeline={onAddedToTimeline} onPickVideo={onPickVideo} editCapability={editCapability} onChanged={library.refresh} onRated={library.replaceAsset} onOpenStudio={onOpenStudio} grouped={grouped} emptyMessage={rating!=='all'||model?'Nothing matches these filters.':undefined}/>}</div>
     {(cursor||nextCursor)&&<div className="mt-4 flex justify-between gap-2">{cursor&&<button type="button" disabled={loading} className="btn-secondary" onClick={()=>library.page(null)}>Latest assets</button>}{nextCursor&&<button type="button" disabled={loading} className="btn-secondary" onClick={()=>library.page(nextCursor)}>Older assets</button>}</div>}
     {(error||library.error)&&<div className="mt-4 flex flex-wrap items-center justify-between gap-2"><p role="alert" className="text-sm text-red-300">{error||library.error}</p>{library.error&&<button type="button" disabled={loading} className="btn-secondary" onClick={library.refresh}>Try again</button>}</div>}
   </AccountSurface>;

@@ -39,6 +39,8 @@ interface LibraryOverlayProps {
    * lint-clean way to reset the tab without a setState-in-effect.
    */
   initialTab?: 'results' | 'prompts';
+  /** Opens the studio where "Reuse settings" selected a result's model. */
+  onOpenStudio?: (href: string) => void;
 }
 
 export default function LibraryOverlay({
@@ -50,6 +52,7 @@ export default function LibraryOverlay({
   onAddedToTimeline,
   onPickVideo,
   editCapability,
+  onOpenStudio,
 }: LibraryOverlayProps) {
   const account = useAccountStore(state => state.status === 'ready' ? state.session?.account : null);
   const [source, setSource] = useState<'auto' | 'browser' | 'cloud'>('auto');
@@ -242,7 +245,7 @@ export default function LibraryOverlay({
       )}
 
       {cloud && account && (isPicker || tab === 'results') ? (
-        <AccountLibrary key={account.id} ownerId={account.id} mode={isClipPicker ? 'pick-clip' : isImagePicker ? 'pick-image' : 'browse'} referenceLimit={referenceLimit} onUsedReference={close} onAddedToTimeline={onAddedToTimeline} onPickVideo={onPickVideo} editCapability={editCapability} onCounts={onCloudCounts} />
+        <AccountLibrary key={account.id} ownerId={account.id} mode={isClipPicker ? 'pick-clip' : isImagePicker ? 'pick-image' : 'browse'} referenceLimit={referenceLimit} onUsedReference={close} onAddedToTimeline={onAddedToTimeline} onPickVideo={onPickVideo} editCapability={editCapability} onCounts={onCloudCounts} onOpenStudio={onOpenStudio} />
       ) : isPicker ? (
         <GalleryGrid
           mode={isClipPicker ? 'pick-clip' : 'pick-image'}
@@ -251,7 +254,7 @@ export default function LibraryOverlay({
           referenceLimit={referenceLimit}
         />
       ) : tab === 'results' ? (
-        <GalleryGrid onUsedReference={close} onAddedToTimeline={onAddedToTimeline} onPickVideo={onPickVideo} />
+        <GalleryGrid onUsedReference={close} onAddedToTimeline={onAddedToTimeline} onPickVideo={onPickVideo} onOpenStudio={onOpenStudio} />
       ) : (
         <PromptLibraryList onInserted={close} />
       )}

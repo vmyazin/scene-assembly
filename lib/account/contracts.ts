@@ -1,5 +1,6 @@
 import type { EditReferencePlan } from '../providers/edit-references';
 import type { ClipOrigin } from '../youtube/clip';
+import type { Rating, RatingCounts } from '../results/rating';
 // lib/account/contracts.ts
 /** Serializable contract shared by browser and Worker; never contains provider keys. */
 export type CloudProvider = 'gemini' | 'fal' | 'kie' | 'runware' | 'atlas' | 'comet' | 'piapi' | 'cloudflare' | 'pollinations' | 'local-test';
@@ -60,7 +61,12 @@ export interface CloudAssetCounts {
   /** Account-wide, never page-scoped: the pills must keep saying how much sits
    *  behind each filter while you are inside a filtered, paged view. */
   all: number; image: number; video: number; temporary: number;
+  /** Optional: a Worker that predates ratings sends neither of these. */
+  ratings?: RatingCounts;
+  /** Every model with a saved asset, most used first, for the model filter. */
+  models?: CloudModelCount[];
 }
+export interface CloudModelCount { provider: CloudProvider; modelId: string; mediaType: 'image' | 'video'; count: number }
 export interface CloudAsset {
   id: string; kind: 'image' | 'video'; mimeType: string; bytes: number; createdAt: number;
   metadata: CloudJobRequest; jobId: string | null;
@@ -72,6 +78,8 @@ export interface CloudAsset {
   expiresAt?: number;
   /** Absent for jobs started in the browser, and from Workers that predate agents. */
   startedBy?: StartedBy;
+  /** Absent when unrated, and from Workers that predate ratings. */
+  rating?: Rating;
 }
 
 /** Every temporary input must share the same ownership and retention lifecycle. */

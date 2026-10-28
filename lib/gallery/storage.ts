@@ -1,5 +1,6 @@
 // lib/gallery/storage.ts
 import type { DraftValue } from '@/lib/draft/carry-over';
+import type { Rating } from '@/lib/results/rating';
 
 export type GalleryKind = 'image' | 'video';
 
@@ -43,6 +44,13 @@ export interface GalleryRecord {
   fps?: number;
   /** Seedance preview id. Optional, so an existing library needs no migration. */
   draftId?: string;
+  /**
+   * How the person judged it. Optional, so an existing library needs no
+   * migration. Good and Great pin the record; a thumbs-down gives up its bytes
+   * first when space runs out but keeps this record, so the history of which
+   * model missed survives the cleanup.
+   */
+  rating?: Rating;
 }
 
 /**
@@ -73,4 +81,9 @@ export function hasBytes(record: GalleryRecord): boolean {
 /** Whether the user asked for this to survive; eviction must respect it. */
 export function isPinned(record: GalleryRecord): boolean {
   return record.pinned === true;
+}
+
+/** Judged a miss: its bytes are the first to go, its record is not. */
+export function isMiss(record: GalleryRecord): boolean {
+  return record.rating === 'down';
 }

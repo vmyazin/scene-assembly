@@ -8,11 +8,12 @@ import { deleteQueuedObject } from './cleanup';
 import { peekMediaType } from './media-type';
 import { acceptedResultUrl, providerBrowserUrl } from '../../lib/account/result-location';
 import { isStageableInputMime } from '../../lib/providers/input-mimes';
+import { isRating, type Rating } from '../../lib/results/rating';
 
 export const MAX_OUTPUT_BYTES = 1_000_000_000;
 export const MAX_JOB_OUTPUTS = 8;
 export const MAX_JOB_OUTPUT_BYTES = 1_000_000_000;
-export interface AssetRow { id: string; user_id: string; job_id: string | null; object_key: string; kind: 'image'|'video'; mime_type: string; bytes: number; metadata_json: string; created_at: number; deleted: number; expires_at?:number|null; agent_id?: string | null; agent_name?: string | null }
+export interface AssetRow { id: string; user_id: string; job_id: string | null; object_key: string; kind: 'image'|'video'; mime_type: string; bytes: number; metadata_json: string; created_at: number; deleted: number; expires_at?:number|null; agent_id?: string | null; agent_name?: string | null; rating?: string | null }
 export interface ResultSource { url?: string; objectKey?: string; mimeType?: string }
 export interface ProviderResult { sources: ResultSource[]; cost?: number; usage?: { promptTokens: number; outputTokens: number }; draftId?: string }
 export const isSupportedOutputMime = (mimeType:string) => /^(image\/(png|jpeg|webp|avif)|video\/(mp4|webm))$/.test(mimeType);
@@ -32,7 +33,7 @@ export function assetView(row: AssetRow): CloudAsset {
   if (draftId) delete stored.draftId;
   const origin = clipOrigin(stored.origin);
   delete stored.origin;
-  return { id:row.id, jobId:row.job_id, kind:row.kind, mimeType:row.mime_type, bytes:row.bytes, createdAt:row.created_at, metadata:stored, ...(draftId ? { draftId } : {}), ...(origin ? { origin } : {}), ...(row.expires_at?{expiresAt:row.expires_at}:{}), ...(row.agent_id?{startedBy:{agentId:row.agent_id,name:row.agent_name??null}}:{}) };
+  return { id:row.id, jobId:row.job_id, kind:row.kind, mimeType:row.mime_type, bytes:row.bytes, createdAt:row.created_at, metadata:stored, ...(draftId ? { draftId } : {}), ...(origin ? { origin } : {}), ...(row.expires_at?{expiresAt:row.expires_at}:{}), ...(row.agent_id?{startedBy:{agentId:row.agent_id,name:row.agent_name??null}}:{}), ...(isRating(row.rating)?{rating:row.rating}:{}) };
 }
 export async function getAsset(env:Env,id:string,owner:string) { return env.DB.prepare('SELECT a.*,r.expires_at FROM account_assets a LEFT JOIN account_asset_retention r ON r.asset_id=a.id WHERE a.id = ? AND a.user_id = ? AND a.deleted = 0 AND (r.expires_at IS NULL OR r.expires_at>?)').bind(id,owner,Date.now()).first<AssetRow>(); }
 /** What a saved job produced, in the order it was written. */
@@ -148,6 +149,10 @@ export async function captureResult(env:Env,job:JobRow,result:ProviderResult) {
   }
   const temporary=await env.DB.prepare('SELECT 1 FROM account_asset_retention r JOIN account_assets a ON a.id=r.asset_id WHERE a.job_id=? AND a.deleted=0 LIMIT 1').bind(job.id).first();
   if(temporary)throw new AccountError('Free space and resume saving. These results are temporarily downloadable for 24 hours.',409,'storage_full');
+}
+/** Owner-scoped, so one account can never rate another's asset. `null` clears it. */
+export async function setAssetRating(env:Env,id:string,owner:string,rating:Rating|null) {
+  await env.DB.prepare('UPDATE account_assets SET rating=? WHERE id=? AND user_id=? AND deleted=0').bind(rating,id,owner).run();
 }
 export async function deleteAsset(env:Env,id:string,owner:string) {
   await env.DB.batch([

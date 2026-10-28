@@ -625,7 +625,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
       playGenerationChime();
       // Kept whole rather than sliced here: ResultStack owns the display cap,
       // and the library holds everything regardless.
-      useImageResultsStore.getState().add({
+      const resultId = useImageResultsStore.getState().add({
         src: result.dataUrl,
         mimeType: result.mimeType,
         relaxed: relaxed.levelRef.current === 'relaxed',
@@ -638,8 +638,9 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
       });
       // Images are small enough to keep every time. The provider URL fal hands
       // back expires in a week, so the bytes are what make this durable.
-      void captureImage(result.dataUrl).then((galleryRecordId) =>
-        captureImageResult({
+      void captureImage(result.dataUrl).then((galleryRecordId) => {
+        if (galleryRecordId) useImageResultsStore.getState().linkRecord(resultId, galleryRecordId);
+        return captureImageResult({
           engine: activeEngine.id,
           modelId: activeModelId,
           prompt,
@@ -651,8 +652,8 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
           falApiKey,
           webSearch: Boolean(config.useGoogleSearch),
           thinkingLevel: falThinkingLevel,
-        })
-      );
+        });
+      });
     },
     onError: (e) => {
       if (e instanceof LocalFalCancellation) return;

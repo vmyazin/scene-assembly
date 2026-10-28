@@ -47,7 +47,7 @@ export interface StudioLocation {
 
 /** The studio form that owns this job's spinner, or `null` when no workspace
  *  can show it. */
-export function studioLocationForJob(request: CloudJobRequest): StudioLocation | null {
+export function studioLocationForJob(request: Pick<CloudJobRequest, 'provider' | 'modelId' | 'mediaType' | 'inputMode'>): StudioLocation | null {
   const { provider, modelId, mediaType, inputMode } = request;
   if (mediaType === 'video') {
     if (!VIDEO_ENGINES.includes(provider as VideoEngineId)) return null;

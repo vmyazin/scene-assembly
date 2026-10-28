@@ -58,6 +58,7 @@ import { removeReferenceAt, useMountedRef, usePromptScope, useReferenceLimit } f
 import { ModelNote, ModelPickerCard } from '@/components/ModelPickerCard';
 import { useClaimSeedFrame, useReferenceIntake } from '@/hooks/useReferenceIntake';
 import { ReferencePicker, SwapFramesButton } from '@/components/ReferencePicker';
+import { browserJobTarget } from '@/lib/results/rating';
 
 interface FalGenerationWorkspaceProps {
   inputMode: FalInputMode;
@@ -215,6 +216,7 @@ function JobCard({
             busy={isDownloading}
             onDownload={() => void download(resultUrl)}
             onContinueFromFrame={onContinueFromFrame}
+            rating={browserJobTarget('fal', job.id)}
           />
         </div>
       )}

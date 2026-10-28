@@ -18,7 +18,9 @@ import { accountRequest } from '@/lib/account/client';
 import { browserKeyCandidates } from '@/lib/account/key-import';
 import { isImportableGalleryRecord } from '@/lib/account/import';
 import { awaitingDecision, isActiveJob, needsAttention } from '@/lib/account/job-status';
-import { formatAccountBytes as size, useAccountLibrary, type LibraryKind } from '@/lib/account/use-library';
+import { formatAccountBytes as size, useAccountLibrary, type LibraryKind, type ModelFilter } from '@/lib/account/use-library';
+import type { RatingFilter } from '@/lib/results/rating';
+import RatingFilterBar from '@/components/RatingFilterBar';
 import { useAccountSpendTotals } from '@/lib/account/use-spend-totals';
 import { formatUsdTotal } from '@/lib/spend/format';
 import type { CloudJobView } from '@/lib/account/contracts';
@@ -98,6 +100,9 @@ export default function AccountConsole({
    */
   const [filter, setFilter] = useState<LibraryFilterId>(() => (readHash().jobs ? 'attention' : 'all'));
   const [highlightAssetId, setHighlightAssetId] = useState<string | null>(() => readHash().assetId);
+  const [ratingFilter, setRatingFilter] = useState<RatingFilter>('all');
+  const [modelFilter, setModelFilter] = useState<ModelFilter | null>(null);
+  const [grouped, setGrouped] = useState(false);
   useEffect(() => {
     const read = () => {
       const { jobs, assetId } = readHash();
@@ -116,6 +121,10 @@ export default function AccountConsole({
       // move back to it or the highlight would point at a panel that is not on
       // screen.
       setFilter('all');
+      // Same for rating and model: a deep link to a Great clip must not land
+      // behind a Misses filter that hides it.
+      setRatingFilter('all');
+      setModelFilter(null);
       setHighlightAssetId(assetId);
     };
     read();
@@ -129,7 +138,7 @@ export default function AccountConsole({
   // Job-state filters cannot be an asset query, so the asset request stays on
   // `all` while the canvas swaps to the job list.
   const assetFilter: LibraryKind = filter === 'active' || filter === 'attention' ? 'all' : filter;
-  const library = useAccountLibrary(ownerId, assetFilter);
+  const library = useAccountLibrary(ownerId, assetFilter, { rating: ratingFilter, model: modelFilter });
   const { jobs, assets, storage, counts, loading } = library;
   const spend = useAccountSpendTotals(ownerId);
 
@@ -343,6 +352,20 @@ export default function AccountConsole({
           onSelect={setFilter}
         />
 
+        {!showingJobs && (
+          <RatingFilterBar
+            counts={counts?.ratings ?? null}
+            rating={ratingFilter}
+            onRating={setRatingFilter}
+            models={counts?.models ?? []}
+            model={modelFilter}
+            onModel={(choice) => setModelFilter(choice as ModelFilter | null)}
+            grouped={grouped}
+            onGrouped={setGrouped}
+            groupNote={library.cursor || library.nextCursor ? 'Groups cover the 50 results on this page.' : undefined}
+          />
+        )}
+
         {localTest && (
           <button
             type="button"
@@ -416,7 +439,18 @@ export default function AccountConsole({
                a button that filed the clip somewhere unnamed. The grid fires this
                only after the placement succeeds, so a failed add stays on the
                account page with its error toast. */
-            <CloudAssetGrid assets={assets} ownerId={ownerId} columns={4} highlightAssetId={highlightAssetId} onAddedToTimeline={() => router.push('/timeline')} onChanged={library.refresh} />
+            <CloudAssetGrid
+              assets={assets}
+              ownerId={ownerId}
+              columns={4}
+              highlightAssetId={highlightAssetId}
+              onAddedToTimeline={() => router.push('/timeline')}
+              onChanged={library.refresh}
+              onRated={library.replaceAsset}
+              onOpenStudio={(href) => router.push(href)}
+              grouped={grouped}
+              emptyMessage={ratingFilter !== 'all' || modelFilter ? 'Nothing matches these filters.' : undefined}
+            />
           )}
         </div>
 

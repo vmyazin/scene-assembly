@@ -1,4 +1,4 @@
-import { isPinned, recordBytes, type GalleryRecord } from '@/lib/gallery/storage';
+import { isMiss, isPinned, recordBytes, type GalleryRecord } from '@/lib/gallery/storage';
 
 export interface GalleryBudget {
   /** Ceiling on stored bytes. Metadata-only records cost nothing against it. */
@@ -13,26 +13,50 @@ export const DEFAULT_GALLERY_BUDGET: GalleryBudget = {
   maxCount: 500,
 };
 
+export interface EvictionPlan {
+  /** Records to delete outright. */
+  remove: GalleryRecord[];
+  /**
+   * Records judged a miss whose bytes go but whose record stays. The rating,
+   * model and prompt are the part worth keeping; the file is the part a miss
+   * gave up any claim to.
+   */
+  strip: GalleryRecord[];
+}
+
 /**
- * Which records to drop to get back inside the budget, oldest first.
+ * What to drop to get back inside the budget.
  *
- * Pinned records are evicted last and only to satisfy the count ceiling — never
- * to free bytes, since pinning was a deliberate act and the provider URL has
- * probably expired by now. Auto-captured images are not pinned, so the gallery
- * can still reclaim space from them.
+ * Bytes come off misses first, newest included, and the miss stays listed as a
+ * metadata record. Then the oldest unpinned records go. Pinned records are
+ * evicted last and only to satisfy the count ceiling — never to free bytes,
+ * since pinning was a deliberate act and the provider URL has probably expired
+ * by now. Auto-captured images are not pinned, so the gallery can still reclaim
+ * space from them.
+ *
+ * Misses are spared by the count ceiling alongside pinned records: a metadata
+ * record costs nothing against the byte budget, and dropping it would erase the
+ * one thing a thumbs-down was for.
  */
-export function selectEvictions(
+export function planEvictions(
   records: GalleryRecord[],
   budget: GalleryBudget = DEFAULT_GALLERY_BUDGET
-): GalleryRecord[] {
+): EvictionPlan {
   const oldestFirst = [...records].sort((a, b) => a.createdAt - b.createdAt);
   const evicted = new Set<GalleryRecord>();
+  const stripped = new Set<GalleryRecord>();
 
   let bytes = oldestFirst.reduce((total, record) => total + recordBytes(record), 0);
   if (bytes > budget.maxBytes) {
     for (const record of oldestFirst) {
       if (bytes <= budget.maxBytes) break;
-      if (isPinned(record)) continue;
+      if (!isMiss(record) || isPinned(record) || recordBytes(record) === 0) continue;
+      stripped.add(record);
+      bytes -= recordBytes(record);
+    }
+    for (const record of oldestFirst) {
+      if (bytes <= budget.maxBytes) break;
+      if (isPinned(record) || stripped.has(record)) continue;
       evicted.add(record);
       bytes -= recordBytes(record);
     }
@@ -41,15 +65,19 @@ export function selectEvictions(
 
   let count = oldestFirst.length - evicted.size;
   if (count > budget.maxCount) {
+    const protectedRecord = (record: GalleryRecord) => isPinned(record) || isMiss(record);
     for (const pass of [false, true]) {
       for (const record of oldestFirst) {
         if (count <= budget.maxCount) break;
-        if (evicted.has(record) || isPinned(record) !== pass) continue;
+        if (evicted.has(record) || protectedRecord(record) !== pass) continue;
         evicted.add(record);
         count -= 1;
       }
     }
   }
 
-  return oldestFirst.filter((record) => evicted.has(record));
+  return {
+    remove: oldestFirst.filter((record) => evicted.has(record)),
+    strip: oldestFirst.filter((record) => stripped.has(record) && !evicted.has(record)),
+  };
 }

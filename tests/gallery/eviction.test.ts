@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { selectEvictions, type GalleryBudget } from '../../lib/gallery/eviction';
+import { planEvictions, type GalleryBudget } from '../../lib/gallery/eviction';
 import type { GalleryRecord } from '../../lib/gallery/storage';
 
 const MB = 1024 * 1024;
@@ -8,7 +8,7 @@ const MB = 1024 * 1024;
 function record(
   id: string,
   createdAt: number,
-  options: { megabytes?: number; pinned?: boolean } = {}
+  options: { megabytes?: number; pinned?: boolean; rating?: GalleryRecord['rating'] } = {}
 ): GalleryRecord {
   const megabytes = options.megabytes ?? 0;
   // Bytes and pinning are independent: an auto-captured image has bytes but is
@@ -24,13 +24,19 @@ function record(
     mimeType: 'image/png',
     blob,
     pinned: options.pinned,
+    rating: options.rating,
     bytes: megabytes * MB,
   };
 }
 
 const budget: GalleryBudget = { maxBytes: 10 * MB, maxCount: 4 };
 
-describe('selectEvictions', () => {
+/** The records a plan deletes outright, which is all the older tests ask about. */
+function selectEvictions(records: GalleryRecord[], limits: GalleryBudget) {
+  return planEvictions(records, limits).remove;
+}
+
+describe('planEvictions', () => {
   it('keeps everything that fits', () => {
     const records = [record('a', 1, { megabytes: 2, pinned: true }), record('b', 2)];
     expect(selectEvictions(records, budget)).toEqual([]);
@@ -113,5 +119,40 @@ describe('selectEvictions', () => {
     selectEvictions(records, budget);
 
     expect(records).toEqual(snapshot);
+  });
+
+  it('frees bytes from misses first, newest included, and keeps their records', () => {
+    const records = [
+      record('old-auto', 1, { megabytes: 4 }),
+      record('miss', 2, { megabytes: 6, rating: 'down' }),
+      record('new-auto', 3, { megabytes: 4 }),
+    ];
+
+    // 14 MB against 10: stripping the 6 MB miss is enough, so nothing is deleted.
+    const plan = planEvictions(records, budget);
+    expect(plan.strip.map((r) => r.id)).toEqual(['miss']);
+    expect(plan.remove).toEqual([]);
+  });
+
+  it('removes the oldest unpinned records only once misses have given up their bytes', () => {
+    const records = [
+      record('old-auto', 1, { megabytes: 6 }),
+      record('miss', 2, { megabytes: 2, rating: 'down' }),
+      record('new-auto', 3, { megabytes: 6 }),
+    ];
+
+    const plan = planEvictions(records, budget);
+    expect(plan.strip.map((r) => r.id)).toEqual(['miss']);
+    expect(plan.remove.map((r) => r.id)).toEqual(['old-auto']);
+  });
+
+  it('spares misses from the count ceiling until unrated records are gone', () => {
+    const records = [
+      record('miss', 1, { rating: 'down' }),
+      record('auto-1', 2),
+      record('auto-2', 3),
+    ];
+
+    expect(planEvictions(records, { maxBytes: 10 * MB, maxCount: 2 }).remove.map((r) => r.id)).toEqual(['auto-1']);
   });
 });

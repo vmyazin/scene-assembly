@@ -83,6 +83,19 @@
 - **Results when switching models** → first read `docs/codex/specs/2026-10-01-shared-model-results.md`. Keep the existing shared image feed; scope video results by provider and input mode, never by the selected model or most recent edit submission, because selection configures the next run and must not hide existing outputs. Read result labels and filenames from the producing job.
 - **Video direction selection** → first read `docs/codex/specs/2026-10-02-compact-video-directions.md`. Use `VideoDirectionSelector` for the larger bordered direction tiles and delayed image/details preview, and `ProviderSelector` for compact provider choices so direction carries the visual emphasis; keep capabilities and selection in `VideoWorkspace`: all directions remain visible, incompatible engines are disabled, and selecting a direction resolves a compatible engine because engine choice must never silently change the requested direction. Hover must never change a selection.
 
+- **Result ratings (👎 / Good / Great), library rating or model filters, group by prompt** →
+  `lib/results/rating.ts` holds the one vocabulary both libraries use. Browser records carry
+  `GalleryRecord.rating`; cloud assets carry `account_assets.rating` (migration 0015), set
+  through `POST /api/account/assets/:id/rating` and filtered in `listAssets` inside SQL, before
+  LIMIT, because filtering a fetched page hides older matches. Good and Great pin a browser
+  record; a miss gives up its bytes first in `planEvictions` but keeps its record, since
+  "this model missed" is the memory a thumbs-down exists for. "Reuse settings" selects the
+  model through `reuseRun` (`lib/results/reuse-run.ts`) before replaying values, because the
+  draft's controls are read against the selected model. A finished result rates the same
+  record through `ResultRating`: pass a `RatingTarget` (`browserJobTarget(provider, jobId)` for
+  jobs `recordFinishedJob` files, the captured record id for images and Gemini clips, the asset
+  id for cloud runs) to `ResultStack` items or `FinishedVideoActions`.
+
 - **Placing a clip on the timeline from outside it** (a result card, a library grid) →
   `placeClipOnTimeline` in `lib/timeline/place-clip.ts`, never `addClip` plus a bare toast.
   There is one timeline, so an add always joins the edit already there; the helper says

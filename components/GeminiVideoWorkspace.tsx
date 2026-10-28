@@ -68,6 +68,8 @@ interface GeminiClip {
   startedAt: number;
   finishedAt: number;
   costUsd: number;
+  /** The library record it was filed as, once saved; what its rating writes to. */
+  galleryRecordId?: string;
 }
 
 /** References are held as Files; the SDK wants bare base64. */
@@ -349,6 +351,10 @@ export default function GeminiVideoWorkspace({
           blob,
         });
         galleryRecordId = record?.id;
+        if (galleryRecordId) {
+          const recordId = galleryRecordId;
+          setClips((current) => current.map((entry) => (entry.id === clip.id ? { ...entry, galleryRecordId: recordId } : entry)));
+        }
       } catch {
         // Library persistence is best effort; the completed generation still costs money.
       }
@@ -535,6 +541,7 @@ export default function GeminiVideoWorkspace({
                 }
               }}
               onContinueFromFrame={onContinueFromFrame}
+              rating={clip.galleryRecordId ? { kind: 'browser', recordId: clip.galleryRecordId } : undefined}
             />
           </article>
         );

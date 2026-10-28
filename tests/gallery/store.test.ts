@@ -153,4 +153,37 @@ describe('useGalleryStore', () => {
   it('is not a persisted store: the bytes belong in IndexedDB', () => {
     expect('persist' in useGalleryStore).toBe(false);
   });
+
+  describe('ratings', () => {
+    it('pins a result rated Good or Great, so cleanup cannot take it', async () => {
+      const saved = await useGalleryStore.getState().record(draft());
+      await useGalleryStore.getState().setRating(saved!.id, 'great');
+
+      const [rated] = useGalleryStore.getState().records;
+      expect(rated).toMatchObject({ rating: 'great', pinned: true });
+      expect((await storage.get(saved!.id))?.rating).toBe('great');
+    });
+
+    it('releases the pin on a miss, and leaves it alone when a rating is cleared', async () => {
+      const saved = await useGalleryStore.getState().record(draft());
+      await useGalleryStore.getState().setRating(saved!.id, 'good');
+      await useGalleryStore.getState().setRating(saved!.id, null);
+      expect(useGalleryStore.getState().records[0]).toMatchObject({ rating: undefined, pinned: true });
+
+      await useGalleryStore.getState().setRating(saved!.id, 'down');
+      expect(useGalleryStore.getState().records[0]).toMatchObject({ rating: 'down', pinned: false });
+    });
+
+    it('drops a miss\'s bytes before anything else when space runs out, but keeps its record', async () => {
+      const miss = await useGalleryStore.getState().record(draft({ prompt: 'missed', blob: blobOf(6) }));
+      await useGalleryStore.getState().setRating(miss!.id, 'down');
+      await useGalleryStore.getState().record(draft({ prompt: 'newer', blob: blobOf(6) }));
+
+      const kept = useGalleryStore.getState().records.find((r) => r.id === miss!.id);
+      expect(kept).toMatchObject({ rating: 'down', bytes: 0, blob: undefined, prompt: 'missed' });
+      expect((await storage.get(miss!.id))?.blob).toBeUndefined();
+      expect(useGalleryStore.getState().records).toHaveLength(2);
+    });
+  });
 });
+
