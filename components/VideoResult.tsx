@@ -5,6 +5,8 @@ import { Download, Loader2, Video } from 'lucide-react';
 import JobElapsed from '@/components/JobElapsed';
 import LastFrameActions from '@/components/LastFrameActions';
 import VideoPlayer from '@/components/video/VideoPlayer';
+import ResultRating from '@/components/ResultRating';
+import type { RatingTarget } from '@/lib/results/rating';
 
 const ACCENT = {
   cyan: 'text-[var(--neon-cyan)]',
@@ -93,8 +95,9 @@ export function VideoDownloadLink({
 }
 
 /**
- * What a finished clip offers under its stage: the download, anything the
- * provider adds (a draft's Finalize), then "Continue from last frame".
+ * What a finished clip offers under its stage: its rating, the download,
+ * anything the provider adds (a draft's Finalize), then "Continue from last
+ * frame". The rating leads because it is the judgement made while watching.
  */
 export function FinishedVideoActions({
   url,
@@ -104,6 +107,7 @@ export function FinishedVideoActions({
   label = 'Download video',
   onDownload,
   onContinueFromFrame,
+  rating,
   children,
 }: {
   url: string;
@@ -113,10 +117,13 @@ export function FinishedVideoActions({
   label?: string;
   onDownload: () => void;
   onContinueFromFrame?: () => void;
+  /** Where the clip's rating is kept, once it is filed in a library. */
+  rating?: RatingTarget;
   children?: ReactNode;
 }) {
   return (
     <>
+      {rating && <ResultRating target={rating} />}
       <VideoDownloadLink href={url} filename={`${filenameBase}.${extension}`} busy={busy} label={label} onDownload={onDownload} />
       {children}
       <LastFrameActions videoUrl={url} filenameBase={filenameBase} onContinue={onContinueFromFrame} />

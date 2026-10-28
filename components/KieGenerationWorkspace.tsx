@@ -61,6 +61,7 @@ import { useClaimSeedFrame, useReferenceIntake } from '@/hooks/useReferenceIntak
 import EditReferenceTray from '@/components/EditReferenceTray';
 import { ReferencePicker } from '@/components/ReferencePicker';
 import VideoSourceInput, { type SourceVideo } from '@/components/VideoSourceInput';
+import { browserJobTarget } from '@/lib/results/rating';
 
 interface KieGenerationWorkspaceProps {
   mediaType: MediaType;
@@ -685,6 +686,7 @@ export default function KieGenerationWorkspace({
                   label={`Download ${mediaType}`}
                   onDownload={() => void downloadResult()}
                   onContinueFromFrame={onContinueFromFrame}
+                  rating={browserJobTarget('kie', latestJob.id)}
                 />
               )}
             </>

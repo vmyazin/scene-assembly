@@ -340,6 +340,10 @@ export default function StudioHeader({
           setLibraryOpen(false);
           if (pathname !== '/timeline') router.push('/timeline');
         }}
+        onOpenStudio={(href) => {
+          setLibraryOpen(false);
+          router.push(href);
+        }}
       />
     </>
   );

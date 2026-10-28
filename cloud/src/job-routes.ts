@@ -8,8 +8,9 @@ import { adapterFor, validateRequest } from './providers';
 import { enforceRelaxedConsent, recordRelaxedConsent } from './relaxed-consent';
 import { RELAXED_POLICY_VERSION } from '../../lib/moderation/level';
 import { isRecoverable, MAX_RESUME_ATTEMPTS } from './failure';
-import { assetView, deleteAsset, getAsset, type AssetRow } from './assets';
-import type { CloudJobState, CloudJobView } from '../../lib/account/contracts';
+import { assetView, deleteAsset, getAsset, setAssetRating, type AssetRow } from './assets';
+import { isRating, isRatingFilter } from '../../lib/results/rating';
+import type { CloudJobState, CloudJobView, CloudProvider } from '../../lib/account/contracts';
 
 export async function jobRoutes(request:Request,env:Env):Promise<Response|null>{
   const path=new URL(request.url).pathname;
@@ -73,11 +74,18 @@ export async function jobRoutes(request:Request,env:Env):Promise<Response|null>{
       }
       if(request.method==='POST'&&jobMatch[2]==='/resume')return json({job:jobView(await resumeJob(env,job,account.id))},202);
     }
-    if(path==='/api/account/assets'&&request.method==='GET'){const params=new URL(request.url).searchParams;return json({accountId:account.id,...await listAssets(env,account.id,{kind:params.get('kind'),cursor:params.get('cursor'),temporaryOnly:params.get('temporary')==='1'})});}
-    const assetMatch=path.match(/^\/api\/account\/assets\/([a-zA-Z0-9-]+)(\/(?:content|access))?$/);
+    if(path==='/api/account/assets'&&request.method==='GET'){const params=new URL(request.url).searchParams;return json({accountId:account.id,...await listAssets(env,account.id,{kind:params.get('kind'),cursor:params.get('cursor'),temporaryOnly:params.get('temporary')==='1',rating:params.get('rating'),provider:params.get('provider'),modelId:params.get('model')})});}
+    const assetMatch=path.match(/^\/api\/account\/assets\/([a-zA-Z0-9-]+)(\/(?:content|access|rating))?$/);
     if(assetMatch){
       const asset=await getAsset(env,assetMatch[1],account.id);if(!asset)return json({error:'Asset not found.'},404);
       if(request.method==='DELETE'&&!assetMatch[2]){await deleteAsset(env,asset.id,account.id);return json({ok:true});}
+      if(request.method==='POST'&&assetMatch[2]==='/rating'){
+        const body=await request.json().catch(()=>{throw new AccountError('Invalid request.',400,'invalid_request');}) as {rating?:unknown};
+        const rating=body?.rating===null?null:isRating(body?.rating)?body.rating:undefined;
+        if(rating===undefined)throw new AccountError('Unsupported rating.',400,'invalid_request');
+        await setAssetRating(env,asset.id,account.id,rating);
+        return json({asset:assetView({...asset,rating})});
+      }
       if(request.method==='POST'&&assetMatch[2]==='/access')return json(await mediaAccess(env,account.id,asset.id,'download'));
       if(request.method==='GET'&&assetMatch[2]==='/content'){
         const access=await mediaAccess(env,account.id,asset.id,'download');
@@ -132,15 +140,29 @@ export async function listJobs(env:Env,owner:string,options:{states:CloudJobStat
   return rows.results.map(jobView);
 }
 
-export async function listAssets(env:Env,owner:string,options:{kind:string|null;cursor:string|null;temporaryOnly:boolean},now=Date.now()){
+export async function listAssets(env:Env,owner:string,options:{kind:string|null;cursor:string|null;temporaryOnly:boolean;rating?:string|null;provider?:string|null;modelId?:string|null},now=Date.now()){
   if(options.kind!==null&&options.kind!=='image'&&options.kind!=='video')throw new AccountError('Unsupported media filter.',400,'invalid_request');
+  const rating=options.rating??'all';
+  if(!isRatingFilter(rating))throw new AccountError('Unsupported rating filter.',400,'invalid_request');
+  // A model is named by provider and id together: two providers can host the
+  // same model id, and a rating is about the run you can repeat.
+  const provider=options.provider||null, modelId=provider?options.modelId||null:null;
+  if(provider&&!modelId)throw new AccountError('A model filter needs both provider and model.',400,'invalid_request');
   const match=options.cursor?.match(/^(\d+):([a-zA-Z0-9-]+)$/);
   if(options.cursor&&!match)throw new AccountError('Invalid page cursor.',400,'invalid_request');
   const kind=options.kind;
   const before=match?Number(match[1]):Number.MAX_SAFE_INTEGER;
   const beforeId=match?match[2]:'~';
   // Joined for the "via" name only; every WHERE column keeps its a./r. prefix.
-  const rows=await env.DB.prepare('SELECT a.*,r.expires_at,j.agent_id,g.client_name AS agent_name FROM account_assets a LEFT JOIN account_asset_retention r ON r.asset_id=a.id LEFT JOIN account_jobs j ON j.id=a.job_id LEFT JOIN account_agents g ON g.id=j.agent_id WHERE a.user_id = ? AND a.deleted = 0 AND (r.expires_at IS NULL OR r.expires_at>?) AND (? IS NULL OR a.kind = ?) AND (? = 0 OR r.expires_at IS NOT NULL) AND (a.created_at < ? OR (a.created_at = ? AND a.id < ?)) ORDER BY a.created_at DESC, a.id DESC LIMIT 51').bind(owner,now,kind,kind,options.temporaryOnly?1:0,before,before,beforeId).all<AssetRow>();
+  // Rating and model narrow inside SQL, before LIMIT, for the same reason the
+  // job list's state filter does: filtering a fetched page would hide a match
+  // older than the newest fifty.
+  const rows=await env.DB.prepare(`SELECT a.*,r.expires_at,j.agent_id,g.client_name AS agent_name FROM account_assets a LEFT JOIN account_asset_retention r ON r.asset_id=a.id LEFT JOIN account_jobs j ON j.id=a.job_id LEFT JOIN account_agents g ON g.id=j.agent_id
+    WHERE a.user_id = ? AND a.deleted = 0 AND (r.expires_at IS NULL OR r.expires_at>?) AND (? IS NULL OR a.kind = ?) AND (? = 0 OR r.expires_at IS NOT NULL)
+    AND (? = 'all' OR (? = 'unrated' AND a.rating IS NULL) OR (? = 'good-up' AND a.rating IN ('good','great')) OR a.rating = ?)
+    AND (? IS NULL OR (json_extract(a.metadata_json,'$.provider') = ? AND json_extract(a.metadata_json,'$.modelId') = ?))
+    AND (a.created_at < ? OR (a.created_at = ? AND a.id < ?)) ORDER BY a.created_at DESC, a.id DESC LIMIT 51`)
+    .bind(owner,now,kind,kind,options.temporaryOnly?1:0,rating,rating,rating,rating,provider,provider,modelId,before,before,beforeId).all<AssetRow>();
   const page=rows.results.slice(0,50), last=page.at(-1);
   // Counts deliberately ignore both the cursor and the active filter. A
   // count that shrank as you paged, or that only described the current
@@ -148,10 +170,21 @@ export async function listAssets(env:Env,owner:string,options:{kind:string|null;
   const counts=await env.DB.prepare(`SELECT COUNT(*) AS all_count,
       SUM(CASE WHEN a.kind='image' THEN 1 ELSE 0 END) AS image_count,
       SUM(CASE WHEN a.kind='video' THEN 1 ELSE 0 END) AS video_count,
-      SUM(CASE WHEN r.expires_at IS NOT NULL THEN 1 ELSE 0 END) AS temporary_count
+      SUM(CASE WHEN r.expires_at IS NOT NULL THEN 1 ELSE 0 END) AS temporary_count,
+      SUM(CASE WHEN a.rating IS NULL THEN 1 ELSE 0 END) AS unrated_count,
+      SUM(CASE WHEN a.rating='down' THEN 1 ELSE 0 END) AS down_count,
+      SUM(CASE WHEN a.rating='good' THEN 1 ELSE 0 END) AS good_count,
+      SUM(CASE WHEN a.rating='great' THEN 1 ELSE 0 END) AS great_count
     FROM account_assets a LEFT JOIN account_asset_retention r ON r.asset_id=a.id
     WHERE a.user_id = ? AND a.deleted = 0 AND (r.expires_at IS NULL OR r.expires_at>?)`)
-    .bind(owner,now).first<{all_count:number;image_count:number|null;video_count:number|null;temporary_count:number|null}>();
+    .bind(owner,now).first<{all_count:number;image_count:number|null;video_count:number|null;temporary_count:number|null;unrated_count:number|null;down_count:number|null;good_count:number|null;great_count:number|null}>();
+  const models=await env.DB.prepare(`SELECT json_extract(a.metadata_json,'$.provider') AS provider, json_extract(a.metadata_json,'$.modelId') AS model_id, a.kind AS media_type, COUNT(*) AS count
+    FROM account_assets a LEFT JOIN account_asset_retention r ON r.asset_id=a.id
+    WHERE a.user_id = ? AND a.deleted = 0 AND (r.expires_at IS NULL OR r.expires_at>?) AND json_extract(a.metadata_json,'$.modelId') IS NOT NULL
+    GROUP BY provider, model_id, media_type ORDER BY count DESC, model_id LIMIT 100`)
+    .bind(owner,now).all<{provider:CloudProvider;model_id:string;media_type:'image'|'video';count:number}>();
   return {assets:page.map(assetView),nextCursor:rows.results.length>50&&last?`${last.created_at}:${last.id}`:null,
-    counts:{all:counts?.all_count??0,image:counts?.image_count??0,video:counts?.video_count??0,temporary:counts?.temporary_count??0}};
+    counts:{all:counts?.all_count??0,image:counts?.image_count??0,video:counts?.video_count??0,temporary:counts?.temporary_count??0,
+      ratings:{unrated:counts?.unrated_count??0,down:counts?.down_count??0,good:counts?.good_count??0,great:counts?.great_count??0},
+      models:models.results.map(row=>({provider:row.provider,modelId:row.model_id,mediaType:row.media_type,count:row.count}))}};
 }

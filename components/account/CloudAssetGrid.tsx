@@ -18,14 +18,17 @@ import { formatAccountBytes } from '@/lib/account/use-library';
 import { formatClock, watchUrl } from '@/lib/youtube/clip';
 import { saveCloudVideoToGallery } from '@/lib/timeline/import-cloud';
 import { useAccountStore } from '@/store/useAccountStore';
-import { useDraftStore } from '@/store/useDraftStore';
 import { placeClipOnTimeline } from '@/lib/timeline/place-clip';
 import VideoPlayer from '@/components/video/VideoPlayer';
 import { libraryGridClass } from './library-grid';
 import CloudAssetMenu from './CloudAssetMenu';
 import TemporaryAssetNotice from './TemporaryAssetNotice';
+import RatingControl from '@/components/RatingControl';
+import { rateAccountAsset } from '@/lib/account/use-library';
+import { groupByPrompt, type Rating } from '@/lib/results/rating';
+import { resultModelLabel, reuseRun } from '@/lib/results/reuse-run';
 
-export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLimit=8,columns=2,highlightAssetId,onUsedReference,onAddedToTimeline,onPickVideo,editCapability,onChanged}: {
+export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLimit=8,columns=2,highlightAssetId,onUsedReference,onAddedToTimeline,onPickVideo,editCapability,onChanged,onRated,onOpenStudio,grouped=false,emptyMessage}: {
   assets:CloudAsset[];ownerId:string;mode?:'browse'|'pick-image'|'pick-clip';referenceLimit?:number;
   /** Widest column count at desktop. The overlay stays at two because it sits
    *  in a narrow sheet; the account console goes to four. */
@@ -44,6 +47,14 @@ export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLi
   /** The edit model currently chosen. Absent on the timeline, which keeps the 100 MB application cap. */
   editCapability?:Pick<VideoEditCapability,'mimes'|'maxBytes'>;
   onChanged:()=>void;
+  /** The asset as the Worker saved it after a rating, so the card updates before the next poll. */
+  onRated?:(asset:CloudAsset)=>void;
+  /** Opens the studio where "Reuse settings" selected the asset's model. */
+  onOpenStudio?:(href:string)=>void;
+  /** Lines up the runs of one prompt under a heading. Groups only what this page holds. */
+  grouped?:boolean;
+  /** Replaces the empty-library line when a filter, not an empty account, left nothing. */
+  emptyMessage?:string;
 }) {
   const [busy,setBusy]=useState<string|null>(null);
   // Which control started the running action, so the spinner lands on it: an
@@ -96,16 +107,23 @@ export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLi
   function addToTimeline(asset:CloudAsset){return run(asset,async()=>{const recordId=await saveCloudVideoToGallery(asset,ownerId);assertOwner();await placeClipOnTimeline(recordId);onAddedToTimeline?.();});}
   function reuseSettings(asset:CloudAsset){
     if(useAccountStore.getState().session?.account?.id!==ownerId)return;
-    const draft=useDraftStore.getState();draft.setPrompt(asset.metadata.prompt);draft.rememberControlValues(asset.metadata.values);
-    toast.success('Prompt and settings loaded');onUsedReference?.();
+    const href=reuseRun({provider:asset.metadata.provider,modelId:asset.metadata.modelId,mediaType:asset.kind,inputMode:asset.metadata.inputMode,prompt:asset.metadata.prompt,values:asset.metadata.values});
+    toast.success(href?'Model, prompt and settings loaded':'Prompt and settings loaded');
+    if(href&&onOpenStudio)onOpenStudio(href);else onUsedReference?.();
+  }
+  /** Not routed through `run`: a rating is a small write that should not lock
+   *  every other card's buttons while it lands. */
+  const [rating,setRating]=useState<string|null>(null);
+  async function rate(asset:CloudAsset,value:Rating|null){
+    setRating(asset.id);
+    try{assertOwner();const saved=await rateAccountAsset(asset.id,value,ownerId);assertOwner();onRated?.(saved);}
+    catch(error){toast.error(error instanceof Error&&error.message?error.message:'Could not save this rating.');}
+    finally{if(mounted.current)setRating(null);}
   }
   async function remove(asset:CloudAsset){
     await run(asset,async()=>{await accountRequest(`assets/${asset.id}`,{method:'DELETE',headers:{'X-Account-Id':ownerId}});assertOwner();if(mounted.current)setRemoving(null);onChanged();});
   }
-  return <>
-    <TemporaryAssetNotice assets={visible}/>
-    {visible.length===0?<p className="py-6 text-center text-sm text-[var(--foreground-muted)]">{mode==='pick-image'?'No cloud images on this page.':mode==='pick-clip'?'No cloud clips on this page.':'Your saved cloud assets will appear here.'}</p>:
-      <ul className={libraryGridClass(columns)}>{visible.map(asset=>{const singled=highlightAssetId===asset.id;return <li key={asset.id} {...(highlightAssetId!==undefined?{id:`asset-${asset.id}`}:{})} {...(singled?{'aria-current':'true' as const}:{})} className={`scroll-mt-24 rounded-xl border bg-[var(--background-elevated)]/80 transition-colors motion-reduce:transition-none ${singled?'border-[var(--neon-cyan)] ring-2 ring-[var(--neon-cyan)]/70 ring-offset-2 ring-offset-[var(--background-elevated)]':'border-cyan-300/25 hover:border-cyan-300/50'} ${dense?'space-y-2.5 p-2.5':'space-y-3 p-3'}`}>
+  const card=(asset:CloudAsset)=>{const singled=highlightAssetId===asset.id;const modelLabel=resultModelLabel({provider:asset.metadata.provider,modelId:asset.metadata.modelId,mediaType:asset.kind});return <li key={asset.id} {...(highlightAssetId!==undefined?{id:`asset-${asset.id}`}:{})} {...(singled?{'aria-current':'true' as const}:{})} className={`scroll-mt-24 rounded-xl border bg-[var(--background-elevated)]/80 transition-colors motion-reduce:transition-none ${singled?'border-[var(--neon-cyan)] ring-2 ring-[var(--neon-cyan)]/70 ring-offset-2 ring-offset-[var(--background-elevated)]':'border-cyan-300/25 hover:border-cyan-300/50'} ${dense?'space-y-2.5 p-2.5':'space-y-3 p-3'}`}>
         <div className="flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-black/40">
           {asset.kind==='image'?
             // Private same-origin authorization redirects to an expiring Worker capability.
@@ -118,7 +136,8 @@ export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLi
               <img loading="lazy" src={`/api/account/assets/${asset.id}/content`} alt={asset.metadata.prompt||'Saved cloud image'} className="h-full w-full object-contain"/>:
             <VideoPlayer crossOrigin reveal="always" src={`/api/account/assets/${asset.id}/content`} label={asset.metadata.prompt||'Saved cloud video'} className="h-full w-full"/>}
         </div>
-        <div><p className={`line-clamp-2 font-medium text-[var(--foreground)] ${dense?'text-[0.8125rem] leading-snug':'text-sm'}`}>{asset.metadata.prompt||'Untitled result'}</p><p className={`mt-1 text-cyan-200 ${dense?'text-[0.625rem]':'text-xs'}`}>{asset.origin?<a href={watchUrl(asset.origin)} target="_blank" rel="noreferrer noopener" className="underline-offset-2 hover:underline">From YouTube · {formatClock(asset.origin.startSeconds)}–{formatClock(asset.origin.endSeconds)}</a>:asset.metadata.provider} · {asset.kind} · {formatAccountBytes(asset.bytes)}{asset.metadata.values.moderation === 'relaxed' ? ' · Relaxed' : ''}{asset.expiresAt?' · Temporary':''}{asset.startedBy?` · via ${asset.startedBy.name??'an agent'}`:''}</p></div>
+        <div><p className={`line-clamp-2 font-medium text-[var(--foreground)] ${dense?'text-[0.8125rem] leading-snug':'text-sm'}`}>{asset.metadata.prompt||'Untitled result'}</p><p className={`mt-1 text-cyan-200 ${dense?'text-[0.625rem]':'text-xs'}`}>{asset.origin?<a href={watchUrl(asset.origin)} target="_blank" rel="noreferrer noopener" className="underline-offset-2 hover:underline">From YouTube · {formatClock(asset.origin.startSeconds)}–{formatClock(asset.origin.endSeconds)}</a>:<>{modelLabel&&<span className="font-medium">{modelLabel} · </span>}{asset.metadata.provider}</>} · {asset.kind} · {formatAccountBytes(asset.bytes)}{asset.metadata.values.moderation === 'relaxed' ? ' · Relaxed' : ''}{asset.expiresAt?' · Temporary':''}{asset.startedBy?` · via ${asset.startedBy.name??'an agent'}`:''}</p></div>
+        {mode==='browse'&&<RatingControl value={asset.rating} disabled={rating===asset.id} onChange={value=>void rate(asset,value)}/>}
         <div className={`flex ${dense?'gap-1.5':'gap-2'}`}>
           {/* One action on the face of the card; the rest wait in the ⋯ menu.
               Shortened on the face in the dense grid, spelled out for assistive
@@ -148,7 +167,15 @@ export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLi
           await submitSeedanceFinalize({prompt:asset.metadata.prompt,inputMode:asset.metadata.inputMode,modelId:asset.metadata.modelId,draftId:asset.draftId,durationSeconds:seconds});
           toast.success('Finalize started. It saves to your account.');
         }}/>}
-      </li>;})}</ul>}
+      </li>;};
+  return <>
+    <TemporaryAssetNotice assets={visible}/>
+    {visible.length===0?<p className="py-6 text-center text-sm text-[var(--foreground-muted)]">{mode==='pick-image'?'No cloud images on this page.':mode==='pick-clip'?'No cloud clips on this page.':emptyMessage??'Your saved cloud assets will appear here.'}</p>:
+      grouped&&mode==='browse'?<div className="space-y-6">{groupByPrompt(visible,asset=>asset.metadata.prompt).map(group=><section key={group.key} aria-label={`Prompt: ${group.prompt||'Untitled'}`}>
+        <h3 className="mb-2 line-clamp-2 text-sm font-medium text-[var(--foreground)]" title={group.prompt}>{group.prompt||'Untitled result'}<span className="ml-2 text-xs font-normal text-[var(--foreground-subtle)]">{group.items.length} {group.items.length===1?'run':'runs'}</span></h3>
+        <ul className={libraryGridClass(columns)}>{group.items.map(card)}</ul>
+      </section>)}</div>:
+      <ul className={libraryGridClass(columns)}>{visible.map(card)}</ul>}
     <ImageLightbox
       src={preview?`/api/account/assets/${preview.id}/content`:null}
       open={Boolean(preview)}

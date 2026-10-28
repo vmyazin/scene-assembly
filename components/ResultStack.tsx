@@ -7,6 +7,8 @@ import { Download, Loader2, Maximize2 } from 'lucide-react';
 import ImageLightbox from '@/components/ImageLightbox';
 import ResultActions from '@/components/ResultActions';
 import ResultMeta from '@/components/ResultMeta';
+import ResultRating from '@/components/ResultRating';
+import type { RatingTarget } from '@/lib/results/rating';
 
 /**
  * Generated images, newest on top, instead of one that each job overwrites.
@@ -49,6 +51,8 @@ export interface ResultStackItem {
   slug?: string;
   /** Set when this result was generated with Relaxed filter. */
   relaxed?: boolean;
+  /** Where its rating is kept, once the result is filed in a library. */
+  rating?: RatingTarget;
 }
 
 interface ResultStackProps {
@@ -263,6 +267,7 @@ export default function ResultStack({
                   picture it describes instead of floating under the buttons.
                   Below the threshold the column is not stretched and it simply
                   follows them. */}
+              {item.rating && <ResultRating target={item.rating} />}
               <ResultMeta
                 provider={item.provider}
                 modelId={item.modelId}

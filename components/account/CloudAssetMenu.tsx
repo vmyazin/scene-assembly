@@ -73,7 +73,7 @@ export default function CloudAssetMenu({
     onReuseSettings !== undefined && {
       id: 'reuse',
       label: 'Reuse settings',
-      description: 'Load this prompt and its settings into the draft',
+      description: 'Select this model and load its prompt and settings',
       icon: Wand2,
       onSelect: onReuseSettings,
     },

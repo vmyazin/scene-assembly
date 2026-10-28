@@ -482,6 +482,12 @@
       "port": 3335
     },
     {
+      "name": "Library ratings smoke test",
+      "runtimeExecutable": "env",
+      "runtimeArgs": ["ACCOUNT_WORKER_PORT=8939", "DEV_FAKE_GENERATION=1", "npm", "run", "dev", "--", "--port", "3339"],
+      "port": 3339
+    },
+    {
       "name": "Card action menu smoke test",
       "runtimeExecutable": "env",
       "runtimeArgs": ["ACCOUNT_WORKER_PORT=8937", "DEV_FAKE_GENERATION=1", "npm", "run", "dev", "--", "--port", "3337"],

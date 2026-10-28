@@ -69,6 +69,7 @@ import { ModelNote, ModelPickerCard } from '@/components/ModelPickerCard';
 import { FinishedVideoActions, VideoResultStage } from '@/components/VideoResult';
 import { useClaimSeedFrame, useReferenceIntake } from '@/hooks/useReferenceIntake';
 import { ReferencePicker, SwapFramesButton } from '@/components/ReferencePicker';
+import { browserJobTarget } from '@/lib/results/rating';
 
 /**
  * Video for Runware, Atlas Cloud, and CometAPI, laid out the way the Kie and
@@ -1105,6 +1106,7 @@ export default function ProviderVideoWorkspace({
               busy={isDownloading}
               onDownload={() => void downloadResult()}
               onContinueFromFrame={onContinueFromFrame}
+              rating={browserJobTarget(provider, latestJob.id)}
             >
             {latestJob.draftId && (
               <FinalizeDraftButton

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { ResultStackItem } from '@/components/ResultStack';
 import { useImageResultsStore } from '@/store/useImageResultsStore';
 import { useKieJobsStore } from '@/store/useKieJobsStore';
+import { browserJobTarget } from '@/lib/results/rating';
 
 /**
  * Every image finished in this tab, from any engine and any model, newest first.
@@ -34,6 +35,8 @@ export function useImageResultFeed(): ResultStackItem[] {
               // per task — only a credit balance — so the footer omits it.
               startedAt: job.createdAt,
               finishedAt: job.updatedAt,
+              // Filed by `KieJobsProvider` under the same job id.
+              rating: browserJobTarget('kie', job.id),
             },
           ]
         : []
