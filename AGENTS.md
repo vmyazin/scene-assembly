@@ -292,7 +292,10 @@
   2. `pnpm --dir cloud exec wrangler d1 migrations apply scene-assembly-accounts --remote` —
      confirm the prompt. "Not authenticated" means `pnpm --dir cloud exec wrangler login`;
      "More than one account available" means prefixing
-     `CLOUDFLARE_ACCOUNT_ID=7f64edc36bdefec27b66e6ff9b2dcc3d` (Rapid Systems).
+     `CLOUDFLARE_ACCOUNT_ID=7f64edc36bdefec27b66e6ff9b2dcc3d` (Rapid Systems). Wrangler
+     4.151 prints "Executing on preview database" even with `--remote`; the id it shows,
+     `a5146fdd…`, is production. Confirm with step 1, which should now say "No migrations
+     to apply!".
   3. Re-run the failed deploy:
      `gh run rerun <run-id> --failed --repo vmyazin/scene-assembly` (find the id with
      `gh run list --workflow deploy-account-worker.yml -L 3`; prefix
