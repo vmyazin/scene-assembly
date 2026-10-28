@@ -277,6 +277,31 @@
   correct on localhost. Compare `npx wrangler deployments list` in `cloud/` with
   `git log -S<field>` before reading the component. See `docs/deployment.md`.
 
+- **A merged PR adds a file under `cloud/migrations/`, or the "Deploy account Worker" run
+  failed at "Check for unapplied D1 migrations"** → the production database needs the
+  migration, and a person applies it. The workflow only reports a pending migration and
+  never applies one, because a schema change is the one deploy step a redeploy cannot
+  undo; until it is applied the Worker stays on its old version while Vercel already
+  serves the new browser, so the new feature's requests fail in production (PR #24's
+  ratings sat in that state on 2026-10-28). Agents tell the person and ask before running
+  step 2. From the repository root:
+  1. `pnpm --dir cloud exec wrangler d1 migrations list scene-assembly-accounts --remote` —
+     names what is pending. Read each file first: if it drops or rewrites a column, stop
+     and plan the order with the person, since only an additive change (a new nullable
+     column, a new table) is safe to apply before the Worker that reads it.
+  2. `pnpm --dir cloud exec wrangler d1 migrations apply scene-assembly-accounts --remote` —
+     confirm the prompt. "Not authenticated" means `pnpm --dir cloud exec wrangler login`;
+     "More than one account available" means prefixing
+     `CLOUDFLARE_ACCOUNT_ID=7f64edc36bdefec27b66e6ff9b2dcc3d` (Rapid Systems).
+  3. Re-run the failed deploy:
+     `gh run rerun <run-id> --failed --repo vmyazin/scene-assembly` (find the id with
+     `gh run list --workflow deploy-account-worker.yml -L 3`; prefix
+     `GH_TOKEN=$(gh auth token --user vmyazin)`, because the active gh account cannot
+     write here). Then confirm the run reaches its `/health` check.
+  Migration first, Worker second, always: the Worker queries the current schema on its
+  first request. The full runbook is "Deploying the account Worker" in
+  `docs/deployment.md`.
+
 - **"Background generation is not available for this provider"** → that message is
   configuration, not a missing adapter. `CLOUD_GENERATION_PROVIDERS` in
   `cloud/wrangler.jsonc` is the only gate; `enabledProviders` filters it against
