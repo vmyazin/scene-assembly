@@ -23,3 +23,9 @@ The user requested separate parent containers for the two grids, with faint on-b
 Mode thumbnail follow-up: use responsive 16:9 artwork frames for both Image and Video, replacing the fixed 75px crop.
 
 Recent creations thumbnail follow-up: use the same responsive 16:9 frames for both images and videos, replacing the fixed 58px strip.
+
+## Follow-up decision — dedicated Image destination
+The Image navigation opens `/?workspace=image`, a dedicated six-mode image picker using FeatureSelector. The wordmark opens `/`, the balanced home launcher. Leaving an image tool returns to the image picker, including when the tool was opened from a direct link. Header links from the timeline use the same explicit image destination.
+
+## Follow-up decision — hero styling and motion
+Restore the prior “Create stunning images with AI power” hero on the dedicated Image picker, including its centered gradient treatment and provider badges. Home keeps the approved “Make images. Create motion.” copy with matching centered typography. Its full headline uses layered brand-color gradients drifting over 24 seconds, reversing smoothly; reduced-motion preferences disable the animation.

@@ -7,6 +7,9 @@ import { useRouter } from 'next/navigation';
 import { useQueryState } from 'nuqs';
 import { motion, AnimatePresence } from 'framer-motion';
 import StudioLauncher from '@/components/StudioLauncher';
+import FeatureSelector from '@/components/FeatureSelector';
+import ProviderLogo from '@/components/ProviderLogo';
+import { brand } from '@/lib/brand';
 import StudioHeader from '@/components/StudioHeader';
 import VideoWorkspace from '@/components/VideoWorkspace';
 import { Feature, FEATURES } from '@/types';
@@ -55,7 +58,11 @@ export default function Studio() {
   const selectedFeature: Feature | null =
     FEATURES.find((f) => f.id === featureId) ?? null;
   const selectFeature = (feature: Feature) => setFeatureId(feature.id);
-  const clearFeature = () => setFeatureId(null);
+  const clearFeature = () => {
+    void setFeatureId(null);
+    void setWorkspace('image');
+  };
+  const isHome = activeWorkspace === 'image' && !selectedFeature && workspace !== 'image';
   // The timeline used to widen this column to the account console's 110rem,
   // because a horizontal track beside the export panel is the widest thing in
   // the app. It runs on /timeline now with a shell of its own, so the studio is
@@ -64,7 +71,8 @@ export default function Studio() {
 
   const selectWorkspace = (nextWorkspace: 'image' | 'video') => {
     if (nextWorkspace === 'image') {
-      void setWorkspace(null);
+      void setFeatureId(null);
+      void setWorkspace('image');
       return;
     }
     void setFeatureId(null);
@@ -108,7 +116,7 @@ export default function Studio() {
   return (
     <>
       <StudioHeader
-        active={activeWorkspace === 'image' && !selectedFeature ? 'home' : activeWorkspace}
+        active={isHome ? 'home' : activeWorkspace}
         onSelectWorkspace={selectWorkspace}
         columnWidth={columnWidth}
       />
@@ -133,18 +141,55 @@ export default function Studio() {
             </motion.div>
           ) : !selectedFeature ? (
             <motion.div
-              key="picker"
+              key={isHome ? 'home' : 'image-picker'}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.18 }}
               className="w-full"
             >
-              <StudioLauncher onSelectImage={selectFeature} onSelectVideo={(mode) => {
+              {!isHome ? <section className="space-y-6" aria-labelledby="image-workspace-title">
+              <div className="text-center space-y-2 sm:space-y-2.5 py-0 sm:py-1">
+                <h2 id="image-workspace-title"
+                  className="display text-2xl sm:text-3xl md:text-4xl font-semibold px-4 text-balance"
+                >
+                  <span className="gradient-text">Create stunning images</span>{' '}
+                  <span className="text-[var(--foreground)]">with AI power</span>
+                </h2>
+
+                {/* Blurb and engines share one row on desktop, stack on mobile. */}
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.12 }}
+                  className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-x-3 gap-y-2 px-4"
+                >
+                  <p className="text-[0.8125rem] sm:text-sm text-[var(--foreground-muted)] max-w-xl leading-relaxed">
+                    {brand.heroBlurb}
+                  </p>
+
+                  <div className="flex flex-wrap items-center justify-center gap-1.5">
+                    <span className="pill">
+                      <ProviderLogo provider="gemini" size={13} className="text-emerald-400" />
+                      Gemini
+                    </span>
+                    <span className="pill">
+                      <ProviderLogo provider="pollinations" size={13} className="text-[var(--neon-purple)]" />
+                      Pollinations
+                    </span>
+                    <span className="pill">
+                      <ProviderLogo provider="cloudflare" size={13} className="text-[var(--brand-accent)]" />
+                      Cloudflare
+                    </span>
+                  </div>
+                </motion.div>
+              </div>
+                <FeatureSelector selectedFeature={null} onFeatureSelect={selectFeature} />
+              </section> : <StudioLauncher onSelectImage={selectFeature} onSelectVideo={(mode) => {
                 void setFeatureId(null);
                 void setWorkspace('video');
                 void setVideoMode(mode === 'text' ? null : mode);
-              }} />
+              }} />}
             </motion.div>
           ) : (
             <motion.div

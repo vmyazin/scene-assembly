@@ -283,6 +283,21 @@ body::after {
   }
 
 
+  /* Oversized color pools drift independently inside the headline's ink. */
+  .home-hero-lava {
+    background-image:
+      radial-gradient(ellipse at center, var(--neon-cyan) 0%, transparent 65%),
+      radial-gradient(ellipse at center, var(--neon-pink, #ff00c8) 0%, transparent 65%),
+      linear-gradient(120deg, var(--neon-purple), var(--neon-cyan));
+    background-size: 170% 260%, 180% 240%, 200% 200%;
+    background-position: 0% 20%, 100% 80%, 50% 50%;
+    animation: home-hero-lava 24s ease-in-out infinite alternate;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .home-hero-lava { animation: none; }
+  }
+
   /* Eyebrow / micro-label — the Linear/Vercel uppercase mono tag */
   .eyebrow {
     font-family: var(--font-geist-mono), monospace;
@@ -1213,4 +1228,10 @@ body::after {
 }
 .doc-prose td {
   color: var(--foreground-muted);
+}
+
+@keyframes home-hero-lava {
+  0% { background-position: 0% 20%, 100% 80%, 50% 50%; }
+  50% { background-position: 70% 85%, 20% 15%, 80% 20%; }
+  100% { background-position: 100% 30%, 0% 70%, 10% 90%; }
 }

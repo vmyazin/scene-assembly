@@ -43,9 +43,11 @@ export default function StudioLauncher({ onSelectImage, onSelectVideo }: {
   onSelectImage: (feature: Feature) => void; onSelectVideo: (mode: ProviderMode) => void;
 }) {
   return <div className="space-y-6" data-testid="studio-launcher">
-    <div>
-      <h2 className="display text-2xl font-semibold">Make images. Create motion.</h2>
-      <p className="mt-2 text-sm text-[var(--foreground-muted)]">Generate, edit, and combine images and video with the right AI model for the job.</p>
+    <div className="space-y-2 py-0 text-center sm:space-y-2.5 sm:py-1">
+      <h2 className="display px-4 text-2xl font-semibold text-balance sm:text-3xl md:text-4xl">
+        <span className="gradient-text home-hero-lava">Make images. Create motion.</span>
+      </h2>
+      <p className="mx-auto max-w-3xl px-4 text-[0.8125rem] leading-relaxed text-[var(--foreground-muted)] sm:text-sm">Generate, edit, and combine images and video with the right AI model for the job.</p>
     </div>
     {/* Both families keep the same columns, thumbnail sizes and label scale.
         They stack together on phones rather than shrinking eleven actions. */}

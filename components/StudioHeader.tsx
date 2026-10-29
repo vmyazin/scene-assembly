@@ -210,7 +210,7 @@ export default function StudioHeader({
                   Image
                 </button>
               ) : (
-                <Link href="/" className={`${pill} ${idle}`}>
+                <Link href="/?workspace=image" className={`${pill} ${idle}`}>
                   Image
                 </Link>
               )}
