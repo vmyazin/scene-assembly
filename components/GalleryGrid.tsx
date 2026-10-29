@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import RecentCreationGrid from '@/components/RecentCreationGrid';
 import { Download, Film, ImageDown, Loader2, Pin, PinOff, Trash2, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -33,6 +34,8 @@ import { useObjectUrls } from '@/lib/media/use-object-url';
 const REFERENCE_LIMIT = 8;
 
 interface GalleryGridProps {
+  /** Read-only home previews; full actions remain in the library overlay. */
+  recent?: boolean;
   mode?: 'browse' | 'pick-image' | 'pick-clip';
   onUsedReference?: () => void;
   /** Fired after a stored clip lands on the timeline, so the host can close. */
@@ -101,6 +104,7 @@ function modelOptions(records: GalleryRecord[]): ModelOption[] {
 
 export default function GalleryGrid({
   mode = 'browse',
+  recent = false,
   onUsedReference,
   onAddedToTimeline,
   onPickVideo,
@@ -123,8 +127,8 @@ export default function GalleryGrid({
       // outlived their files by the time anyone goes looking for them.
       : mode === 'pick-clip'
         ? records.filter((record) => record.kind === 'video' && Boolean(record.blob))
-        : records,
-    [mode, records]
+        : recent ? records.slice(0, 4) : records,
+    [mode, records, recent]
   );
   // Rating and model narrow the browse library only; a picker is choosing an
   // input, and hiding unrated inputs there would hide most of them.
@@ -149,6 +153,12 @@ export default function GalleryGrid({
    * is the moment the user actually learns the file is gone.
    */
   const [expiredIds, setExpiredIds] = useState<Set<string>>(new Set());
+
+  if (recent) return <RecentCreationGrid items={visibleRecords.map(record => ({
+    id: record.id, title: titleOf(record), provider: record.provider, kind: record.kind,
+    url: previews.get(record.id)?.url ?? record.sourceUrl,
+    isVideo: previews.get(record.id)?.isVideo ?? record.kind === 'video',
+  }))} />;
 
   if (visibleRecords.length === 0) {
     return (

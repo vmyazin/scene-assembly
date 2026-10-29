@@ -6,9 +6,7 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useQueryState } from 'nuqs';
 import { motion, AnimatePresence } from 'framer-motion';
-import FeatureSelector from '@/components/FeatureSelector';
-import ProviderLogo from '@/components/ProviderLogo';
-import { brand } from '@/lib/brand';
+import StudioLauncher from '@/components/StudioLauncher';
 import StudioHeader from '@/components/StudioHeader';
 import VideoWorkspace from '@/components/VideoWorkspace';
 import { Feature, FEATURES } from '@/types';
@@ -110,7 +108,7 @@ export default function Studio() {
   return (
     <>
       <StudioHeader
-        active={activeWorkspace}
+        active={activeWorkspace === 'image' && !selectedFeature ? 'home' : activeWorkspace}
         onSelectWorkspace={selectWorkspace}
         columnWidth={columnWidth}
       />
@@ -142,63 +140,11 @@ export default function Studio() {
               transition={{ duration: 0.18 }}
               className="w-full"
             >
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="w-full space-y-5 sm:space-y-6"
-            >
-              {/* Hero — compact: one headline line, then a single meta row.
-                  The eyebrow pill is gone on purpose; it repeated the tagline
-                  already sitting next to the product name in the nav. */}
-              <div className="text-center space-y-2 sm:space-y-2.5 py-0 sm:py-1">
-                {/* A display line rather than a heading: it labels no section
-                    and vanishes the moment a mode is picked, and the page's one
-                    `<h1>` belongs to the crawlable intro below, which is the
-                    part that survives into the HTML a search engine reads. */}
-                <motion.p
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.05 }}
-                  className="display text-2xl sm:text-3xl md:text-4xl font-semibold px-4 text-balance"
-                >
-                  <span className="gradient-text">Create stunning images</span>{' '}
-                  <span className="text-[var(--foreground)]">with AI power</span>
-                </motion.p>
-
-                {/* Blurb and engines share one row on desktop, stack on mobile. */}
-                <motion.div
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.12 }}
-                  className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-x-3 gap-y-2 px-4"
-                >
-                  <p className="text-[0.8125rem] sm:text-sm text-[var(--foreground-muted)] max-w-xl leading-relaxed">
-                    {brand.heroBlurb}
-                  </p>
-
-                  <div className="flex flex-wrap items-center justify-center gap-1.5">
-                    <span className="pill">
-                      <ProviderLogo provider="gemini" size={13} className="text-emerald-400" />
-                      Gemini
-                    </span>
-                    <span className="pill">
-                      <ProviderLogo provider="pollinations" size={13} className="text-[var(--neon-purple)]" />
-                      Pollinations
-                    </span>
-                    <span className="pill">
-                      <ProviderLogo provider="cloudflare" size={13} className="text-[var(--brand-accent)]" />
-                      Cloudflare
-                    </span>
-                  </div>
-                </motion.div>
-              </div>
-
-              {/* Feature Selector */}
-              <FeatureSelector
-                selectedFeature={selectedFeature}
-                onFeatureSelect={selectFeature}
-              />
-            </motion.div>
+              <StudioLauncher onSelectImage={selectFeature} onSelectVideo={(mode) => {
+                void setFeatureId(null);
+                void setWorkspace('video');
+                void setVideoMode(mode === 'text' ? null : mode);
+              }} />
             </motion.div>
           ) : (
             <motion.div

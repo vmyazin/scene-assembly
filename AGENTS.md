@@ -16,6 +16,14 @@
 
 ## Auto-load routing
 
+- **Studio home launcher or recent creations** → `components/StudioLauncher.tsx`
+  and `docs/codex/specs/2026-10-28-studio-home-b2.md`. Keep image/video families
+  equal in width and tile treatment; video modes come from `lib/video/directions.ts`
+  so home links and workspace capabilities cannot drift. `RecentCreations` uses
+  the existing library grids in read-only recent mode, with owner/epoch-keyed
+  cloud reads, because personal results must never cross account changes.
+
+
 - **Provider display order or ranking** → first read `docs/codex/specs/2026-10-26-provider-ranking.md`. Rank the exposed image and video catalogs separately, because platform-wide model counts misrepresent the choices here; preserve saved selections and distinguish integration evidence from measured reliability.
 
 - **Atlas Kling 4.0 or fal H3 promotional pricing** → first read

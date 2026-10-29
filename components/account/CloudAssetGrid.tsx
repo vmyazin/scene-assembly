@@ -1,5 +1,7 @@
 'use client';
 
+import RecentCreationGrid from '@/components/RecentCreationGrid';
+
 import { useEffect, useRef, useState } from 'react';
 import { Film, ImageDown, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -28,8 +30,8 @@ import { rateAccountAsset } from '@/lib/account/use-library';
 import { groupByPrompt, type Rating } from '@/lib/results/rating';
 import { resultModelLabel, reuseRun } from '@/lib/results/reuse-run';
 
-export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLimit=8,columns=2,highlightAssetId,onUsedReference,onAddedToTimeline,onPickVideo,editCapability,onChanged,onRated,onOpenStudio,grouped=false,emptyMessage}: {
-  assets:CloudAsset[];ownerId:string;mode?:'browse'|'pick-image'|'pick-clip';referenceLimit?:number;
+export default function CloudAssetGrid({assets,ownerId,mode='browse',recent=false,referenceLimit=8,columns=2,highlightAssetId,onUsedReference,onAddedToTimeline,onPickVideo,editCapability,onChanged,onRated,onOpenStudio,grouped=false,emptyMessage}: {
+  assets:CloudAsset[];ownerId:string;recent?:boolean;mode?:'browse'|'pick-image'|'pick-clip';referenceLimit?:number;
   /** Widest column count at desktop. The overlay stays at two because it sits
    *  in a narrow sheet; the account console goes to four. */
   columns?:2|4;
@@ -123,6 +125,10 @@ export default function CloudAssetGrid({assets,ownerId,mode='browse',referenceLi
   async function remove(asset:CloudAsset){
     await run(asset,async()=>{await accountRequest(`assets/${asset.id}`,{method:'DELETE',headers:{'X-Account-Id':ownerId}});assertOwner();if(mounted.current)setRemoving(null);onChanged();});
   }
+  if(recent) return <RecentCreationGrid items={visible.slice(0,4).map(asset=>({
+    id:asset.id,title:asset.metadata.prompt||'Untitled result',provider:asset.metadata.provider,kind:asset.kind,
+    url:`/api/account/assets/${asset.id}/content`,isVideo:asset.kind==='video',
+  }))}/>;
   const card=(asset:CloudAsset)=>{const singled=highlightAssetId===asset.id;const modelLabel=resultModelLabel({provider:asset.metadata.provider,modelId:asset.metadata.modelId,mediaType:asset.kind});return <li key={asset.id} {...(highlightAssetId!==undefined?{id:`asset-${asset.id}`}:{})} {...(singled?{'aria-current':'true' as const}:{})} className={`scroll-mt-24 rounded-xl border bg-[var(--background-elevated)]/80 transition-colors motion-reduce:transition-none ${singled?'border-[var(--neon-cyan)] ring-2 ring-[var(--neon-cyan)]/70 ring-offset-2 ring-offset-[var(--background-elevated)]':'border-cyan-300/25 hover:border-cyan-300/50'} ${dense?'space-y-2.5 p-2.5':'space-y-3 p-3'}`}>
         <div className="flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-black/40">
           {asset.kind==='image'?

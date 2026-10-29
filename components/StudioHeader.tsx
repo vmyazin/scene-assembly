@@ -21,7 +21,7 @@ import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
 
 interface StudioHeaderProps {
   /** Which workspace reads as current. */
-  active: 'image' | 'video' | 'timeline';
+  active: 'home' | 'image' | 'video' | 'timeline';
   /**
    * How the studio switches workspaces in place. Omitted by routes that reach
    * the studio by navigating instead — the editor has its own page, so its

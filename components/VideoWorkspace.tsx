@@ -2,11 +2,10 @@
 'use client';
 
 import { useEffect } from 'react';
-import { ImagePlus, Images, ScanFace, Type } from 'lucide-react';
 import FalGenerationWorkspace from '@/components/FalGenerationWorkspace';
 import GeminiVideoWorkspace from '@/components/GeminiVideoWorkspace';
 import KieGenerationWorkspace from '@/components/KieGenerationWorkspace';
-import VideoDirectionSelector, { type VideoDirection } from '@/components/VideoDirectionSelector';
+import VideoDirectionSelector from '@/components/VideoDirectionSelector';
 import ProviderSelector, { VIDEO_PROVIDERS, type VideoProvider } from '@/components/ProviderSelector';
 import ProviderVideoWorkspace from '@/components/ProviderVideoWorkspace';
 import type { EngineId } from '@/lib/engines/registry';
@@ -26,57 +25,13 @@ const PROVIDER_LABELS: Record<ProviderId, string> = {
 };
 import type { FalInputMode } from '@/lib/fal/types';
 import { useAppStore } from '@/store/useAppStore';
-import catalogThumbnail from '@/public/thumbnails/neon-cat-catalog-isometric.jpg';
-import leapThumbnail from '@/public/thumbnails/neon-cat-leap-cyan-magenta.jpg';
-import bookendThumbnail from '@/public/thumbnails/neon-cat-jump-dashboard.jpg';
-import characterThumbnail from '@/public/thumbnails/photorealistic_example.png';
-
+import { VIDEO_DIRECTIONS as MODES } from '@/lib/video/directions';
 interface VideoWorkspaceProps {
   inputMode: ProviderMode;
   onInputModeChange: (mode: ProviderMode) => void;
   onExit: () => void;
   onOpenConnections: (provider?: EngineId) => void;
 }
-
-// The selector and its preview share these fixtures; provider capabilities below
-// determine engine availability without hiding any direction.
-const MODES: readonly VideoDirection[] = [
-  {
-    id: 'text',
-    label: 'Text to video',
-    blurb: 'Start from a written prompt',
-    requires: 'Prompt only',
-    icon: Type,
-    thumbnail: catalogThumbnail,
-  },
-  {
-    id: 'image',
-    label: 'Image to video',
-    blurb: 'Put a still frame into motion',
-    requires: 'Needs an image',
-    icon: ImagePlus,
-    thumbnail: leapThumbnail,
-  },
-  {
-    id: 'frames',
-    label: 'First & last frame',
-    blurb: 'Fill the motion between two stills',
-    requires: 'Needs two images',
-    icon: Images,
-    thumbnail: bookendThumbnail,
-    needsProviderSupport: true,
-  },
-  {id: 'edit', thumbnail: '/thumbnails/edit-video.jpg', label: 'Edit video', blurb: 'Replace a character, setting, or style', requires: 'Needs a video', icon: ScanFace, needsProviderSupport: true},
-  {
-    id: 'reference',
-    label: 'Character references',
-    blurb: 'Carry one character into a new scene',
-    requires: 'Needs character views',
-    icon: ScanFace,
-    thumbnail: characterThumbnail,
-    needsProviderSupport: true,
-  },
-];
 
 // Aggregators advertise modes in their catalogs; the dedicated workspaces expose
 // only their implemented input modes, so unsupported forms are never mounted.

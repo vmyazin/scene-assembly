@@ -506,6 +506,13 @@
       "request": "launch",
       "command": "ACCOUNT_WORKER_PORT=8941 DEV_FAKE_GENERATION=1 npm run dev -- --port 3341",
       "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "B2 studio home review",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "ACCOUNT_WORKER_PORT=8947 pnpm dev -- --port 3347",
+      "cwd": "${workspaceFolder}"
     }
   ],
   "version": "0.0.1"
