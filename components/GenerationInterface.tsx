@@ -896,22 +896,22 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
       // Checked here like every other keyed engine. Without it the press went
       // to the server, came back 400, and said "API key is required" twice
       // (toast and inline) with no way to add one.
-      setError('Connect your Google Gemini key first in API connections.');
+      setError('Connect your Google Gemini key first in Connections.');
       onOpenConnections('gemini');
       return;
     }
     if (activeEngine.id === 'cloudflare' && !hasCfCreds) {
-      setError('Connect your Cloudflare account first — add your Account ID and API token in API connections.');
+      setError('Connect your Cloudflare account first — add your Account ID and API token in Connections.');
       onOpenConnections('cloudflare');
       return;
     }
     if (activeEngine.id === 'fal' && !falApiKey.trim()) {
-      setError('Connect your fal API key first in API connections.');
+      setError('Connect your fal API key first in Connections.');
       onOpenConnections('fal');
       return;
     }
     if (activeProvider && !providerKeys[activeProvider].trim()) {
-      setError(`Connect your ${activeEngine.label} key first in API connections.`);
+      setError(`Connect your ${activeEngine.label} key first in Connections.`);
       onOpenConnections(activeProvider);
       return;
     }

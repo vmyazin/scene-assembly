@@ -78,12 +78,12 @@ export default function LandingIntro() {
             className="display text-2xl sm:text-3xl md:text-4xl font-semibold text-balance"
           >
             <span className="text-[var(--foreground)]">Pick the right</span>{' '}
-            <span className="gradient-text">AI engine for every image and video</span>
+            <span className="gradient-text">AI provider for every image and video</span>
             <span className="text-[var(--foreground)]">, on your own keys</span>
           </h1>
           <p className="mt-5 text-sm sm:text-base leading-relaxed text-[var(--foreground-muted)]">
             {brand.name} is a studio for generating and editing images and for creating video —
-            built around choosing the engine that fits the work, not locking you to one vendor. Use
+            built around choosing the provider that fits the work, not locking you to one vendor. Use
             Google Gemini when you need grounded, multi-reference editing; Veo, Kling, or Seedance
             when the job is video. No monthly subscription: connect the provider keys you already
             use and pay as you go. The studio is the interface on top.
@@ -140,10 +140,10 @@ export default function LandingIntro() {
               "which UI wraps Gemini / FLUX / Veo / Kling" is how people search. */}
           <div className="mt-12">
             <h2 className="display text-xl sm:text-2xl font-semibold text-[var(--foreground)]">
-              Engines you can connect
+              Providers you can connect
             </h2>
             <p className="mt-2 max-w-2xl text-[0.8125rem] leading-relaxed text-[var(--foreground-muted)]">
-              Every engine below is selectable per generation, so the same prompt and the same
+              Every provider below is selectable per generation, so the same prompt and the same
               reference images can be re-run somewhere else without leaving the page.
             </p>
             <ul className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

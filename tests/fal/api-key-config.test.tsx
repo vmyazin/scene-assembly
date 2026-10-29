@@ -498,6 +498,6 @@ describe('fal API connection', () => {
 
     render(<Home />);
 
-    expect(await screen.findByTitle('Update your API keys')).toBeInTheDocument();
+    expect(await screen.findByTitle('Manage provider connections')).toBeInTheDocument();
   });
 });

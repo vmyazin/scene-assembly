@@ -33,18 +33,18 @@ export function EngineField({
   return (
     <div className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="eyebrow">Engine</span>
+        <span className="eyebrow">Provider</span>
         {engines.length > 1 && (
           <span className="font-mono text-[0.68rem] text-[var(--foreground-subtle)]">
-            {engines.length} engines{freeCount ? ` · ${freeCount} free` : ''}
+            {engines.length} providers{freeCount ? ` · ${freeCount} free` : ''}
           </span>
         )}
       </div>
       {engines.length > 1 ? (
         <ChipPopover
           variant="field"
-          label="Engine"
-          panelLabel="Generation engine"
+          label="Provider"
+          panelLabel="Provider"
           value={
             <span className="flex items-center gap-2">
               <ProviderLogo provider={active.id} size={15} />
@@ -106,7 +106,7 @@ export function ImageRailCard({
   onCollapse: () => void;
 }) {
   return (
-    <section aria-label="Engine and model" className="glass-card space-y-3 p-3.5">
+    <section aria-label="Provider and model" className="glass-card space-y-3 p-3.5">
       {engineField}
       <div className="space-y-1.5">
         <span className="eyebrow block">Model</span>
@@ -135,12 +135,12 @@ export function ImageRailStrip({
   onExpand: () => void;
 }) {
   return (
-    <section aria-label="Engine and model" className="glass-card flex flex-col items-center gap-3 px-1.5 py-3">
+    <section aria-label="Provider and model" className="glass-card flex flex-col items-center gap-3 px-1.5 py-3">
       <button
         type="button"
         onClick={onExpand}
-        aria-label="Expand engine and model rail"
-        title="Expand engine and model rail"
+        aria-label="Expand provider and model rail"
+        title="Expand provider and model rail"
         className="rounded-lg p-2 text-[var(--foreground-muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--foreground)]"
       >
         <ChevronsRight size={16} aria-hidden="true" />

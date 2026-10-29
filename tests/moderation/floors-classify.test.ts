@@ -103,7 +103,7 @@ describe('refusal copy', () => {
       route: { provider: 'gemini', modelId: 'gemini-3-pro-image-preview' },
     });
     expect(presented?.offerTryRelaxed).toBe(false);
-    expect(presented?.message).toMatch(/can't adjust it for this engine/);
+    expect(presented?.message).toMatch(/can't adjust it for this provider/);
     expect(presented?.message).toMatch(/fal Nano Banana 2/);
   });
 

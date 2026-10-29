@@ -58,14 +58,14 @@ describe('the timeline header reads the same key state as the studio', () => {
 
     render(<TimelinePage />);
 
-    expect(await screen.findByTitle('Update your API keys')).toBeInTheDocument();
-    expect(screen.queryByTitle('Add your API keys')).not.toBeInTheDocument();
+    expect(await screen.findByTitle('Manage provider connections')).toBeInTheDocument();
+    expect(screen.queryByTitle('Connect a provider')).not.toBeInTheDocument();
   });
 
   it('still asks a browser that genuinely has no key', async () => {
     render(<TimelinePage />);
 
-    expect(await screen.findByTitle('Add your API keys')).toBeInTheDocument();
+    expect(await screen.findByTitle('Connect a provider')).toBeInTheDocument();
   });
 
   it('hydrates the store rather than waiting for another route to do it', async () => {
@@ -92,7 +92,7 @@ describe('the header counts every place a key can live', () => {
 
     render(<TimelinePage />);
 
-    expect(await screen.findByTitle('Update your API keys')).toBeInTheDocument();
+    expect(await screen.findByTitle('Manage provider connections')).toBeInTheDocument();
   });
 
   it('confirms a browser key for an engine outside the original three', async () => {
@@ -103,6 +103,6 @@ describe('the header counts every place a key can live', () => {
 
     render(<TimelinePage />);
 
-    expect(await screen.findByTitle('Update your API keys')).toBeInTheDocument();
+    expect(await screen.findByTitle('Manage provider connections')).toBeInTheDocument();
   });
 });

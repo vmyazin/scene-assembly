@@ -14,6 +14,7 @@ import StudioHeader from '@/components/StudioHeader';
 import VideoWorkspace from '@/components/VideoWorkspace';
 import { Feature, FEATURES } from '@/types';
 import { useAppStore } from '@/store/useAppStore';
+import { PROVIDER_LABELS } from '@/lib/engines/registry';
 import { useConnectionsDialog } from '@/store/useConnectionsDialog';
 
 // Lazy-load the heavy generation workspace so the landing bundle stays light.
@@ -171,15 +172,15 @@ export default function Studio() {
                   <div className="flex flex-wrap items-center justify-center gap-1.5">
                     <span className="pill">
                       <ProviderLogo provider="gemini" size={13} className="text-emerald-400" />
-                      Gemini
+                      {PROVIDER_LABELS.gemini}
                     </span>
                     <span className="pill">
                       <ProviderLogo provider="pollinations" size={13} className="text-[var(--neon-purple)]" />
-                      Pollinations
+                      {PROVIDER_LABELS.pollinations}
                     </span>
                     <span className="pill">
                       <ProviderLogo provider="cloudflare" size={13} className="text-[var(--brand-accent)]" />
-                      Cloudflare
+                      {PROVIDER_LABELS.cloudflare}
                     </span>
                   </div>
                 </motion.div>

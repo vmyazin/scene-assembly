@@ -41,7 +41,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { useDraftStore } from '@/store/useDraftStore';
 import { useGalleryStore } from '@/store/useGalleryStore';
 import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
-import type { EngineId } from '@/lib/engines/registry';
+import { PROVIDER_LABELS, type EngineId } from '@/lib/engines/registry';
 import { fileAsDataUrl } from '@/lib/file-data-url';
 import { useClaimSeedFrame, useReferenceIntake } from '@/hooks/useReferenceIntake';
 import { ReferencePicker } from '@/components/ReferencePicker';
@@ -399,7 +399,7 @@ export default function GeminiVideoWorkspace({
       <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--background-elevated)] p-4">
         <div className="flex items-center gap-2">
           <ProviderLogo provider="gemini" size={20} />
-          <h3 className="font-semibold">Gemini · {currentModel.label}</h3>
+          <h3 className="font-semibold">{PROVIDER_LABELS.gemini} · {currentModel.label}</h3>
         </div>
 
         <div className="space-y-3">
@@ -552,7 +552,7 @@ export default function GeminiVideoWorkspace({
   return (
     <ConnectionGate
       provider="gemini"
-      label="Gemini"
+      label={PROVIDER_LABELS.gemini}
       storage="browser"
       needsKey={needsKey}
       onConnect={() => onOpenConnections('gemini')}

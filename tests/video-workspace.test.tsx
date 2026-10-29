@@ -77,14 +77,14 @@ describe('VideoWorkspace provider selection', () => {
       'Atlas Cloud',
       'Runware',
       'Kie.ai',
-      'Gemini',
+      'Google Gemini',
       'CometAPI',
       'PiAPI',
     ]);
     for (const name of ['Runware', 'Kie.ai', 'fal.ai', 'Atlas Cloud', 'CometAPI']) {
       expect(screen.getByRole('radio', { name })).toBeEnabled();
     }
-    for (const name of ['Gemini', 'PiAPI']) {
+    for (const name of ['Google Gemini', 'PiAPI']) {
       expect(screen.getByRole('radio', { name })).toBeDisabled();
     }
     await userEvent.click(screen.getByRole('radio', { name: 'fal.ai' }));
@@ -141,14 +141,14 @@ describe('VideoWorkspace provider selection', () => {
       />
     );
 
-    const providers = screen.getByRole('radiogroup', { name: 'Generation engine' });
+    const providers = screen.getByRole('radiogroup', { name: 'Provider' });
     // Overall video value determines display order; the saved choice stays selected.
     expect(screen.getAllByRole('radio').map((radio) => radio.textContent?.trim())).toEqual([
       'fal.ai',
       'Atlas Cloud',
       'Runware',
       'Kie.ai',
-      'Gemini',
+      'Google Gemini',
       'CometAPI',
       'PiAPI',
     ]);
@@ -158,7 +158,7 @@ describe('VideoWorkspace provider selection', () => {
     );
   });
 
-  it('names the Gemini provider and workspace without Google', async () => {
+  it('names the Gemini provider and workspace consistently', async () => {
     useAppStore.setState({ apiKey: '' });
     render(
       <VideoWorkspace
@@ -169,12 +169,12 @@ describe('VideoWorkspace provider selection', () => {
       />
     );
 
-    await userEvent.click(screen.getByRole('radio', { name: /^Gemini$/ }));
+    await userEvent.click(screen.getByRole('radio', { name: /^Google Gemini$/ }));
 
     expect(useAppStore.getState().videoEngine).toBe('gemini');
-    expect(screen.getByRole('heading', { name: 'Gemini · Omni Flash' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Google Gemini · Omni Flash' })).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: 'Add your Gemini key' })
+      screen.getByRole('heading', { name: 'Add your Google Gemini key' })
     ).toBeInTheDocument();
   });
 
@@ -188,7 +188,7 @@ describe('VideoWorkspace provider selection', () => {
       />
     );
     const kie = screen.getByRole('radio', { name: /Kie\.ai/i });
-    const gemini = screen.getByRole('radio', { name: /^Gemini$/ });
+    const gemini = screen.getByRole('radio', { name: /^Google Gemini$/ });
     expect(kie).toHaveAttribute('tabindex', '0');
     expect(gemini).toHaveAttribute('tabindex', '-1');
     kie.focus();

@@ -8,7 +8,7 @@ import KieGenerationWorkspace from '@/components/KieGenerationWorkspace';
 import VideoDirectionSelector from '@/components/VideoDirectionSelector';
 import ProviderSelector, { VIDEO_PROVIDERS, type VideoProvider } from '@/components/ProviderSelector';
 import ProviderVideoWorkspace from '@/components/ProviderVideoWorkspace';
-import type { EngineId } from '@/lib/engines/registry';
+import { PROVIDER_LABELS, type EngineId } from '@/lib/engines/registry';
 import { modelsForFalMode } from '@/lib/fal/catalog';
 import { modelsForKieMode } from '@/lib/kie/catalog';
 import type { KieInputMode } from '@/lib/kie/types';
@@ -16,13 +16,6 @@ import { modelsFor } from '@/lib/providers/catalog';
 import { isProviderId } from '@/lib/providers';
 import type { ProviderId, ProviderMode } from '@/lib/providers/types';
 
-/** Display names for the aggregator providers in the video workspace header. */
-const PROVIDER_LABELS: Record<ProviderId, string> = {
-  runware: 'Runware',
-  atlas: 'Atlas Cloud',
-  comet: 'CometAPI',
-  piapi: 'PiAPI',
-};
 import type { FalInputMode } from '@/lib/fal/types';
 import { useAppStore } from '@/store/useAppStore';
 import { VIDEO_DIRECTIONS as MODES } from '@/lib/video/directions';
@@ -111,7 +104,7 @@ export default function VideoWorkspace({
       <ProviderSelector value={videoEngine ?? storedEngine} onChange={selectEngine} disabledProviders={disabledProviders} />
 
       {!videoEngine ? (
-        <p className="text-sm text-[var(--foreground-muted)]">No engine currently supports this direction.</p>
+        <p className="text-sm text-[var(--foreground-muted)]">No provider currently supports this mode.</p>
       ) : activeProvider ? (
         <ProviderVideoWorkspace
           key={`${activeProvider}-${activeMode}`}

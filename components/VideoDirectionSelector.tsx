@@ -108,8 +108,8 @@ export default function VideoDirectionSelector({
 
   return (
     <div>
-      <p className="mb-2.5 text-[0.625rem] uppercase tracking-[0.12em] text-[var(--foreground-muted)]">Direction</p>
-      <div ref={groupRef} role="group" aria-label="Video direction" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+      <p className="mb-2.5 text-[0.625rem] uppercase tracking-[0.12em] text-[var(--foreground-muted)]">Mode</p>
+      <div ref={groupRef} role="group" aria-label="Video mode" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {modes.map(mode => {
           const Icon = mode.icon;
           return (

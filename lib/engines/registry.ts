@@ -15,6 +15,19 @@ export type EngineId =
   | 'comet'
   | 'piapi';
 
+/** UI names describe the provider alone; model names belong in the model field. */
+export const PROVIDER_LABELS: Record<EngineId, string> = {
+  gemini: 'Google Gemini',
+  pollinations: 'Pollinations',
+  cloudflare: 'Cloudflare',
+  kie: 'Kie.ai',
+  fal: 'fal.ai',
+  runware: 'Runware',
+  atlas: 'Atlas Cloud',
+  comet: 'CometAPI',
+  piapi: 'PiAPI',
+};
+
 export interface EngineMeta {
   id: EngineId;
   label: string;
@@ -45,7 +58,7 @@ export interface EngineMeta {
 export const ENGINES: EngineMeta[] = [
   {
     id: 'atlas',
-    label: 'Atlas Cloud',
+    label: PROVIDER_LABELS.atlas,
     blurb: 'Image, video, and LLMs on one key — FLUX schnell from $0.003',
     requiresApiKey: true,
     supportsInputImages: true,
@@ -56,7 +69,7 @@ export const ENGINES: EngineMeta[] = [
   },
   {
     id: 'gemini',
-    label: 'Google Gemini',
+    label: PROVIDER_LABELS.gemini,
     blurb: 'Nano Banana 2.1 — every mode, your API key',
     requiresApiKey: true,
     supportsInputImages: true,
@@ -68,7 +81,7 @@ export const ENGINES: EngineMeta[] = [
   },
   {
     id: 'kie',
-    label: 'Kie.ai',
+    label: PROVIDER_LABELS.kie,
     blurb: 'Image and video, on your own Kie key',
     requiresApiKey: true,
     supportsInputImages: true,
@@ -79,7 +92,7 @@ export const ENGINES: EngineMeta[] = [
   },
   {
     id: 'runware',
-    label: 'Runware',
+    label: PROVIDER_LABELS.runware,
     blurb: 'Cheapest per image — Z-Image Turbo and FLUX, on your own Runware key',
     requiresApiKey: true,
     supportsInputImages: true,
@@ -90,7 +103,7 @@ export const ENGINES: EngineMeta[] = [
   },
   {
     id: 'fal',
-    label: 'fal.ai',
+    label: PROVIDER_LABELS.fal,
     blurb: 'Nano Banana 2.1, on your own fal key',
     requiresApiKey: true,
     supportsInputImages: true,
@@ -100,14 +113,14 @@ export const ENGINES: EngineMeta[] = [
     free: false,
   },
   {
-    id: 'piapi', label: 'PiAPI',
+    id: 'piapi', label: PROVIDER_LABELS.piapi,
     blurb: 'Nano Banana 2, Veo Fast and Kling Omni on your PiAPI key',
     requiresApiKey: true, supportsInputImages: true, supportsGoogleSearch: false,
     supportsAspectRatio: true, supportsImageSize: true, free: false,
   },
   {
     id: 'comet',
-    label: 'CometAPI',
+    label: PROVIDER_LABELS.comet,
     blurb: 'Broad commercial coverage behind an OpenAI-compatible interface',
     requiresApiKey: true,
     supportsInputImages: false,
@@ -118,7 +131,7 @@ export const ENGINES: EngineMeta[] = [
   },
   {
     id: 'cloudflare',
-    label: 'Cloudflare · FLUX',
+    label: PROVIDER_LABELS.cloudflare,
     blurb: 'Free daily tier · FLUX.1 [schnell] · Cloudflare token',
     requiresApiKey: true,
     supportsInputImages: false,
@@ -130,7 +143,7 @@ export const ENGINES: EngineMeta[] = [
   },
   {
     id: 'pollinations',
-    label: 'Pollinations · FLUX',
+    label: PROVIDER_LABELS.pollinations,
     blurb: 'Free · text-to-image · no key required',
     requiresApiKey: false,
     supportsInputImages: false,

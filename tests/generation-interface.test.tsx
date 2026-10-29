@@ -79,10 +79,10 @@ function renderInterface(
 
 /** The rail's Engine field opens a menu of engines; pick one from it. */
 function chooseEngine(name: string | RegExp) {
-  if (!screen.queryByRole('group', { name: 'Generation engine' })) {
-    fireEvent.click(screen.getByRole('button', { name: /^Engine:/ }));
+  if (!screen.queryByRole('group', { name: 'Provider' })) {
+    fireEvent.click(screen.getByRole('button', { name: /^Provider:/ }));
   }
-  fireEvent.click(within(screen.getByRole('group', { name: 'Generation engine' })).getByRole('button', { name }));
+  fireEvent.click(within(screen.getByRole('group', { name: 'Provider' })).getByRole('button', { name }));
 }
 
 /** Shape, Size and the rest fold into chips under the prompt; open one to reach its control. */
@@ -149,14 +149,14 @@ describe('GenerationInterface engine selection', () => {
 
     expect(screen.getByTestId('kie-workspace')).toBeTruthy();
     // Kie's rail carries the same engine menu as every other image engine.
-    fireEvent.click(screen.getByRole('button', { name: /^Engine:\s*Kie\.ai$/ }));
-    expect(screen.getByRole('button', { name: /Cloudflare · FLUX/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /^Provider:\s*Kie\.ai$/ }));
+    expect(screen.getByRole('button', { name: /Cloudflare/i })).toBeTruthy();
 
     chooseEngine('Google Gemini');
 
     expect(useAppStore.getState().engine).toBe('gemini');
     expect(screen.queryByTestId('kie-workspace')).toBeNull();
-    expect(screen.getByRole('region', { name: 'Engine and model' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Provider and model' })).toBeTruthy();
   });
 
   it('lists every engine in the rail’s Engine menu, outside any heading', () => {
@@ -176,18 +176,18 @@ describe('GenerationInterface engine selection', () => {
       </QueryClientProvider>
     );
 
-    const rail = screen.getByRole('region', { name: 'Engine and model' });
+    const rail = screen.getByRole('region', { name: 'Provider and model' });
     expect(rail.className).toContain('glass-card');
     // The field names the engine it is set to; the rail says how many there are.
-    expect(within(rail).getByText(/^\d+ engines · \d+ free$/)).toBeTruthy();
-    fireEvent.click(within(rail).getByRole('button', { name: /^Engine:\s*Google Gemini$/ }));
-    const picker = screen.getByRole('group', { name: 'Generation engine' });
+    expect(within(rail).getByText(/^\d+ providers · \d+ free$/)).toBeTruthy();
+    fireEvent.click(within(rail).getByRole('button', { name: /^Provider:\s*Google Gemini$/ }));
+    const picker = screen.getByRole('group', { name: 'Provider' });
 
     expect(
       within(picker).getByRole('button', { name: 'Google Gemini' })
     ).toHaveAttribute('aria-pressed', 'true');
     expect(
-      within(picker).getByRole('button', { name: /Cloudflare · FLUX/i })
+      within(picker).getByRole('button', { name: /Cloudflare/i })
     ).toBeTruthy();
     expect(within(picker).queryByRole('heading')).toBeNull();
   });
@@ -209,7 +209,7 @@ describe('GenerationInterface engine selection', () => {
     );
 
     const title = screen.getByRole('heading', { name: 'Kie page title' });
-    const picker = screen.getByRole('button', { name: /^Engine:/ });
+    const picker = screen.getByRole('button', { name: /^Provider:/ });
 
     expect(title.compareDocumentPosition(picker) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
@@ -234,7 +234,7 @@ describe('GenerationInterface engine selection', () => {
     );
 
     const title = screen.getByRole('heading', { name: /Text to Image Generation/ });
-    const picker = screen.getByRole('region', { name: 'Engine and model' });
+    const picker = screen.getByRole('region', { name: 'Provider and model' });
 
     expect(title.compareDocumentPosition(picker) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
@@ -409,7 +409,7 @@ describe('GenerationInterface fal image generation', () => {
   it('offers the fal engine for every image feature', () => {
     for (const feature of FEATURES) {
       const view = renderInterface(feature);
-      fireEvent.click(screen.getByRole('button', { name: /^Engine:/ }));
+      fireEvent.click(screen.getByRole('button', { name: /^Provider:/ }));
 
       expect(
         screen.getByRole('button', { name: /^fal\.ai$/i })
@@ -727,7 +727,7 @@ describe('GenerationInterface fal image generation', () => {
     expect(mockedRunFalImage).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(
-      screen.getByText('Connect your fal API key first in API connections.')
+      screen.getByText('Connect your fal API key first in Connections.')
     ).toBeTruthy();
   });
 
@@ -1674,13 +1674,13 @@ describe('GenerationInterface without a key', () => {
 
     expect(onOpenConnections).toHaveBeenCalledWith('gemini');
     expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/api/generate'), expect.anything());
-    expect(screen.getByText('Connect your Google Gemini key first in API connections.')).toBeTruthy();
+    expect(screen.getByText('Connect your Google Gemini key first in Connections.')).toBeTruthy();
   });
 
   it('keeps the engine and model rail usable while the main column waits for a key (H1)', () => {
     renderInterface(textToImage, { apiKey: '' });
 
-    const rail = screen.getByRole('region', { name: 'Engine and model' });
+    const rail = screen.getByRole('region', { name: 'Provider and model' });
     expect(rail.closest('[inert]')).toBeNull();
     expect(screen.getByRole('textbox').closest('[inert]')).not.toBeNull();
 
@@ -1694,7 +1694,7 @@ describe('GenerationInterface without a key', () => {
   it('leaves the free engines to the rail rather than the key card', () => {
     renderInterface(textToImage, { apiKey: '' });
 
-    expect(screen.queryByRole('button', { name: /Use Pollinations · FLUX instead/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Use Pollinations instead/ })).toBeNull();
 
     chooseEngine(/Pollinations/);
 
@@ -1706,13 +1706,13 @@ describe('GenerationInterface without a key', () => {
     renderInterface(textToImage, { apiKey: '' });
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A paper city' } });
     fireEvent.click(screen.getByRole('button', { name: 'Generate Image' }));
-    expect(screen.getByText('Connect your Google Gemini key first in API connections.')).toBeTruthy();
+    expect(screen.getByText('Connect your Google Gemini key first in Connections.')).toBeTruthy();
 
     chooseEngine(/Pollinations/);
 
     // Waited on, not asserted at once: the message leaves with an exit animation.
     await waitFor(() =>
-      expect(screen.queryByText('Connect your Google Gemini key first in API connections.')).toBeNull()
+      expect(screen.queryByText('Connect your Google Gemini key first in Connections.')).toBeNull()
     );
   });
 
@@ -1775,8 +1775,8 @@ describe('GenerationInterface rail collapse', () => {
     // screens, hidden from lg up, and the strip is added beside it.
     expect(screen.getByText('Nano Banana 2.1', { selector: 'span.truncate' })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Expand engine and model rail' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Expand provider and model rail' }));
     expect(useAppStore.getState().imageRailCollapsed).toBe(false);
-    expect(screen.queryByRole('button', { name: 'Expand engine and model rail' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Expand provider and model rail' })).toBeNull();
   });
 });

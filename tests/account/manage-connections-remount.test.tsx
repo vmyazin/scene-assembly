@@ -58,7 +58,7 @@ describe('the connections dialog on /account', () => {
     render(<AccountDashboard />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Manage connections' }));
-    expect(screen.getByRole('dialog', { name: 'API connections' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Connections' })).toBeInTheDocument();
 
     const initialEpoch = useAccountStore.getState().epoch;
     fireEvent.click(screen.getByRole('button', { name: /Remove from account/ }));
@@ -72,6 +72,6 @@ describe('the connections dialog on /account', () => {
     // Before the fix, `managingKeys` lived inside the keyed `AccountConsole`
     // subtree and this remount discarded it, closing the dialog out from
     // under the click that just used it.
-    expect(screen.getByRole('dialog', { name: 'API connections' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Connections' })).toBeInTheDocument();
   });
 });

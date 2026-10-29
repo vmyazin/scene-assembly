@@ -63,13 +63,13 @@ export function refusalPresentation(
   if (capability.relaxable && ctx.level === 'relaxed') {
     return {
       kind,
-      message: `${ctx.providerLabel} still blocked this with Relaxed filter on. That's the model's core policy and can't be relaxed. Try rephrasing, or use another engine.`,
+      message: `${ctx.providerLabel} still blocked this with Relaxed filter on. That's the model's core policy and can't be relaxed. Try rephrasing, or use another provider.`,
       offerTryRelaxed: false,
     };
   }
   return {
     kind,
-    message: `${ctx.modelLabel}'s own safety filter blocked this. Scene Assembly can't adjust it for this engine. Engines with Relaxed filter: ${RELAXABLE_ENGINE_LIST}.`,
+    message: `${ctx.modelLabel}'s own safety filter blocked this. Scene Assembly can't adjust it for this provider. Providers with Relaxed filter: ${RELAXABLE_ENGINE_LIST}.`,
     offerTryRelaxed: false,
   };
 }

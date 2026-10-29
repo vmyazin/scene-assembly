@@ -9,7 +9,7 @@ import { ConnectionStorageBadge, ConnectionStorageButton } from '@/components/ac
 import { useAppStore } from '@/store/useAppStore';
 import MicroAiUsagePanel from '@/components/MicroAiUsagePanel';
 import ProviderLogo from '@/components/ProviderLogo';
-import type { EngineId } from '@/lib/engines/registry';
+import { PROVIDER_LABELS, type EngineId } from '@/lib/engines/registry';
 import { pendingConnectionWrites, syncPendingConnections } from '@/lib/account/connection-sync';
 import { accountChanged, refreshAccount } from '@/lib/account/session';
 import { KEY_SOURCES } from '@/lib/providers/key-source';
@@ -53,24 +53,24 @@ const AGGREGATORS: ReadonlyArray<{
 }> = [
   {
     id: 'runware',
-    name: 'Runware',
+    name: PROVIDER_LABELS.runware,
     description: 'Image and video across hundreds of models, billed per megapixel or second.',
     ...KEY_SOURCES.runware,
   },
   {
     id: 'atlas',
-    name: 'Atlas Cloud',
+    name: PROVIDER_LABELS.atlas,
     description: 'Image, video, and LLMs on one key, with published per-request pricing.',
     ...KEY_SOURCES.atlas,
   },
   {
-    id: 'piapi', name: 'PiAPI',
+    id: 'piapi', name: PROVIDER_LABELS.piapi,
     description: 'Nano Banana 2, Veo Fast and Kling Omni. Browser reference uploads require Creator or higher.',
     ...KEY_SOURCES.piapi,
   },
   {
     id: 'comet',
-    name: 'CometAPI',
+    name: PROVIDER_LABELS.comet,
     description: 'Commercial models — GPT Image, Seedance, Veo, Kling — behind one OpenAI-shaped API.',
     ...KEY_SOURCES.comet,
   },
@@ -563,9 +563,9 @@ export default function ApiKeyConfig({ open, onOpenChange, focusProvider }: ApiK
     >
       <ModalHeader
         icon={<Key className="mt-0.5 shrink-0 text-[var(--neon-cyan)]" size={18} />}
-        title="API connections"
+        title="Connections"
         titleId={titleId}
-        description="Add a key for any engine you want to use."
+        description="Connect a provider with your API key."
         descriptionId={descriptionId}
         onClose={handleClose}
       />
@@ -576,7 +576,7 @@ export default function ApiKeyConfig({ open, onOpenChange, focusProvider }: ApiK
           <ProviderCard
             provider="gemini"
             highlighted={focusProvider === 'gemini'}
-            name="Google Gemini"
+            name={PROVIDER_LABELS.gemini}
             connected={!!savedKey}
             description="Image and video, billed to your Google account."
             linkPrefix="Get a key at"
@@ -606,7 +606,7 @@ export default function ApiKeyConfig({ open, onOpenChange, focusProvider }: ApiK
           <ProviderCard
             provider="kie"
             highlighted={focusProvider === 'kie'}
-            name="Kie.ai"
+            name={PROVIDER_LABELS.kie}
             connected={kieConnected}
             description="Image and video, billed to your own account. Checked against your Kie credit balance."
             linkPrefix="Get a key at"
@@ -636,7 +636,7 @@ export default function ApiKeyConfig({ open, onOpenChange, focusProvider }: ApiK
           <ProviderCard
             provider="fal"
             highlighted={focusProvider === 'fal'}
-            name="fal.ai"
+            name={PROVIDER_LABELS.fal}
             connected={falConnected}
             description="Image and video, billed to your own account. Checked through fal pricing, so nothing billable runs."
             linkPrefix="Get a key at"
@@ -669,7 +669,7 @@ export default function ApiKeyConfig({ open, onOpenChange, focusProvider }: ApiK
           <ProviderCard
             provider="cloudflare"
             highlighted={focusProvider === 'cloudflare'}
-            name="Cloudflare"
+            name={PROVIDER_LABELS.cloudflare}
             connected={cfConnected}
             description="Free text-to-image on Workers AI. Both fields save as you type."
             linkPrefix="Create a token at"

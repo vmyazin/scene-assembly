@@ -561,7 +561,7 @@ describe('Kie image workspace layout', () => {
       />
     );
 
-    const rail = screen.getByRole('region', { name: 'Engine and model' });
+    const rail = screen.getByRole('region', { name: 'Provider and model' });
     expect(within(rail).getByText('engine field')).toBeTruthy();
     expect(within(rail).getByRole('listbox', { name: 'Model' })).toBeTruthy();
     // Comparing models needs no key; the prompt and its settings wait for one.
@@ -577,7 +577,7 @@ describe('Kie image workspace layout', () => {
       <KieGenerationWorkspace mediaType="video" inputMode="text" onBack={() => undefined} onOpenConnections={() => undefined} />
     );
 
-    expect(screen.queryByRole('region', { name: 'Engine and model' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Provider and model' })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Shape/ })).toBeNull();
   });
 });

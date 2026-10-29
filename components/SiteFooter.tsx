@@ -57,7 +57,7 @@ export default function SiteFooter() {
         {/* Engines available — capability context, not product identity.
             Each one links to the docs you'd need to work with it directly. */}
         <div className="mt-6 pt-5 border-t border-[hsl(var(--tint)/0.05)] text-center">
-          <p className="eyebrow mb-2">Engine docs</p>
+          <p className="eyebrow mb-2">Provider docs</p>
           <ul className="flex flex-wrap items-center justify-center gap-1.5 text-xs">
             {ENGINE_DOCS.map(({ id, label, href, accentClass }) => (
               <li key={id}>

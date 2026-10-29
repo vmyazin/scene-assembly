@@ -23,6 +23,10 @@
   the existing library grids in read-only recent mode, with owner/epoch-keyed
   cloud reads, because personal results must never cross account changes.
 
+- **UI terminology (Provider, Model, Mode, Connection)** → first read
+  `docs/ui-terminology.md`. Provider names come from `PROVIDER_LABELS` in
+  `lib/engines/registry.ts`, because mixing model names into provider labels
+  obscures which service owns the connection and billing. Keep internal IDs and API fields unchanged.
 
 - **Provider display order or ranking** → first read `docs/codex/specs/2026-10-26-provider-ranking.md`. Rank the exposed image and video catalogs separately, because platform-wide model counts misrepresent the choices here; preserve saved selections and distinguish integration evidence from measured reliability.
 

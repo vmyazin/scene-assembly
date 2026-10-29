@@ -34,7 +34,7 @@ function ConsentBody({ titleId, error, onConfirm, onCancel }: Omit<RelaxedConsen
         Turn on Relaxed filter?
       </h2>
       <p className="text-sm leading-relaxed text-[var(--foreground-muted)]">
-        Relaxed filter asks supported engines to use their less-strict settings, so swimwear, horror, action and classical-art prompts are blocked less often. It does <strong>not</strong> allow sexually explicit content. Some things never change: no minors in any suggestive context, no sexualized images of real people, and AI watermarks stay on. Providers still apply their own rules, and repeated violations can get your provider account suspended.
+        Relaxed filter asks supported providers to use their less-strict settings, so swimwear, horror, action and classical-art prompts are blocked less often. It does <strong>not</strong> allow sexually explicit content. Some things never change: no minors in any suggestive context, no sexualized images of real people, and AI watermarks stay on. Providers still apply their own rules, and repeated violations can get your provider account suspended.
       </p>
       <label className="flex items-start gap-2 text-sm">
         <input

@@ -27,7 +27,7 @@ export function homeJsonLd() {
     // the full provider enumeration that makes the entity legible.
     description:
       'A studio for generating and editing images and for creating video, built around picking ' +
-      'the engine that fits the job rather than locking you to one vendor. No monthly ' +
+      'the provider that fits the job rather than locking you to one vendor. No monthly ' +
       'subscription — connect your own provider keys (Gemini, FLUX, fal.ai, Kie.ai, Runware, ' +
       'Atlas Cloud, CometAPI, PiAPI or Cloudflare Workers AI) and pay those providers as you go.',
     applicationCategory: 'MultimediaApplication',

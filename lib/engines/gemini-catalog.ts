@@ -74,7 +74,7 @@ export const GEMINI_IMAGE_MODELS: GeminiImageModel[] = [
     sizes: ['1K', '2K', '4K'],
     supportsGoogleSearch: true,
     maxInputImages: 14,
-    note: 'Nano Banana Pro. A professional design engine with a reasoning core for studio-quality 4K visuals, complex layouts, and precise text rendering.',
+    note: 'Nano Banana Pro. A professional design model with a reasoning core for studio-quality 4K visuals, complex layouts, and precise text rendering.',
   },
   {
     id: 'gemini-3.1-flash-lite-image',

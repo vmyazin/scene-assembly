@@ -9,7 +9,7 @@ const SOURCES: Record<SpendSource, string> = {
   'estimate-api': "Estimated by the provider's pricing endpoint.",
   'balance-delta': 'Credit balance before the run minus the balance after.',
   'catalog-rate': 'Published list price times the quantity generated.',
-  free: 'This engine is free.',
+  free: 'This generation is free.',
 };
 
 const TONES: Record<SpendConfidence, StatusTone> = { exact: 'success', estimated: 'warning', unknown: 'neutral' };

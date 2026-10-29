@@ -363,14 +363,14 @@ export function CommandPalette({
             </span>
           </Command.Item>
           <Command.Item
-            value="Connections & API keys"
-            keywords={['gemini', 'fal', 'kie', 'credentials', 'connect']}
+            value="Connections"
+            keywords={['gemini', 'fal', 'kie', 'credentials', 'connect', 'API keys']}
             onSelect={() => go(onOpenApiKey)}
           >
             <Key size={15} />
             <span className="cmd-item-body">
-              <span className="cmd-item-title">Connections &amp; API keys</span>
-              <span className="cmd-item-desc">Add or update an engine key</span>
+              <span className="cmd-item-title">Connections</span>
+              <span className="cmd-item-desc">Add or update a provider connection</span>
             </span>
           </Command.Item>
         </Command.Group>

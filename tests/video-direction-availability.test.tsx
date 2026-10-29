@@ -22,7 +22,7 @@ describe('direction-first engine selection', () => {
     }
     expect(screen.getAllByRole('radio')).toHaveLength(7);
     expect(screen.getByRole('radio', { name: 'Kie.ai' })).toBeEnabled();
-    expect(screen.getByRole('radio', { name: 'Gemini' })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: 'Google Gemini' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Edit video' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('kie workspace')).toBeInTheDocument();
     expect(useAppStore.getState().videoEngine).toBe('kie');
@@ -48,7 +48,7 @@ describe('direction-first engine selection', () => {
     expect(tooltip).not.toBeVisible();
     fireEvent.pointerEnter(trigger);
     expect(tooltip).toBeVisible();
-    expect(tooltip).toHaveTextContent('No support for this mode/direction');
+    expect(tooltip).toHaveTextContent('This provider does not support this mode');
     fireEvent.keyDown(trigger, { key: 'Escape' });
     expect(tooltip).not.toBeVisible();
     fireEvent.focus(trigger);
@@ -65,13 +65,13 @@ describe('direction-first engine selection', () => {
     expect(onChange).not.toHaveBeenCalled();
     const runware = screen.getByRole('radio', { name: 'Runware' });
     fireEvent.keyDown(runware, { key: 'ArrowRight' });
-    expect(onChange).toHaveBeenLastCalledWith('fal');
-    expect(screen.getByRole('radio', { name: 'fal.ai' })).toHaveFocus();
-    fireEvent.keyDown(runware, { key: 'ArrowLeft' });
     expect(onChange).toHaveBeenLastCalledWith('comet');
+    expect(screen.getByRole('radio', { name: 'CometAPI' })).toHaveFocus();
+    fireEvent.keyDown(runware, { key: 'ArrowLeft' });
+    expect(onChange).toHaveBeenLastCalledWith('atlas');
     fireEvent.keyDown(runware, { key: 'End' });
     expect(onChange).toHaveBeenLastCalledWith('comet');
     fireEvent.keyDown(screen.getByRole('radio', { name: 'CometAPI' }), { key: 'Home' });
-    expect(onChange).toHaveBeenLastCalledWith('runware');
+    expect(onChange).toHaveBeenLastCalledWith('fal');
   });
 });

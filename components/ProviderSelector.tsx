@@ -2,6 +2,7 @@
 'use client';
 
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { PROVIDER_LABELS } from '@/lib/engines/registry';
 import ProviderLogo from '@/components/ProviderLogo';
 
 export type VideoProvider = 'gemini' | 'kie' | 'fal' | 'runware' | 'atlas' | 'comet' | 'piapi';
@@ -16,13 +17,13 @@ export const VIDEO_PROVIDERS = [
   // Rank the implemented video offering, not the vendor's entire catalog.
   // See docs/codex/specs/2026-10-26-provider-ranking.md. This order also picks
   // the first compatible engine when a direction cannot use the saved choice.
-  { id: 'fal' as const, label: 'fal.ai' },
-  { id: 'atlas' as const, label: 'Atlas Cloud' },
-  { id: 'runware' as const, label: 'Runware' },
-  { id: 'kie' as const, label: 'Kie.ai' },
-  { id: 'gemini' as const, label: 'Gemini' },
-  { id: 'comet' as const, label: 'CometAPI' },
-  { id: 'piapi' as const, label: 'PiAPI' },
+  { id: 'fal' as const, label: PROVIDER_LABELS.fal },
+  { id: 'atlas' as const, label: PROVIDER_LABELS.atlas },
+  { id: 'runware' as const, label: PROVIDER_LABELS.runware },
+  { id: 'kie' as const, label: PROVIDER_LABELS.kie },
+  { id: 'gemini' as const, label: PROVIDER_LABELS.gemini },
+  { id: 'comet' as const, label: PROVIDER_LABELS.comet },
+  { id: 'piapi' as const, label: PROVIDER_LABELS.piapi },
 ];
 
 function EngineAvailabilityTooltip({ disabled, label, children }: { disabled: boolean; label: string; children: ReactNode }) {
@@ -50,7 +51,7 @@ function EngineAvailabilityTooltip({ disabled, label, children }: { disabled: bo
           className="absolute bottom-full left-1/2 z-50 w-44 -translate-x-1/2 pb-2"
         >
           <span className="block rounded-lg border border-[var(--border-hover)] bg-[var(--background-elevated)] px-3 py-2 text-center text-xs leading-snug text-[var(--foreground)] shadow-lg">
-            No support for this mode/direction
+            This provider does not support this mode
           </span>
         </span>
       )}
@@ -83,7 +84,7 @@ export default function ProviderSelector({ value, onChange, disabledProviders = 
 
   return (
     <div>
-      <p id={headingId} className="mb-2.5 text-[0.625rem] uppercase tracking-[0.12em] text-[var(--foreground-muted)]">Generation engine</p>
+      <p id={headingId} className="mb-2.5 text-[0.625rem] uppercase tracking-[0.12em] text-[var(--foreground-muted)]">Provider</p>
       <div
         role="radiogroup"
         aria-labelledby={headingId}

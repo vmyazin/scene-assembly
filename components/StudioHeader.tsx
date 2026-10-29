@@ -286,25 +286,10 @@ export default function StudioHeader({
               <button
                 onClick={() => openConnections()}
                 className={`${hasKey ? 'btn-secondary' : 'btn-primary'} min-h-11 text-sm sm:min-h-0`}
-                title={hasKey ? 'Update your API keys' : 'Add your API keys'}
+                title={hasKey ? 'Manage provider connections' : 'Connect a provider'}
               >
-                {hasKey ? (
-                  <>
-                    <Check size={15} className="text-emerald-400" />
-                    {/* Plural, like the CTA beside it and the dialog it opens:
-                        the button stands for every provider's credentials, not
-                        one, and a user with three keys saved read "API Key" as
-                        a count. */}
-                    <span className="hidden sm:inline">API&nbsp;Keys</span>
-                    <span className="sm:hidden">Keys</span>
-                  </>
-                ) : (
-                  <>
-                    <Key size={15} />
-                    <span className="hidden sm:inline">Add&nbsp;API&nbsp;Keys</span>
-                    <span className="sm:hidden">Add&nbsp;Keys</span>
-                  </>
-                )}
+                {hasKey ? <Check size={15} className="text-emerald-400" /> : <Key size={15} />}
+                <span>Connections</span>
               </button>
             </motion.div>
           </div>
