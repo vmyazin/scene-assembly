@@ -4,6 +4,8 @@ import catalogThumbnail from '@/public/thumbnails/neon-cat-catalog-isometric.jpg
 import leapThumbnail from '@/public/thumbnails/neon-cat-leap-cyan-magenta.jpg';
 import bookendThumbnail from '@/public/thumbnails/neon-cat-jump-dashboard.jpg';
 import characterThumbnail from '@/public/thumbnails/photorealistic_example.png';
+import catalogLoopPoster from '@/public/thumbnails/neon-cat-catalog-loop-poster.jpg';
+import leapLoopPoster from '@/public/thumbnails/neon-cat-leap-loop-poster.jpg';
 
 // The selector and its preview share these fixtures; provider capabilities below
 // determine engine availability without hiding any direction.
@@ -15,6 +17,7 @@ export const VIDEO_DIRECTIONS: readonly VideoDirection[] = [
     requires: 'Prompt only',
     icon: Type,
     thumbnail: catalogThumbnail,
+    loop: { src: '/thumbnails/neon-cat-catalog-loop.mp4', poster: catalogLoopPoster },
   },
   {
     id: 'image',
@@ -23,6 +26,7 @@ export const VIDEO_DIRECTIONS: readonly VideoDirection[] = [
     requires: 'Needs an image',
     icon: ImagePlus,
     thumbnail: leapThumbnail,
+    loop: { src: '/thumbnails/neon-cat-leap-loop.mp4', poster: leapLoopPoster },
   },
   {
     id: 'frames',

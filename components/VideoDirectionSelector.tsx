@@ -13,6 +13,8 @@ export interface VideoDirection {
   requires: string;
   icon: LucideIcon;
   thumbnail: StaticImageData | string;
+  /** Looping clip for the home launcher card; poster is its first frame. */
+  loop?: { src: string; poster: StaticImageData };
   needsProviderSupport?: boolean;
 }
 
