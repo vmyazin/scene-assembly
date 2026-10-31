@@ -22,16 +22,21 @@ function requirement(feature: Feature) {
   return feature.requiresImage ? 'Needs an image' : 'Prompt only';
 }
 
-function LauncherTile({ title, detail, thumbnail, onClick }: {
-  title: string; detail: string; thumbnail: string | StaticImageData; onClick: () => void;
+function LauncherTile({ title, detail, thumbnail, loop, onClick }: {
+  title: string; detail: string; thumbnail: string | StaticImageData;
+  loop?: { src: string; poster: StaticImageData }; onClick: () => void;
 }) {
+  const still = loop?.poster ?? thumbnail;
   return <button type="button" onClick={onClick} aria-label={title}
     className="group flex min-h-[124px] cursor-pointer flex-col overflow-hidden rounded-lg border border-[var(--border-input)] bg-[var(--background-elevated)] text-left transition-colors hover:border-[var(--border-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--neon-cyan)]">
     <div className="relative aspect-video w-full shrink-0 overflow-hidden">
-      {typeof thumbnail === 'string' ? (
+      {typeof still === 'string' ? (
         // eslint-disable-next-line @next/next/no-img-element -- existing public catalog illustrations
-        <img src={thumbnail} alt="" className="h-full w-full object-cover" />
-      ) : <Image src={thumbnail} alt="" fill sizes="(min-width: 640px) 25vw, 50vw" className="object-cover" />}
+        <img src={still} alt="" className="h-full w-full object-cover" />
+      ) : <Image src={still} alt="" fill sizes="(min-width: 640px) 25vw, 50vw" className="object-cover" />}
+      {/* The poster stays underneath, so reduced motion simply hides the clip. */}
+      {loop && <video src={loop.src} poster={loop.poster.src} autoPlay muted loop playsInline preload="auto"
+        aria-hidden="true" className="absolute inset-0 h-full w-full object-cover motion-reduce:hidden" />}
     </div>
     <span className="block px-2 py-2 text-xs font-medium leading-snug text-[var(--foreground)]">
       {title}<span className="mt-1 block text-[0.625rem] font-normal text-[var(--foreground-muted)]">{detail}</span>
@@ -64,7 +69,7 @@ export default function StudioLauncher({ onSelectImage, onSelectVideo }: {
           Video <span className="text-[0.625rem] font-normal text-[var(--foreground-muted)]">{VIDEO_DIRECTIONS.length} modes</span>
         </h3>
         <div className="grid grid-cols-2 gap-2">{VIDEO_DIRECTIONS.map(mode => <LauncherTile key={mode.id}
-          title={mode.label} detail={mode.requires} thumbnail={mode.thumbnail} onClick={() => onSelectVideo(mode.id)} />)}</div>
+          title={mode.label} detail={mode.requires} thumbnail={mode.thumbnail} loop={mode.loop} onClick={() => onSelectVideo(mode.id)} />)}</div>
       </section>
     </div>
     <RecentCreations />
