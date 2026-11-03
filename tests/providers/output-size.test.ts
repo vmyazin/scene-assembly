@@ -183,6 +183,8 @@ describe('the shared table is the one the request uses', () => {
     expect(imageDimensions('atlas', 'bytedance/seedream-v5.0-pro/text-to-image', '4:3')).toEqual([1776, 1328]);
     expect(imageDimensions('atlas', 'microsoft/mai-image-2.6/text-to-image', '1:1')).toEqual([1536, 1536]);
     expect(imageDimensions('atlas', 'microsoft/mai-image-2.6/text-to-image', '21:9')).toEqual([2016, 864]);
+    // The edit sends size "default" and has no pixel pair to label.
+    expect(imageDimensions('atlas', 'microsoft/mai-image-2.6/edit', '16:9')).toBeNull();
   });
 
   it('Comet sends the pixels the image control promises', async () => {

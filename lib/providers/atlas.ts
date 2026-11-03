@@ -14,9 +14,7 @@ import {
 import {
   ATLAS_GPT_IMAGE_DIMENSIONS,
   ATLAS_IMAGE_DIMENSIONS,
-  ATLAS_MAI_DIMENSIONS,
-  ATLAS_SEEDREAM_DIMENSIONS,
-  ATLAS_SEEDREAM_FLASH_DIMENSIONS,
+  atlasDimensionTable,
   isGptImage25,
   isLumaUni,
   isMaiImage,
@@ -26,7 +24,7 @@ import {
   isSeedreamFlash,
   ratioDimensions,
 } from './output-size';
-import { resolveSize } from './catalog';
+import { findModel, generatedEditSeconds, resolveSize } from './catalog';
 
 /**
  * Atlas Cloud — submit returns a prediction id, then you poll one endpoint for
@@ -50,14 +48,8 @@ export const ATLAS_API = 'https://api.atlascloud.ai/api/v1';
  * ("1024*1024"), and that formatting is the only part that belongs here.
  */
 function imageSize(model: string, aspectRatio: string | undefined): string {
-  // Flash shares the Seedream prefix and must not inherit Pro's pairs.
-  const table = isSeedreamFlash(model)
-    ? ATLAS_SEEDREAM_FLASH_DIMENSIONS
-    : isMaiImage(model)
-      ? ATLAS_MAI_DIMENSIONS
-      : isSeedream(model)
-        ? ATLAS_SEEDREAM_DIMENSIONS
-        : ATLAS_IMAGE_DIMENSIONS;
+  // Same table the shape control labels. Flash is ahead of Seedream there.
+  const table = atlasDimensionTable(model) ?? ATLAS_IMAGE_DIMENSIONS;
   const [width, height] = ratioDimensions(table, aspectRatio);
   return `${width}*${height}`;
 }
@@ -368,7 +360,7 @@ export function atlasEditBody(request: VideoRequest): Record<string, unknown> {
       model: request.model,
       prompt: request.prompt,
       video: request.sourceVideo,
-      duration: request.outputDuration ?? 5,
+      duration: generatedEditSeconds(findModel('atlas', request.model), request.outputDuration) ?? 5,
       resolution: request.resolution ?? '540p',
       strength: request.strength ?? 'flex_2',
     };

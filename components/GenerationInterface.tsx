@@ -15,13 +15,9 @@ import { motion } from 'framer-motion';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Feature, GenerationConfig } from '@/types';
-
-/** Four places, then drop trailing zeros: $0.0175 must not become $0.018. */
-function formatCatalogUsd(value: number): string {
-  return value.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
-}
 import { metaForFeature, slugify } from '@/lib/example-prompts';
 import { falPublishedCost, geminiResolutionCost } from '@/lib/spend/rates';
+import { formatUsdTrimmed } from '@/lib/spend/format';
 import { resolveCatalogRate } from '@/lib/spend/resolve';
 import { DEFAULT_GEMINI_IMAGE_MODEL, geminiImageSize, geminiModelsForFeature, resolveGeminiImageModel } from '@/lib/engines/gemini-catalog';
 import { requestExamplePrompt, requestPromptSlug } from '@/lib/micro-ai/browser';
@@ -337,6 +333,9 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
     ? activeProviderCatalogModel.sizes
     : undefined;
   const backgrounds = activeProviderCatalogModel?.backgrounds;
+  // An empty list means the model ignores a ratio. MAI-Image-2.6 edit sends
+  // `size: 'default'`, so a shape chip would label pixels the request never sends.
+  const offersAspectRatio = activeProviderCatalogModel?.aspectRatios?.length !== 0;
   const selectedBackground = backgrounds?.find((option) => option.value === config.background)?.value
     ?? backgrounds?.[0]?.value;
   // What the download filename is tagged with. Cloudflare and Pollinations still
@@ -839,7 +838,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
           // the fact anyway.
           ? `${falImageCost ? `Est. ≈ $${falImageCost.costUsd.toFixed(3)} / image` : 'fal usage rates apply'} · ${activeFalImageModel.label}`
           : activeProviderCatalogModel
-            ? `${tieredProviderEstimate?.costUsd != null ? `Est. ≈ $${formatCatalogUsd(tieredProviderEstimate.costUsd)} / image` : activeProviderCatalogModel.price ?? 'Usage rates apply'} · ${activeProviderCatalogModel.label}`
+            ? `${tieredProviderEstimate?.costUsd != null ? `Est. ≈ $${formatUsdTrimmed(tieredProviderEstimate.costUsd)} / image` : activeProviderCatalogModel.price ?? 'Usage rates apply'} · ${activeProviderCatalogModel.label}`
             // Three decimals, not two: Lite is $0.034 an image and "$0.03"
             // rounds away the very difference the picker exists to show.
             : `Est. ≈ $${estCost.toFixed(3)} / image · ${activeGeminiModel.label}`;
@@ -897,7 +896,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
         const values: Record<string,string|number|boolean> = activeEngine.id === 'fal'
           ? falImageValues(config, falThinkingLevel, relaxed.attach())
           : activeProvider || activeEngine.id === 'pollinations'
-            ? {aspectRatio:config.aspectRatio ?? DEFAULT_ASPECT_RATIO, ...(activeProvider === 'piapi' || providerImageSizes ? {resolution:selectedImageSize} : {}), ...(selectedBackground ? {background:selectedBackground} : {}), ...relaxed.attach()}
+            ? {...(offersAspectRatio ? {aspectRatio:config.aspectRatio ?? DEFAULT_ASPECT_RATIO} : {}), ...(activeProvider === 'piapi' || providerImageSizes ? {resolution:selectedImageSize} : {}), ...(selectedBackground ? {background:selectedBackground} : {}), ...relaxed.attach()}
             : activeEngine.id === 'cloudflare' ? {}
               : {aspectRatio:config.aspectRatio ?? DEFAULT_ASPECT_RATIO,imageSize:selectedImageSize,useGoogleSearch:Boolean(config.useGoogleSearch) && activeGeminiModel.supportsGoogleSearch};
         await cloudWorkspace.submit({modelId:cloudModelId,mediaType:'image',inputMode:cloudInputMode,prompt:cloudPrompt,values},feature.requiresImage ? references.map(reference => reference.file) : [],prompt);
@@ -1370,7 +1369,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
         }
         chips={
           <>
-            {activeEngine.supportsAspectRatio && (
+            {activeEngine.supportsAspectRatio && offersAspectRatio && (
               <ChipPopover
                 label="Shape"
                 panelLabel="Aspect ratio"

@@ -47,7 +47,7 @@ import { downloadFilenameBase } from '@/lib/download-name';
 import { requestPromptSlug } from '@/lib/micro-ai/browser';
 import { getProviderVideoStatus, pollDelayMs, releaseRunwareMedia, submitProviderVideo } from '@/lib/providers/browser';
 import { followProviderVideo } from '@/lib/providers/follow-video';
-import { findModel, modelsFor } from '@/lib/providers/catalog';
+import { findModel, generatedEditSeconds, modelsFor } from '@/lib/providers/catalog';
 import ModelListbox from '@/components/ModelListbox';
 import { PROVIDER_VIDEO_COLUMNS, providerVideoSpecs } from '@/lib/models/listbox-specs';
 import { frameSlotLabel, keyframeSlotLabel } from '@/lib/providers/frames';
@@ -436,16 +436,18 @@ export default function ProviderVideoWorkspace({
    * selected. Priced through the same resolver the spend ledger uses, so the
    * figure on the button and the figure in the ledger cannot disagree. A
    * requested output longer than the source is not what Atlas renders, so
-   * both use the shorter of the two. Null whenever the vendor never
-   * published a rate for this size, which is a silence rather than a guess.
+   * both use the shorter of the two. A generated-length edit bills its
+   * selected length, or the catalog default when the request omits one.
+   * Null whenever the vendor never published a rate for this size, which
+   * is a silence rather than a guess.
    */
   const pricedSize = typeof values.size === 'string' ? values.size : undefined;
   const requestedOutput = typeof values.outputDuration === 'number' && values.outputDuration > 0 ? values.outputDuration : undefined;
   const sourceSeconds = source?.durationSeconds;
-  const generatedLength = isEdit && selectedModel?.videoEdit?.outputDurationIsGenerated === true;
+  const generatedSeconds = isEdit ? generatedEditSeconds(selectedModel, requestedOutput) : undefined;
   const pricedSeconds = isEdit
-    ? (generatedLength && requestedOutput !== undefined
-      ? requestedOutput
+    ? (generatedSeconds !== undefined
+      ? generatedSeconds
       : requestedOutput !== undefined && sourceSeconds !== undefined
         ? Math.min(requestedOutput, sourceSeconds)
         : sourceSeconds ?? requestedOutput)

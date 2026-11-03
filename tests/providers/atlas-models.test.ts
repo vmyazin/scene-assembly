@@ -1,6 +1,7 @@
 // tests/providers/atlas-models.test.ts
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { describeModels } from '@/lib/account/model-schema';
 import { buildAccountSpendEntry } from '@/lib/spend/account';
 import { atlasEditBody, atlasGenerateImage } from '@/lib/providers/atlas';
 import type { CloudJobRequest } from '@/lib/account/contracts';
@@ -115,6 +116,14 @@ describe('Atlas image request shaping', () => {
     });
     expect(edit.images).toBeUndefined();
   });
+
+  it('does not advertise an aspect ratio for MAI-Image-2.6 edit', () => {
+    const models = describeModels(['atlas']);
+    const edit = models.find((entry) => entry.modelId === 'microsoft/mai-image-2.6/edit')?.modes.find((mode) => mode.mode === 'image');
+    const text = models.find((entry) => entry.modelId === 'microsoft/mai-image-2.6/text-to-image')?.modes.find((mode) => mode.mode === 'text');
+    expect(edit?.fields.some((field) => field.key === 'aspectRatio')).toBe(false);
+    expect(text?.fields.some((field) => field.key === 'aspectRatio')).toBe(true);
+  });
 });
 
 describe('Atlas video edit request shaping', () => {
@@ -156,6 +165,14 @@ describe('Atlas video edit request shaping', () => {
 
     expect(atlasEditBody({
       apiKey: 'at-key',
+      model: 'luma/ray-3.2/video-to-video',
+      prompt: 'clay animation',
+      sourceVideo: 'https://cdn.atlas/clip.mp4',
+      inputMode: 'edit',
+    }).duration).toBe(5);
+
+    expect(atlasEditBody({
+      apiKey: 'at-key',
       model: 'luma/ray-3.2/reframe',
       prompt: 'portrait',
       sourceVideo: 'https://cdn.atlas/clip.mp4',
@@ -183,6 +200,31 @@ describe('Atlas ledger for the new rates', () => {
       referenceIds: [],
       values: { resolution: '4K', aspectRatio: '1:1' },
     }).costUsd).toBeCloseTo(0.049, 8);
+  });
+
+  it('prices a tiered Atlas image with no resolution at the first published size', () => {
+    expect(spend({
+      provider: 'atlas',
+      modelId: 'google/nano-banana-2.1-developer/text-to-image',
+      mediaType: 'image',
+      inputMode: 'text',
+      prompt: 'a lighthouse',
+      referenceIds: [],
+      values: {},
+    }).costUsd).toBeCloseTo(0.0175, 8);
+  });
+
+  it('bills a Luma restyle that omitted its length at the 5 second default', () => {
+    expect(spend({
+      provider: 'atlas',
+      modelId: 'luma/ray-3.2/video-to-video',
+      mediaType: 'video',
+      inputMode: 'edit',
+      prompt: 'clay',
+      referenceIds: [],
+      sourceVideoId: 'source',
+      values: { size: '1080p', sourceDurationSeconds: 10 },
+    }).costUsd).toBeCloseTo(2.376, 6);
   });
 
   it('bills Luma restyle for the generated length when the source is shorter', () => {

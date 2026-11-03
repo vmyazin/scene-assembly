@@ -39,7 +39,9 @@ describe('Atlas Kling 4.0 browser route', () => {
       last_image: frames[3],
       resolution: '4k-esr',
     });
-    expect((await post({ ...base, model: 'kwaivgi/kling-v4.0/image-to-video', inputMode: 'frames', images: frameImages.slice(0, 1) })).status).toBe(400);
+    const missing = await post({ ...base, model: 'kwaivgi/kling-v4.0/image-to-video', inputMode: 'frames', images: frameImages.slice(0, 1) });
+    expect(missing.status).toBe(400);
+    expect(await missing.json()).toMatchObject({ error: 'Add the first and last frame' });
   });
 
   it('keeps the reference endpoint separate from ordered keyframes and enforces its image cap', async () => {

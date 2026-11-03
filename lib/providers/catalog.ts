@@ -1147,6 +1147,8 @@ function maiImage26(): ProviderModel[] {
       price: '$0.0891 / image',
       rate: { usd: 0.0891, per: 'image' },
       maxInputImages: 5,
+      // Empty on purpose: the edit sends `size: 'default'` and ignores a ratio.
+      aspectRatios: [],
       note: 'Editing only — it needs at least one reference. Up to 5. The output size stays the model’s own default.',
     },
   ];
@@ -1828,6 +1830,19 @@ export function modelsFor(provider: ProviderId, kind: MediaKind): ProviderModel[
 
 export function findModel(provider: ProviderId, id: string): ProviderModel | undefined {
   return PROVIDER_MODELS[provider].find((model) => model.id === id);
+}
+
+/**
+ * Seconds a generated-length edit renders when the request names one, or the
+ * catalog default when it does not. Luma restyle's body sends that default, so
+ * the button and the ledger have to as well: billing the source length instead
+ * charges a 10s file for a 5s render.
+ */
+export function generatedEditSeconds(model: ProviderModel | undefined, outputDuration: number | undefined): number | undefined {
+  if (!model?.videoEdit?.outputDurationIsGenerated) return undefined;
+  if (typeof outputDuration === 'number' && outputDuration > 0) return outputDuration;
+  const fallback = model.videoEdit.controls?.find((entry) => entry.key === 'outputDuration')?.defaultValue;
+  return typeof fallback === 'number' && fallback > 0 ? fallback : 5;
 }
 
 /** Resolve only the catalog-advertised video input contract for a model/mode. */

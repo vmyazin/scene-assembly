@@ -8,7 +8,7 @@ import type { CloudJobRequest } from '../account/contracts';
 import type { EngineId } from '../engines/registry';
 import { resolveFalVariant } from '../fal/catalog';
 import { falDurationSeconds } from '../fal/pricing';
-import { findModel } from '../providers/catalog';
+import { findModel, generatedEditSeconds } from '../providers/catalog';
 import { seedanceCatalogFigure } from '../providers/seedance-draft';
 import { excerpt, type SpendEntry } from './ledger';
 import {
@@ -154,11 +154,12 @@ export function buildAccountSpendEntry(args: BuildAccountSpendEntryArgs): Accoun
     : undefined;
   // A requested output longer than the file is not what Wan or Kling renders.
   // Bill the shorter of the two so a 3s source with "10 seconds" selected is
-  // not a 10s charge. Luma Ray restyle generates the selected length, so that
-  // clip would undercharge a 10s request on a short source.
-  const generatedOutput = Boolean(edit && model?.videoEdit?.outputDurationIsGenerated && outputDuration !== undefined);
-  const clippedOutput = generatedOutput
-    ? outputDuration
+  // not a 10s charge. Luma Ray restyle generates the selected length, and when
+  // that length is missing it still generates the catalog default. Billing the
+  // source there would not match the body.
+  const generatedSeconds = generatedEditSeconds(model, outputDuration);
+  const clippedOutput = generatedSeconds !== undefined
+    ? generatedSeconds
     : outputDuration !== undefined && sourceDuration !== undefined
       ? Math.min(outputDuration, sourceDuration)
       : outputDuration;
@@ -166,8 +167,13 @@ export function buildAccountSpendEntry(args: BuildAccountSpendEntryArgs): Accoun
     ?? (edit && sourceDuration !== undefined
       ? sourceDuration
       : typeof request.values.durationSeconds === 'number' ? request.values.durationSeconds : undefined);
+  // Atlas renders its first published size when a tiered request omits one,
+  // the same way PiAPI renders 1K. Leaving the size blank prices that render
+  // as unknown.
   const imageResolution = request.mediaType === 'image' && (request.provider === 'piapi' || request.provider === 'atlas')
-    ? (typeof request.values.resolution === 'string' ? request.values.resolution : request.provider === 'piapi' ? '1K' : undefined)
+    ? (typeof request.values.resolution === 'string'
+      ? request.values.resolution
+      : request.provider === 'piapi' ? '1K' : model?.sizes?.[0]?.label)
     : undefined;
   const resolved = resolveCatalogRate(model, duration, outputs, {
     audio: request.values.audio === true,

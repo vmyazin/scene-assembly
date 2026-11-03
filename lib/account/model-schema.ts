@@ -155,7 +155,9 @@ function sizeNamesAspect(model: ProviderModel): boolean {
 }
 
 function aggregatorImageFields(provider: ProviderId, model: ProviderModel): ModelField[] {
-  const fields = [aspectRatioField(provider, model)];
+  // An explicit empty list means the model does not take a ratio. Undefined
+  // keeps the generic choices older image entries rely on.
+  const fields: ModelField[] = model.aspectRatios?.length === 0 ? [] : [aspectRatioField(provider, model)];
   if (provider === 'piapi') fields.push(select('resolution', 'Resolution', ['1K', '2K', '4K'], { default: '1K' }));
   else if (provider === 'atlas' && model.sizes?.length) fields.push(select('resolution', 'Resolution', model.sizes.map(size => size.label), { default: model.sizes[0].label }));
   if (model.backgrounds?.length) {
