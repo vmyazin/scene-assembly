@@ -8,6 +8,7 @@
  * sizes, fal and Kie list control fields — so each gets an adapter and the
  * listbox itself only ever sees cells.
  */
+import { pVideoEditRates } from '@/lib/providers/p-video-edit-promo';
 import type { ProviderModel, ProviderRate, ProviderSize } from '@/lib/providers/types';
 import { sizeTier } from '@/lib/providers/types';
 import type { FalInputMode, FalModelDefinition } from '@/lib/fal/types';
@@ -248,10 +249,13 @@ function lengthCell(seconds: number | undefined, whenMissing: SpecCell): SpecCel
 }
 
 /** Aggregator video rows: Max · Up to · Shapes · From. */
-export function providerVideoSpecs(model: ProviderModel, inputMode?: string): SpecCell[] {
+export function providerVideoSpecs(model: ProviderModel, inputMode?: string, at = Date.now()): SpecCell[] {
   if (inputMode === 'edit' && model.videoEdit) {
     const edit = model.videoEdit;
-    const rate = edit.draftRate ?? edit.rate;
+    // The From cell is the cheapest rate. P-Video-Edit's draft sale replaces
+    // the list price only while the offer is open, read at call time.
+    const sale = pVideoEditRates(model.id, at);
+    const rate = sale?.draftRate ?? edit.draftRate ?? edit.rate;
     return [
       edit.maxSeconds === undefined ? DASH : text(`${edit.maxSeconds}s`),
       text(edit.outputLabel ?? topTier(edit.sizes) ?? '—'),

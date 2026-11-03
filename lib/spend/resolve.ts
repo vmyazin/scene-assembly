@@ -6,6 +6,7 @@
  */
 import type { KieJob } from '../kie/types';
 import type { MicroAiUsage } from '../micro-ai/models';
+import { pVideoEditRates } from '../providers/p-video-edit-promo';
 import { sizeRateKey, type ProviderModel } from '../providers/types';
 
 import type { SpendEntry, SpendSource } from './ledger';
@@ -102,9 +103,17 @@ export function resolveCatalogRate(
   model: ProviderModel | undefined,
   durationSeconds?: number,
   outputImages = 1,
-  controls: { size?: string; inputImages?: number; audio?: boolean; draft?: boolean; inputMode?: string } = {}
+  controls: { size?: string; inputImages?: number; audio?: boolean; draft?: boolean; inputMode?: string; pricedAt?: number } = {}
 ): SpendFigure {
-  const rate = controls.inputMode === 'edit' ? (controls.draft ? model?.videoEdit?.draftRate : model?.videoEdit?.rate) : model?.rate;
+  // Edit rates resolve here, not at import. P-Video-Edit's sale replaces the
+  // catalog list price only inside its window; pricedAt keeps a saved job on
+  // the rate in force when it was submitted, the same way fal's H3 sale does.
+  const at = controls.pricedAt ?? Date.now();
+  const sale = controls.inputMode === 'edit' ? pVideoEditRates(model?.id, at) : null;
+  const editRate = controls.draft
+    ? (sale?.draftRate ?? model?.videoEdit?.draftRate)
+    : (sale?.rate ?? model?.videoEdit?.rate);
+  const rate = controls.inputMode === 'edit' ? editRate : model?.rate;
   if (!rate) return unknownFigure('catalog-rate');
   // Only search when a size was actually given. `size.preset === undefined`
   // is true for every size that has no preset, so with no size chosen this

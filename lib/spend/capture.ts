@@ -261,6 +261,7 @@ export function captureProviderJob(provider: ProviderId, job: ProviderJob, task:
           size: typeof controls.size === 'string' ? controls.size : undefined,
           inputMode: job.inputMode,
           draft: controls.draft === true,
+          pricedAt: job.createdAt,
         })
       )
     );
