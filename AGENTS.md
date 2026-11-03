@@ -34,8 +34,11 @@
   `docs/codex/specs/2026-10-26-kling4-atlas-h3-pricing.md`. Atlas's live quote
   differs from its headline; preserve the documented pricing evidence and unknown
   edit totals. Keyframes use `middle_images`, and an explicit empty `aspectRatios`
-  means the input fixes the shape. fal promotions resolve at call time and saved
-  job time, because a running Worker can outlive the sale.
+  means the input fixes the shape. The 2026-11-03 follow-up prices the ESR
+  upscales and lets First & last frame carry the same ordered keyframes as Image
+  mode. Newer Atlas image and edit models are in
+  `docs/codex/specs/2026-11-03-atlas-models.md`. fal promotions resolve at call
+  time and saved job time, because a running Worker can outlive the sale.
 
 - **A selected source/reference video exceeds model duration** → first read
   `docs/codex/specs/2026-10-15-auto-trim-ref-clip.md`. Use

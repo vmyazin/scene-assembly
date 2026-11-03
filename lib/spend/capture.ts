@@ -110,7 +110,12 @@ export function captureImageResult(args: ImageResultCapture): void {
           args.modelId ? findModel(args.engine, args.modelId) : undefined,
           undefined,
           1,
-          { inputImages: args.inputImages, ...(args.engine === 'piapi' ? {size: args.resolution ?? '1K'} : {}) }
+          {
+            inputImages: args.inputImages,
+            ...(args.engine === 'piapi' ? { size: args.resolution ?? '1K' } : {}),
+            // Atlas image tiers key off the same resolution label the control shows.
+            ...(args.engine === 'atlas' && args.resolution ? { size: args.resolution } : {}),
+          }
         )));
         return;
       case 'fal': {

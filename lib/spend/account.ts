@@ -152,18 +152,26 @@ export function buildAccountSpendEntry(args: BuildAccountSpendEntryArgs): Accoun
   const outputDuration = typeof request.values.outputDuration === 'number' && request.values.outputDuration > 0
     ? request.values.outputDuration
     : undefined;
-  // A requested output longer than the file is not what Atlas renders. Bill the
-  // shorter of the two so a 3s source with "10 seconds" selected is not $1.00.
-  const clippedOutput = outputDuration !== undefined && sourceDuration !== undefined
-    ? Math.min(outputDuration, sourceDuration)
-    : outputDuration;
+  // A requested output longer than the file is not what Wan or Kling renders.
+  // Bill the shorter of the two so a 3s source with "10 seconds" selected is
+  // not a 10s charge. Luma Ray restyle generates the selected length, so that
+  // clip would undercharge a 10s request on a short source.
+  const generatedOutput = Boolean(edit && model?.videoEdit?.outputDurationIsGenerated && outputDuration !== undefined);
+  const clippedOutput = generatedOutput
+    ? outputDuration
+    : outputDuration !== undefined && sourceDuration !== undefined
+      ? Math.min(outputDuration, sourceDuration)
+      : outputDuration;
   const duration = clippedOutput
     ?? (edit && sourceDuration !== undefined
       ? sourceDuration
       : typeof request.values.durationSeconds === 'number' ? request.values.durationSeconds : undefined);
+  const imageResolution = request.mediaType === 'image' && (request.provider === 'piapi' || request.provider === 'atlas')
+    ? (typeof request.values.resolution === 'string' ? request.values.resolution : request.provider === 'piapi' ? '1K' : undefined)
+    : undefined;
   const resolved = resolveCatalogRate(model, duration, outputs, {
     audio: request.values.audio === true,
-    size: request.provider === 'piapi' && request.mediaType === 'image' ? String(request.values.resolution ?? '1K') : typeof request.values.size === 'string' ? request.values.size : undefined,
+    size: imageResolution ?? (typeof request.values.size === 'string' ? request.values.size : undefined),
     inputImages: request.referenceIds.length,
     inputMode: request.inputMode,
     draft: request.values.draft === true,

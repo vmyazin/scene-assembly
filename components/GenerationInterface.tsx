@@ -15,8 +15,14 @@ import { motion } from 'framer-motion';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Feature, GenerationConfig } from '@/types';
+
+/** Four places, then drop trailing zeros: $0.0175 must not become $0.018. */
+function formatCatalogUsd(value: number): string {
+  return value.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+}
 import { metaForFeature, slugify } from '@/lib/example-prompts';
 import { falPublishedCost, geminiResolutionCost } from '@/lib/spend/rates';
+import { resolveCatalogRate } from '@/lib/spend/resolve';
 import { DEFAULT_GEMINI_IMAGE_MODEL, geminiImageSize, geminiModelsForFeature, resolveGeminiImageModel } from '@/lib/engines/gemini-catalog';
 import { requestExamplePrompt, requestPromptSlug } from '@/lib/micro-ai/browser';
 import { extensionForMimeType } from '@/lib/media-download';
@@ -330,6 +336,9 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
   const providerImageSizes = activeProviderCatalogModel?.sizes?.length
     ? activeProviderCatalogModel.sizes
     : undefined;
+  const backgrounds = activeProviderCatalogModel?.backgrounds;
+  const selectedBackground = backgrounds?.find((option) => option.value === config.background)?.value
+    ?? backgrounds?.[0]?.value;
   // What the download filename is tagged with. Cloudflare and Pollinations still
   // name themselves from the engine registry; Gemini, fal and the aggregators
   // each answer with the model that actually ran.
@@ -581,7 +590,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
           prompt: finalPrompt,
           ...relaxed.attach(),
           images: images.map((image) => image.dataUrl.split(',')[1]), // strip data: prefix
-          config,
+          config: selectedBackground ? { ...config, background: selectedBackground } : config,
           featureId: feature.id,
           apiKey: activeProvider ? providerKeys[activeProvider] : apiKey,
           model: activeProviderModel ?? (isGemini ? activeGeminiModel.id : undefined),
@@ -811,6 +820,13 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
       inputImages: images.length,
     }
   );
+  const tieredProviderEstimate = activeProviderCatalogModel?.rate?.usdByResolution
+    ? resolveCatalogRate(activeProviderCatalogModel, undefined, 1, {
+        inputMode: cloudInputMode,
+        inputImages: images.length,
+        ...(providerImageSizes ? { size: selectedImageSize } : {}),
+      })
+    : undefined;
   const costLine =
     activeEngine.id === 'pollinations'
       ? cloudWorkspace.cloud ? 'Provider usage rates apply · Pollinations (FLUX)' : 'Free · Pollinations (FLUX)'
@@ -823,7 +839,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
           // the fact anyway.
           ? `${falImageCost ? `Est. ≈ $${falImageCost.costUsd.toFixed(3)} / image` : 'fal usage rates apply'} · ${activeFalImageModel.label}`
           : activeProviderCatalogModel
-            ? `${activeProviderCatalogModel.price ?? 'Usage rates apply'} · ${activeProviderCatalogModel.label}`
+            ? `${tieredProviderEstimate?.costUsd != null ? `Est. ≈ $${formatCatalogUsd(tieredProviderEstimate.costUsd)} / image` : activeProviderCatalogModel.price ?? 'Usage rates apply'} · ${activeProviderCatalogModel.label}`
             // Three decimals, not two: Lite is $0.034 an image and "$0.03"
             // rounds away the very difference the picker exists to show.
             : `Est. ≈ $${estCost.toFixed(3)} / image · ${activeGeminiModel.label}`;
@@ -881,7 +897,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
         const values: Record<string,string|number|boolean> = activeEngine.id === 'fal'
           ? falImageValues(config, falThinkingLevel, relaxed.attach())
           : activeProvider || activeEngine.id === 'pollinations'
-            ? {aspectRatio:config.aspectRatio ?? DEFAULT_ASPECT_RATIO, ...(activeProvider === 'piapi' || providerImageSizes ? {resolution:selectedImageSize} : {}), ...relaxed.attach()}
+            ? {aspectRatio:config.aspectRatio ?? DEFAULT_ASPECT_RATIO, ...(activeProvider === 'piapi' || providerImageSizes ? {resolution:selectedImageSize} : {}), ...(selectedBackground ? {background:selectedBackground} : {}), ...relaxed.attach()}
             : activeEngine.id === 'cloudflare' ? {}
               : {aspectRatio:config.aspectRatio ?? DEFAULT_ASPECT_RATIO,imageSize:selectedImageSize,useGoogleSearch:Boolean(config.useGoogleSearch) && activeGeminiModel.supportsGoogleSearch};
         await cloudWorkspace.submit({modelId:cloudModelId,mediaType:'image',inputMode:cloudInputMode,prompt:cloudPrompt,values},feature.requiresImage ? references.map(reference => reference.file) : [],prompt);
@@ -1389,6 +1405,32 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                       The free tier returns about 0.6 MP (768 × 768 for a square) and adds a small pollinations.ai mark.
                     </span>
                   )}
+                </div>
+              </ChipPopover>
+            )}
+
+            {backgrounds && selectedBackground && (
+              <ChipPopover
+                label="Background"
+                panelLabel="Background"
+                value={backgrounds.find((option) => option.value === selectedBackground)?.label ?? selectedBackground}
+              >
+                <div className="space-y-2">
+                  <span className="block text-sm font-medium text-[var(--foreground)]">
+                    Background
+                  </span>
+                  <SegmentedToggleGroup
+                    label="Background"
+                    options={backgrounds.map((option) => ({ label: option.label, value: option.value }))}
+                    value={selectedBackground}
+                    onChange={(value) => applyConfig({
+                      ...config,
+                      background: value as NonNullable<GenerationConfig['background']>,
+                    })}
+                  />
+                  <span className="block text-xs text-[var(--foreground-subtle)]">
+                    Transparent backgrounds are saved as PNG.
+                  </span>
                 </div>
               </ChipPopover>
             )}

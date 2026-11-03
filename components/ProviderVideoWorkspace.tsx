@@ -252,11 +252,20 @@ export default function ProviderVideoWorkspace({
       return next;
     }
     const fields = controlFieldsFor({...selectedModel, duration: undefined, durations: undefined, sizes: selectedModel.videoEdit.sizes, aspectRatios: undefined, supportsAudio: false});
-    if (selectedModel.videoEdit.aspectRatios?.length) fields.push({
-      key: 'aspectRatio', label: 'Target aspect ratio', type: 'select', defaultValue: '',
-      description: 'Letterboxes the source. Leave this on “Keep source frame” to send the clip unchanged.',
-      options: [{ label: 'Keep source frame', value: '' }, ...selectedModel.videoEdit.aspectRatios.map(value => ({ label: value, value }))],
-    });
+    if (selectedModel.videoEdit.aspectRatios?.length) {
+      const required = selectedModel.videoEdit.requireAspectRatio === true;
+      fields.push({
+        key: 'aspectRatio', label: 'Target aspect ratio', type: 'select',
+        defaultValue: required ? selectedModel.videoEdit.aspectRatios[0] : '',
+        description: required
+          ? 'This model always reframes. Pick the shape the clip should become.'
+          : 'Letterboxes the source. Leave this on “Keep source frame” to send the clip unchanged.',
+        options: [
+          ...(required ? [] : [{ label: 'Keep source frame', value: '' }]),
+          ...selectedModel.videoEdit.aspectRatios.map(value => ({ label: value, value })),
+        ],
+      });
+    }
     if (selectedModel.videoEdit.draftRate) fields.push({key: 'draft', label: 'Draft mode', type: 'boolean', defaultValue: false, description: 'Faster, lower-quality preview at a lower price. Turn off for Standard quality.'});
     else if (selectedModel.videoEdit.draftPreview) fields.push(draftField);
     for (const control of selectedModel.videoEdit.controls ?? []) {
@@ -352,6 +361,9 @@ export default function ProviderVideoWorkspace({
   const [isDownloading, setIsDownloading] = useState(false);
   const mountedRef = useMountedRef();
   const isFrames = inputMode === 'frames';
+  const inputCapability = inputMode === 'text' ? undefined : selectedModel?.videoInputs?.[inputMode];
+  const orderedFrames = isFrames && inputCapability?.orderedKeyframes === true;
+  const isKeyframes = (inputMode === 'image' && inputCapability?.orderedKeyframes === true) || orderedFrames;
   const describeSources = useMemo(() => {
     // Text mode submits no media. A reference left in the draft from Image
     // mode would otherwise be described and then ignored by the run.
@@ -361,24 +373,23 @@ export default function ProviderVideoWorkspace({
     references.forEach((reference, index) => {
       items.push({
         file: reference.file,
-        label: isFrames ? frameSlotLabel(index) : `Image ${index + 1}`,
+        label: isKeyframes ? keyframeSlotLabel(index, references.length) : isFrames ? frameSlotLabel(index) : `Image ${index + 1}`,
       });
     });
     return items;
-  }, [inputMode, source, references, isFrames]);
+  }, [inputMode, source, references, isFrames, isKeyframes]);
   const isReference = inputMode === 'reference';
   const clipCapability = referenceClipsFor(selectedModel, inputMode);
   const clipSyntax = selectedModel?.videoInputs?.reference?.promptSyntax;
   const imageReferencesOnly = isReference || isEdit;
-  const inputCapability = inputMode === 'text' ? undefined : selectedModel?.videoInputs?.[inputMode];
   // Reference arrays can be larger at the provider, but data-URI requests stay
   // practical at five views. The server still enforces the documented hard max.
+  // Ordered frames (Kling 4) keep the catalog cap: first, up to eight middle, last.
   const maxInputImages = isEdit ? (selectedModel?.videoEdit?.maxImages ?? 0) : isFrames
-    ? 2
+    ? (orderedFrames ? (inputCapability?.maxImages ?? 2) : 2)
     : imageReferencesOnly
       ? (inputCapability?.clientMaxImages ?? Math.min(inputCapability?.maxImages ?? 5, 5))
       : (inputCapability?.maxImages ?? selectedModel?.maxInputImages ?? 1);
-  const isKeyframes = inputMode === 'image' && inputCapability?.orderedKeyframes === true;
   const referenceToken = (index: number) => clipToken(
     isEdit ? (selectedModel?.videoEdit?.plainReferences ? 'image-index' : selectedModel?.videoEdit?.promptSyntax ?? 'at-image-index') : inputCapability?.promptSyntax,
     'Image', index,
@@ -431,8 +442,13 @@ export default function ProviderVideoWorkspace({
   const pricedSize = typeof values.size === 'string' ? values.size : undefined;
   const requestedOutput = typeof values.outputDuration === 'number' && values.outputDuration > 0 ? values.outputDuration : undefined;
   const sourceSeconds = source?.durationSeconds;
+  const generatedLength = isEdit && selectedModel?.videoEdit?.outputDurationIsGenerated === true;
   const pricedSeconds = isEdit
-    ? (requestedOutput !== undefined && sourceSeconds !== undefined ? Math.min(requestedOutput, sourceSeconds) : sourceSeconds)
+    ? (generatedLength && requestedOutput !== undefined
+      ? requestedOutput
+      : requestedOutput !== undefined && sourceSeconds !== undefined
+        ? Math.min(requestedOutput, sourceSeconds)
+        : sourceSeconds ?? requestedOutput)
     : (typeof values.duration === 'number' ? values.duration : undefined);
   const estimate = resolveCatalogRate(
     selectedModel,
@@ -917,12 +933,14 @@ export default function ProviderVideoWorkspace({
           {inputMode !== 'text' && maxInputImages > 0 && !editSpec && (
             <WorkspaceCard
               title={isEdit ? 'Replacement images (optional)' : isFrames
-                ? 'First and last frame'
+                ? (orderedFrames ? 'First, middle, and last frames' : 'First and last frame')
                 : isKeyframes ? 'Keyframes in order' : isReference
                   ? 'Add character views'
                   : `Reference image${maxInputImages === 1 ? '' : 's'}`}
               description={isEdit ? `Add up to ${maxInputImages} character, product, or setting images to guide the edit. Address images as ${referenceToken(0)}, ${referenceToken(1)}, and so on.` : isFrames
-                ? 'Two images, in order: the frame the clip opens on, then the one it ends on. The model builds the motion between them.'
+                ? (orderedFrames
+                  ? 'Add the opening frame first and the closing frame last, with up to eight middle frames between them. Two images are the first and the last.'
+                  : 'Two images, in order: the frame the clip opens on, then the one it ends on. The model builds the motion between them.')
                 : isKeyframes
                   ? 'Add the opening frame first and the closing frame last, with up to eight middle frames between them. One image supplies only the opening frame.'
                   : isReference
@@ -947,13 +965,17 @@ export default function ProviderVideoWorkspace({
                 items={references.map((reference, index) => ({
                   id: reference.id,
                   src: reference.previewUrl,
-                  caption: isFrames ? frameSlotLabel(index) : isKeyframes ? keyframeSlotLabel(index, references.length) : isEdit || isReference ? referenceToken(index) : undefined,
-                  alt: isFrames
+                  caption: isKeyframes ? keyframeSlotLabel(index, references.length) : isFrames ? frameSlotLabel(index) : isEdit || isReference ? referenceToken(index) : undefined,
+                  alt: isKeyframes
+                    ? keyframeSlotLabel(index, references.length)
+                    : isFrames
                     ? frameSlotLabel(index)
                     : isReference
                       ? `Image ${index + 1} character reference`
                       : `Reference ${index + 1}`,
-                  removeLabel: isFrames
+                  removeLabel: isKeyframes
+                    ? `Remove ${keyframeSlotLabel(index, references.length).toLowerCase()}`
+                    : isFrames
                     ? `Remove ${frameSlotLabel(index).toLowerCase()}`
                     : isReference
                       ? `Remove Image ${index + 1}`
@@ -984,9 +1006,11 @@ export default function ProviderVideoWorkspace({
           {(fields.length > 0 || relaxed.offered) && (
             <ModelControlsCard
               description={isEdit
-                ? editHasControl(selectedModel?.videoEdit, 'outputDuration')
-                  ? 'Choose the output duration; aspect ratio follows the source video.'
-                  : 'Duration and aspect ratio match the source video.'
+                ? selectedModel?.videoEdit?.requireAspectRatio
+                  ? 'Pick the output shape. Duration matches the source video.'
+                  : editHasControl(selectedModel?.videoEdit, 'outputDuration')
+                    ? 'Choose the output duration; aspect ratio follows the source video.'
+                    : 'Duration and aspect ratio match the source video.'
                 : `Only the lengths and sizes ${selectedModel?.label} publishes are offered.`}
               namespace={`provider-${modelKey}`}
               fields={shownFields}
