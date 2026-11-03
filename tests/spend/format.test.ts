@@ -1,6 +1,7 @@
+// tests/spend/format.test.ts
 import { describe, expect, it } from 'vitest';
 
-import { formatUsd, formatUsdTotal } from '@/lib/spend/format';
+import { formatUsd, formatUsdTotal, formatUsdTrimmed } from '@/lib/spend/format';
 import { excerpt, providerLabel } from '@/lib/spend/ledger';
 
 describe('formatUsd', () => {
@@ -13,6 +14,14 @@ describe('formatUsd', () => {
   it('treats nothing and nonsense as zero', () => {
     expect(formatUsd(0)).toBe('$0.0000');
     expect(formatUsd(Number.NaN)).toBe('$0.0000');
+  });
+});
+
+describe('formatUsdTrimmed', () => {
+  it('keeps a five-place catalog quote and drops trailing zeros', () => {
+    expect(formatUsdTrimmed(0.02625)).toBe('0.02625');
+    expect(formatUsdTrimmed(0.0175)).toBe('0.0175');
+    expect(formatUsdTrimmed(0.03)).toBe('0.03');
   });
 });
 

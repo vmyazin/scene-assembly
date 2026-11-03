@@ -1,3 +1,4 @@
+// cloud/tests/atlas-kling4.test.ts
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CloudJobRequest } from '../../lib/account/contracts';
@@ -45,7 +46,7 @@ describe('Atlas Kling 4.0 account contract', () => {
   it('describes ten ordered image frames, two bookends, and ten image references', () => {
     const image = findModelDescriptor('atlas', modelId('image-to-video'), 'video')!;
     expect(image.modes.find(mode => mode.mode === 'image')?.references).toEqual({ min: 1, max: 10 });
-    expect(image.modes.find(mode => mode.mode === 'frames')?.references).toEqual({ min: 2, max: 2 });
+    expect(image.modes.find(mode => mode.mode === 'frames')?.references).toEqual({ min: 2, max: 10 });
     for (const mode of image.modes) {
       expect(mode.fields.some(field => field.key === 'aspectRatio')).toBe(false);
       expect(() => validateRequest(env, {
@@ -60,15 +61,20 @@ describe('Atlas Kling 4.0 account contract', () => {
     expect(() => validateRequest(env, generation('reference', 10))).not.toThrow();
     expect(() => validateRequest(env, generation('image', 11))).toThrow(/up to 10/);
     expect(() => validateRequest(env, generation('reference', 15))).toThrow(/up to 10/);
-    expect(() => validateRequest(env, generation('frames', 3))).toThrow(/exactly two/);
+    expect(() => validateRequest(env, generation('frames', 4))).not.toThrow();
+    expect(() => validateRequest(env, generation('frames', 10))).not.toThrow();
+    expect(() => validateRequest(env, generation('frames', 1))).toThrow(/first and last/);
+    expect(() => validateRequest(env, generation('frames', 11))).toThrow(/up to 10/);
     expect(() => validateRequest(env, { ...generation('reference', 1), referenceVideoIds: ['clip'] })).toThrow(/reference video/);
   });
 
   it('refuses unsupported generation sizes and durations before a job can reserve', () => {
     const request = generation('text');
     expect(() => validateRequest(env, { ...request, values: { size: '1080p', durationSeconds: 30 } })).not.toThrow();
+    expect(() => validateRequest(env, { ...request, values: { size: '4K upscale', durationSeconds: 5 } })).not.toThrow();
     for (const values of [
       { size: '4K', durationSeconds: 5 },
+      { size: '4K upscale extra', durationSeconds: 5 },
       { size: '720p', durationSeconds: 2 },
       { size: '720p', durationSeconds: 31 },
       { size: '720p', durationSeconds: 5.5 },

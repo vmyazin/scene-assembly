@@ -99,7 +99,8 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
   } else if (r.inputMode !== 'text') {
     const capability = resolveVideoInput(r.provider, r.modelId, r.inputMode);
     if (!capability) return invalid(`${model.label} does not accept images for ${describeMode(r.inputMode)}.`);
-    if (r.inputMode === 'frames' && count !== 2) return invalid('First and last frame needs exactly two images: the frame the clip opens on, then the one it ends on.');
+    if (r.inputMode === 'frames' && capability.orderedKeyframes && count < 2) return invalid('Add the first and last frame. Middle frames are optional.');
+    if (r.inputMode === 'frames' && !capability.orderedKeyframes && count !== 2) return invalid('First and last frame needs exactly two images: the frame the clip opens on, then the one it ends on.');
     if (count > capability.maxImages) return invalid(`${model.label} takes up to ${capability.maxImages} input image${capability.maxImages === 1 ? '' : 's'}. Remove ${count - capability.maxImages}.`);
     // Comet's video route takes a single `input_reference`; Atlas maps a second
     // image to `last_image`, so only Comet is held to one.
@@ -116,6 +117,7 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
   // Only some Atlas image models publish a tier, so the catalog entry is what
   // says whether one is accepted and which labels are real.
   if (r.provider === 'atlas' && resolution !== undefined && (r.mediaType !== 'image' || !model.sizes?.some(s => s.label === String(resolution)))) return invalid(`"${String(resolution)}" is not a resolution ${model.label} publishes. Pick one from the list.`);
+  if (r.values.background !== undefined && !model.backgrounds?.some(option => option.value === r.values.background)) return invalid('Choose a background this model publishes.');
   if (aspectRatio !== undefined && !['1:1','16:9','9:16','4:3','3:4','3:2','2:3','21:9'].includes(String(aspectRatio))) return invalid(`"${String(aspectRatio)}" is not an aspect ratio ${model.label} accepts.`);
   if (size !== undefined && (typeof size !== 'string' || !model.sizes?.some(s => s.label === size))) return invalid(`"${String(size)}" is not an output size ${model.label} publishes. Pick one from the list.`);
   if (r.values.draft === true && (!model.draftPreview || typeof size !== 'string' || !isSeedanceDraftSize(size))) return invalid('A Seedance draft is 480p only. Pick a 480p size, or turn Draft off.');
@@ -123,7 +125,7 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
   const relaxable = moderationCapability({ provider: r.provider, modelId: r.modelId }).relaxable;
   const accepted = r.provider === 'piapi'
     ? ['aspectRatio','size','durationSeconds','resolution','audio']
-    : r.provider === 'atlas' ? ['aspectRatio','size','durationSeconds','resolution']
+    : r.provider === 'atlas' ? ['aspectRatio','size','durationSeconds','resolution', ...(model.backgrounds?.length ? ['background'] : [])]
       : ['aspectRatio','size','durationSeconds'];
   if (model.draftPreview) accepted.push('draft');
   if (relaxable) accepted.push('moderation');
@@ -165,7 +167,13 @@ export const aggregatorAdapter: GenerationAdapter = {
         throw new Error('Missing output');
       }
       const create = provider === 'piapi' ? piapiCreateImage : provider === 'runware' ? runwareCreateImage : atlasCreateImage;
-      const result = await create({...common, imageInput: model.imageInput, ...(provider === 'piapi' || provider === 'atlas' ? {resolution: r.values.resolution as string | undefined} : {})});
+      const background = r.values.background;
+      const result = await create({
+        ...common,
+        imageInput: model.imageInput,
+        ...(provider === 'piapi' || provider === 'atlas' ? {resolution: r.values.resolution as string | undefined} : {}),
+        ...(provider === 'atlas' && (background === 'auto' || background === 'opaque' || background === 'transparent') ? { background } : {}),
+      });
       return {handle: {id: result.taskId}};
     }
     if (isSeedanceFinalizeValues(r.values)) {
@@ -220,6 +228,7 @@ export const aggregatorAdapter: GenerationAdapter = {
         ...(sourceDurationSeconds !== undefined ? { sourceDurationSeconds } : {}),
         ...(typeof r.values.negativePrompt === 'string' ? { negativePrompt: r.values.negativePrompt } : {}),
         ...(typeof r.values.promptExtend === 'boolean' ? { promptExtend: r.values.promptExtend } : {}),
+        ...(typeof r.values.strength === 'string' ? { strength: r.values.strength } : {}),
       });
       return { handle: { id: result.taskId } };
     }

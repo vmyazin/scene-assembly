@@ -601,19 +601,17 @@ function seedance25(): ProviderModel[] {
  * promising a resolution the endpoint refuses.
  */
 /**
- * Nano Banana 2.1 Developer. Read 2026-10-15 from
- * `https://www.atlascloud.ai/models/google/nano-banana-2.1-developer/text-to-image/llms.txt`
- * and the edit sibling. The llms.txt rate is the authoritative one: $0.018 per
- * image, flat across 1K, 2K and 4K. The page's vendor SKU table quotes $0.05
- * and then says that table is a different platform. The id hangs `-developer`
- * off the model (`google/nano-banana-2.1-developer/text-to-image`), not off the
- * mode the way Nano Banana 2 does.
+ * Nano Banana 2.1 Developer. The id hangs `-developer` off the model
+ * (`google/nano-banana-2.1-developer/text-to-image`), not off the mode the way
+ * Nano Banana 2 does. llms.txt still prints a flat $0.018. Atlas's calculator
+ * on 2026-11-03 does not: 1K is $0.0175, 2K is $0.02625, 4K is $0.049
+ * (35% off the tier's origin price). The ledger uses those quotes.
  */
 function nanoBanana21Developer(): ProviderModel[] {
   const shared = {
     kind: 'image' as const,
-    price: '$0.018 / image',
-    rate: { usd: 0.018, per: 'image' as const },
+    price: '$0.0175 / image @ 1K · $0.02625 @ 2K · $0.049 @ 4K',
+    rate: { usdByResolution: { '1k': 0.0175, '2k': 0.02625, '4k': 0.049 }, per: 'image' as const },
     sizes: ['1K', '2K', '4K'].map((label) => ({ label, preset: label.toLowerCase() })),
   };
   return [
@@ -623,7 +621,7 @@ function nanoBanana21Developer(): ProviderModel[] {
       label: 'Nano Banana 2.1 Developer',
       fileCode: 'nano-banana-2_1-dev-t2i',
       modes: ['text'],
-      note: 'The cheapest Nano Banana 2.1 route. $0.018 an image at 1K, 2K and 4K.',
+      note: 'The cheapest Nano Banana 2.1 route. Quoted 2026-11-03 at $0.0175 / $0.02625 / $0.049 for 1K / 2K / 4K. The page still prints a flat $0.018.',
     },
     {
       ...shared,
@@ -632,20 +630,29 @@ function nanoBanana21Developer(): ProviderModel[] {
       fileCode: 'nano-banana-2_1-dev-edit',
       modes: ['image'],
       maxInputImages: 14,
-      note: 'Editing only — it needs at least one reference. Up to 14. Same $0.018 an image.',
+      note: 'Editing only — it needs at least one reference. Up to 14. Same tier prices as generation.',
     },
   ];
 }
 
 function nanoBanana2Developer(tier: 'full' | 'lite'): ProviderModel[] {
   const lite = tier === 'lite';
-  const usd = lite ? 0.014 : 0.028;
-  const shared = {
-    kind: 'image' as const,
-    price: `$${usd} / image`,
-    rate: { usd, per: 'image' as const },
-    sizes: (lite ? ['1K'] : ['1K', '2K', '4K']).map((label) => ({ label, preset: label.toLowerCase() })),
-  };
+  // Lite is 1K only, and the calculator still returns $0.014 there.
+  // The full developer route is no longer one price: 2026-11-03 quotes are
+  // $0.028 at 1K, $0.042 at 2K and $0.056 at 4K. A flat $0.028 undercharged 4K.
+  const shared = lite
+    ? {
+        kind: 'image' as const,
+        price: '$0.014 / image',
+        rate: { usd: 0.014, per: 'image' as const },
+        sizes: ['1K'].map((label) => ({ label, preset: label.toLowerCase() })),
+      }
+    : {
+        kind: 'image' as const,
+        price: '$0.028 / image @ 1K · $0.042 @ 2K · $0.056 @ 4K',
+        rate: { usdByResolution: { '1k': 0.028, '2k': 0.042, '4k': 0.056 }, per: 'image' as const },
+        sizes: ['1K', '2K', '4K'].map((label) => ({ label, preset: label.toLowerCase() })),
+      };
   const family = lite ? 'nano-banana-2-lite' : 'nano-banana-2';
   const label = lite ? 'Nano Banana 2 Lite Developer' : 'Nano Banana 2 Developer';
   const editLabel = lite ? 'Nano Banana 2 Lite Developer Edit' : 'Nano Banana 2 Developer Edit';
@@ -661,7 +668,7 @@ function nanoBanana2Developer(tier: 'full' | 'lite'): ProviderModel[] {
       ...(lite ? {} : { deprecated: true }),
       note: lite
         ? 'The cheapest image model here. 1K only — Lite publishes no larger size.'
-        : 'Deprecated. Nano Banana 2.1 Developer replaces it. Still available, one price at every resolution.',
+        : 'Deprecated. Nano Banana 2.1 Developer replaces it. Still available. 1K, 2K and 4K are different prices.',
     },
     {
       ...shared,
@@ -700,6 +707,13 @@ function gptImage25Developer(variant: 'sunburst' | 'flare'): ProviderModel[] {
     kind: 'image' as const,
     price: '$0.03 / image @ 1K',
     rate: { usd: 0.03, per: 'image' as const },
+    // Transparent does not change the 1K quote (calculator, 2026-11-03).
+    // 2K is $0.05 and 4K is $0.08, so those sizes stay off this card.
+    backgrounds: [
+      { label: 'Auto', value: 'auto' as const },
+      { label: 'Opaque', value: 'opaque' as const },
+      { label: 'Transparent', value: 'transparent' as const },
+    ],
   };
 
   return [
@@ -878,10 +892,13 @@ function ltx2(version: '2.3' | '2.5', tier: 'fast' | 'pro'): ProviderModel[] {
  * announcement quotes a 720p clip above the per-second figure, which is what
  * that rule is there for.
  *
- * `loop` and `hdr` are not offered — they are switches with no control here
- * yet. The `video-to-video` and `reframe` endpoints are left out because Edit
- * video submits through Runware only.
+ * `loop` and `hdr` are not offered. Restyle and reframe are separate catalog
+ * entries below (`lumaRay32Edits`). The 540p-only rate on these two generation
+ * endpoints is the one recorded in 2026-09; the calculator now prices 720p and
+ * 1080p, and 10s is not twice 5s. Those generation rates stay as recorded
+ * here rather than being rewritten from a non-linear table in the edit work.
  */
+
 function lumaRay32(): ProviderModel[] {
   const shared = {
     label: 'Luma Ray 3.2',
@@ -972,19 +989,35 @@ function lumaUni1(variant: 'standard' | 'max'): ProviderModel[] {
  * the provider's current calculator. No published promotion end date.
  */
 function kling40(): ProviderModel[] {
-  const sizes = [{ label: '720p', preset: '720p' }, { label: '1080p', preset: '1080p' }];
+  // Calculator, 2026-11-03, linear in duration: 720p $0.14287/s, 1080p
+  // $0.21385/s, 1080p-esr $0.182/s, 2k-esr $0.273/s, 4k-esr $0.364/s.
+  // The page still prints $0.11/s. Labels stay human; presets are the API enum.
+  const sizes = [
+    { label: '720p', preset: '720p' },
+    { label: '1080p', preset: '1080p' },
+    { label: '1080p upscale', preset: '1080p-esr' },
+    { label: '2K upscale', preset: '2k-esr' },
+    { label: '4K upscale', preset: '4k-esr' },
+  ];
+  const usdByResolution = {
+    '720p': 0.14287,
+    '1080p': 0.21385,
+    '1080p-esr': 0.182,
+    '2k-esr': 0.273,
+    '4k-esr': 0.364,
+  };
   const shared = {
     kind: 'video' as const,
     label: 'Kling 4.0',
-    price: '$0.14287 / s @ 720p · $0.21385 / s @ 1080p',
-    rate: { per: 'second' as const, usdByResolution: { '720p': 0.14287, '1080p': 0.21385 } },
+    price: '$0.14287 / s @ 720p · $0.21385 / s @ 1080p · $0.182 / s @ 1080p upscale · $0.273 / s @ 2K upscale · $0.364 / s @ 4K upscale',
+    rate: { per: 'second' as const, usdByResolution },
     duration: { type: 'range' as const, min: 3, max: 30, default: 5 },
     sizes,
     // Atlas describes 26,000 English / 11,000 non-English characters.
     // One conservative cap keeps mixed-language prompts inside both limits.
     maxPromptLength: 11_000,
   };
-  const pricing = 'Atlas advertises $0.11/s (30% off, no end date), but its calculator quotes $0.14287/s at 720p and $0.21385/s at 1080p. Estimates use the calculator.';
+  const pricing = 'Atlas advertises $0.11/s (30% off, no end date). Its calculator, read 2026-11-03, quotes $0.14287/s at 720p, $0.21385/s at 1080p, $0.182/s at 1080p upscale, $0.273/s at 2K upscale and $0.364/s at 4K upscale. Estimates use the calculator.';
   return [
     {
       ...shared,
@@ -1003,9 +1036,10 @@ function kling40(): ProviderModel[] {
       maxInputImages: 10,
       videoInputs: {
         image: { field: 'frameImages', maxImages: 10, orderedKeyframes: true },
-        frames: { field: 'frameImages', maxImages: 2 },
+        // Same bookends as Image mode: first, up to eight middle frames, last.
+        frames: { field: 'frameImages', maxImages: 10, orderedKeyframes: true },
       },
-      note: `Premium Kling with generated audio. Add an opening frame, up to eight middle frames, then a closing frame; the frame sets the output shape. ${pricing}`,
+      note: `Premium Kling with generated audio. In Image or First & last frame, add an opening frame, up to eight middle frames, then a closing frame. The opening frame sets the output shape. ${pricing}`,
     },
     {
       ...shared,
@@ -1043,10 +1077,199 @@ function kling40(): ProviderModel[] {
           options: Array.from({ length: 28 }, (_, index) => ({ label: `${index + 3} seconds`, value: index + 3 })),
           description: 'Choose 3–30 seconds; this can differ from the source length.',
         }],
-        note: 'Premium Kling editing in a background job. Address the source as @video_1 and images as @image_1. Choose an output length of 3–30 seconds. Input video duration is billed too; the full pricing formula is unverified, so the total estimate is unavailable. Source files are limited to 200 MB in this app.',
+        note: 'Premium Kling editing in a background job. Address the source as @video_1 and images as @image_1. Choose an output length of 3–30 seconds, including an upscale size. Input video duration is billed too; the full pricing formula is unverified, so the total estimate is unavailable even when the generation calculator quotes that size. Source files are limited to 200 MB in this app.',
       },
     },
   ];
+}
+
+/**
+ * Seedream 5.0 Flash. Calculator, 2026-11-03: $0.018 at every published size,
+ * including 2048×2048 and 3136×1344. The edit takes 1–10 images and
+ * `background` of opaque or transparent. Transparent cannot be JPEG, so the
+ * adapter forces PNG. Text-to-image publishes no background field.
+ */
+function seedream50Flash(): ProviderModel[] {
+  const shared = {
+    kind: 'image' as const,
+    price: '$0.018 / image',
+    rate: { usd: 0.018, per: 'image' as const },
+  };
+  return [
+    {
+      ...shared,
+      id: 'bytedance/seedream-v5.0-flash/text-to-image',
+      label: 'Seedream 5.0 Flash',
+      fileCode: 'seedream-v5_0-flash',
+      modes: ['text'],
+      note: 'One price at every size. Faster than Seedream v5.0 Pro, which stays on its own 1.5K tier.',
+    },
+    {
+      ...shared,
+      id: 'bytedance/seedream-v5.0-flash/edit',
+      label: 'Seedream 5.0 Flash Edit',
+      fileCode: 'seedream-v5_0-flash-edit',
+      modes: ['image'],
+      maxInputImages: 10,
+      backgrounds: [
+        { label: 'Opaque', value: 'opaque' },
+        { label: 'Transparent', value: 'transparent' },
+      ],
+      note: 'Editing only — it needs at least one reference. Up to 10. Transparent backgrounds are PNG.',
+    },
+  ];
+}
+
+/**
+ * MAI-Image-2.6, not the Flash variant. Calculator, 2026-11-03: text $0.0792,
+ * edit $0.0891 (the catalog API rounds those to 0.079 and 0.089). The edit
+ * takes `reference_images` (1–5) and `size` of default or auto, not a pixel pair.
+ * Web search is a separate flag and is not offered.
+ */
+function maiImage26(): ProviderModel[] {
+  return [
+    {
+      id: 'microsoft/mai-image-2.6/text-to-image',
+      label: 'MAI-Image-2.6',
+      fileCode: 'mai-image-2_6',
+      kind: 'image',
+      modes: ['text'],
+      price: '$0.0792 / image',
+      rate: { usd: 0.0792, per: 'image' },
+      note: 'Microsoft’s image model. Each edge stays between 768 and 2346 pixels, and the picture stays under 2.36 megapixels.',
+    },
+    {
+      id: 'microsoft/mai-image-2.6/edit',
+      label: 'MAI-Image-2.6 Edit',
+      fileCode: 'mai-image-2_6-edit',
+      kind: 'image',
+      modes: ['image'],
+      price: '$0.0891 / image',
+      rate: { usd: 0.0891, per: 'image' },
+      maxInputImages: 5,
+      // Empty on purpose: the edit sends `size: 'default'` and ignores a ratio.
+      aspectRatios: [],
+      note: 'Editing only — it needs at least one reference. Up to 5. The output size stays the model’s own default.',
+    },
+  ];
+}
+
+const LUMA_STRENGTH = [
+  ['adhere_1', 'Adhere 1'],
+  ['adhere_2', 'Adhere 2'],
+  ['adhere_3', 'Adhere 3'],
+  ['flex_1', 'Flex 1'],
+  ['flex_2', 'Flex 2'],
+  ['flex_3', 'Flex 3'],
+  ['reimagine_1', 'Reimagine 1'],
+  ['reimagine_2', 'Reimagine 2'],
+  ['reimagine_3', 'Reimagine 3'],
+].map(([value, label]) => ({ value, label }));
+
+/**
+ * Luma Ray 3.2 restyle and reframe. Read 2026-11-03.
+ *
+ * Restyle (`video-to-video`) is linear: $0.1584/s at 540p, $0.2376/s at 720p,
+ * $0.4752/s at 1080p. The llms page’s $0.54/s is not what the calculator returns.
+ * Duration 5 or 10 is the generated length, so a short source does not clip the
+ * bill. HDR is omitted: it needs upstream HDR access and only 720p/1080p at 5s.
+ * The page publishes no source ceiling; this app stops at 10 seconds, the
+ * longest output.
+ *
+ * Reframe is billed from the source. A 5.366667s sample quoted $0.3542 / $0.7084
+ * / $2.1252 at 540p / 720p / 1080p, which is $0.066 / $0.132 / $0.396 per second.
+ * The llms page’s $0.03/s is not that quote. 9:21 is in the schema and left off
+ * because the account worker does not accept it. The schema default is 9:16.
+ */
+function lumaRay32Edits(): ProviderModel[] {
+  const sizes = [
+    { label: '540p', preset: '540p' },
+    { label: '720p', preset: '720p' },
+    { label: '1080p', preset: '1080p' },
+  ];
+  return [
+    {
+      id: 'luma/ray-3.2/video-to-video',
+      label: 'Luma Ray 3.2 Restyle',
+      fileCode: 'luma-ray-3_2-restyle',
+      kind: 'video',
+      modes: ['edit'],
+      price: '$0.1584 / s @ 540p · $0.2376 / s @ 720p · $0.4752 / s @ 1080p',
+      videoEdit: {
+        sizes,
+        rate: { usdByResolution: { '540p': 0.1584, '720p': 0.2376, '1080p': 0.4752 }, per: 'second' },
+        maxImages: 0,
+        maxSeconds: 10,
+        maxBytes: 100_000_000,
+        mimes: ['video/mp4', 'video/quicktime'],
+        requireMeasurement: true,
+        outputDurationIsGenerated: true,
+        controls: [
+          {
+            key: 'outputDuration', label: 'Output duration', kind: 'select', defaultValue: 5,
+            options: [{ label: '5 seconds', value: 5 }, { label: '10 seconds', value: 10 }],
+            description: 'The model generates this length. It does not have to match the source.',
+          },
+          {
+            key: 'strength', label: 'Strength', kind: 'select', defaultValue: 'flex_2',
+            options: LUMA_STRENGTH,
+            description: 'Flex 2 is Luma’s default. Adhere stays closer to the source; Reimagine moves further.',
+          },
+        ],
+        note: 'Restyle in a background job. Motion can change with the new look. The clip is silent. Output is 5 or 10 seconds at the size you pick, and that length is what is billed. This app accepts sources up to 10 seconds. HDR is not offered.',
+      },
+    },
+    {
+      id: 'luma/ray-3.2/reframe',
+      label: 'Luma Ray 3.2 Reframe',
+      fileCode: 'luma-ray-3_2-reframe',
+      kind: 'video',
+      modes: ['edit'],
+      price: '$0.066 / s @ 540p · $0.132 / s @ 720p · $0.396 / s @ 1080p',
+      videoEdit: {
+        sizes,
+        rate: { usdByResolution: { '540p': 0.066, '720p': 0.132, '1080p': 0.396 }, per: 'second' },
+        aspectRatios: ['9:16', '16:9', '1:1', '4:3', '3:4', '21:9'],
+        requireAspectRatio: true,
+        maxImages: 0,
+        maxSeconds: 10,
+        maxBytes: 100_000_000,
+        mimes: ['video/mp4', 'video/quicktime'],
+        requireMeasurement: true,
+        measureForPrice: true,
+        note: 'Reframe a clip, including 16:9 into 9:16, in a background job. The result stays the source length and is silent. Billed from that length at the size you pick. Sources up to 10 seconds. 9:21 is published by Atlas and left off here.',
+      },
+    },
+  ];
+}
+
+/**
+ * FLUX 3 edit-video. The page and the newsletter say $0.03/s. A 5.366667s
+ * sample quoted $0.1771 on 2026-11-03, which is $0.033/s, and that is the
+ * rate used here. Output follows the source: no duration, resolution, or
+ * aspect field. MP4 under 50 MB and 15 seconds. No reference images.
+ * `safety_tolerance` stays at the vendor default (2) and is not a control.
+ */
+function flux3EditVideo(): ProviderModel {
+  return {
+    id: 'black-forest-labs/flux-3/edit-video',
+    label: 'FLUX 3 Edit Video',
+    fileCode: 'flux-3-edit-video',
+    kind: 'video',
+    modes: ['edit'],
+    price: '$0.033 / s',
+    videoEdit: {
+      sizes: [],
+      rate: { usd: 0.033, per: 'second' },
+      maxImages: 0,
+      maxSeconds: 15,
+      maxBytes: 50_000_000,
+      mimes: ['video/mp4'],
+      requireMeasurement: true,
+      measureForPrice: true,
+      note: 'Restyle that keeps the source motion, in a background job. Length and frame follow the clip. MP4 under 50 MB and 15 seconds. The page prints $0.03/s; the calculator quoted $0.033/s on 2026-11-03, which is the estimate used here.',
+    },
+  };
 }
 
 const ATLAS_MODELS: ProviderModel[] = [
@@ -1158,6 +1381,8 @@ const ATLAS_MODELS: ProviderModel[] = [
   ...nanoBanana2Developer('lite'),
   ...gptImage25Developer('sunburst'),
   ...gptImage25Developer('flare'),
+  ...seedream50Flash(),
+  ...maiImage26(),
   ...minimaxH3Developer(),
   ...kling40(),
   // Added 2026-09-29 from Atlas's LTX-2 / Luma drop. See each block above.
@@ -1166,6 +1391,8 @@ const ATLAS_MODELS: ProviderModel[] = [
   ...ltx2('2.5', 'fast'),
   ...ltx2('2.5', 'pro'),
   ...lumaRay32(),
+  ...lumaRay32Edits(),
+  flux3EditVideo(),
   ...lumaUni1('standard'),
   ...lumaUni1('max'),
   // Read 2026-10-16 from
@@ -1603,6 +1830,19 @@ export function modelsFor(provider: ProviderId, kind: MediaKind): ProviderModel[
 
 export function findModel(provider: ProviderId, id: string): ProviderModel | undefined {
   return PROVIDER_MODELS[provider].find((model) => model.id === id);
+}
+
+/**
+ * Seconds a generated-length edit renders when the request names one, or the
+ * catalog default when it does not. Luma restyle's body sends that default, so
+ * the button and the ledger have to as well: billing the source length instead
+ * charges a 10s file for a 5s render.
+ */
+export function generatedEditSeconds(model: ProviderModel | undefined, outputDuration: number | undefined): number | undefined {
+  if (!model?.videoEdit?.outputDurationIsGenerated) return undefined;
+  if (typeof outputDuration === 'number' && outputDuration > 0) return outputDuration;
+  const fallback = model.videoEdit.controls?.find((entry) => entry.key === 'outputDuration')?.defaultValue;
+  return typeof fallback === 'number' && fallback > 0 ? fallback : 5;
 }
 
 /** Resolve only the catalog-advertised video input contract for a model/mode. */

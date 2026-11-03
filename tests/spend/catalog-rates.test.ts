@@ -28,14 +28,18 @@ describe('provider catalog rates', () => {
       'bytedance/seedance-2.5/text-to-video': { usd: 0.134, per: 'second' },
       'bytedance/seedance-2.5/image-to-video': { usd: 0.134, per: 'second' },
       'bytedance/seedance-2.5/reference-to-video': { usd: 0.134, per: 'second' },
-      // Developer editions. Nano Banana 2.1 and Nano Banana 2 are priced flat
-      // across 1K/2K/4K. 2.1 Developer is the cheapest Nano Banana 2.1 route.
-      'google/nano-banana-2.1-developer/text-to-image': { usd: 0.018, per: 'image' },
-      'google/nano-banana-2.1-developer/edit': { usd: 0.018, per: 'image' },
-      'google/nano-banana-2/text-to-image-developer': { usd: 0.028, per: 'image' },
-      'google/nano-banana-2/edit-developer': { usd: 0.028, per: 'image' },
+      // Developer editions. 2.1 and full Nano Banana 2 are tiered (calculator,
+      // 2026-11-03). Lite stays $0.014 and publishes 1K only.
+      'google/nano-banana-2.1-developer/text-to-image': { usdByResolution: { '1k': 0.0175, '2k': 0.02625, '4k': 0.049 }, per: 'image' },
+      'google/nano-banana-2.1-developer/edit': { usdByResolution: { '1k': 0.0175, '2k': 0.02625, '4k': 0.049 }, per: 'image' },
+      'google/nano-banana-2/text-to-image-developer': { usdByResolution: { '1k': 0.028, '2k': 0.042, '4k': 0.056 }, per: 'image' },
+      'google/nano-banana-2/edit-developer': { usdByResolution: { '1k': 0.028, '2k': 0.042, '4k': 0.056 }, per: 'image' },
       'google/nano-banana-2-lite/text-to-image-developer': { usd: 0.014, per: 'image' },
       'google/nano-banana-2-lite/edit-developer': { usd: 0.014, per: 'image' },
+      'bytedance/seedream-v5.0-flash/text-to-image': { usd: 0.018, per: 'image' },
+      'bytedance/seedream-v5.0-flash/edit': { usd: 0.018, per: 'image' },
+      'microsoft/mai-image-2.6/text-to-image': { usd: 0.0792, per: 'image' },
+      'microsoft/mai-image-2.6/edit': { usd: 0.0891, per: 'image' },
       // Pinned to the 1K tier, so the $0.03 on the card is the tier charged.
       'openai/gpt-image-2.5-sunburst-developer/text-to-image': { usd: 0.03, per: 'image' },
       'openai/gpt-image-2.5-sunburst-developer/edit': { usd: 0.03, per: 'image' },
@@ -44,9 +48,9 @@ describe('provider catalog rates', () => {
       // The two `-sr` upscales are deliberately absent: Atlas publishes no
       // price for them, and an absent tier must not bill at the cheapest one.
       // Resolution-specific quotes from Atlas's public calculator, not its headline.
-      'kwaivgi/kling-v4.0/text-to-video': { per: 'second', usdByResolution: { '720p': 0.14287, '1080p': 0.21385 } },
-      'kwaivgi/kling-v4.0/image-to-video': { per: 'second', usdByResolution: { '720p': 0.14287, '1080p': 0.21385 } },
-      'kwaivgi/kling-v4.0/reference-to-video': { per: 'second', usdByResolution: { '720p': 0.14287, '1080p': 0.21385 } },
+      'kwaivgi/kling-v4.0/text-to-video': { per: 'second', usdByResolution: { '720p': 0.14287, '1080p': 0.21385, '1080p-esr': 0.182, '2k-esr': 0.273, '4k-esr': 0.364 } },
+      'kwaivgi/kling-v4.0/image-to-video': { per: 'second', usdByResolution: { '720p': 0.14287, '1080p': 0.21385, '1080p-esr': 0.182, '2k-esr': 0.273, '4k-esr': 0.364 } },
+      'kwaivgi/kling-v4.0/reference-to-video': { per: 'second', usdByResolution: { '720p': 0.14287, '1080p': 0.21385, '1080p-esr': 0.182, '2k-esr': 0.273, '4k-esr': 0.364 } },
       'kwaivgi/kling-v4.0/video-edit': undefined,
       'minimax/h3-developer/text-to-video': { usdByResolution: { '480P': 0.015, '768P': 0.015 }, per: 'second' },
       'minimax/h3-developer/image-to-video': { usdByResolution: { '480P': 0.015, '768P': 0.015 }, per: 'second' },
@@ -63,6 +67,10 @@ describe('provider catalog rates', () => {
       'ltx/ltx-2.5-pro/image-to-video': { usdByResolution: { '720p': 0.12 }, per: 'second' },
       'luma/ray-3.2/text-to-video': { usdByResolution: { '540p': 0.06 }, per: 'second' },
       'luma/ray-3.2/image-to-video': { usdByResolution: { '540p': 0.06 }, per: 'second' },
+      // Restyle and reframe rates live on videoEdit, not the top-level rate.
+      'luma/ray-3.2/video-to-video': undefined,
+      'luma/ray-3.2/reframe': undefined,
+      'black-forest-labs/flux-3/edit-video': undefined,
       'luma/uni-1/text-to-image': { usd: 0.04, per: 'image' },
       'luma/uni-1/edit': { usd: 0.043, per: 'image' },
       'luma/uni-1-max/text-to-image': { usd: 0.1, per: 'image' },
@@ -286,11 +294,51 @@ describe('Atlas Kling 4 calculator estimates', () => {
     expect(resolveCatalogRate(model, 5, 1, { size: '720p' }).costUsd).toBeCloseTo(0.71435, 8);
     expect(resolveCatalogRate(model, 10, 1, { size: '1080p' }).costUsd).toBeCloseTo(2.1385, 8);
     expect(resolveCatalogRate(model, 5, 1, { size: '4k' }).confidence).toBe('unknown');
+    expect(resolveCatalogRate(model, 5, 1, { size: '4K' }).confidence).toBe('unknown');
     expect(resolveCatalogRate(model, 5).confidence).toBe('unknown');
+  });
+
+  it('prices the verified upscale tiers by their preset, not a guessed 4K', () => {
+    const model = findModel('atlas', 'kwaivgi/kling-v4.0/text-to-video');
+    expect(resolveCatalogRate(model, 5, 1, { size: '4K upscale' }).costUsd).toBeCloseTo(1.82, 8);
+    expect(resolveCatalogRate(model, 5, 1, { size: '2K upscale' }).costUsd).toBeCloseTo(1.365, 8);
+    expect(resolveCatalogRate(model, 5, 1, { size: '1080p upscale' }).costUsd).toBeCloseTo(0.91, 8);
   });
 
   it('does not treat an edit as an output-only generation price', () => {
     expect(resolveCatalogRate(findModel('atlas', 'kwaivgi/kling-v4.0/video-edit'), 5, 1, { inputMode: 'edit', size: '720p' }))
       .toMatchObject({ costUsd: null, confidence: 'unknown' });
+    expect(resolveCatalogRate(findModel('atlas', 'kwaivgi/kling-v4.0/video-edit'), 5, 1, { inputMode: 'edit', size: '4K upscale' }))
+      .toMatchObject({ costUsd: null, confidence: 'unknown' });
+  });
+});
+
+describe('Atlas models added 2026-11-03', () => {
+  it('prices Nano Banana developer tiers from the selected size', () => {
+    const full = findModel('atlas', 'google/nano-banana-2.1-developer/text-to-image');
+    expect(resolveCatalogRate(full, undefined, 1, { size: '1K' }).costUsd).toBeCloseTo(0.0175, 8);
+    expect(resolveCatalogRate(full, undefined, 1, { size: '2K' }).costUsd).toBeCloseTo(0.02625, 8);
+    expect(resolveCatalogRate(full, undefined, 1, { size: '4K' }).costUsd).toBeCloseTo(0.049, 8);
+    const previous = findModel('atlas', 'google/nano-banana-2/text-to-image-developer');
+    expect(resolveCatalogRate(previous, undefined, 1, { size: '4K' }).costUsd).toBeCloseTo(0.056, 8);
+    expect(resolveCatalogRate(findModel('atlas', 'google/nano-banana-2-lite/text-to-image-developer'), undefined, 1).costUsd).toBeCloseTo(0.014, 8);
+  });
+
+  it('prices the new image models at the calculator figure', () => {
+    expect(resolveCatalogRate(findModel('atlas', 'bytedance/seedream-v5.0-flash/text-to-image'), undefined, 1).costUsd).toBeCloseTo(0.018, 8);
+    expect(resolveCatalogRate(findModel('atlas', 'bytedance/seedream-v5.0-flash/edit'), undefined, 1, { inputMode: 'image', inputImages: 3 }).costUsd).toBeCloseTo(0.018, 8);
+    expect(resolveCatalogRate(findModel('atlas', 'microsoft/mai-image-2.6/text-to-image'), undefined, 1).costUsd).toBeCloseTo(0.0792, 8);
+    expect(resolveCatalogRate(findModel('atlas', 'microsoft/mai-image-2.6/edit'), undefined, 1).costUsd).toBeCloseTo(0.0891, 8);
+    expect(resolveCatalogRate(findModel('atlas', 'openai/gpt-image-2.5-sunburst-developer/text-to-image'), undefined, 1).costUsd).toBeCloseTo(0.03, 8);
+  });
+
+  it('prices Luma restyle from the generated length and reframe from the source length', () => {
+    const restyle = findModel('atlas', 'luma/ray-3.2/video-to-video');
+    expect(resolveCatalogRate(restyle, 10, 1, { inputMode: 'edit', size: '720p' }).costUsd).toBeCloseTo(2.376, 8);
+    expect(resolveCatalogRate(restyle, 5, 1, { inputMode: 'edit', size: '1080p' }).costUsd).toBeCloseTo(2.376, 8);
+    const reframe = findModel('atlas', 'luma/ray-3.2/reframe');
+    expect(resolveCatalogRate(reframe, 5.366667, 1, { inputMode: 'edit', size: '540p' }).costUsd).toBeCloseTo(0.3542, 4);
+    expect(resolveCatalogRate(reframe, 5.366667, 1, { inputMode: 'edit', size: '1080p' }).costUsd).toBeCloseTo(2.1252, 4);
+    expect(resolveCatalogRate(findModel('atlas', 'black-forest-labs/flux-3/edit-video'), 5.366667, 1, { inputMode: 'edit' }).costUsd).toBeCloseTo(0.1771, 4);
   });
 });

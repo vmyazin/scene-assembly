@@ -2,6 +2,12 @@
 
 Status: Approved design
 
+## Follow-up decision — 2026-11-03
+
+The calculator now quotes the ESR upscales, so they are offered and priced: $0.182/s at 1080p-esr, $0.273/s at 2k-esr, $0.364/s at 4k-esr. Native 720p and 1080p quotes are unchanged. A label of `4K` is still not a size; the control says `4K upscale`.
+
+First & last frame uses the same ordered keyframes as Image mode: opening frame, up to eight `middle_images`, closing frame. Other models stay at exactly two frames. Edit totals stay unknown. The generation calculator quotes an edit’s output seconds the same way it quotes a generation, and that is not the input-plus-output formula this spec already refused to treat as verified. See `docs/codex/specs/2026-11-03-atlas-models.md` for the other Atlas models added the same day.
+
 ## Follow-up decision — 2026-10-26
 The official Atlas calculator contradicts its $0.11/s headline. Use verified quote-derived estimates of $0.14287/s at 720p and $0.21385/s at 1080p, and disclose the discrepancy in the model note. Do not advertise Atlas as cheaper than Kie. This supersedes the headline rate in the context below.
 

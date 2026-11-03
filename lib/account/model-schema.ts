@@ -155,9 +155,14 @@ function sizeNamesAspect(model: ProviderModel): boolean {
 }
 
 function aggregatorImageFields(provider: ProviderId, model: ProviderModel): ModelField[] {
-  const fields = [aspectRatioField(provider, model)];
+  // An explicit empty list means the model does not take a ratio. Undefined
+  // keeps the generic choices older image entries rely on.
+  const fields: ModelField[] = model.aspectRatios?.length === 0 ? [] : [aspectRatioField(provider, model)];
   if (provider === 'piapi') fields.push(select('resolution', 'Resolution', ['1K', '2K', '4K'], { default: '1K' }));
   else if (provider === 'atlas' && model.sizes?.length) fields.push(select('resolution', 'Resolution', model.sizes.map(size => size.label), { default: model.sizes[0].label }));
+  if (model.backgrounds?.length) {
+    fields.push(select('background', 'Background', model.backgrounds.map(option => option.value), { default: model.backgrounds[0].value }));
+  }
   return fields;
 }
 
@@ -189,7 +194,12 @@ function aggregatorReferences(provider: ProviderId, model: ProviderModel, mode: 
   if (!capability) return null;
   // Comet's video route takes a single input_reference.
   const max = provider === 'comet' ? Math.min(capability.maxImages, 1) : capability.maxImages;
-  if (mode === 'frames') return max >= 2 ? { min: 2, max: 2 } : null;
+  // Kling 4 frames carry the same ordered keyframes as its image mode.
+  // Every other first-and-last mode stays a pair.
+  if (mode === 'frames') {
+    if (capability.orderedKeyframes && max > 2) return { min: 2, max };
+    return max >= 2 ? { min: 2, max: 2 } : null;
+  }
   return max >= 1 ? { min: 1, max } : null;
 }
 
@@ -215,7 +225,10 @@ function aggregatorModes(provider: ProviderId, model: ProviderModel): ModeDescri
         // editSettingsError accepts these keys; duration and ratio follow the source.
         fields: [
           ...(edit.aspectRatios?.length ? [select('aspectRatio', 'Target aspect ratio', edit.aspectRatios, {
-            description: 'Letterboxes the source to this shape. Omit it to keep the source frame.',
+            ...(edit.requireAspectRatio ? { required: true, default: edit.aspectRatios[0] } : {}),
+            description: edit.requireAspectRatio
+              ? 'This model always reframes. Pick the shape the clip should become.'
+              : 'Letterboxes the source to this shape. Omit it to keep the source frame.',
           })] : []),
           ...(edit.sizes.length ? [select('size', 'Resolution', edit.sizes.map(size => size.label), {
             // The catalog's first size (720p for Seedance). checkValues moves
@@ -403,7 +416,10 @@ function standInEditSeconds(model: ModelDescriptor, mode: ModeDescriptor): numbe
   }
   if (model.provider !== 'atlas' && model.provider !== 'comet' && model.provider !== 'piapi') return undefined;
   const edit = findModel(model.provider, model.modelId)?.videoEdit;
-  if (!edit || edit.rate?.per !== 'second' || edit.rate?.usd === undefined) return undefined;
+  if (!edit || edit.rate?.per !== 'second') return undefined;
+  // A resolution table is still a published per-second rate. Skipping it left
+  // Luma restyle and reframe samples unpriced.
+  if (edit.rate.usd === undefined && !edit.rate.usdByResolution) return undefined;
   return edit.minSeconds ?? 1;
 }
 

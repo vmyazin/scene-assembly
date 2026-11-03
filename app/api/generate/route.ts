@@ -1,3 +1,4 @@
+// app/api/generate/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { geminiGenerate } from '@/lib/engines/gemini';
 import { pollinationsGenerate } from '@/lib/engines/pollinations';
@@ -156,6 +157,9 @@ async function handleProviderRequest(provider: ProviderId, body: Record<string, 
         ? {resolution: typeof config.imageSize === 'string' ? config.imageSize : '1K'}
         : {}),
       aspectRatio: typeof config.aspectRatio === 'string' ? config.aspectRatio : undefined,
+      ...(catalogModel?.backgrounds?.some((option) => option.value === config.background)
+        ? { background: config.background as 'auto' | 'opaque' | 'transparent' }
+        : {}),
       imageInput: catalogModel?.imageInput,
       ...(moderation === 'relaxed' ? { moderation } : {}),
     });
