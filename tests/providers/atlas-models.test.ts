@@ -27,12 +27,15 @@ async function imageBody(request: Parameters<typeof atlasGenerateImage>[0]) {
 }
 
 function spend(request: CloudJobRequest) {
-  return buildAccountSpendEntry({
+  const entry = buildAccountSpendEntry({
     jobId: 'job',
     request,
     result: { sources: [{ url: 'https://cdn.atlas/out.png' }] },
     at: 1,
   });
+  // A null entry means the request was never billed, which is its own failure.
+  if (!entry) throw new Error(`No spend entry for ${request.modelId}`);
+  return entry;
 }
 
 afterEach(() => vi.unstubAllGlobals());
