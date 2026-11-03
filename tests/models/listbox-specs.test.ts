@@ -54,9 +54,9 @@ describe('listbox spec derivation', () => {
     expect(cells).toEqual(['30s', '1080p', '480p–1080p', '$0.05/s']);
   });
 
-  it('prints P-Video-Edit From at the four-digit draft promo, not a rounded sticker', () => {
+  it('prints P-Video-Edit From at the list draft rate', () => {
     const cells = providerVideoSpecs(findModel('runware', 'prunaai:p-video@edit')!, 'edit').map(textOf);
-    expect(cells).toEqual(['15s', '848px', 'source', '$0.0188/s']);
+    expect(cells).toEqual(['15s', '848px', 'source', '$0.025/s']);
     expect(providerVideoSpecs(findModel('runware', 'runway:aleph@2.0')!, 'edit').map(textOf)).toEqual(['30s', '1080p', 'source', '$0.28/s']);
     expect(providerVideoSpecs(findModel('runware', 'klingai:kling@o1')!, 'edit').map(textOf)).toEqual(['—', 'source', 'source', 'price unknown']);
     expect(providerVideoSpecs(findModel('runware', 'klingai:kling@o1-standard')!, 'edit').map(textOf)).toEqual(['—', 'source', 'source', 'price unknown']);
