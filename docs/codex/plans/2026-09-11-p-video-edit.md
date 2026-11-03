@@ -1,3 +1,6 @@
+## Follow-up decision — 2026-11-03
+Sale rates stay in force through 2026-11-03T23:59:59.999Z and list prices ($0.025/s draft, $0.045/s standard) apply from 2026-11-04T00:00:00Z. The catalog stores the list prices; the window lives in `lib/providers/p-video-edit-promo.ts` and is read when the estimate, From sticker, and sale note render. A 4s clip is about $0.14 standard / $0.08 draft during the sale and $0.18 / $0.10 after, which is the 2026-09-11 arithmetic below. This supersedes the instruction that catalog `videoEdit` rates are the live sale figures.
+
 ## Follow-up decision — 2026-09-21
 P-Video-Edit estimates and the model-list From sticker use the Runware promo: $0.0188/s draft, $0.0338/s std, until Nov 3, 2026. List remains $0.025 / $0.045. Catalog `videoEdit` rates are the live figures; this is display/spend only. The 2026-09-11 smoke numbers below ($0.18 / $0.10 for a 4s clip) were list-price arithmetic and are not current.
 

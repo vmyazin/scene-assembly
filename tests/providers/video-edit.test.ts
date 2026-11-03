@@ -79,9 +79,15 @@ describe('P-Video-Edit', () => {
     expect(()=>validateEditSource({durationSeconds:15.01,width:1280,height:720},model.videoEdit!)).toThrow(/15/);
     expect(()=>validateEditSource({durationSeconds:NaN,width:1280,height:720},model.videoEdit!)).toThrow();
   });
-  it('prices Standard and Draft using source duration', () => {
-    expect(resolveCatalogRate(model,5,1,{inputMode:'edit'}).costUsd).toBeCloseTo(0.169);
-    expect(resolveCatalogRate(model,5,1,{inputMode:'edit',draft:true}).costUsd).toBeCloseTo(0.094);
+  it('prices Standard and Draft from the sale until Nov 4 UTC, then the list rate', () => {
+    const during = Date.parse('2026-11-03T23:59:59.999Z');
+    const after = Date.parse('2026-11-04T00:00:00Z');
+    expect(model.videoEdit?.rate).toMatchObject({ usd: 0.045 });
+    expect(model.videoEdit?.draftRate).toMatchObject({ usd: 0.025 });
+    expect(resolveCatalogRate(model,5,1,{inputMode:'edit', pricedAt: during}).costUsd).toBeCloseTo(0.169);
+    expect(resolveCatalogRate(model,5,1,{inputMode:'edit', draft:true, pricedAt: during}).costUsd).toBeCloseTo(0.094);
+    expect(resolveCatalogRate(model,5,1,{inputMode:'edit', pricedAt: after}).costUsd).toBeCloseTo(0.225);
+    expect(resolveCatalogRate(model,5,1,{inputMode:'edit', draft:true, pricedAt: after}).costUsd).toBeCloseTo(0.125);
   });
 });
 

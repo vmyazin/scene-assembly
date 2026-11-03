@@ -1,4 +1,5 @@
 // lib/providers/catalog.ts
+import { P_VIDEO_EDIT_MODEL } from './p-video-edit-promo';
 import {
   ATLAS_SEEDANCE_25_REFERENCE_CLIPS,
   SEEDANCE_20_REFERENCE_CLIPS,
@@ -154,13 +155,16 @@ const RUNWARE_MODELS: ProviderModel[] = [
     ],
   },
   {
-    // Verified 2026-09-11: https://runware.ai/docs/models/prunaai-p-video-edit
-    // Promo pricing until Nov 3, 2026 (was $0.045 std / $0.025 draft)
-    id: 'prunaai:p-video@edit', label: 'P-Video-Edit', fileCode: 'p-video-edit',
+    // List prices, re-read 2026-11-03: https://runware.ai/docs/models/prunaai-p-video-edit
+    // The page still shows 25% off ($0.0338/s standard, $0.0188/s draft) until
+    // November 3. Those sale figures are applied at call time by
+    // pVideoEditRates — baking them in here would keep the discount after a
+    // Worker that loaded during the sale outlived it.
+    id: P_VIDEO_EDIT_MODEL, label: 'P-Video-Edit', fileCode: 'p-video-edit',
     kind: 'video', modes: ['edit'],
     videoEdit: {
       sizes: [], maxImages: 4, maxSeconds: 15,
-      rate: {per: 'second', usd: 0.0338}, draftRate: {per: 'second', usd: 0.0188},
+      rate: {per: 'second', usd: 0.045}, draftRate: {per: 'second', usd: 0.025},
       outputLabel: '848px', promptSyntax: 'image-index',
       note: 'Duration and aspect ratio follow the source. Output is 25 fps with fixed dimensions up to 848px on the long edge (848×480 landscape, 624×624 square). Draft is faster and lower quality.',
     },

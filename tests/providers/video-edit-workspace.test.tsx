@@ -28,7 +28,7 @@ beforeEach(()=>{
   useProviderJobsStore.getState().clearJobs();
   vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:vi.fn(()=> 'blob:source'),revokeObjectURL:vi.fn()}));
 });
-afterEach(()=>{vi.clearAllMocks();vi.unstubAllGlobals();});
+afterEach(()=>{vi.restoreAllMocks();vi.clearAllMocks();vi.unstubAllGlobals();});
 it('requires a source, permits no reference images, and submits without stale duration controls',async()=>{
   render(<ProviderVideoWorkspace provider="runware" label="Runware" inputMode="edit" onBack={()=>{}} onOpenConnections={()=>{}}/>);
   expect(screen.queryByRole('spinbutton',{name:/Duration/})).toBeNull();
@@ -248,6 +248,25 @@ it('does not accept a trim that finishes after changing models', async () => {
   await act(async()=>resolve({file,width:1280,height:720,durationSeconds:4}));
   expect(onChange).not.toHaveBeenCalled();
   expect(screen.getByLabelText('Upload source video')).not.toBeDisabled();
+});
+
+it('shows the P-Video-Edit sale through Nov 3 and the list price after', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-03T18:00:00Z'));
+  vi.mocked(probeDimensions).mockResolvedValue({ width: 1280, height: 720, durationSeconds: 4 });
+  useAppStore.setState({ runwareVideoModel: 'prunaai:p-video@edit' });
+  const view = render(<ProviderVideoWorkspace provider="runware" label="Runware" inputMode="edit" onBack={() => {}} onOpenConnections={() => {}} />);
+  expect(screen.getByText(/25% off through Nov 3/)).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: 'P-Video-Edit' })).toHaveTextContent('$0.0188/s');
+  fireEvent.change(screen.getByLabelText('Upload source video'), { target: { files: [new File(['clip'], 'source.mp4', { type: 'video/mp4' })] } });
+  await screen.findByText(/source.mp4/);
+  expect(screen.getByRole('button', { name: /Generate edit/ })).toHaveTextContent('~$0.14');
+
+  vi.mocked(Date.now).mockReturnValue(Date.parse('2026-11-04T00:00:00Z'));
+  view.rerender(<ProviderVideoWorkspace provider="runware" label="Runware" inputMode="edit" onBack={() => {}} onOpenConnections={() => {}} />);
+  expect(screen.queryByText(/25% off through Nov 3/)).not.toBeInTheDocument();
+  expect(screen.getByRole('option', { name: 'P-Video-Edit' })).toHaveTextContent('$0.025/s');
+  expect(screen.getByRole('button', { name: /Generate edit/ })).toHaveTextContent('~$0.18');
+  vi.mocked(Date.now).mockRestore();
 });
 
 it('names an Atlas Kling source with the triple-angle token', () => {
