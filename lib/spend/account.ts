@@ -73,8 +73,19 @@ export function buildAccountSpendEntry(args: BuildAccountSpendEntryArgs): Accoun
     if (resolved.costUsd === null) {
       const catalog = seedanceCatalogFigure(request);
       if (catalog && catalog.costUsd !== null) return { ...base, ...catalog };
-      const measured = resolveMeasuredRunwareEdit(findModel('runware', request.modelId), request.values.sourceDurationSeconds);
+      const model = findModel('runware', request.modelId);
+      const measured = resolveMeasuredRunwareEdit(model, request.values.sourceDurationSeconds);
       if (measured) return { ...base, ...measured };
+      // P-Video-Edit uses catalog rates with promotional pricing
+      if (model?.id === 'prunaai:p-video@edit') {
+        const duration = typeof request.values.sourceDurationSeconds === 'number' ? request.values.sourceDurationSeconds : undefined;
+        const priced = resolveCatalogRate(model, duration, 1, {
+          inputMode: 'edit',
+          draft: request.values.draft === true,
+          pricedAt: args.pricedAt ?? args.at,
+        });
+        if (priced.costUsd !== null) return { ...base, ...priced };
+      }
     }
     const figure = resolved.costUsd === null
       ? withNote(resolved, 'Runware did not include billing cost in the persisted response.')

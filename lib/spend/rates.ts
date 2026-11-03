@@ -364,6 +364,20 @@ function falPromotionActive(endpointId: string, at: number): boolean {
     && at >= FAL_H3_TURBO_PROMOTION.startsAt && at < FAL_H3_TURBO_PROMOTION.endsAt;
 }
 
+/**
+ * Verified 2026-09-11 on Runware's P-Video-Edit page. Promotional pricing
+ * through November 3, 2026. The provider names November 3 but no timezone;
+ * this app expires the offer at November 4, 00:00 UTC. The known window
+ * starts on the verification date so late capture never invents a discount
+ * for older jobs.
+ */
+export const RUNWARE_P_VIDEO_EDIT_PROMOTION = {
+  startsAt: Date.parse('2026-09-11T00:00:00Z'),
+  endsAt: Date.parse('2026-11-04T00:00:00Z'),
+  standardRate: 0.0338,
+  draftRate: 0.0188,
+};
+
 export function falPromotionNote(endpointId: string, at = Date.now()): string | null {
   return falPromotionActive(endpointId, at) ? '35% off through Oct 31.' : null;
 }

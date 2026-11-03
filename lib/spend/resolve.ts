@@ -16,6 +16,7 @@ import {
   geminiVideoCost,
   geminiVideoPriceNotice,
   KIE_USD_PER_CREDIT,
+  RUNWARE_P_VIDEO_EDIT_PROMOTION,
   type FalRunControls,
 } from './rates';
 
@@ -102,10 +103,22 @@ export function resolveCatalogRate(
   model: ProviderModel | undefined,
   durationSeconds?: number,
   outputImages = 1,
-  controls: { size?: string; inputImages?: number; audio?: boolean; draft?: boolean; inputMode?: string } = {}
+  controls: { size?: string; inputImages?: number; audio?: boolean; draft?: boolean; inputMode?: string; pricedAt?: number } = {}
 ): SpendFigure {
-  const rate = controls.inputMode === 'edit' ? (controls.draft ? model?.videoEdit?.draftRate : model?.videoEdit?.rate) : model?.rate;
+  let rate = controls.inputMode === 'edit' ? (controls.draft ? model?.videoEdit?.draftRate : model?.videoEdit?.rate) : model?.rate;
   if (!rate) return unknownFigure('catalog-rate');
+  
+  // Apply P-Video-Edit promotional pricing through Nov 3, 2026
+  if (model?.id === 'prunaai:p-video@edit' && controls.inputMode === 'edit' && rate.per === 'second' && rate.usd !== undefined) {
+    const at = controls.pricedAt ?? Date.now();
+    if (at >= RUNWARE_P_VIDEO_EDIT_PROMOTION.startsAt && at < RUNWARE_P_VIDEO_EDIT_PROMOTION.endsAt) {
+      rate = {
+        ...rate,
+        usd: controls.draft ? RUNWARE_P_VIDEO_EDIT_PROMOTION.draftRate : RUNWARE_P_VIDEO_EDIT_PROMOTION.standardRate,
+      };
+    }
+  }
+  
   // Only search when a size was actually given. `size.preset === undefined`
   // is true for every size that has no preset, so with no size chosen this
   // matched the first Runware entry and priced its cheapest tier — the exact
