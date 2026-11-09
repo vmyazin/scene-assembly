@@ -2,13 +2,17 @@
 /**
  * The Gemini video model one Google AI Studio key can run.
  *
- * Veo 3.1 Lite (`veo-3.1-lite-generate-preview`) shuts down on 2026-10-22.
- * Google's replacement is Gemini Omni Flash, generally available as
- * `gemini-omni-1.1-flash`. Capabilities from
- * https://ai.google.dev/gemini-api/docs/models/gemini-omni-flash and
- * https://ai.google.dev/gemini-api/docs/omni, read 2026-10-19.
- * The 720p per-second figure is derived in `lib/spend/rates.ts` from
- * https://ai.google.dev/gemini-api/docs/pricing (5,792 output tokens/s × $17.50/M).
+ * Gemini Omni 1.2 Flash (`gemini-omni-1.2-flash`, released 2026-11-05) replaces
+ * Omni 1.1, and Veo 3.1 Lite before it. Google routes `gemini-omni-1.1-flash`
+ * to 1.2 on 2026-12-03, so this stays a one-model list: stored 1.1 ids migrate
+ * to the default rather than staying selectable for four weeks. Capabilities from
+ * https://aistudio.google.com/docs/models/gemini-omni-flash and
+ * https://aistudio.google.com/docs/omni, read 2026-11-09. Per-second figures
+ * are derived below from https://aistudio.google.com/docs/pricing, read the
+ * same day (published tokens per second × $12.00/M).
+ *
+ * Omni 1.2 also accepts 11–15s. This catalog still offers Omni 1.1's 3–10s, a
+ * valid subset, because a longer clip is a product change and not a repricing.
  *
  * Clip extension and first+last frame are documented, and neither is offered
  * here. Extension needs an uploaded video (or a previous interaction id) plus
@@ -28,7 +32,6 @@ export interface GeminiVideoModel {
    * Supported output resolutions, lowest first. The default is
    * `defaultResolution`, not the first entry, so reordering this list does
    * not change the fallback. Google's API takes '360p', '720p', '1080p', '4k'.
-   * 720p is the only resolution with a published per-second price.
    */
   resolutions: string[];
   /** Documented default output. Omni's default is 720p. */
@@ -61,17 +64,34 @@ export interface GeminiVideoModel {
   note: string;
 }
 
+const OMNI_1_2_USD_PER_MILLION_TOKENS = 12;
+const omni12UsdPerSecond = (tokensPerSecond: number) => (tokensPerSecond * OMNI_1_2_USD_PER_MILLION_TOKENS) / 1_000_000;
+
 /**
- * 720p output tokens per second × $17.50 / 1M, from the pricing page.
- * 5792 × 17.50 / 1_000_000 = 0.10136. Google summarizes that as about $0.10/s.
+ * Published output tokens per second × $12.00 / 1M. Google rounds these to
+ * about $0.023, $0.07, $0.104, and $0.209. 1080p and 4k are upscaled outputs.
  */
-export const GEMINI_OMNI_720P_USD_PER_SECOND = (5792 * 17.5) / 1_000_000;
+export const GEMINI_OMNI_USD_PER_SECOND: Record<string, number> = {
+  '360p': omni12UsdPerSecond(1931),
+  '720p': omni12UsdPerSecond(5792),
+  '1080p': omni12UsdPerSecond(8688),
+  '4k': omni12UsdPerSecond(17376),
+};
+
+/** 5792 × 12 / 1_000_000 = 0.069504. */
+export const GEMINI_OMNI_720P_USD_PER_SECOND = GEMINI_OMNI_USD_PER_SECOND['720p'];
+
+/**
+ * Omni 1.1 at 720p: 5792 × 17.50 / 1_000_000 = 0.10136. Saved 1.1 jobs keep
+ * this rate. Google never published a per-second rate for its other resolutions.
+ */
+export const GEMINI_OMNI_1_1_720P_USD_PER_SECOND = (5792 * 17.5) / 1_000_000;
 
 export const GEMINI_VIDEO_MODELS: GeminiVideoModel[] = [
   {
-    id: 'gemini-omni-1.1-flash',
-    label: 'Omni Flash',
-    fileCode: 'omni-1_1-flash',
+    id: 'gemini-omni-1.2-flash',
+    label: 'Omni 1.2 Flash',
+    fileCode: 'omni-1_2-flash',
     resolutions: ['360p', '720p', '1080p', '4k'],
     defaultResolution: '720p',
     durations: [3, 4, 5, 6, 7, 8, 9, 10],
@@ -79,10 +99,8 @@ export const GEMINI_VIDEO_MODELS: GeminiVideoModel[] = [
     aspectRatios: ['16:9', '9:16'],
     supports4K: true,
     supportsExtension: false,
-    usdPerSecond: {
-      '720p': GEMINI_OMNI_720P_USD_PER_SECOND,
-    },
-    note: 'Fast video with audio. 720p is about $0.101/s (5,792 output tokens × $17.50 per million). 360p, 1080p, and 4k are supported; Google does not publish their per-second rate.',
+    usdPerSecond: GEMINI_OMNI_USD_PER_SECOND,
+    note: 'Fast video with audio. 720p is about $0.070/s (5,792 output tokens × $12 per million). 360p is about $0.023/s, 1080p about $0.104/s, and 4k about $0.209/s.',
   },
 ];
 
@@ -91,6 +109,21 @@ export const DEFAULT_GEMINI_VIDEO_MODEL = GEMINI_VIDEO_MODELS[0].id;
 
 /** The preview id Google shuts down on 2026-10-22. Stored settings still name it. */
 export const RETIRED_GEMINI_VIDEO_MODEL_ID = 'veo-3.1-lite-generate-preview';
+
+/** Google routes this id to Omni 1.2 on 2026-12-03. Saved jobs and stored settings still name it. */
+export const GEMINI_OMNI_1_1_MODEL_ID = 'gemini-omni-1.1-flash';
+
+/**
+ * How finished clips from a model that has left the catalog are still named.
+ * Not selectable, and `resolveGeminiVideoModel` sends these ids to the default.
+ */
+const PAST_GEMINI_VIDEO_MODELS: Record<string, Pick<GeminiVideoModel, 'label' | 'fileCode'>> = {
+  [GEMINI_OMNI_1_1_MODEL_ID]: { label: 'Omni 1.1 Flash', fileCode: 'omni-1_1-flash' },
+};
+
+export function pastGeminiVideoModel(modelId: string | undefined): Pick<GeminiVideoModel, 'label' | 'fileCode'> | undefined {
+  return modelId ? PAST_GEMINI_VIDEO_MODELS[modelId] : undefined;
+}
 
 export function findGeminiVideoModel(modelId: string | undefined): GeminiVideoModel | undefined {
   return GEMINI_VIDEO_MODELS.find((model) => model.id === modelId);

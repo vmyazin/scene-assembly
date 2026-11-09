@@ -53,7 +53,15 @@ describe('resolveGemini', () => {
 });
 
 describe('resolveGeminiVideo', () => {
-  it('prices Omni 720p from 5,792 tokens/s × $17.50/M and leaves other resolutions unpublished', () => {
+  it('prices Omni 1.2 from Google\'s published tokens/s at $12/M', () => {
+    const cost = (resolution: string) => resolveGeminiVideo({ modelId: 'gemini-omni-1.2-flash', resolution, durationSeconds: 8 }).costUsd;
+    expect(cost('360p')).toBeCloseTo(0.185376, 6);
+    expect(cost('720p')).toBeCloseTo(0.556032, 6);
+    expect(cost('1080p')).toBeCloseTo(0.834048, 6);
+    expect(cost('4k')).toBeCloseTo(1.668096, 6);
+  });
+
+  it('keeps a saved Omni 1.1 job on 5,792 tokens/s × $17.50/M and leaves other resolutions unpublished', () => {
     expect(
       resolveGeminiVideo({
         modelId: 'gemini-omni-1.1-flash',
@@ -72,7 +80,7 @@ describe('resolveGeminiVideo', () => {
         resolution: '720p',
         durationSeconds: 1,
       }).costUsd
-    ).toBeCloseTo(0.10136, 6);
+    ).toBeCloseTo(0.069504, 6);
     expect(
       resolveGeminiVideo({
         modelId: 'gemini-omni-1.1-flash',

@@ -39,13 +39,16 @@ afterEach(() => {
 
 describe('gemini video catalog', () => {
   it('offers Omni and maps the shut-down preview id onto it', () => {
-    expect(GEMINI_VIDEO_MODELS.map((model) => model.id)).toEqual(['gemini-omni-1.1-flash']);
-    expect(DEFAULT_GEMINI_VIDEO_MODEL).toBe('gemini-omni-1.1-flash');
-    expect(resolveGeminiVideoModel(undefined).id).toBe('gemini-omni-1.1-flash');
-    expect(resolveGeminiVideoModel(RETIRED_GEMINI_VIDEO_MODEL_ID).id).toBe('gemini-omni-1.1-flash');
-    expect(GEMINI_OMNI_720P_USD_PER_SECOND).toBeCloseTo(0.10136, 6);
+    expect(GEMINI_VIDEO_MODELS.map((model) => model.id)).toEqual(['gemini-omni-1.2-flash']);
+    expect(DEFAULT_GEMINI_VIDEO_MODEL).toBe('gemini-omni-1.2-flash');
+    expect(resolveGeminiVideoModel(undefined).id).toBe('gemini-omni-1.2-flash');
+    expect(resolveGeminiVideoModel(RETIRED_GEMINI_VIDEO_MODEL_ID).id).toBe('gemini-omni-1.2-flash');
+    expect(resolveGeminiVideoModel('gemini-omni-1.1-flash').id).toBe('gemini-omni-1.2-flash');
+    expect(GEMINI_OMNI_720P_USD_PER_SECOND).toBeCloseTo(0.069504, 6);
     expect(GEMINI_VIDEO_MODELS[0].usdPerSecond['720p']).toBe(GEMINI_OMNI_720P_USD_PER_SECOND);
-    expect(GEMINI_VIDEO_MODELS[0].usdPerSecond['1080p']).toBeUndefined();
+    expect(GEMINI_VIDEO_MODELS[0].usdPerSecond['360p']).toBeCloseTo(0.023172, 6);
+    expect(GEMINI_VIDEO_MODELS[0].usdPerSecond['1080p']).toBeCloseTo(0.104256, 6);
+    expect(GEMINI_VIDEO_MODELS[0].usdPerSecond['4k']).toBeCloseTo(0.208512, 6);
     expect(GEMINI_VIDEO_MODELS[0].supportsExtension).toBe(false);
     expect(GEMINI_VIDEO_MODELS[0].resolutions).toEqual(['360p', '720p', '1080p', '4k']);
     expect(GEMINI_VIDEO_MODELS[0].defaultResolution).toBe('720p');
@@ -54,7 +57,7 @@ describe('gemini video catalog', () => {
   });
 
   it('keeps 3–10s at every resolution and defaults an omitted length to 8s', () => {
-    const model = resolveGeminiVideoModel('gemini-omni-1.1-flash');
+    const model = resolveGeminiVideoModel('gemini-omni-1.2-flash');
     expect(geminiVideoDuration(model, 4)).toBe(4);
     expect(geminiVideoDuration(model, 3)).toBe(3);
     expect(geminiVideoDuration(model, 2)).toBe(8);
@@ -96,7 +99,7 @@ describe('geminiGenerateVideo', () => {
       headers: { 'content-type': 'application/json', 'x-goog-api-key': 'test-key' },
       signal: expect.any(AbortSignal),
       body: JSON.stringify({
-        model: 'gemini-omni-1.1-flash',
+        model: 'gemini-omni-1.2-flash',
         input: 'A moonlit ocean',
         response_format: {
           type: 'video',
@@ -183,11 +186,11 @@ describe('geminiGenerateVideo', () => {
       prompt: 'Animate the still',
       image: 'abc123',
       imageMimeType: 'image/jpeg',
-      model: 'gemini-omni-1.1-flash',
+      model: 'gemini-omni-1.2-flash',
     });
 
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
-    expect(body.model).toBe('gemini-omni-1.1-flash');
+    expect(body.model).toBe('gemini-omni-1.2-flash');
     expect(body.input).toEqual([
       { type: 'image', data: 'abc123', mime_type: 'image/jpeg' },
       { type: 'text', text: 'Animate the still' },

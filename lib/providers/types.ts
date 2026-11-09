@@ -254,9 +254,10 @@ export interface ProviderModel {
     /**
      * Runware edit body. `frame-anchors` is inputs.frameImages.
      * `kling-reference` is inputs.referenceImages plus optional keepOriginalSound.
+     * `kling-preserve-audio` is the same input with settings.preserveAudio.
      * Absent stays the Seedance / P-Video path.
      */
-    transport?: 'frame-anchors' | 'kling-reference';
+    transport?: 'frame-anchors' | 'kling-reference' | 'kling-preserve-audio';
     /** Pins for `transport: 'frame-anchors'`. `frame` and `timestamp` are mutually exclusive. */
     frameAnchors?: {
       frames: readonly ('first' | 'last' | '0' | '-1')[];
@@ -381,7 +382,7 @@ export interface VideoRequest {
    */
   framePins?: Array<{ frame: 'first' | 'last' | '0' | '-1' } | { timestamp: number } | null>;
   /** Catalog transport. Absent keeps the Seedance / P-Video edit body. */
-  editTransport?: 'frame-anchors' | 'kling-reference';
+  editTransport?: 'frame-anchors' | 'kling-reference' | 'kling-preserve-audio';
   /**
    * Vendor keep-original-sound. Omitted means the vendor default, which is on.
    * A Runware edit that lists the control still sends the boolean.

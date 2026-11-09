@@ -418,6 +418,61 @@ const RUNWARE_MODELS: ProviderModel[] = [
       note: 'Edits a 3–15.5 s source. Each edge is 700–4553 px, the aspect is between 1:2.5 and 2:1, and the frame is at most 8.29 MP. Up to 4 reference images. Output is the 4K preset. Keep original sound is sent with the clip. $0.42 per second. Element bundles are not offered.',
     },
   },
+  {
+    // Read 2026-11-09 from https://runware.ai/docs/models/klingai-video-4-0-flash
+    // (released 2026-11-04, confirmed in https://runware.ai/docs/changelog).
+    // These are list prices: $0.094/s without video input and $0.126/s with it.
+    // The sale that ends Nov 10 is applied at call time by withKling4FlashSale.
+    // Reference video is not offered: it moves a reference run onto the
+    // video-input rate, and this entry prices that mode from images alone.
+    // The vendor allows 10 referenceImages; edit stays at the 4 every other
+    // Kling edit here sends. Elements and voices are not offered.
+    // Prompt limit is E/26000 + N/11000 <= 1, so 11,000 fits every language.
+    id: 'klingai:kling-video@4.0-flash',
+    label: 'Kling VIDEO 4.0 Flash',
+    fileCode: 'kling-4_0-flash',
+    kind: 'video',
+    modes: ['text', 'image', 'reference', 'edit'],
+    price: '$0.094 / s',
+    rate: { per: 'second', usd: 0.094 },
+    maxInputImages: 10,
+    maxPromptLength: 11_000,
+    videoInputs: {
+      image: { field: 'frameImages', maxImages: 1 },
+      reference: { field: 'referenceImages', maxImages: 10, clientMaxImages: 5, promptSyntax: 'triple-angle' },
+    },
+    duration: { type: 'range', min: 3, max: 20, default: 10 },
+    sizes: [
+      { label: '720p · 16:9', width: 1280, height: 720 },
+      { label: '720p · 9:16', width: 720, height: 1280 },
+      { label: '720p · 1:1', width: 960, height: 960 },
+      { label: '720p · 21:9', width: 1464, height: 628 },
+    ],
+    note: 'Fast 720p Kling with audio from the prompt, in 3–20 second clips. Uses one opening frame or up to 5 reference images here. List price is $0.094 per second.',
+    videoEdit: {
+      sizes: [],
+      rate: { per: 'second', usd: 0.126 },
+      maxImages: 4,
+      minSeconds: 3,
+      maxSeconds: 20,
+      maxPromptLength: 11_000,
+      requireMeasurement: true,
+      measureForPrice: true,
+      transport: 'kling-preserve-audio',
+      controls: [{
+        key: 'keepOriginalSound',
+        label: 'Keep original sound',
+        kind: 'boolean',
+        defaultValue: true,
+        description: 'Keep the audio of the source video instead of generating new audio.',
+      }],
+      promptSyntax: 'triple-angle',
+      namesSource: true,
+      outputLabel: '720p',
+      sourceBounds: { minEdge: 700, maxEdge: 4553, maxPixels: 8_294_400, minRatio: 0.4, maxRatio: 2.5 },
+      note: 'Edits a 3–20 s source at 24–60 fps. Each edge is 700–4553 px, the aspect is between 1:2.5 and 2.5:1, and the frame is at most 8.29 MP. Up to 4 reference images. Output is 720p. List price is $0.126 per second.',
+    },
+  },
 ];
 
 /**

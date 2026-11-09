@@ -277,6 +277,20 @@ export async function runwareCreateVideo(request: VideoRequest, uuid = taskUUID(
     }]);
     return { taskId: uuid };
   }
+  if (request.inputMode === 'edit' && request.editTransport === 'kling-preserve-audio') {
+    const images = request.images ?? [];
+    if (!request.sourceVideo || images.length > 4 || request.durationSeconds !== undefined || request.width !== undefined || request.height !== undefined || request.aspectRatio !== undefined || request.audio !== undefined || request.draft !== undefined || request.resolution !== undefined) {
+      throw new ProviderError('Invalid video edit settings.', 400, 'runware');
+    }
+    await runwareFetch(request.apiKey, [{
+      taskType: 'videoInference', taskUUID: uuid, model: request.model,
+      positivePrompt: request.prompt,
+      inputs: { video: request.sourceVideo, ...(images.length ? { referenceImages: images } : {}) },
+      ...(request.keepOriginalSound !== undefined ? { settings: { preserveAudio: request.keepOriginalSound } } : {}),
+      deliveryMethod: 'async', includeCost: true, outputFormat: 'MP4',
+    }]);
+    return { taskId: uuid };
+  }
   if (request.inputMode === 'edit') {
     const draft = request.draft === true;
     if ((request.draft !== undefined && typeof request.draft !== 'boolean') || request.model !== SEEDANCE_25_MODEL || !request.sourceVideo || !['480p', '720p', '1080p'].includes(request.resolution ?? '')) throw new ProviderError('Invalid video edit settings.', 400, 'runware');

@@ -3,6 +3,21 @@
 Status: Approved design
 Date: 2026-09-21
 
+## Follow-up decision — 2026-11-09 (Omni 1.2 Flash)
+
+`gemini-omni-1.2-flash` (released 2026-11-05) is the catalog default and the
+fallback for a stored or unknown id. Google routes `gemini-omni-1.1-flash` to
+1.2 on 2026-12-03 and bills it at 1.2 rates, so this stays a one-model list and
+store version 4 maps a stored 1.1 id to the default. `GEMINI_VIDEO_RATES` keeps
+the 1.1 720p rate so a saved 1.1 clip is not repriced, and finished 1.1 clips
+keep their label and file code.
+
+Rates from https://aistudio.google.com/docs/pricing, read 2026-11-09, at $12.00
+per million output tokens: 360p is 1,931 tokens/s ($0.023172), 720p is 5,792
+($0.069504), 1080p is 8,688 ($0.104256), and 4k is 17,376 ($0.208512). This
+supersedes the 2026-10-19 note that non-720p resolutions stay unpriced. Omni 1.2
+also accepts 11–15s; the duration control stays at 3–10s until that is scoped.
+
 ## Follow-up decision — 2026-10-20 (second review)
 
 Each result carries `kind: 'interaction' | 'file'`, and

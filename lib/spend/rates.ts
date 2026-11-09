@@ -5,7 +5,12 @@
  * isolation. Dependency-free so server routes and client code can both price.
  */
 import { DEFAULT_GEMINI_IMAGE_MODEL } from '../engines/gemini-catalog';
-import { DEFAULT_GEMINI_VIDEO_MODEL, GEMINI_OMNI_720P_USD_PER_SECOND } from '../engines/gemini-video-catalog';
+import {
+  DEFAULT_GEMINI_VIDEO_MODEL,
+  GEMINI_OMNI_1_1_720P_USD_PER_SECOND,
+  GEMINI_OMNI_1_1_MODEL_ID,
+  GEMINI_OMNI_USD_PER_SECOND,
+} from '../engines/gemini-video-catalog';
 
 /**
  * https://ai.google.dev/gemini-api/docs/pricing and
@@ -69,13 +74,14 @@ function geminiRate(modelId: string | undefined): GeminiImageRate {
 }
 
 /**
- * https://ai.google.dev/gemini-api/docs/pricing — Gemini Omni Flash, read
- * 2026-10-19. Video output is $17.50 per 1M tokens, including thinking tokens.
- * 720p is billed at 5,792 tokens per second, so one second is
- * 5792 × 17.50 / 1_000_000 = $0.10136. Google summarizes that as about $0.10/s.
- * Input tokens are $1.50 per 1M and are not part of this per-second figure.
- * No per-second token rate is published for 360p, 1080p, or 4k, so those
- * resolutions are not given a stand-in price.
+ * https://aistudio.google.com/docs/pricing — Gemini Omni Flash, read
+ * 2026-11-09. Omni 1.2 video output is $12.00 per 1M tokens, including thinking
+ * tokens, billed per second at 1,931 (360p), 5,792 (720p), 8,688 (1080p), and
+ * 17,376 (4k) tokens. 720p is 5792 × 12 / 1_000_000 = $0.069504, which Google
+ * summarizes as about $0.07/s. Input tokens are not part of these figures.
+ * Omni 1.1 is $17.50 per 1M at the same 5,792 tokens, or $0.10136/s. Its rate
+ * stays so a saved 1.1 job is not repriced. Google published no other 1.1
+ * resolution, so those stay without a stand-in price.
  */
 export interface GeminiVideoRate {
   /** USD per second of generated video, by resolution. Audio is included in the output-token rate. */
@@ -83,8 +89,11 @@ export interface GeminiVideoRate {
 }
 
 export const GEMINI_VIDEO_RATES: Record<string, GeminiVideoRate> = {
-  'gemini-omni-1.1-flash': {
-    usdPerSecond: { '720p': GEMINI_OMNI_720P_USD_PER_SECOND },
+  [DEFAULT_GEMINI_VIDEO_MODEL]: {
+    usdPerSecond: GEMINI_OMNI_USD_PER_SECOND,
+  },
+  [GEMINI_OMNI_1_1_MODEL_ID]: {
+    usdPerSecond: { '720p': GEMINI_OMNI_1_1_720P_USD_PER_SECOND },
   },
 };
 
