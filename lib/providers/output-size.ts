@@ -225,7 +225,39 @@ export const ATLAS_IMAGE_DIMENSIONS: Record<string, Dimensions> = {
 };
 
 /**
- * Seedream v5.0 Pro will not take any of the sizes above: it requires
+ * Seedream v5.0 Flash publishes its own size enum, and several Pro pairs
+ * (1776×1328, 1328×1776) are not in it. Every pair below is in that enum.
+ * Flash bills one price at every size, so these are the larger 2K presets.
+ * Read 2026-11-03 from the Flash text-to-image schema.
+ */
+export const ATLAS_SEEDREAM_FLASH_DIMENSIONS: Record<string, Dimensions> = {
+  '1:1': [2048, 2048],
+  '16:9': [2816, 1584],
+  '9:16': [1584, 2816],
+  '4:3': [2368, 1776],
+  '3:4': [1776, 2368],
+  '3:2': [2496, 1664],
+  '2:3': [1664, 2496],
+  '21:9': [3136, 1344],
+};
+
+/**
+ * MAI-Image-2.6: each edge is 768–2346 and width × height is at most 2,359,296.
+ * These pairs sit on that ceiling where the ratio allows it.
+ */
+export const ATLAS_MAI_DIMENSIONS: Record<string, Dimensions> = {
+  '1:1': [1536, 1536],
+  '16:9': [2048, 1152],
+  '9:16': [1152, 2048],
+  '4:3': [1728, 1296],
+  '3:4': [1296, 1728],
+  '3:2': [1872, 1248],
+  '2:3': [1248, 1872],
+  '21:9': [2016, 864],
+};
+
+/**
+ * Seedream v5.0 Pro will not take the standard Atlas sizes: it requires
  * 1,048,576–4,194,304 output pixels and every one of them is smaller. These are
  * its own published sizes, all inside its 1.5K billing tier (≤2.36M pixels), so
  * a run costs the $0.036 the catalog quotes rather than the 2K tier's price. It
@@ -297,6 +329,12 @@ export const ATLAS_GPT_IMAGE_DIMENSIONS: Record<string, Dimensions> = {
 /** Atlas picks a table per model, since not every model shares one. */
 export const isSeedream = (model: string) => model.startsWith('bytedance/seedream-');
 
+/** Flash has its own size enum. It must not inherit Pro's pairs. */
+export const isSeedreamFlash = (model: string) => model.startsWith('bytedance/seedream-v5.0-flash');
+
+/** MAI-Image-2.6 writes `width*height` inside a pixel cap, not a named tier. */
+export const isMaiImage = (model: string) => model.startsWith('microsoft/mai-image-2.6');
+
 export const isGptImage25 = (model: string) => model.startsWith('openai/gpt-image-2.5-');
 
 /**
@@ -312,6 +350,21 @@ export const isNanoBanana21 = (model: string) => model.startsWith('google/nano-b
 
 /** Luma Uni 1 takes a ratio from its own enum and publishes no pixels either. */
 export const isLumaUni = (model: string) => model.startsWith('luma/uni-');
+
+/**
+ * The pixel table an Atlas image model actually sends, or null when this app
+ * has no pair to show. Flash is checked before Seedream because it shares that
+ * prefix. MAI edit takes `size: 'default'` and no ratio, so it has no table.
+ */
+export function atlasDimensionTable(modelId: string | undefined): Record<string, Dimensions> | null {
+  if (modelId && (isNanoBanana2(modelId) || isNanoBanana21(modelId) || isLumaUni(modelId))) return null;
+  if (modelId && isMaiImage(modelId) && modelId.endsWith('/edit')) return null;
+  if (modelId && isSeedreamFlash(modelId)) return ATLAS_SEEDREAM_FLASH_DIMENSIONS;
+  if (modelId && isMaiImage(modelId)) return ATLAS_MAI_DIMENSIONS;
+  if (modelId && isSeedream(modelId)) return ATLAS_SEEDREAM_DIMENSIONS;
+  if (modelId && isGptImage25(modelId)) return ATLAS_GPT_IMAGE_DIMENSIONS;
+  return ATLAS_IMAGE_DIMENSIONS;
+}
 
 /**
  * Look up a ratio in a table the way an adapter does, including its fallback,
@@ -362,13 +415,8 @@ export function imageDimensions(
   if (engine === 'comet') return ratioDimensions(COMET_IMAGE_DIMENSIONS, aspectRatio);
   if (engine === 'pollinations') return ratioDimensions(POLLINATIONS_IMAGE_DIMENSIONS, aspectRatio);
   if (engine === 'atlas') {
-    if (modelId && (isNanoBanana2(modelId) || isNanoBanana21(modelId) || isLumaUni(modelId))) return null;
-    const table = modelId && isSeedream(modelId)
-      ? ATLAS_SEEDREAM_DIMENSIONS
-      : modelId && isGptImage25(modelId)
-        ? ATLAS_GPT_IMAGE_DIMENSIONS
-        : ATLAS_IMAGE_DIMENSIONS;
-    return ratioDimensions(table, aspectRatio);
+    const table = atlasDimensionTable(modelId);
+    return table ? ratioDimensions(table, aspectRatio) : null;
   }
   return null;
 }

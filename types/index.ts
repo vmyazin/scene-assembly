@@ -1,3 +1,4 @@
+// types/index.ts
 export interface Feature {
   id: string;
   name: string;
@@ -18,6 +19,8 @@ export interface GenerationConfig {
   useGoogleSearch?: boolean;
   /** fal Nano Banana 2.1 `thinking_level`. Medium is the vendor default. */
   thinkingLevel?: 'minimal' | 'medium' | 'high';
+  /** GPT Image and Seedream Flash. Absent leaves the vendor default. */
+  background?: 'auto' | 'opaque' | 'transparent';
 }
 
 export interface GenerationRequest {

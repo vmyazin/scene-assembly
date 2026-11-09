@@ -268,7 +268,9 @@ export async function POST(request: NextRequest) {
           success: false,
           error:
             inputMode === 'frames'
-              ? 'Exactly two frame images are required'
+              ? videoInput.orderedKeyframes
+                ? 'Add the first and last frame'
+                : 'Exactly two frame images are required'
               : 'At least one image is required',
         },
         { status: 400 }

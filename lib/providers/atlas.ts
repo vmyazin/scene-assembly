@@ -14,15 +14,17 @@ import {
 import {
   ATLAS_GPT_IMAGE_DIMENSIONS,
   ATLAS_IMAGE_DIMENSIONS,
-  ATLAS_SEEDREAM_DIMENSIONS,
+  atlasDimensionTable,
   isGptImage25,
   isLumaUni,
+  isMaiImage,
   isNanoBanana2,
   isNanoBanana21,
   isSeedream,
+  isSeedreamFlash,
   ratioDimensions,
 } from './output-size';
-import { resolveSize } from './catalog';
+import { findModel, generatedEditSeconds, resolveSize } from './catalog';
 
 /**
  * Atlas Cloud — submit returns a prediction id, then you poll one endpoint for
@@ -46,9 +48,19 @@ export const ATLAS_API = 'https://api.atlascloud.ai/api/v1';
  * ("1024*1024"), and that formatting is the only part that belongs here.
  */
 function imageSize(model: string, aspectRatio: string | undefined): string {
-  const table = isSeedream(model) ? ATLAS_SEEDREAM_DIMENSIONS : ATLAS_IMAGE_DIMENSIONS;
+  // Same table the shape control labels. Flash is ahead of Seedream there.
+  const table = atlasDimensionTable(model) ?? ATLAS_IMAGE_DIMENSIONS;
   const [width, height] = ratioDimensions(table, aspectRatio);
   return `${width}*${height}`;
+}
+
+/** Sent only when the caller chose one. Transparent has no JPEG alpha channel. */
+function imageBackground(request: ImageRequest): Record<string, unknown> {
+  if (!request.background) return {};
+  return {
+    background: request.background,
+    ...(request.background === 'transparent' ? { output_format: 'png' } : {}),
+  };
 }
 
 /** `image` is what the FLUX endpoints take; Seedream's editor takes an array. */
@@ -127,7 +139,34 @@ function atlasImageFields(
       ...base,
       size: `${width}x${height}`,
       n: 1,
+      ...imageBackground(request),
       ...(images.length ? { images } : {}),
+    };
+  }
+
+  if (isSeedreamFlash(model)) {
+    return {
+      ...base,
+      size: imageSize(model, request.aspectRatio),
+      num_images: 1,
+      ...imageBackground(request),
+      ...(model.endsWith('/edit') && images.length ? { images } : {}),
+    };
+  }
+
+  if (isMaiImage(model)) {
+    // The edit endpoint's size is `default` or `auto`, not a pixel pair.
+    if (model.endsWith('/edit')) {
+      return {
+        ...base,
+        size: 'default',
+        ...(images.length ? { reference_images: images } : {}),
+      };
+    }
+    return {
+      ...base,
+      size: imageSize(model, request.aspectRatio),
+      num_images: 1,
     };
   }
 
@@ -308,6 +347,33 @@ export async function atlasGenerateImage(
  * output is shorter than the source.
  */
 export function atlasEditBody(request: VideoRequest): Record<string, unknown> {
+  if (request.model === 'black-forest-labs/flux-3/edit-video') {
+    // Output follows the source. No duration, size, aspect, or safety_tolerance.
+    return {
+      model: request.model,
+      prompt: request.prompt,
+      video_url: request.sourceVideo,
+    };
+  }
+  if (request.model === 'luma/ray-3.2/video-to-video') {
+    return {
+      model: request.model,
+      prompt: request.prompt,
+      video: request.sourceVideo,
+      duration: generatedEditSeconds(findModel('atlas', request.model), request.outputDuration) ?? 5,
+      resolution: request.resolution ?? '540p',
+      strength: request.strength ?? 'flex_2',
+    };
+  }
+  if (request.model === 'luma/ray-3.2/reframe') {
+    return {
+      model: request.model,
+      prompt: request.prompt,
+      video: request.sourceVideo,
+      aspect_ratio: request.aspectRatio ?? '9:16',
+      resolution: request.resolution ?? '540p',
+    };
+  }
   if (request.model === 'kwaivgi/kling-v4.0/video-edit') {
     return {
       model: request.model, prompt: request.prompt, video: request.sourceVideo,

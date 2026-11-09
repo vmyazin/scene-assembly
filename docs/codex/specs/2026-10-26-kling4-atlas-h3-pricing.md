@@ -5,6 +5,12 @@ Status: Approved design
 ## Follow-up decision — 2026-11-09 (Runware Kling VIDEO 4.0 Flash)
 `klingai:kling-video@4.0-flash` stores list prices: $0.094/s without video input and $0.126/s with a source video. Runware shows 15% off until November 10, 2026 with no timezone, so `lib/providers/kling-4-flash-promo.ts` applies $0.0799/s and $0.107/s through the end of that UTC day and lists from 2026-11-11T00:00:00Z, read at call time and from the submission time for saved jobs. Reference video is not offered, because it would move a reference run onto the video-input rate. Edit sends `settings.preserveAudio` through the `kling-preserve-audio` transport, not the O1/O3 `providerSettings.klingai.keepOriginalSound`.
 
+## Follow-up decision — 2026-11-03
+
+The calculator now quotes the ESR upscales, so they are offered and priced: $0.182/s at 1080p-esr, $0.273/s at 2k-esr, $0.364/s at 4k-esr. Native 720p and 1080p quotes are unchanged. A label of `4K` is still not a size; the control says `4K upscale`.
+
+First & last frame uses the same ordered keyframes as Image mode: opening frame, up to eight `middle_images`, closing frame. Other models stay at exactly two frames. Edit totals stay unknown. The generation calculator quotes an edit’s output seconds the same way it quotes a generation, and that is not the input-plus-output formula this spec already refused to treat as verified. See `docs/codex/specs/2026-11-03-atlas-models.md` for the other Atlas models added the same day.
+
 ## Follow-up decision — 2026-10-26
 The official Atlas calculator contradicts its $0.11/s headline. Use verified quote-derived estimates of $0.14287/s at 720p and $0.21385/s at 1080p, and disclose the discrepancy in the model note. Do not advertise Atlas as cheaper than Kie. This supersedes the headline rate in the context below.
 

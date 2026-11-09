@@ -272,6 +272,14 @@ export interface ProviderModel {
      * on the finished task still replaces that estimate.
      */
     measureForPrice?: boolean;
+    /**
+     * The selected output length is what the model generates and bills.
+     * Wan clips a longer request back to the source; Luma Ray restyle does not,
+     * so the shorter-of-the-two rule would undercharge a 10s request on a short clip.
+     */
+    outputDurationIsGenerated?: boolean;
+    /** The edit has no “keep the source frame” choice. A target ratio is required. */
+    requireAspectRatio?: boolean;
     note?: string;
     /** Structured references. The flat `maxImages` tray stays when this is absent. */
     references?: EditReferenceSpec;
@@ -296,6 +304,11 @@ export interface ProviderModel {
    * at all. Sending the wrong one is rejected, so it is per model, not global.
    */
   imageInput?: 'seed' | 'reference';
+  /**
+   * Background choices the image endpoint actually publishes. Transparent
+   * forces PNG on the wire, because JPEG cannot carry the alpha channel.
+   */
+  backgrounds?: readonly { label: string; value: 'auto' | 'opaque' | 'transparent' }[];
   /**
    * Clip lengths in seconds this model actually accepts, verbatim from the
    * vendor's parameter reference. Video models reject a length they do not
@@ -329,6 +342,8 @@ export interface ImageRequest {
   /** Reference images as data URLs (`data:image/png;base64,…`). */
   images?: string[];
   aspectRatio?: string;
+  /** GPT Image and Seedream Flash `background`. Absent leaves the vendor default. */
+  background?: 'auto' | 'opaque' | 'transparent';
   /** Which input field this model's references belong in. */
   imageInput?: 'seed' | 'reference';
   /**
@@ -396,6 +411,8 @@ export interface VideoRequest {
   sourceDurationSeconds?: number;
   negativePrompt?: string;
   promptExtend?: boolean;
+  /** Luma Ray restyle strength. One of the vendor's adhere / flex / reimagine steps. */
+  strength?: string;
 }
 
 export type TaskState = 'queued' | 'running' | 'success' | 'error';

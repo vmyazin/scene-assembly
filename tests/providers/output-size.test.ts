@@ -1,3 +1,4 @@
+// tests/providers/output-size.test.ts
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -174,6 +175,16 @@ describe('the shared table is the one the request uses', () => {
     expect(imageDimensions('atlas', 'google/nano-banana-2/text-to-image-developer', '9:16')).toBeNull();
     expect(imageDimensions('atlas', 'google/nano-banana-2.1-developer/text-to-image', '9:16')).toBeNull();
     expect(imageDimensions('atlas', 'google/nano-banana-2-lite/edit-developer', '1:1')).toBeNull();
+  });
+
+  it('keeps Seedream Flash and MAI-Image-2.6 off Pro’s pixel pairs', () => {
+    expect(imageDimensions('atlas', 'bytedance/seedream-v5.0-flash/text-to-image', '4:3')).toEqual([2368, 1776]);
+    expect(imageDimensions('atlas', 'bytedance/seedream-v5.0-flash/edit', '21:9')).toEqual([3136, 1344]);
+    expect(imageDimensions('atlas', 'bytedance/seedream-v5.0-pro/text-to-image', '4:3')).toEqual([1776, 1328]);
+    expect(imageDimensions('atlas', 'microsoft/mai-image-2.6/text-to-image', '1:1')).toEqual([1536, 1536]);
+    expect(imageDimensions('atlas', 'microsoft/mai-image-2.6/text-to-image', '21:9')).toEqual([2016, 864]);
+    // The edit sends size "default" and has no pixel pair to label.
+    expect(imageDimensions('atlas', 'microsoft/mai-image-2.6/edit', '16:9')).toBeNull();
   });
 
   it('Comet sends the pixels the image control promises', async () => {

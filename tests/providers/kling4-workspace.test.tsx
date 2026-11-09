@@ -1,3 +1,4 @@
+// tests/providers/kling4-workspace.test.tsx
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProviderVideoWorkspace from '@/components/ProviderVideoWorkspace';
@@ -27,6 +28,14 @@ describe('Kling 4 image ordering', () => {
     expect(useDraftStore.getState().references).toHaveLength(10);
     expect(screen.queryByLabelText('Aspect ratio')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Generate audio')).not.toBeInTheDocument();
+  });
+
+  it('extends first-and-last frame with the same ordered keyframes', () => {
+    render(<ProviderVideoWorkspace provider="atlas" label="Atlas Cloud" inputMode="frames" onBack={() => {}} onOpenConnections={() => {}} />);
+    expect(screen.getByRole('heading', { name: 'First, middle, and last frames' })).toBeInTheDocument();
+    expect(screen.getAllByText(/up to eight middle frames/i).length).toBeGreaterThan(0);
+    expect(screen.getByText('Middle frame 8')).toBeInTheDocument();
+    expect(screen.getByText('Last frame')).toBeInTheDocument();
   });
 
   it('describes the selectable edit length without claiming it matches the source', () => {

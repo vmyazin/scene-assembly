@@ -1,3 +1,4 @@
+// tests/providers/kling4-route.test.ts
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { POST } from '@/app/api/providers/video/route';
 
@@ -21,6 +22,26 @@ describe('Atlas Kling 4.0 browser route', () => {
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(body).toMatchObject({ image: frameImages[0], middle_images: frameImages.slice(1, -1), last_image: frameImages[9] });
     expect(body.reference_images).toBeUndefined();
+  });
+
+  it('sends first-and-last mode with middle frames, and an upscale preset as its API value', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ data: { id: 'kling-four' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const frames = frameImages.slice(0, 4);
+    const response = await post({
+      ...base, model: 'kwaivgi/kling-v4.0/image-to-video', inputMode: 'frames', images: frames, size: '4K upscale',
+    });
+    expect(response.status).toBe(200);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body).toMatchObject({
+      image: frames[0],
+      middle_images: frames.slice(1, -1),
+      last_image: frames[3],
+      resolution: '4k-esr',
+    });
+    const missing = await post({ ...base, model: 'kwaivgi/kling-v4.0/image-to-video', inputMode: 'frames', images: frameImages.slice(0, 1) });
+    expect(missing.status).toBe(400);
+    expect(await missing.json()).toMatchObject({ error: 'Add the first and last frame' });
   });
 
   it('keeps the reference endpoint separate from ordered keyframes and enforces its image cap', async () => {
