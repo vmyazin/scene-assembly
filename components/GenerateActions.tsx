@@ -4,6 +4,7 @@
 import type { ReactNode } from 'react';
 import { Loader2, Sparkles } from 'lucide-react';
 import CloudExecutionNotice from '@/components/account/CloudExecutionNotice';
+import { CONNECT_KEY_TITLE_ID } from '@/components/ConnectKeyCallout';
 import SubmissionError from '@/components/SubmissionError';
 import type { useCloudWorkspace } from '@/lib/account/useCloudWorkspace';
 import { refusalPresentation, type RefusalContext } from '@/lib/moderation/classify';
@@ -20,6 +21,7 @@ export default function GenerateActions({
   workspace,
   mediaType,
   label,
+  needsKey = false,
   cost,
   note,
   busy,
@@ -34,6 +36,12 @@ export default function GenerateActions({
   mediaType: 'image' | 'video';
   /** "Generate video", "Generate edit". */
   label: string;
+  /**
+   * This provider has no key, so the button is disabled and keeps its label.
+   * The callout above is the way forward; putting the ask in the button too only
+   * crowded a page that already has plenty of calls to action.
+   */
+  needsKey?: boolean;
   /** The run's price after the label; hidden for a simulation, which costs nothing. */
   cost?: ReactNode;
   /** A line under the button, for a workspace that prices the run there instead. */
@@ -59,7 +67,8 @@ export default function GenerateActions({
           autoRetry.reset();
           onSubmit();
         }}
-        disabled={busy || workspace.checking}
+        disabled={busy || workspace.checking || needsKey}
+        aria-describedby={needsKey ? CONNECT_KEY_TITLE_ID : undefined}
         // A disabled control has to carry its own reason: the submit guard for
         // this can only be reached programmatically, so for a pointer this
         // button going dead is the whole of the explanation on offer.

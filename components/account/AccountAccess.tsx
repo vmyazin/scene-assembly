@@ -3,12 +3,23 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { RefreshCw } from 'lucide-react';
+import { Check, RefreshCw } from 'lucide-react';
 import AccountPageShell from './AccountPageShell';
 import { AccountSurface } from './AccountSurface';
 import { accountChanged, refreshAccount } from '@/lib/account/session';
 import { afterSignIn } from '@/lib/account/return-path';
 import { useAccountStore } from '@/store/useAccountStore';
+
+/**
+ * What signing up adds over staying a guest, each line something the account
+ * Worker does today: `FREE_BYTES` is the 1 GB, and accepted jobs run in a
+ * Workflow that does not need the tab.
+ */
+const ACCOUNT_BENEFITS = [
+  'Generations keep running after you close the tab.',
+  'Your provider keys are saved encrypted, ready on any device.',
+  'Finished images and videos save to a private 1 GB cloud library.',
+];
 
 export default function AccountAccess({ mode, signInFailed = false, returnTo }: { mode: 'sign-in' | 'sign-up'; signInFailed?: boolean; returnTo?: string }) {
   const router = useRouter();
@@ -78,6 +89,16 @@ export default function AccountAccess({ mode, signInFailed = false, returnTo }: 
           </>
         ) : (
           <>
+            {signup && (
+              <ul aria-label="What an account adds" className="mb-6 space-y-2.5 text-sm leading-relaxed text-[var(--foreground-muted)]">
+                {ACCOUNT_BENEFITS.map(benefit => (
+                  <li key={benefit} className="flex items-start gap-2.5">
+                    <Check size={15} aria-hidden="true" className="mt-[3px] shrink-0 text-[var(--brand-accent)]" />
+                    <span>{benefit}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
             <button type="button" disabled={busy || !session?.googleEnabled} onClick={() => void act('sign-in/google')} className="flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-[var(--border-hover)] bg-white px-4 py-3 text-sm font-medium text-zinc-900 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--brand-accent)]"><GoogleMark />{busy ? 'Connecting…' : 'Continue with Google'}</button>
             {session && !session.googleEnabled && <p className="mt-3 text-sm text-[var(--foreground-muted)]">Google sign-in isn’t available yet. You can keep creating as a guest.</p>}
             {session?.localSignIn && <button type="button" disabled={busy} onClick={() => void act('local-sign-in')} className="btn-secondary mt-4 w-full">Use local test account</button>}

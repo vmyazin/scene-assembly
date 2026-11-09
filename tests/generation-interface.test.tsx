@@ -285,15 +285,14 @@ describe('GenerationInterface engine selection', () => {
   });
 
   it('offers every Gemini image model with its price, and prices the press', () => {
-    // One Google AI Studio key runs Nano Banana 2.1, the deprecated Nano Banana 2,
-    // Pro and Lite. The rack is the same one every aggregator engine has.
+    // One Google AI Studio key runs Nano Banana 2.1, Pro and Lite. The rack is
+    // the same one every aggregator engine has.
     useAppStore.setState({ engine: 'gemini', geminiImageModel: 'gemini-3-pro-image-preview' });
     renderInterface(textToImage);
 
     const rack = screen.getByRole('listbox', { name: 'Model' });
     expect(within(rack).getAllByRole('option').map((row) => row.textContent)).toEqual([
       expect.stringContaining('Nano Banana 2.1'),
-      expect.stringContaining('Nano Banana 2'),
       expect.stringContaining('Gemini 3 Pro Image'),
       expect.stringContaining('Gemini 3.1 Flash Lite Image'),
     ]);
@@ -301,25 +300,33 @@ describe('GenerationInterface engine selection', () => {
     expect(within(rack).getByRole('option', { name: 'Gemini 3.1 Flash Lite Image' }).textContent).toContain('$0.034');
     expect(screen.getByText(/Est\. ≈ \$0\.134 \/ image · Gemini 3 Pro Image/)).toBeTruthy();
 
-    fireEvent.click(within(rack).getByRole('option', { name: 'Nano Banana 2' }));
+    fireEvent.click(within(rack).getByRole('option', { name: 'Gemini 3.1 Flash Lite Image' }));
 
-    expect(useAppStore.getState().geminiImageModel).toBe('gemini-3.1-flash-image');
+    expect(useAppStore.getState().geminiImageModel).toBe('gemini-3.1-flash-lite-image');
     // Persisted, or the choice is lost the moment the workspace is left: the
     // store writes only the fields `partialize` names.
     expect(useAppStore.persist.getOptions().partialize?.(useAppStore.getState())).toMatchObject({
-      geminiImageModel: 'gemini-3.1-flash-image',
+      geminiImageModel: 'gemini-3.1-flash-lite-image',
     });
-    expect(screen.getByText(/Est\. ≈ \$0\.067 \/ image · Nano Banana 2$/)).toBeTruthy();
-    expect(within(rack).getByRole('option', { name: 'Nano Banana 2' }).textContent).toContain('Retired · use 2.1');
   });
 
-  it('defaults Gemini to Nano Banana 2.1 and keeps the deprecated model selectable', () => {
+  it('keeps a retired Gemini model listed and priced while it is the selection', () => {
+    useAppStore.setState({ engine: 'gemini', geminiImageModel: 'gemini-3.1-flash-image' });
+    renderInterface(textToImage);
+
+    const rack = screen.getByRole('listbox', { name: 'Model' });
+    expect(within(rack).getByRole('option', { name: 'Nano Banana 2' }).getAttribute('aria-selected')).toBe('true');
+    expect(within(rack).getByRole('option', { name: 'Nano Banana 2' }).textContent).toContain('Retired · use 2.1');
+    expect(screen.getByText(/Est\. ≈ \$0\.067 \/ image · Nano Banana 2$/)).toBeTruthy();
+  });
+
+  it('defaults Gemini to Nano Banana 2.1 and hides the retired model', () => {
     useAppStore.setState({ engine: 'gemini', geminiImageModel: DEFAULT_GEMINI_IMAGE_MODEL });
     renderInterface(textToImage);
 
     const rack = screen.getByRole('listbox', { name: 'Model' });
     expect(within(rack).getByRole('option', { name: 'Nano Banana 2.1' }).getAttribute('aria-selected')).toBe('true');
-    expect(within(rack).getByRole('option', { name: 'Nano Banana 2' })).toBeTruthy();
+    expect(within(rack).queryByRole('option', { name: 'Nano Banana 2' })).toBeNull();
     expect(screen.getByText(/Gemini Nano Banana 2\.1/)).toBeTruthy();
     expect(screen.getByText(/Est\. ≈ \$0\.034 \/ image · Nano Banana 2\.1/)).toBeTruthy();
   });
@@ -719,16 +726,17 @@ describe('GenerationInterface fal image generation', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderInterface(textToImage, { onOpenConnections });
 
-    expect(screen.getByText('Add your fal.ai key')).toBeTruthy();
+    expect(screen.getByText('Generating needs your own fal.ai API key')).toBeTruthy();
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A paper city' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Image' }));
+    const generate = screen.getByRole('button', { name: 'Generate Image' }) as HTMLButtonElement;
+    expect(generate.disabled).toBe(true);
+    fireEvent.click(generate);
+    expect(onOpenConnections).not.toHaveBeenCalled();
 
-    expect(onOpenConnections).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Connect key' }));
+    expect(onOpenConnections).toHaveBeenCalledWith('fal');
     expect(mockedRunFalImage).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(
-      screen.getByText('Connect your fal API key first in Connections.')
-    ).toBeTruthy();
   });
 
   it('renders a safe fal error without falling back or exposing the key', async () => {
@@ -1012,16 +1020,19 @@ describe('GenerationInterface fal image generation', () => {
 
     const rack = screen.getByRole('listbox', { name: 'Model' });
     expect(within(rack).getByRole('option', { name: 'Nano Banana 2.1' }).getAttribute('aria-selected')).toBe('true');
-    expect(within(rack).getByRole('option', { name: 'Nano Banana 2' })).toBeTruthy();
+    expect(within(rack).queryByRole('option', { name: 'Nano Banana 2' })).toBeNull();
     expect(screen.getByText(`Est. ≈ $${published!.costUsd.toFixed(3)} / image · Nano Banana 2.1`)).toBeTruthy();
     expect(screen.queryByText(/usage rates apply/)).toBeNull();
+  });
 
-    fireEvent.click(within(rack).getByRole('option', { name: 'Nano Banana 2' }));
+  it('keeps a retired fal model listed and priced while it is the selection', () => {
+    useAppStore.setState({ falImageModel: 'nano-banana-2' });
     const deprecated = falPublishedCost('fal-ai/nano-banana-2', { resolution: '1K', webSearch: false });
-    expect(useAppStore.getState().falImageModel).toBe('nano-banana-2');
-    expect(useAppStore.persist.getOptions().partialize?.(useAppStore.getState())).toMatchObject({
-      falImageModel: 'nano-banana-2',
-    });
+
+    renderInterface();
+
+    const rack = screen.getByRole('listbox', { name: 'Model' });
+    expect(within(rack).getByRole('option', { name: 'Nano Banana 2' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByText(`Est. ≈ $${deprecated!.costUsd.toFixed(3)} / image · Nano Banana 2`)).toBeTruthy();
   });
 
@@ -1660,6 +1671,7 @@ describe('what the image aspect control promises for the active engine', () => {
 describe('GenerationInterface without a key', () => {
   beforeEach(() => {
     useAppStore.setState({ engine: 'gemini', geminiImageModel: DEFAULT_GEMINI_IMAGE_MODEL });
+    useDraftStore.setState({ prompt: '' });
   });
 
   it('shows the not-connected card and stops a Gemini press before the request', () => {
@@ -1668,27 +1680,49 @@ describe('GenerationInterface without a key', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderInterface(textToImage, { apiKey: '', onOpenConnections });
 
-    expect(screen.getByText('Add your Google Gemini key')).toBeTruthy();
+    expect(screen.getByText('Generating needs your own Google Gemini API key')).toBeTruthy();
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A paper city' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Image' }));
+    const generate = screen.getByRole('button', { name: 'Generate Image' }) as HTMLButtonElement;
+    expect(generate.disabled).toBe(true);
+    expect(generate.getAttribute('aria-describedby')).toBe(screen.getByRole('heading', { name: 'Generating needs your own Google Gemini API key' }).id);
+    fireEvent.click(generate);
 
-    expect(onOpenConnections).toHaveBeenCalledWith('gemini');
+    expect(onOpenConnections).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/api/generate'), expect.anything());
-    expect(screen.getByText('Connect your Google Gemini key first in Connections.')).toBeTruthy();
   });
 
-  it('keeps the engine and model rail usable while the main column waits for a key (H1)', () => {
+  it('enables Generate for an engine that needs no key', () => {
+    renderInterface(textToImage, { apiKey: '' });
+
+    chooseEngine(/Pollinations/);
+
+    expect((screen.getByRole('button', { name: 'Generate Image' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('keeps the rail and the prompt usable before a key exists (H1, SA-05)', () => {
     renderInterface(textToImage, { apiKey: '' });
 
     const rail = screen.getByRole('region', { name: 'Provider and model' });
     expect(rail.closest('[inert]')).toBeNull();
-    expect(screen.getByRole('textbox').closest('[inert]')).not.toBeNull();
+    expect(screen.getByRole('textbox').closest('[inert]')).toBeNull();
 
     fireEvent.click(within(rail).getByRole('option', { name: 'Gemini 3 Pro Image' }));
     expect(useAppStore.getState().geminiImageModel).toBe('gemini-3-pro-image-preview');
 
     chooseEngine(/Pollinations/);
     expect(useAppStore.getState().engine).toBe('pollinations');
+  });
+
+  it('says what the Create image gate needs and links Google\'s key page (SA-01)', () => {
+    const onOpenConnections = vi.fn();
+    renderInterface(textToImage, { apiKey: '', onOpenConnections });
+
+    expect(screen.getByRole('heading', { name: 'Generating needs your own Google Gemini API key' })).toBeTruthy();
+    expect(screen.getByText(/run on your Google Gemini account and are billed there/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: /aistudio\.google\.com\/apikey/ }).getAttribute('href')).toBe('https://aistudio.google.com/apikey');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connect key' }));
+    expect(onOpenConnections).toHaveBeenCalledWith('gemini');
   });
 
   it('leaves the free engines to the rail rather than the key card', () => {
@@ -1699,21 +1733,18 @@ describe('GenerationInterface without a key', () => {
     chooseEngine(/Pollinations/);
 
     expect(useAppStore.getState().engine).toBe('pollinations');
-    expect(screen.queryByText('Add your Google Gemini key')).toBeNull();
+    expect(screen.queryByText('Generating needs your own Google Gemini API key')).toBeNull();
   });
 
   it('drops the last press\'s error when the engine changes', async () => {
-    renderInterface(textToImage, { apiKey: '' });
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A paper city' } });
+    renderInterface(textToImage);
     fireEvent.click(screen.getByRole('button', { name: 'Generate Image' }));
-    expect(screen.getByText('Connect your Google Gemini key first in Connections.')).toBeTruthy();
+    expect(screen.getByText('Please enter a prompt')).toBeTruthy();
 
     chooseEngine(/Pollinations/);
 
     // Waited on, not asserted at once: the message leaves with an exit animation.
-    await waitFor(() =>
-      expect(screen.queryByText('Connect your Google Gemini key first in Connections.')).toBeNull()
-    );
+    await waitFor(() => expect(screen.queryByText('Please enter a prompt')).toBeNull());
   });
 
   it('drops a failed request\'s error when the engine changes', async () => {

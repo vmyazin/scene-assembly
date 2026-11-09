@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Loader2, Sparkles, Video } from 'lucide-react';
 import { toast } from 'sonner';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
-import ConnectionGate, { isGated } from '@/components/ConnectionGate';
+import ConnectionGate from '@/components/ConnectionGate';
+import { CONNECT_KEY_TITLE_ID } from '@/components/ConnectKeyCallout';
 import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
 import JobElapsed from '@/components/JobElapsed';
 import ModelControls, { type ModelControlField } from '@/components/ModelControls';
@@ -165,7 +166,6 @@ export default function GeminiVideoWorkspace({
   const autoRetry = useAutoRetry();
 
   const needsKey = !apiKey;
-  const gated = isGated(needsKey, false);
   const currentModel = GEMINI_VIDEO_MODELS.find((m) => m.id === geminiVideoModel) || GEMINI_VIDEO_MODELS[0];
   // Number() tells React Compiler this is a primitive. Otherwise it treats the
   // helper's result as mutable and, because handleGenerate captures it, reports
@@ -465,6 +465,7 @@ export default function GeminiVideoWorkspace({
           void handleGenerate();
         }}
         disabled={needsKey || isGenerating}
+        aria-describedby={needsKey ? CONNECT_KEY_TITLE_ID : undefined}
         className="w-full rounded-lg bg-[var(--neon-purple)] px-4 py-3 font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
       >
         {isGenerating ? (
@@ -560,7 +561,7 @@ export default function GeminiVideoWorkspace({
       <GenerationWorkspaceLayout
         setup={setup}
         prompt={
-          <PromptPanel paused={gated} hasPrompt={prompt.trim().length > 0}>
+          <PromptPanel hasPrompt={prompt.trim().length > 0}>
             <div className="flex items-center justify-between gap-3">
               <label htmlFor="gemini-video-prompt" className="display block text-base font-semibold">Prompt</label>
               <SavedPromptsButton />

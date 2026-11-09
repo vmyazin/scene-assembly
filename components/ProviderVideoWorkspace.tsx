@@ -22,7 +22,7 @@ import SavedPromptsButton from '@/components/SavedPromptsButton';
 import DescribeSourceButton from '@/components/DescribeSourceButton';
 import type { ModelControlField } from '@/components/ModelControls';
 import AspectMismatchNote from '@/components/AspectMismatchNote';
-import ConnectionGate, { isGated } from '@/components/ConnectionGate';
+import ConnectionGate from '@/components/ConnectionGate';
 import GenerateActions from '@/components/GenerateActions';
 import ResultPanel from '@/components/ResultPanel';
 import { ModelControlsCard, WorkspaceCard } from '@/components/WorkspaceCard';
@@ -61,6 +61,7 @@ import { useDraftStore } from '@/store/useDraftStore';
 import { useEditReferenceDraft } from '@/hooks/useEditReferenceDraft';
 import { useModelControlValues } from '@/hooks/useModelControlValues';
 import { removeReferenceAt, useMountedRef, usePromptScope, useReferenceLimit } from '@/hooks/useWorkspaceLifecycle';
+import { hideRetiredModels } from '@/lib/models/retired';
 import { usePromptLibraryStore } from '@/store/usePromptLibraryStore';
 import { useProviderJobsStore, type ProviderJob } from '@/store/useProviderJobsStore';
 import { fileAsDataUrl } from '@/lib/file-data-url';
@@ -403,8 +404,6 @@ export default function ProviderVideoWorkspace({
 
   const allJobs = useProviderJobsStore((state) => state.jobs);
   const needsKey = cloudWorkspace.cloud ? !cloudWorkspace.connected : !apiKey.trim();
-  const hasFinishedWork = cloudWorkspace.cloud ? cloudWorkspace.hasJobs : allJobs.some((job) => job.provider === provider);
-  const gated = isGated(needsKey, hasFinishedWork);
   const patchJob = useProviderJobsStore((state) => state.patchJob);
   const latestJob = allJobs.find(
     (job) =>
@@ -884,7 +883,6 @@ export default function ProviderVideoWorkspace({
         provider={provider}
         label={label}
         needsKey={needsKey}
-        hasFinishedWork={hasFinishedWork}
         onConnect={() => onOpenConnections(provider)}
       >
       <GenerationWorkspaceLayout
@@ -895,7 +893,7 @@ export default function ProviderVideoWorkspace({
               label="Model"
               accent="video"
               columns={PROVIDER_VIDEO_COLUMNS}
-              rows={(matchingModels.length > 0 ? matchingModels : models).map((model) => ({
+              rows={hideRetiredModels(matchingModels.length > 0 ? matchingModels : models, selectedModel?.id).map((model) => ({
                 id: model.id,
                 label: model.label,
                 deprecated: model.deprecated,
@@ -1031,7 +1029,7 @@ export default function ProviderVideoWorkspace({
           </>
         }
         prompt={
-          <PromptPanel paused={gated} hasPrompt={prompt.trim().length > 0}>
+          <PromptPanel hasPrompt={prompt.trim().length > 0}>
             <PromptHeader htmlFor="provider-video-prompt">
               {isEdit && (
                 <select
@@ -1093,6 +1091,7 @@ export default function ProviderVideoWorkspace({
             workspace={cloudWorkspace}
             mediaType="video"
             label={isEdit ? 'Generate edit' : 'Generate video'}
+            needsKey={needsKey}
             cost={estimate.costUsd !== null && <span className="font-normal opacity-80">{` · ~$${estimate.costUsd.toFixed(2)}`}</span>}
             busy={isSubmitting}
             busyLabel={uploadProgress !== null ? `Uploading ${uploadKind === 'audio' ? 'reference audio' : uploadKind === 'video' ? 'reference video' : 'source'}… ${uploadProgress}%` : 'Starting…'}

@@ -14,12 +14,6 @@ interface PromptPanelProps {
   children: ReactNode;
   className?: string;
   /**
-   * Suppress the ambient perimeter runner entirely. A workspace that cannot
-   * submit — no provider key yet — dims and disables this panel, and a lap of
-   * cyan running around a disabled control invites an edit that goes nowhere.
-   */
-  paused?: boolean;
-  /**
    * There is already a prompt written, so stop inviting one.
    *
    * The runner is an ambient "type something here". Once something is typed it
@@ -42,15 +36,9 @@ function isTextarea(target: EventTarget | null): target is HTMLTextAreaElement {
 export default function PromptPanel({
   children,
   className = '',
-  paused = false,
   hasPrompt = false,
 }: PromptPanelProps) {
-  /**
-   * Two unrelated reasons to hold still, kept apart in the props because they
-   * are different facts about the panel, and combined only here: nothing can be
-   * submitted, or nothing needs asking for.
-   */
-  const quiet = paused || hasPrompt;
+  const quiet = hasPrompt;
   const [runnerVisible, setRunnerVisible] = useState(!quiet);
   const textareaFocusedRef = useRef(false);
   const repeatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -76,8 +64,7 @@ export default function PromptPanel({
 
   // Adjusted during render rather than in an effect: going quiet stops the
   // current lap and any pending repeat, and coming back hands the panel one
-  // fresh lap — so connecting a key returns the panel to life, and emptying the
-  // box brings the invitation back.
+  // fresh lap, so emptying the box brings the invitation back.
   const [wasQuiet, setWasQuiet] = useState(quiet);
   if (wasQuiet !== quiet) {
     setWasQuiet(quiet);

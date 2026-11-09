@@ -652,15 +652,20 @@ describe('FalGenerationWorkspace', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('opens connections for a missing key without uploading or submitting', () => {
+  it('disables Generate for a missing key, leaving Connect key as the way forward', () => {
     useAppStore.setState({ falApiKey: '' });
     const onOpenConnections = vi.fn();
     renderWorkspace('text', { onOpenConnections });
     fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A moonlit ocean' } });
-    fireEvent.click(screen.getByRole('button', { name: /^Generate video/ }));
-    expect(onOpenConnections).toHaveBeenCalledOnce();
+    const generate = screen.getByRole('button', { name: /^Generate video/ });
+    expect(generate).toBeDisabled();
+    fireEvent.click(generate);
+    expect(onOpenConnections).not.toHaveBeenCalled();
     expect(uploadFalFilesMock).not.toHaveBeenCalled();
     expect(submitFalJobMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connect key' }));
+    expect(onOpenConnections).toHaveBeenCalledWith('fal');
   });
 
   it.each([

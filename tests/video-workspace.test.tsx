@@ -174,7 +174,7 @@ describe('VideoWorkspace provider selection', () => {
     expect(useAppStore.getState().videoEngine).toBe('gemini');
     expect(screen.getByRole('heading', { name: 'Google Gemini · Omni 1.2 Flash' })).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: 'Add your Google Gemini key' })
+      screen.getByRole('heading', { name: 'Generating needs your own Google Gemini API key' })
     ).toBeInTheDocument();
   });
 

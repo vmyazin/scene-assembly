@@ -42,7 +42,7 @@ import RelaxedFilterControl from '@/components/RelaxedFilterControl';
 import GenerateActions from '@/components/GenerateActions';
 import ResultPanel from '@/components/ResultPanel';
 import { ModelControlsCard, WorkspaceCard } from '@/components/WorkspaceCard';
-import ConnectionGate, { isGated } from '@/components/ConnectionGate';
+import ConnectionGate from '@/components/ConnectionGate';
 import { trackGenerationResult, trackGenerationSubmitted } from '@/lib/analytics/generation-result';
 import { classifyFailure } from '@/lib/moderation/classify';
 import { inspectPrompt } from '@/lib/moderation/floors';
@@ -122,7 +122,6 @@ export default function KieGenerationWorkspace({
   const jobs = useKieJobsStore((state) => state.jobs);
   const cloudWorkspace=useCloudWorkspace('kie');
   const needsKey = cloudWorkspace.cloud ? !cloudWorkspace.connected : !kieApiKey.trim();
-  const gated = isGated(needsKey, cloudWorkspace.cloud ? cloudWorkspace.hasJobs : jobs.length > 0);
   const upsertJob = useKieJobsStore((state) => state.upsertJob);
 
   const models = useMemo(() => modelsForKieMode(mediaType, inputMode), [inputMode, mediaType]);
@@ -423,7 +422,7 @@ export default function KieGenerationWorkspace({
   );
 
   const promptPanel = (
-    <PromptPanel paused={gated} hasPrompt={prompt.trim().length > 0}>
+    <PromptPanel hasPrompt={prompt.trim().length > 0}>
       <PromptHeader htmlFor="kie-prompt">
         <SavedPromptsButton />
         <GenExampleButton busy={example.generating} onClick={() => void example.generate()} />
@@ -442,6 +441,7 @@ export default function KieGenerationWorkspace({
       workspace={cloudWorkspace}
       mediaType={mediaType}
       label={`Generate ${mediaType}`}
+      needsKey={needsKey}
       busy={isSubmitting}
       busyLabel="Uploading & starting…"
       onSubmit={() => void submit()}
@@ -522,7 +522,6 @@ export default function KieGenerationWorkspace({
             provider="kie"
             label="Kie.ai"
             needsKey={needsKey}
-            hasFinishedWork={cloudWorkspace.cloud ? cloudWorkspace.hasJobs : jobs.length > 0}
             onConnect={() => onOpenConnections('kie')}
           >
             <ImageMainStack
@@ -603,7 +602,6 @@ export default function KieGenerationWorkspace({
         provider="kie"
         label="Kie.ai"
         needsKey={needsKey}
-        hasFinishedWork={cloudWorkspace.cloud ? cloudWorkspace.hasJobs : jobs.length > 0}
         onConnect={() => onOpenConnections('kie')}
       >
       <GenerationWorkspaceLayout

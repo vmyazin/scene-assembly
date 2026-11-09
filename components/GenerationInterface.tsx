@@ -37,6 +37,7 @@ import PromptPanel from '@/components/PromptPanel';
 import SavedPromptsButton from '@/components/SavedPromptsButton';
 import { useAppStore } from '@/store/useAppStore';
 import { DEFAULT_MODELS, modelsFor, resolveModel } from '@/lib/providers/catalog';
+import { hideRetiredModels } from '@/lib/models/retired';
 import ModelListbox from '@/components/ModelListbox';
 import { GEMINI_IMAGE_COLUMNS, PROVIDER_IMAGE_COLUMNS, falImageSpecs, geminiImageSpecs, providerImageSpecs, railTags } from '@/lib/models/listbox-specs';
 import type { ProviderId } from '@/lib/providers/types';
@@ -1096,7 +1097,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                   accent="image"
                   layout="rail"
                   columns={GEMINI_IMAGE_COLUMNS}
-                  rows={geminiModels.map((model) => {
+                  rows={hideRetiredModels(geminiModels, activeGeminiModel.id).map((model) => {
                     const cells = geminiImageSpecs(model);
                     return {
                       id: model.id,
@@ -1124,7 +1125,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                   accent="image"
                   layout="rail"
                   columns={PROVIDER_IMAGE_COLUMNS}
-                  rows={FAL_IMAGE_MODELS.map((model) => {
+                  rows={hideRetiredModels(FAL_IMAGE_MODELS, activeFalImageModel.id).map((model) => {
                     const cells = falImageSpecs(model);
                     return {
                       id: model.id,
@@ -1152,7 +1153,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                   accent="image"
                   layout="rail"
                   columns={PROVIDER_IMAGE_COLUMNS}
-                  rows={modelsFor(activeProvider, 'image').map((model) => {
+                  rows={hideRetiredModels(modelsFor(activeProvider, 'image'), activeProviderModel ?? undefined).map((model) => {
                     const cells = providerImageSpecs(model);
                     return {
                       id: model.id,
@@ -1207,7 +1208,6 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
         label={activeEngine.label}
         storage={cloudWorkspace.cloud ? 'account' : 'browser'}
         needsKey={needsKey}
-        hasFinishedWork={results.length > 0 || (cloudWorkspace.cloud && cloudWorkspace.hasJobs)}
         // No "use the free engine instead" button: the rail's engine menu,
         // outside the gate, lists the free engines with their Free tag.
         onConnect={() => onOpenConnections(activeEngine.id)}
@@ -1347,6 +1347,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
               workspace={cloudWorkspace}
               mediaType="image"
               label="Generate Image"
+              needsKey={needsKey}
               busy={isGenerating}
               busyLabel="Generating Magic..."
               onSubmit={() => void handleGenerate()}

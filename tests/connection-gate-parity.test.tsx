@@ -1,7 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import FalGenerationWorkspace from '@/components/FalGenerationWorkspace';
+import GeminiVideoWorkspace from '@/components/GeminiVideoWorkspace';
 import KieGenerationWorkspace from '@/components/KieGenerationWorkspace';
 import ProviderVideoWorkspace from '@/components/ProviderVideoWorkspace';
 import { useAppStore } from '@/store/useAppStore';
@@ -75,7 +76,7 @@ describe.each(WORKSPACES)('$name with no key', ({ label, render: renderWorkspace
     const { container } = render(renderWorkspace());
 
     expect(
-      screen.getByRole('heading', { name: `Add your ${label} key` })
+      screen.getByRole('heading', { name: `Generating needs your own ${label} API key` })
     ).toBeInTheDocument();
     // The header's own connect button steps aside, so the ask is made once.
     expect(
@@ -85,21 +86,51 @@ describe.each(WORKSPACES)('$name with no key', ({ label, render: renderWorkspace
     ).toHaveLength(1);
   });
 
-  it('dims and disables the controls, with the whole area opening the dialog', () => {
+  it('leaves the prompt and controls usable, so a visitor can write first', () => {
     const { container } = render(renderWorkspace());
 
-    const gate = container.querySelector('[inert]');
-    expect(gate).not.toBeNull();
-    expect(gate).toHaveClass('pointer-events-none', 'opacity-[0.42]');
-    expect(
-      screen.getByRole('button', { name: `Connect your ${label} key to use these controls` })
-    ).toBeInTheDocument();
+    expect(container.querySelector('[inert]')).toBeNull();
+    expect(screen.queryByRole('button', { name: `Connect your ${label} key to use these controls` })).toBeNull();
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A paper city' } });
+    expect(useDraftStore.getState().prompt).toBe('A paper city');
   });
 
-  it('stills the prompt panel runner', () => {
+  it('keeps inviting a prompt until one is written', () => {
     render(renderWorkspace());
 
-    expect(screen.queryByTestId('prompt-panel-runner')).not.toBeInTheDocument();
+    expect(screen.getByTestId('prompt-panel-runner')).toBeInTheDocument();
+  });
+
+  it('keeps Generate short and disabled, with or without a prompt, described by the key prompt', () => {
+    render(renderWorkspace());
+
+    const expectDisabled = () => {
+      const generate = screen.getByRole('button', { name: /^Generate video/ });
+      expect(generate).toBeDisabled();
+      expect(generate).toHaveAccessibleDescription(`Generating needs your own ${label} API key`);
+    };
+    expectDisabled();
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A paper city' } });
+    expectDisabled();
+    expect(screen.queryByRole('button', { name: /key to generate/ })).toBeNull();
+  });
+});
+
+/**
+ * The point of writing first: the prompt belongs to the draft, not the provider,
+ * so someone who has a key for a different provider can run it there.
+ */
+describe('a prompt written before connecting', () => {
+  it('follows the visitor to a provider they do have a key for', () => {
+    useAppStore.setState({ runwareApiKey: 'k' });
+    const first = render(WORKSPACES[2].render());
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A paper city' } });
+    first.unmount();
+
+    render(WORKSPACES[0].render());
+
+    expect(screen.getByLabelText('Prompt')).toHaveValue('A paper city');
+    expect(screen.getByRole('button', { name: /^Generate video/ })).toBeEnabled();
   });
 });
 
@@ -111,5 +142,18 @@ describe.each(WORKSPACES)('$name with a key', ({ label, render: renderWorkspace 
     expect(screen.queryByText(/not connected/i)).not.toBeInTheDocument();
     expect(container.querySelector('[inert]')).toBeNull();
     expect(screen.getByRole('button', { name: `${label} key connected` })).toBeInTheDocument();
+  });
+});
+
+describe('Gemini video with no key', () => {
+  it('follows the same rule on its own Generate button', () => {
+    useAppStore.setState({ apiKey: '' });
+    useDraftStore.setState({ prompt: 'A paper city' });
+    render(<GeminiVideoWorkspace inputMode="text" onBack={() => undefined} onOpenConnections={() => undefined} />);
+
+    const generate = screen.getByRole('button', { name: /^Generate video/ });
+    expect(generate).toBeDisabled();
+    expect(generate).toHaveAccessibleDescription('Generating needs your own Google Gemini API key');
+    expect(screen.getByLabelText('Prompt')).toBeEnabled();
   });
 });

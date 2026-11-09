@@ -15,7 +15,7 @@ import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
 import GenerateActions from '@/components/GenerateActions';
 import ResultPanel from '@/components/ResultPanel';
 import { ModelControlsCard, WorkspaceCard } from '@/components/WorkspaceCard';
-import ConnectionGate, { isGated } from '@/components/ConnectionGate';
+import ConnectionGate from '@/components/ConnectionGate';
 import { trackGenerationResult, trackGenerationSubmitted } from '@/lib/analytics/generation-result';
 import { classifyFailure } from '@/lib/moderation/classify';
 import { inspectPrompt } from '@/lib/moderation/floors';
@@ -55,6 +55,7 @@ import { useExamplePrompt } from '@/hooks/useExamplePrompt';
 import { useEditReferenceDraft } from '@/hooks/useEditReferenceDraft';
 import { useModelControlValues } from '@/hooks/useModelControlValues';
 import { removeReferenceAt, useMountedRef, usePromptScope, useReferenceLimit } from '@/hooks/useWorkspaceLifecycle';
+import { hideRetiredModels } from '@/lib/models/retired';
 import { ModelNote, ModelPickerCard } from '@/components/ModelPickerCard';
 import { useClaimSeedFrame, useReferenceIntake } from '@/hooks/useReferenceIntake';
 import { ReferencePicker, SwapFramesButton } from '@/components/ReferencePicker';
@@ -267,7 +268,6 @@ function FalGenerationWorkspaceSession({
   const jobs = useFalJobsStore((state) => state.jobs);
   const cloudWorkspace=useCloudWorkspace('fal');
   const needsKey = cloudWorkspace.cloud ? !cloudWorkspace.connected : !apiKey.trim();
-  const gated = isGated(needsKey, cloudWorkspace.cloud ? cloudWorkspace.hasJobs : jobs.length > 0);
   const upsertJob = useFalJobsStore((state) => state.upsertJob);
   const models = useMemo(() => modelsForFalMode('video', inputMode), [inputMode]);
   const selectedModel = models.find((model) => model.id === falVideoModel) ?? models[0];
@@ -605,7 +605,6 @@ function FalGenerationWorkspaceSession({
         provider="fal"
         label="fal.ai"
         needsKey={needsKey}
-        hasFinishedWork={cloudWorkspace.cloud ? cloudWorkspace.hasJobs : jobs.length > 0}
         onConnect={() => onOpenConnections('fal')}
       >
       <GenerationWorkspaceLayout
@@ -622,7 +621,7 @@ function FalGenerationWorkspaceSession({
               label="Model"
               accent="video"
               columns={FAL_VIDEO_COLUMNS}
-              rows={matchingModels.map((model) => ({
+              rows={hideRetiredModels(matchingModels, selectedModel.id).map((model) => ({
                 id: model.id,
                 label: model.label,
                 deprecated: model.deprecated,
@@ -709,7 +708,7 @@ function FalGenerationWorkspaceSession({
           </>
         }
         prompt={
-          <PromptPanel paused={gated} hasPrompt={!promptAbsent && prompt.trim().length > 0}>
+          <PromptPanel hasPrompt={!promptAbsent && prompt.trim().length > 0}>
             {promptAbsent ? (
               <p className="text-sm text-[var(--foreground-muted)]">This model does not take a prompt. The lighting sphere is the only reference.</p>
             ) : (
@@ -735,6 +734,7 @@ function FalGenerationWorkspaceSession({
             workspace={cloudWorkspace}
             mediaType="video"
             label={isEdit ? 'Generate edit' : 'Generate video'}
+            needsKey={needsKey}
             cost={<FalRunCost modelId={selectedModel.id} mediaType="video" inputMode={inputMode} resolution={values.resolution} audio={isEdit ? values.keep_audio : values.generate_audio} duration={isEdit ? source?.durationSeconds : values.duration} outputDuration={isEdit ? values.duration : undefined} />}
             busy={isSubmitting}
             busyLabel="Uploading & starting…"

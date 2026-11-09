@@ -29,16 +29,15 @@ function renderAtlas(onOpenConnections = () => undefined) {
 }
 
 /**
- * Without a key every control on the page is inert, so the workspace has to say
- * so up front rather than letting someone fill in a prompt and a reference only
- * to be refused at submit.
+ * Nothing can run without a key, so the workspace says so up front, while still
+ * letting someone write a prompt before they go and get one.
  */
 describe('the not-connected callout', () => {
   it('names the provider and both routes to a key while none is set', () => {
     renderAtlas();
 
     expect(
-      screen.getByRole('heading', { name: /add your atlas cloud key/i })
+      screen.getByRole('heading', { name: /generating needs your own atlas cloud api key/i })
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Connect key' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /atlascloud\.ai\/console\/api-keys/i })).toHaveAttribute(
@@ -84,34 +83,29 @@ describe('the not-connected callout', () => {
 });
 
 /**
- * The controls below the callout submit to a provider that will refuse them, so
- * they are dimmed and made inert rather than left looking live.
+ * The key is asked for when there is something to run, not before: blocking the
+ * prompt asked a visitor to fetch a paid key before they had tried anything.
  */
-describe('the gated workspace below it', () => {
-  it('is inert while the key is missing', () => {
+describe('the workspace below it', () => {
+  it('stays editable while the key is missing', () => {
     const { container } = renderAtlas();
 
-    const gate = container.querySelector('[inert]');
-    expect(gate).not.toBeNull();
-    expect(gate).toContainElement(screen.getByRole('button', { name: /generate video/i }));
-    expect(gate).not.toContainElement(screen.getByRole('button', { name: 'Connect key' }));
+    expect(container.querySelector('[inert]')).toBeNull();
+    expect(screen.getByLabelText('Prompt')).toBeEnabled();
   });
 
-  it('sends a click anywhere in the dimmed area to the key dialog', async () => {
-    const onOpenConnections = vi.fn();
-    renderAtlas(onOpenConnections);
-
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Connect your Atlas Cloud key to use these controls' })
-    );
-
-    expect(onOpenConnections).toHaveBeenCalledOnce();
-  });
-
-  it('stills the prompt panel runner rather than animating a disabled control', () => {
+  it('says the prompt survives connecting', () => {
     renderAtlas();
 
-    expect(screen.queryByTestId('prompt-panel-runner')).not.toBeInTheDocument();
+    expect(screen.getByText(/Write your prompt first/)).toBeInTheDocument();
+  });
+
+  it('keeps Generate disabled and asks for the key only in the callout', () => {
+    useDraftStore.setState({ prompt: 'a cat walking' });
+    renderAtlas();
+
+    expect(screen.getByRole('button', { name: /generate video/i })).toBeDisabled();
+    expect(screen.getAllByRole('button').filter((button) => /^connect/i.test(button.textContent ?? ''))).toHaveLength(1);
   });
 
   it('stays usable when a finished job is still on screen without a key', () => {
