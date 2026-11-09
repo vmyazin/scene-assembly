@@ -40,6 +40,12 @@
   `docs/codex/specs/2026-11-03-atlas-models.md`. fal promotions resolve at call
   time and saved job time, because a running Worker can outlive the sale.
 
+- **Runware P-Video-Edit sale pricing** → first read
+  `docs/codex/specs/2026-09-11-p-video-edit.md` (the 2026-11-03 follow-up).
+  The catalog keeps list prices; `lib/providers/p-video-edit-promo.ts` applies
+  the sale at call time and from `pricedAt` for saved jobs, the same pattern as
+  the fal H3 offer, because a sale baked into the catalog outlives its end date.
+
 - **A selected source/reference video exceeds model duration** → first read
   `docs/codex/specs/2026-10-15-auto-trim-ref-clip.md`. Use
   `lib/media/trim-video.ts` before accepting the selection and revalidate its output,

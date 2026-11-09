@@ -35,6 +35,7 @@ import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
 import ReferenceStack from '@/components/ReferenceStack';
 import { candidatesFromSizes, useAutoAspect } from '@/lib/draft/aspect-match';
 import { APPROXIMATE_LEGEND, hasApproximateSize, sizeDimensions, withDimensions } from '@/lib/providers/output-size';
+import { pVideoEditPromotionNote } from '@/lib/providers/p-video-edit-promo';
 import { resolveCatalogRate } from '@/lib/spend/resolve';
 import { recordFinishedJob } from '@/lib/gallery/record-job';
 import FinalizeDraftButton from '@/components/FinalizeDraftButton';
@@ -460,6 +461,8 @@ export default function ProviderVideoWorkspace({
     1,
     { inputMode, draft: values.draft === true || values.draftPreview === true, size: pricedSize, audio: values.audio === true }
   );
+  // Same clock as the button figure. Null after the sale, and for every other model.
+  const editSaleNote = isEdit ? pVideoEditPromotionNote(selectedModel?.id) : null;
 
   useAutoAspect(isEdit ? undefined : references[0], sizeCandidates, (value) => {
     if (value !== values.size) updateValues('size', value);
@@ -906,7 +909,7 @@ export default function ProviderVideoWorkspace({
             />
             {selectedModel && (
               <ModelNote label={selectedModel.label}>
-                {isEdit ? selectedModel.videoEdit?.note ?? 'Edit the source clip with optional reference images. Duration and aspect ratio follow the source; changes are guided by your prompt.' : selectedModel.note ??
+                {isEdit ? <>{selectedModel.videoEdit?.note ?? 'Edit the source clip with optional reference images. Duration and aspect ratio follow the source; changes are guided by your prompt.'}{editSaleNote ? ` ${editSaleNote}` : ''}</> : selectedModel.note ??
                   `Billed to your ${label} account at ${selectedModel.price && selectedModel.price !== 'metered' ? selectedModel.price : 'the vendor’s rates'}.`}
               </ModelNote>
             )}

@@ -182,6 +182,7 @@ export function buildAccountSpendEntry(args: BuildAccountSpendEntryArgs): Accoun
     inputImages: request.referenceIds.length,
     inputMode: request.inputMode,
     draft: request.values.draft === true,
+    pricedAt: args.pricedAt ?? args.at,
   });
   if (resolved.costUsd !== null) return { ...base, ...resolved };
   const perSecond = (edit ? model?.videoEdit?.rate : model?.rate)?.per === 'second';
