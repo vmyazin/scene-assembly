@@ -2,6 +2,9 @@
 
 Status: Approved design
 
+## Follow-up decision — 2026-11-09 (Runware Kling VIDEO 4.0 Flash)
+`klingai:kling-video@4.0-flash` stores list prices: $0.094/s without video input and $0.126/s with a source video. Runware shows 15% off until November 10, 2026 with no timezone, so `lib/providers/kling-4-flash-promo.ts` applies $0.0799/s and $0.107/s through the end of that UTC day and lists from 2026-11-11T00:00:00Z, read at call time and from the submission time for saved jobs. Reference video is not offered, because it would move a reference run onto the video-input rate. Edit sends `settings.preserveAudio` through the `kling-preserve-audio` transport, not the O1/O3 `providerSettings.klingai.keepOriginalSound`.
+
 ## Follow-up decision — 2026-11-03
 
 The calculator now quotes the ESR upscales, so they are offered and priced: $0.182/s at 1080p-esr, $0.273/s at 2k-esr, $0.364/s at 4k-esr. Native 720p and 1080p quotes are unchanged. A label of `4K` is still not a size; the control says `4K upscale`.

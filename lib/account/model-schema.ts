@@ -15,6 +15,7 @@ import { SINGLE_IMAGE_MODELS, SINGLE_IMAGE_MODEL_LABELS } from './models';
 import { FAL_IMAGE_MODELS, FAL_VIDEO_MODELS } from '../fal/catalog';
 import { KIE_MODELS } from '../kie/catalog';
 import { findModel, PROVIDER_MODELS, resolveVideoInput } from '../providers/catalog';
+import { withKling4FlashSale } from '../providers/kling-4-flash-promo';
 import { isSeedanceDraftSize } from '../providers/seedance-draft';
 import type { EditReferenceSpec, ProviderId, ProviderModel } from '../providers/types';
 import { GEMINI_IMAGE_MODELS } from '../engines/gemini-catalog';
@@ -268,7 +269,7 @@ function aggregatorModes(provider: ProviderId, model: ProviderModel): ModeDescri
 }
 
 function aggregatorModels(provider: ProviderId): ModelDescriptor[] {
-  return PROVIDER_MODELS[provider].map(model => ({
+  return PROVIDER_MODELS[provider].map(listed => withKling4FlashSale(listed)).map(model => ({
     provider, modelId: model.id, label: model.label, mediaType: model.kind,
     ...(model.price ? { price: model.price } : {}), ...(model.note ? { note: model.note } : {}),
     ...(model.deprecated ? { deprecated: true } : {}),

@@ -69,7 +69,7 @@
   `docs/cursor/specs/2026-09-21-gemini-veo-video-generation.md` (the 2026-10-19
   follow-up replaces Veo 3.1 Lite). Start, poll, and download live in
   `lib/engines/gemini.ts` (`POST /v1beta/interactions` with `background: true`
-  for `gemini-omni-1.1-flash`, then GET the interaction until it finishes, then
+  for `gemini-omni-1.2-flash`, then GET the interaction until it finishes, then
   GET the file until `ACTIVE`, then GET `video.uri` with the API key). A
   synchronous POST hid a dropped connection behind "could not start" and invited
   a second charge. Results carry `kind`, and the poll takes the previous result,
@@ -88,6 +88,12 @@
   in `docs/superpowers/plans/2026-09-05-cloud-provider-enablement.md` — video is a
   long-running operation, not the synchronous image adapter, and
   `ai.files.download({ downloadPath })` is Node-only.
+
+- **Runware Kling VIDEO 4.0 Flash sale pricing** → first read the 2026-11-09
+  follow-up in `docs/codex/specs/2026-10-26-kling4-atlas-h3-pricing.md`. The
+  catalog keeps list prices; `withKling4FlashSale` in
+  `lib/providers/kling-4-flash-promo.ts` returns a re-priced copy at each price
+  surface, cached because the workspace keys effects on the model's identity.
 
 - **Provider balance, billing readout, or low-credit alerts** → first read
   `docs/codex/specs/2026-09-22-provider-billing-readout.md` and

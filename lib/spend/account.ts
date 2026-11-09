@@ -9,6 +9,7 @@ import type { EngineId } from '../engines/registry';
 import { resolveFalVariant } from '../fal/catalog';
 import { falDurationSeconds } from '../fal/pricing';
 import { findModel, generatedEditSeconds } from '../providers/catalog';
+import { withKling4FlashSale } from '../providers/kling-4-flash-promo';
 import { seedanceCatalogFigure } from '../providers/seedance-draft';
 import { excerpt, type SpendEntry } from './ledger';
 import {
@@ -73,7 +74,7 @@ export function buildAccountSpendEntry(args: BuildAccountSpendEntryArgs): Accoun
     if (resolved.costUsd === null) {
       const catalog = seedanceCatalogFigure(request);
       if (catalog && catalog.costUsd !== null) return { ...base, ...catalog };
-      const measured = resolveMeasuredRunwareEdit(findModel('runware', request.modelId), request.values.sourceDurationSeconds);
+      const measured = resolveMeasuredRunwareEdit(withKling4FlashSale(findModel('runware', request.modelId), args.pricedAt ?? args.at), request.values.sourceDurationSeconds);
       if (measured) return { ...base, ...measured };
     }
     const figure = resolved.costUsd === null
@@ -175,7 +176,7 @@ export function buildAccountSpendEntry(args: BuildAccountSpendEntryArgs): Accoun
       ? request.values.resolution
       : request.provider === 'piapi' ? '1K' : model?.sizes?.[0]?.label)
     : undefined;
-  const resolved = resolveCatalogRate(model, duration, outputs, {
+  const resolved = resolveCatalogRate(withKling4FlashSale(model, args.pricedAt ?? args.at), duration, outputs, {
     audio: request.values.audio === true,
     size: imageResolution ?? (typeof request.values.size === 'string' ? request.values.size : undefined),
     inputImages: request.referenceIds.length,

@@ -48,6 +48,7 @@ import { requestPromptSlug } from '@/lib/micro-ai/browser';
 import { getProviderVideoStatus, pollDelayMs, releaseRunwareMedia, submitProviderVideo } from '@/lib/providers/browser';
 import { followProviderVideo } from '@/lib/providers/follow-video';
 import { findModel, generatedEditSeconds, modelsFor } from '@/lib/providers/catalog';
+import { withKling4FlashSale } from '@/lib/providers/kling-4-flash-promo';
 import ModelListbox from '@/components/ModelListbox';
 import { PROVIDER_VIDEO_COLUMNS, providerVideoSpecs } from '@/lib/models/listbox-specs';
 import { frameSlotLabel, keyframeSlotLabel } from '@/lib/providers/frames';
@@ -241,7 +242,8 @@ export default function ProviderVideoWorkspace({
     () => modelsFor(provider, 'video').filter((model) => model.modes.includes(inputMode)),
     [inputMode, provider]
   );
-  const selectedModel = models.find((model) => model.id === preference) ?? models[0];
+  // Same object until the sale closes, so effects keyed on it do not re-run.
+  const selectedModel = withKling4FlashSale(models.find((model) => model.id === preference) ?? models[0]);
   const modelKey = `${provider}:${inputMode}:${selectedModel?.id ?? 'none'}`;
   const isEdit = inputMode === 'edit';
   const fields = useMemo(() => {
@@ -894,7 +896,7 @@ export default function ProviderVideoWorkspace({
                 id: model.id,
                 label: model.label,
                 deprecated: model.deprecated,
-                cells: providerVideoSpecs(model, inputMode),
+                cells: providerVideoSpecs(withKling4FlashSale(model), inputMode),
               }))}
               value={selectedModel?.id}
               onChange={(id) => {
