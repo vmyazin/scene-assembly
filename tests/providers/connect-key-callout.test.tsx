@@ -91,7 +91,7 @@ describe('the workspace below it', () => {
     const { container } = renderAtlas();
 
     expect(container.querySelector('[inert]')).toBeNull();
-    expect(screen.getByRole('button', { name: /generate video/i })).toBeEnabled();
+    expect(screen.getByLabelText('Prompt')).toBeEnabled();
   });
 
   it('says the prompt survives connecting', () => {
@@ -100,14 +100,12 @@ describe('the workspace below it', () => {
     expect(screen.getByText(/Write your prompt first/)).toBeInTheDocument();
   });
 
-  it('turns Generate into the key request once a prompt is written', async () => {
-    const onOpenConnections = vi.fn();
-    renderAtlas(onOpenConnections);
-
+  it('keeps Generate disabled and asks for the key only in the callout', () => {
     useDraftStore.setState({ prompt: 'a cat walking' });
-    await userEvent.click(await screen.findByRole('button', { name: 'Connect Atlas Cloud key to generate' }));
+    renderAtlas();
 
-    expect(onOpenConnections).toHaveBeenCalledOnce();
+    expect(screen.getByRole('button', { name: /generate video/i })).toBeDisabled();
+    expect(screen.getAllByRole('button').filter((button) => /^connect/i.test(button.textContent ?? ''))).toHaveLength(1);
   });
 
   it('stays usable when a finished job is still on screen without a key', () => {

@@ -307,7 +307,6 @@ function FalGenerationWorkspaceSession({
   const isEdit = inputMode === 'edit';
   const editSpec = isEdit ? variant.edit?.references : undefined;
   const promptAbsent = editPromptMode(editSpec) === 'absent';
-  const promptReady = editPromptMode(editSpec) !== 'required' || prompt.trim().length > 0;
   const pickerLabel = !isFramesMode
     ? 'Choose an image, or a video to use its last frame'
     : references.length === 0
@@ -420,10 +419,6 @@ function FalGenerationWorkspaceSession({
     if (submissionRef.current) return;
     if(cloudWorkspace.checking){setError('Checking your account…');return;}
     if (needsKey) {
-      if (!promptReady) {
-        setError('Describe the clip you want before generating.');
-        return;
-      }
       setError('Connect your fal API key before starting a generation.');
       onOpenConnections('fal');
       return;
@@ -739,7 +734,7 @@ function FalGenerationWorkspaceSession({
             workspace={cloudWorkspace}
             mediaType="video"
             label={isEdit ? 'Generate edit' : 'Generate video'}
-            connection={needsKey ? { label: 'fal.ai', promptReady, onConnect: () => onOpenConnections('fal') } : undefined}
+            needsKey={needsKey}
             cost={<FalRunCost modelId={selectedModel.id} mediaType="video" inputMode={inputMode} resolution={values.resolution} audio={isEdit ? values.keep_audio : values.generate_audio} duration={isEdit ? source?.durationSeconds : values.duration} outputDuration={isEdit ? values.duration : undefined} />}
             busy={isSubmitting}
             busyLabel="Uploading & starting…"

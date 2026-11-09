@@ -120,22 +120,14 @@ describe('ProviderVideoWorkspace', () => {
     );
   });
 
-  it('sends you to connections instead of spending a request without a key', () => {
+  it('cannot spend a request without a key, and leaves Connect key as the way forward', () => {
     useDraftStore.setState({ prompt: 'a drifting nebula' });
     const { onOpenConnections } = renderWorkspace();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Connect Runware key to generate' }));
+    expect(screen.getByRole('button', { name: /Generate video/ })).toBeDisabled();
 
-    expect(onOpenConnections).toHaveBeenCalled();
-  });
-
-  it('asks for the prompt, not the key, when nothing is written yet', () => {
-    const { onOpenConnections } = renderWorkspace();
-
-    fireEvent.click(screen.getByRole('button', { name: /Generate video/ }));
-
-    expect(onOpenConnections).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent('Describe the clip');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect key' }));
+    expect(onOpenConnections).toHaveBeenCalledWith('runware');
   });
 
   describe('automatic retry after a transient failure', () => {

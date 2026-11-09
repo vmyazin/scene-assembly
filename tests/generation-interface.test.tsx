@@ -728,9 +728,13 @@ describe('GenerationInterface fal image generation', () => {
 
     expect(screen.getByText('Generating needs your own fal.ai API key')).toBeTruthy();
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A paper city' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Connect fal.ai key to generate' }));
+    const generate = screen.getByRole('button', { name: 'Generate Image' }) as HTMLButtonElement;
+    expect(generate.disabled).toBe(true);
+    fireEvent.click(generate);
+    expect(onOpenConnections).not.toHaveBeenCalled();
 
-    expect(onOpenConnections).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Connect key' }));
+    expect(onOpenConnections).toHaveBeenCalledWith('fal');
     expect(mockedRunFalImage).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -1678,20 +1682,21 @@ describe('GenerationInterface without a key', () => {
 
     expect(screen.getByText('Generating needs your own Google Gemini API key')).toBeTruthy();
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A paper city' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Connect Google Gemini key to generate' }));
+    const generate = screen.getByRole('button', { name: 'Generate Image' }) as HTMLButtonElement;
+    expect(generate.disabled).toBe(true);
+    expect(generate.getAttribute('aria-describedby')).toBe(screen.getByRole('heading', { name: 'Generating needs your own Google Gemini API key' }).id);
+    fireEvent.click(generate);
 
-    expect(onOpenConnections).toHaveBeenCalledWith('gemini');
+    expect(onOpenConnections).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/api/generate'), expect.anything());
   });
 
-  it('asks for the prompt, not the key, when nothing is written yet', () => {
-    const onOpenConnections = vi.fn();
-    renderInterface(textToImage, { apiKey: '', onOpenConnections });
+  it('enables Generate for an engine that needs no key', () => {
+    renderInterface(textToImage, { apiKey: '' });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Image' }));
+    chooseEngine(/Pollinations/);
 
-    expect(onOpenConnections).not.toHaveBeenCalled();
-    expect(screen.getByText('Please enter a prompt')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Generate Image' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('keeps the rail and the prompt usable before a key exists (H1, SA-05)', () => {
@@ -1732,7 +1737,7 @@ describe('GenerationInterface without a key', () => {
   });
 
   it('drops the last press\'s error when the engine changes', async () => {
-    renderInterface(textToImage, { apiKey: '' });
+    renderInterface(textToImage);
     fireEvent.click(screen.getByRole('button', { name: 'Generate Image' }));
     expect(screen.getByText('Please enter a prompt')).toBeTruthy();
 

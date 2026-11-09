@@ -136,7 +136,6 @@ export default function KieGenerationWorkspace({
   const epoch = useAccountStore((state) => state.epoch);
   const source = selectedSource?.epoch === epoch ? selectedSource : null;
   const prompt = useDraftStore((state) => state.prompt);
-  const promptReady = editPromptMode(editSpec) !== 'required' || prompt.trim().length > 0;
   const setPrompt = useDraftStore((state) => state.setPrompt);
   usePromptScope(mediaType === 'video' ? 'video' : 'image');
   const references = useDraftStore((state) => state.references);
@@ -300,10 +299,6 @@ export default function KieGenerationWorkspace({
   const submit = async () => {
     if (cloudWorkspace.checking) { setError('Checking your account…'); return; }
     if (needsKey) {
-      if (!promptReady) {
-        setError(`Describe the ${mediaType === 'video' ? 'clip' : 'image'} you want before generating.`);
-        return;
-      }
       setError('Connect your Kie API key before starting a generation.');
       onOpenConnections('kie');
       return;
@@ -446,7 +441,7 @@ export default function KieGenerationWorkspace({
       workspace={cloudWorkspace}
       mediaType={mediaType}
       label={`Generate ${mediaType}`}
-      connection={needsKey ? { label: 'Kie.ai', promptReady, onConnect: () => onOpenConnections('kie') } : undefined}
+      needsKey={needsKey}
       busy={isSubmitting}
       busyLabel="Uploading & starting…"
       onSubmit={() => void submit()}

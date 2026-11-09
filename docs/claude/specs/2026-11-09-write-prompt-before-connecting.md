@@ -3,6 +3,10 @@
 Status: Approved design (the owner's comments on the onboarding UX review, 2026-11-09)
 Findings: SA-05, SA-08, SA-10. SA-02 is declined: free engines exist to test that the product works, are low quality, and do not become the first path.
 
+## Follow-up decision (2026-11-09): Generate stays short and disabled
+
+The owner's feedback on PR #31 overrides the goal below that has Generate ask for the key. With no key, Generate keeps its normal label and is disabled, and `aria-describedby` points at the callout's heading. The callout's Connect key is the way forward. `ConnectToGenerateButton` is removed. Writing a prompt before connecting still works, and the prompt still carries across providers.
+
 ## Follow-up decision (2026-11-09): SA-01
 
 The owner declined the free shortcut SA-01 proposed. Make the key gate clearer instead: `ConnectKeyCallout` says what is needed and why, and gives two steps, a link to the vendor's key page and pasting the key into Connections. `Connect key` already opens that dialog with the provider's field focused, and validation and storage live there, so there is no second paste field. `alternative`, which had no caller, is removed. The provider order does not change.
@@ -29,7 +33,7 @@ A guest with no provider key saw a dimmed, inert workspace, so they could not wr
 ## Scope and implementation boundary
 
 - `components/ConnectionGate.tsx`: the callout above an unlocked workspace.
-- `components/GenerateActions.tsx` and `components/ConnectToGenerateButton.tsx`: the key request at Generate. `GeminiVideoWorkspace` has its own button and uses the same component.
+- `components/GenerateActions.tsx`: Generate disabled while there is no key. `GeminiVideoWorkspace` has its own button and follows the same rule.
 - Each workspace's submit guard asks for the prompt first when there is no key.
 - `lib/models/retired.ts`: the one filter, applied where picker rows are built.
 - `components/account/AccountAccess.tsx`: the sign-up benefit list.

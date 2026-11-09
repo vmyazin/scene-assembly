@@ -7,8 +7,8 @@ import type { EngineId } from '@/lib/engines/registry';
 
 /**
  * The not-connected state, identical for every provider workspace: the callout
- * above a workspace that stays fully usable. The key is asked for at Generate
- * (`ConnectToGenerateButton`), once there is a prompt to run.
+ * above a workspace that stays fully usable, except Generate, which the workspace
+ * disables until there is a key (`GenerateActions`' `needsKey`).
  *
  * It lives in one component because three workspaces used to disagree about
  * what "no key yet" looks like, and a person switching providers should not

@@ -6,6 +6,9 @@ import ProviderLogo from '@/components/ProviderLogo';
 import type { EngineId } from '@/lib/engines/registry';
 import { KEY_SOURCES } from '@/lib/providers/key-source';
 
+/** The callout's heading, which a disabled Generate button points at for its reason. */
+export const CONNECT_KEY_TITLE_ID = 'connect-key-callout-title';
+
 /**
  * The not-connected state for a provider workspace: nothing can run without a
  * key, though a person can still write a prompt and set things up first. So the
@@ -37,7 +40,7 @@ export default function ConnectKeyCallout({
 
   return (
     <section
-      aria-labelledby="connect-key-callout-title"
+      aria-labelledby={CONNECT_KEY_TITLE_ID}
       className="rounded-[var(--radius)] border border-dashed border-[var(--brand-accent)]/30 bg-[var(--brand-accent)]/[0.035] p-5 shadow-[var(--shadow-md)] md:px-7 md:py-6"
     >
       <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between sm:gap-10">
@@ -53,7 +56,7 @@ export default function ConnectKeyCallout({
               <span className="connect-key-dot" aria-hidden /> Not connected
             </p>
             <h3
-              id="connect-key-callout-title"
+              id={CONNECT_KEY_TITLE_ID}
               className="display text-base font-semibold text-[var(--foreground)] sm:text-lg"
             >
               Generating needs your own {label} {credential}

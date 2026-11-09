@@ -6,7 +6,7 @@ import { Loader2, Sparkles, Video } from 'lucide-react';
 import { toast } from 'sonner';
 import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import ConnectionGate from '@/components/ConnectionGate';
-import ConnectToGenerateButton from '@/components/ConnectToGenerateButton';
+import { CONNECT_KEY_TITLE_ID } from '@/components/ConnectKeyCallout';
 import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
 import JobElapsed from '@/components/JobElapsed';
 import ModelControls, { type ModelControlField } from '@/components/ModelControls';
@@ -459,15 +459,13 @@ export default function GeminiVideoWorkspace({
 
   const actions = (
     <div className="space-y-3">
-      {needsKey && prompt.trim() && !isGenerating ? (
-        <ConnectToGenerateButton label={PROVIDER_LABELS.gemini} onConnect={() => onOpenConnections('gemini')} />
-      ) : (
       <button
         onClick={() => {
           autoRetry.reset();
           void handleGenerate();
         }}
-        disabled={isGenerating}
+        disabled={needsKey || isGenerating}
+        aria-describedby={needsKey ? CONNECT_KEY_TITLE_ID : undefined}
         className="w-full rounded-lg bg-[var(--neon-purple)] px-4 py-3 font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
       >
         {isGenerating ? (
@@ -487,7 +485,6 @@ export default function GeminiVideoWorkspace({
           </>
         )}
       </button>
-      )}
       {priceNotice && !isGenerating && (
         <p className="text-sm text-[var(--foreground-muted)]">{priceNotice}</p>
       )}

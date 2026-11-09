@@ -755,7 +755,6 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
           : activeProvider ? !providerKeys[activeProvider].trim()
             : false;
   const needsKey = !cloudWorkspace.checking && (cloudWorkspace.cloud ? !cloudWorkspace.connected : localKeyMissing);
-  const hasFeatureDefaultPrompt = feature.id === 'image-editing' || feature.id === 'style-transfer';
 
   // A retired model's successor, offered while the retired one is selected.
   const geminiSuccessor = activeGeminiModel.replacedBy
@@ -873,6 +872,8 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
       setError(floor.message);
       return;
     }
+    const hasFeatureDefaultPrompt =
+      feature.id === 'image-editing' || feature.id === 'style-transfer';
     if (!prompt.trim() && !hasFeatureDefaultPrompt) {
       setPromptError('Please enter a prompt');
       promptRef.current?.focus();
@@ -1346,11 +1347,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
               workspace={cloudWorkspace}
               mediaType="image"
               label="Generate Image"
-              connection={needsKey ? {
-                label: activeEngine.label,
-                promptReady: prompt.trim().length > 0 || hasFeatureDefaultPrompt,
-                onConnect: () => onOpenConnections(activeEngine.id),
-              } : undefined}
+              needsKey={needsKey}
               busy={isGenerating}
               busyLabel="Generating Magic..."
               onSubmit={() => void handleGenerate()}

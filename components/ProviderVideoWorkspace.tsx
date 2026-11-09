@@ -404,8 +404,6 @@ export default function ProviderVideoWorkspace({
 
   const allJobs = useProviderJobsStore((state) => state.jobs);
   const needsKey = cloudWorkspace.cloud ? !cloudWorkspace.connected : !apiKey.trim();
-  const promptMode = isEdit ? editPromptMode(selectedModel?.videoEdit?.references) : 'required';
-  const promptReady = promptMode !== 'required' || prompt.trim().length > 0;
   const patchJob = useProviderJobsStore((state) => state.patchJob);
   const latestJob = allJobs.find(
     (job) =>
@@ -610,10 +608,6 @@ export default function ProviderVideoWorkspace({
       return;
     }
     if (needsKey) {
-      if (!promptReady) {
-        setError('Describe the clip you want before generating.');
-        return;
-      }
       setError(`Connect your ${label} key before starting a generation.`);
       onOpenConnections(provider);
       return;
@@ -622,6 +616,7 @@ export default function ProviderVideoWorkspace({
       setError(`${label} has no model for this mode.`);
       return;
     }
+    const promptMode = isEdit ? editPromptMode(selectedModel?.videoEdit?.references) : 'required';
     if (promptMode === 'required' && !prompt.trim()) {
       setError('Describe the clip you want before generating.');
       return;
@@ -1096,7 +1091,7 @@ export default function ProviderVideoWorkspace({
             workspace={cloudWorkspace}
             mediaType="video"
             label={isEdit ? 'Generate edit' : 'Generate video'}
-            connection={needsKey ? { label, promptReady, onConnect: () => onOpenConnections(provider) } : undefined}
+            needsKey={needsKey}
             cost={estimate.costUsd !== null && <span className="font-normal opacity-80">{` · ~$${estimate.costUsd.toFixed(2)}`}</span>}
             busy={isSubmitting}
             busyLabel={uploadProgress !== null ? `Uploading ${uploadKind === 'audio' ? 'reference audio' : uploadKind === 'video' ? 'reference video' : 'source'}… ${uploadProgress}%` : 'Starting…'}

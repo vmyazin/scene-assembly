@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import FalGenerationWorkspace from '@/components/FalGenerationWorkspace';
+import GeminiVideoWorkspace from '@/components/GeminiVideoWorkspace';
 import KieGenerationWorkspace from '@/components/KieGenerationWorkspace';
 import ProviderVideoWorkspace from '@/components/ProviderVideoWorkspace';
 import { useAppStore } from '@/store/useAppStore';
@@ -100,12 +101,18 @@ describe.each(WORKSPACES)('$name with no key', ({ label, render: renderWorkspace
     expect(screen.getByTestId('prompt-panel-runner')).toBeInTheDocument();
   });
 
-  it('asks for the key at Generate once there is a prompt to run', () => {
+  it('keeps Generate short and disabled, with or without a prompt, described by the key prompt', () => {
     render(renderWorkspace());
 
-    expect(screen.queryByRole('button', { name: `Connect ${label} key to generate` })).toBeNull();
+    const expectDisabled = () => {
+      const generate = screen.getByRole('button', { name: /^Generate video/ });
+      expect(generate).toBeDisabled();
+      expect(generate).toHaveAccessibleDescription(`Generating needs your own ${label} API key`);
+    };
+    expectDisabled();
     fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A paper city' } });
-    expect(screen.getByRole('button', { name: `Connect ${label} key to generate` })).toBeInTheDocument();
+    expectDisabled();
+    expect(screen.queryByRole('button', { name: /key to generate/ })).toBeNull();
   });
 });
 
@@ -123,7 +130,7 @@ describe('a prompt written before connecting', () => {
     render(WORKSPACES[0].render());
 
     expect(screen.getByLabelText('Prompt')).toHaveValue('A paper city');
-    expect(screen.getByRole('button', { name: /^Generate video/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Generate video/ })).toBeEnabled();
   });
 });
 
@@ -135,5 +142,18 @@ describe.each(WORKSPACES)('$name with a key', ({ label, render: renderWorkspace 
     expect(screen.queryByText(/not connected/i)).not.toBeInTheDocument();
     expect(container.querySelector('[inert]')).toBeNull();
     expect(screen.getByRole('button', { name: `${label} key connected` })).toBeInTheDocument();
+  });
+});
+
+describe('Gemini video with no key', () => {
+  it('follows the same rule on its own Generate button', () => {
+    useAppStore.setState({ apiKey: '' });
+    useDraftStore.setState({ prompt: 'A paper city' });
+    render(<GeminiVideoWorkspace inputMode="text" onBack={() => undefined} onOpenConnections={() => undefined} />);
+
+    const generate = screen.getByRole('button', { name: /^Generate video/ });
+    expect(generate).toBeDisabled();
+    expect(generate).toHaveAccessibleDescription('Generating needs your own Google Gemini API key');
+    expect(screen.getByLabelText('Prompt')).toBeEnabled();
   });
 });

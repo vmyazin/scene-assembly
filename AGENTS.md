@@ -400,13 +400,14 @@
   implementations drift in timing, focus behavior, and reduced-motion handling.
 - **A workspace that cannot run without credentials** → wrap the workspace layout
   in `components/ConnectionGate.tsx`, which renders `ConnectKeyCallout` above a
-  workspace that stays fully usable, and pass `connection` to `GenerateActions`.
+  workspace that stays fully usable, and pass `needsKey` to `GenerateActions`.
   Never dim or `inert` the prompt: a visitor who could not write one until they had
   fetched a paid key had no reason to fetch it, and the draft store carries the text
   to any provider they do have a key for (spec:
-  `docs/claude/specs/2026-11-09-write-prompt-before-connecting.md`). Generate asks for
-  the key through `ConnectToGenerateButton` only once there is a prompt to run, and
-  before that a press asks for the prompt. One gate because Kie, fal, and the
+  `docs/claude/specs/2026-11-09-write-prompt-before-connecting.md`). Generate keeps its
+  short label and stays disabled until there is a key, described by the callout's heading,
+  because connect wording in the button crowded a page that already has the callout (owner's
+  feedback on PR #31). One gate because Kie, fal, and the
   aggregators each used to answer "no key yet" differently and a person switching
   providers had to relearn the page. The header keeps only its connected-state status
   button, named `<provider label> key connected`, so the same ask is not made
