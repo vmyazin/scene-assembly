@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import FalGenerationWorkspace from '@/components/FalGenerationWorkspace';
@@ -85,21 +85,45 @@ describe.each(WORKSPACES)('$name with no key', ({ label, render: renderWorkspace
     ).toHaveLength(1);
   });
 
-  it('dims and disables the controls, with the whole area opening the dialog', () => {
+  it('leaves the prompt and controls usable, so a visitor can write first', () => {
     const { container } = render(renderWorkspace());
 
-    const gate = container.querySelector('[inert]');
-    expect(gate).not.toBeNull();
-    expect(gate).toHaveClass('pointer-events-none', 'opacity-[0.42]');
-    expect(
-      screen.getByRole('button', { name: `Connect your ${label} key to use these controls` })
-    ).toBeInTheDocument();
+    expect(container.querySelector('[inert]')).toBeNull();
+    expect(screen.queryByRole('button', { name: `Connect your ${label} key to use these controls` })).toBeNull();
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A paper city' } });
+    expect(useDraftStore.getState().prompt).toBe('A paper city');
   });
 
-  it('stills the prompt panel runner', () => {
+  it('keeps inviting a prompt until one is written', () => {
     render(renderWorkspace());
 
-    expect(screen.queryByTestId('prompt-panel-runner')).not.toBeInTheDocument();
+    expect(screen.getByTestId('prompt-panel-runner')).toBeInTheDocument();
+  });
+
+  it('asks for the key at Generate once there is a prompt to run', () => {
+    render(renderWorkspace());
+
+    expect(screen.queryByRole('button', { name: `Connect ${label} key to generate` })).toBeNull();
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A paper city' } });
+    expect(screen.getByRole('button', { name: `Connect ${label} key to generate` })).toBeInTheDocument();
+  });
+});
+
+/**
+ * The point of writing first: the prompt belongs to the draft, not the provider,
+ * so someone who has a key for a different provider can run it there.
+ */
+describe('a prompt written before connecting', () => {
+  it('follows the visitor to a provider they do have a key for', () => {
+    useAppStore.setState({ runwareApiKey: 'k' });
+    const first = render(WORKSPACES[2].render());
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A paper city' } });
+    first.unmount();
+
+    render(WORKSPACES[0].render());
+
+    expect(screen.getByLabelText('Prompt')).toHaveValue('A paper city');
+    expect(screen.getByRole('button', { name: /^Generate video/ })).toBeInTheDocument();
   });
 });
 

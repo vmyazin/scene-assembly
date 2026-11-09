@@ -39,3 +39,26 @@ describe('sign-in return path', () => {
     expect(screen.getByRole('link', { name: /create an account/i })).toHaveAttribute('href', `/sign-up?returnTo=${encodeURIComponent(back)}`);
   });
 });
+
+describe('what an account adds', () => {
+  const guest = { account: null, googleEnabled: true, localSignIn: false, providers: [], connections: [] };
+
+  it('lists the benefits on sign-up, beside the one sign-in route', () => {
+    useAccountStore.getState().applySession(guest);
+    render(<AccountAccess mode="sign-up" />);
+
+    const benefits = screen.getByRole('list', { name: 'What an account adds' });
+    expect(benefits).toHaveTextContent('keep running after you close the tab');
+    expect(benefits).toHaveTextContent('saved encrypted');
+    expect(benefits).toHaveTextContent('1 GB cloud library');
+    expect(screen.getByRole('button', { name: /continue with google/i })).toBeInTheDocument();
+    expect(screen.getByText(/An account is optional/)).toBeInTheDocument();
+  });
+
+  it('leaves sign-in as it was, since that visitor already has an account', () => {
+    useAccountStore.getState().applySession(guest);
+    render(<AccountAccess mode="sign-in" />);
+
+    expect(screen.queryByRole('list', { name: 'What an account adds' })).toBeNull();
+  });
+});

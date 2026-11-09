@@ -4,6 +4,7 @@
 import type { ReactNode } from 'react';
 import { Loader2, Sparkles } from 'lucide-react';
 import CloudExecutionNotice from '@/components/account/CloudExecutionNotice';
+import ConnectToGenerateButton from '@/components/ConnectToGenerateButton';
 import SubmissionError from '@/components/SubmissionError';
 import type { useCloudWorkspace } from '@/lib/account/useCloudWorkspace';
 import { refusalPresentation, type RefusalContext } from '@/lib/moderation/classify';
@@ -20,6 +21,7 @@ export default function GenerateActions({
   workspace,
   mediaType,
   label,
+  connection,
   cost,
   note,
   busy,
@@ -34,6 +36,12 @@ export default function GenerateActions({
   mediaType: 'image' | 'video';
   /** "Generate video", "Generate edit". */
   label: string;
+  /**
+   * Set while this provider has no key. Once there is a prompt to run, the
+   * button asks for the key, because that is the moment someone has a reason to
+   * go and get one; before that it stays Generate and asks for the prompt.
+   */
+  connection?: { label: string; promptReady: boolean; onConnect: () => void };
   /** The run's price after the label; hidden for a simulation, which costs nothing. */
   cost?: ReactNode;
   /** A line under the button, for a workspace that prices the run there instead. */
@@ -51,6 +59,9 @@ export default function GenerateActions({
   const presentation = error ? refusalPresentation(error, { ...refusal, level: relaxed.effective }) : null;
   return (
     <>
+      {connection?.promptReady && !busy ? (
+        <ConnectToGenerateButton label={connection.label} onConnect={connection.onConnect} disabled={workspace.checking} />
+      ) : (
       <button
         type="button"
         onClick={() => {
@@ -77,6 +88,7 @@ export default function GenerateActions({
           </>
         )}
       </button>
+      )}
       {note}
       <CloudExecutionNotice workspace={workspace} />
       {error && (

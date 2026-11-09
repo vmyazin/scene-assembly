@@ -161,10 +161,12 @@
   (UX audit M5).
 
 - **A retired model** → mark it `deprecated` and set `replacedBy` to its successor's id
-  (Gemini and fal image catalogs). The image workspace then shows `ReplaceDeprecatedModel`,
-  a one-click switch, while the retired model is selected. Not a silent migration: it stays
-  runnable and may have been picked on purpose, but a remembered Nano Banana 2 ran at twice
-  2.1's price behind only a badge (UX audit M7).
+  (Gemini and fal image catalogs). Pickers build rows through `hideRetiredModels`
+  (`lib/models/retired.ts`), so nobody new sees it (it sat in the first-run list at twice its
+  successor's price, 2026-11-09). The row stays only while that model is the selection, and
+  the image workspace then shows `ReplaceDeprecatedModel`, a one-click switch. Not a silent
+  migration: it stays runnable and may have been picked on purpose, but a remembered Nano
+  Banana 2 ran at twice 2.1's price behind only a badge (UX audit M7).
 
 - **A provider workspace's setup cards, generate button, or result panel** (fal, Kie,
   Runware/Atlas/Comet/PiAPI) → compose the shared pieces listed under "Already
@@ -396,14 +398,16 @@
   provider pages must not recreate that timer or animation because repeated local
   implementations drift in timing, focus behavior, and reduced-motion handling.
 - **A workspace that cannot run without credentials** → wrap the workspace layout
-  in `components/ConnectionGate.tsx` and pass `paused={gated}` (from its exported
-  `isGated`) to `PromptPanel`. The gate owns the whole not-connected state —
-  `ConnectKeyCallout` above the controls, the dim, the `inert`, and the
-  click-anywhere target that opens the key dialog — because Kie, fal, and the
+  in `components/ConnectionGate.tsx`, which renders `ConnectKeyCallout` above a
+  workspace that stays fully usable, and pass `connection` to `GenerateActions`.
+  Never dim or `inert` the prompt: a visitor who could not write one until they had
+  fetched a paid key had no reason to fetch it, and the draft store carries the text
+  to any provider they do have a key for (spec:
+  `docs/claude/specs/2026-11-09-write-prompt-before-connecting.md`). Generate asks for
+  the key through `ConnectToGenerateButton` only once there is a prompt to run, and
+  before that a press asks for the prompt. One gate because Kie, fal, and the
   aggregators each used to answer "no key yet" differently and a person switching
-  providers had to relearn the page. Never gate a rail that already holds finished
-  jobs (`hasFinishedWork`): a key can be cleared after a clip lands, and the
-  download has to stay reachable. The header keeps only its connected-state status
+  providers had to relearn the page. The header keeps only its connected-state status
   button, named `<provider label> key connected`, so the same ask is not made
   twice. Vendor key pages come from `lib/providers/key-source.ts`, and the dialog
   opens through `onOpenConnections(<engine id>)` so `ApiKeyConfig`'s

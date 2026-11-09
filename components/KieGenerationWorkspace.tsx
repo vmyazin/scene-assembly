@@ -42,7 +42,7 @@ import RelaxedFilterControl from '@/components/RelaxedFilterControl';
 import GenerateActions from '@/components/GenerateActions';
 import ResultPanel from '@/components/ResultPanel';
 import { ModelControlsCard, WorkspaceCard } from '@/components/WorkspaceCard';
-import ConnectionGate, { isGated } from '@/components/ConnectionGate';
+import ConnectionGate from '@/components/ConnectionGate';
 import { trackGenerationResult, trackGenerationSubmitted } from '@/lib/analytics/generation-result';
 import { classifyFailure } from '@/lib/moderation/classify';
 import { inspectPrompt } from '@/lib/moderation/floors';
@@ -122,7 +122,6 @@ export default function KieGenerationWorkspace({
   const jobs = useKieJobsStore((state) => state.jobs);
   const cloudWorkspace=useCloudWorkspace('kie');
   const needsKey = cloudWorkspace.cloud ? !cloudWorkspace.connected : !kieApiKey.trim();
-  const gated = isGated(needsKey, cloudWorkspace.cloud ? cloudWorkspace.hasJobs : jobs.length > 0);
   const upsertJob = useKieJobsStore((state) => state.upsertJob);
 
   const models = useMemo(() => modelsForKieMode(mediaType, inputMode), [inputMode, mediaType]);
@@ -137,6 +136,7 @@ export default function KieGenerationWorkspace({
   const epoch = useAccountStore((state) => state.epoch);
   const source = selectedSource?.epoch === epoch ? selectedSource : null;
   const prompt = useDraftStore((state) => state.prompt);
+  const promptReady = editPromptMode(editSpec) !== 'required' || prompt.trim().length > 0;
   const setPrompt = useDraftStore((state) => state.setPrompt);
   usePromptScope(mediaType === 'video' ? 'video' : 'image');
   const references = useDraftStore((state) => state.references);
@@ -300,6 +300,10 @@ export default function KieGenerationWorkspace({
   const submit = async () => {
     if (cloudWorkspace.checking) { setError('Checking your account…'); return; }
     if (needsKey) {
+      if (!promptReady) {
+        setError(`Describe the ${mediaType === 'video' ? 'clip' : 'image'} you want before generating.`);
+        return;
+      }
       setError('Connect your Kie API key before starting a generation.');
       onOpenConnections('kie');
       return;
@@ -423,7 +427,7 @@ export default function KieGenerationWorkspace({
   );
 
   const promptPanel = (
-    <PromptPanel paused={gated} hasPrompt={prompt.trim().length > 0}>
+    <PromptPanel hasPrompt={prompt.trim().length > 0}>
       <PromptHeader htmlFor="kie-prompt">
         <SavedPromptsButton />
         <GenExampleButton busy={example.generating} onClick={() => void example.generate()} />
@@ -442,6 +446,7 @@ export default function KieGenerationWorkspace({
       workspace={cloudWorkspace}
       mediaType={mediaType}
       label={`Generate ${mediaType}`}
+      connection={needsKey ? { label: 'Kie.ai', promptReady, onConnect: () => onOpenConnections('kie') } : undefined}
       busy={isSubmitting}
       busyLabel="Uploading & starting…"
       onSubmit={() => void submit()}
@@ -522,7 +527,6 @@ export default function KieGenerationWorkspace({
             provider="kie"
             label="Kie.ai"
             needsKey={needsKey}
-            hasFinishedWork={cloudWorkspace.cloud ? cloudWorkspace.hasJobs : jobs.length > 0}
             onConnect={() => onOpenConnections('kie')}
           >
             <ImageMainStack
@@ -603,7 +607,6 @@ export default function KieGenerationWorkspace({
         provider="kie"
         label="Kie.ai"
         needsKey={needsKey}
-        hasFinishedWork={cloudWorkspace.cloud ? cloudWorkspace.hasJobs : jobs.length > 0}
         onConnect={() => onOpenConnections('kie')}
       >
       <GenerationWorkspaceLayout

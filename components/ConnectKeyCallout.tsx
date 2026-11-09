@@ -8,12 +8,11 @@ import type { EngineId } from '@/lib/engines/registry';
 import { KEY_SOURCES } from '@/lib/providers/key-source';
 
 /**
- * The not-connected state for a provider workspace: without a key every control
- * on the page is inert, and a page full of live-looking controls that cannot
- * submit reads as a broken app rather than an unfinished setup. So the callout
- * sits directly under the workspace header — above the controls it gates — and
- * says the one thing that has to happen, with both routes to it: paste a key
- * here, or go get one from the vendor.
+ * The not-connected state for a provider workspace: nothing can run without a
+ * key, though a person can still write a prompt and set things up first. So the
+ * callout sits directly under the workspace header, says the one thing that has
+ * to happen before a run, with both routes to it (paste a key here, or go get
+ * one from the vendor), and says the prompt will still be there.
  *
  * Urgency comes from state, not from ornament: a Marker Yellow status dot and a
  * dashed perimeter (the same "nothing here yet" language as the upload
@@ -64,6 +63,9 @@ export default function ConnectKeyCallout({
             </h3>
             <p className="max-w-2xl text-sm leading-relaxed text-[var(--foreground-muted)]">
               {storage==='account'?'Keys are encrypted in your account and used by your background jobs.':'Keys stay in this browser and are sent only with your own generations.'}
+            </p>
+            <p className="max-w-2xl text-sm leading-relaxed text-[var(--foreground-muted)]">
+              Write your prompt first. It stays here while you connect, and carries over to any provider you switch to.
             </p>
             {alternative}
           </div>

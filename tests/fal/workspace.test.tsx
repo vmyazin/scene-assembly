@@ -657,10 +657,19 @@ describe('FalGenerationWorkspace', () => {
     const onOpenConnections = vi.fn();
     renderWorkspace('text', { onOpenConnections });
     fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A moonlit ocean' } });
-    fireEvent.click(screen.getByRole('button', { name: /^Generate video/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Connect fal.ai key to generate' }));
     expect(onOpenConnections).toHaveBeenCalledOnce();
     expect(uploadFalFilesMock).not.toHaveBeenCalled();
     expect(submitFalJobMock).not.toHaveBeenCalled();
+  });
+
+  it('asks for the prompt, not the key, when nothing is written yet', () => {
+    useAppStore.setState({ falApiKey: '' });
+    const onOpenConnections = vi.fn();
+    renderWorkspace('text', { onOpenConnections });
+    fireEvent.click(screen.getByRole('button', { name: /^Generate video/ }));
+    expect(onOpenConnections).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('Describe the clip');
   });
 
   it.each([

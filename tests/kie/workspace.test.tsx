@@ -564,9 +564,9 @@ describe('Kie image workspace layout', () => {
     const rail = screen.getByRole('region', { name: 'Provider and model' });
     expect(within(rail).getByText('engine field')).toBeTruthy();
     expect(within(rail).getByRole('listbox', { name: 'Model' })).toBeTruthy();
-    // Comparing models needs no key; the prompt and its settings wait for one.
+    // Comparing models and writing a prompt both work before a key exists.
     expect(rail.closest('[inert]')).toBeNull();
-    expect(screen.getByLabelText('Prompt').closest('[inert]')).not.toBeNull();
+    expect(screen.getByLabelText('Prompt').closest('[inert]')).toBeNull();
     expect(screen.getByRole('button', { name: /^Shape/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /^Size/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /^More settings/ })).toBeTruthy();

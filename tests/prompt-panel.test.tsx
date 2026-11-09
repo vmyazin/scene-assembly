@@ -148,16 +148,6 @@ describe('PromptPanel', () => {
     expect(screen.getByTestId('prompt-panel-runner')).toBeInTheDocument();
   });
 
-  it('stays quiet for a gated panel even with the box empty', () => {
-    // The two reasons are independent: nothing can be submitted here.
-    render(
-      <PromptPanel paused>
-        <textarea id="p" />
-      </PromptPanel>
-    );
-    expect(screen.queryByTestId('prompt-panel-runner')).toBeNull();
-  });
-
   it('clears the queued repeat when unmounted', () => {
     const view = renderPanel();
     finishRunnerLap(screen.getByTestId('prompt-panel-runner'));
