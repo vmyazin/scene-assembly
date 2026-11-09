@@ -20,19 +20,29 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); read.mockClear(); });
 
 describe('recent creation sources', () => {
-  it('shows an intentional guest empty state and opens the real library dialog', () => {
-    render(<RecentCreations />);
-    expect(screen.getByText('Your creations will appear here.')).toBeVisible();
+  it('renders nothing for a guest with no creations', () => {
+    const view = render(<RecentCreations />);
+    expect(view.container).toBeEmptyDOMElement();
     expect(read).not.toHaveBeenCalled();
+  });
+  it('shows browser results with a link to the real library dialog', () => {
+    useGalleryStore.setState({ records: [{ id: 'r' }] as never });
+    render(<RecentCreations />);
+    expect(screen.getByText('Browser results')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'View library →' }));
     expect(useLibraryDialog.getState().open).toBe(true);
   });
   it('waits for session resolution instead of flashing browser results', () => {
     useAccountStore.setState({ status: 'loading' });
-    render(<RecentCreations />);
-    expect(screen.getByRole('status')).toHaveTextContent('Loading');
-    expect(screen.queryByText('Browser results')).not.toBeInTheDocument();
+    const view = render(<RecentCreations />);
+    expect(view.container).toBeEmptyDOMElement();
     expect(read).not.toHaveBeenCalled();
+  });
+  it('renders nothing for an account with an empty library', () => {
+    read.mockReturnValue({ assets: [], loading: false, error: null, refresh: vi.fn() });
+    useAccountStore.setState({ status: 'ready', session: { account: { id: 'owner-a', name: 'Test', email: 'test@example.test' }, providers: [], connections: [], googleEnabled: false, localSignIn: true } });
+    const view = render(<RecentCreations />);
+    expect(view.container).toBeEmptyDOMElement();
   });
   it('keys cloud reads to the current owner and does not render the browser library', () => {
     const session = { account: { id: 'owner-a', name: 'Test', email: 'test@example.test' }, providers: [], connections: [], googleEnabled: false, localSignIn: true };
