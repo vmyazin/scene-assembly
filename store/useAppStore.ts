@@ -281,8 +281,11 @@ export const useAppStore = create<AppState>()(
        * Version 3 maps a stored Gemini video model that is no longer in the
        * catalog — Veo 3.1 Lite shuts down on 2026-10-22 — onto Omni. Leaving
        * the old id in the blob would keep sending a model Google has turned off.
+       *
+       * Version 4 runs that same mapping again for Omni 1.1, which Google routes
+       * to Omni 1.2 on 2026-12-03. Without the bump a version 3 blob keeps 1.1.
        */
-      version: 3,
+      version: 4,
       migrate: (persisted, from) => {
         if (!persisted || typeof persisted !== 'object') return persisted;
         let next = persisted as Record<string, unknown>;
@@ -307,7 +310,7 @@ export const useAppStore = create<AppState>()(
           next = { ...next, relaxedConsents: consents };
         }
         if (
-          from < 3 &&
+          from < 4 &&
           typeof next.geminiVideoModel === 'string' &&
           !findGeminiVideoModel(next.geminiVideoModel)
         ) {

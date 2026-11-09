@@ -13,6 +13,7 @@ import { fetchKieCredits } from '@/lib/kie/browser';
 import type { KieJob } from '@/lib/kie/types';
 import type { MicroAiUsage } from '@/lib/micro-ai/models';
 import { findModel } from '@/lib/providers/catalog';
+import { withKling4FlashSale } from '@/lib/providers/kling-4-flash-promo';
 import { seedanceCatalogFigure } from '@/lib/providers/seedance-draft';
 import type { ProviderId, ProviderTask } from '@/lib/providers/types';
 import type { ProviderJob } from '@/store/useProviderJobsStore';
@@ -245,7 +246,7 @@ export function captureProviderJob(provider: ProviderId, job: ProviderJob, task:
         ? seedanceCatalogFigure({ modelId: job.modelId, inputMode: job.inputMode, values })
         : null;
       const measured = exact.costUsd === null && !(catalog && catalog.costUsd !== null)
-        ? resolveMeasuredRunwareEdit(findModel(provider, job.modelId), values.sourceDurationSeconds)
+        ? resolveMeasuredRunwareEdit(withKling4FlashSale(findModel(provider, job.modelId), job.createdAt), values.sourceDurationSeconds)
         : null;
       const chosen = catalog && catalog.costUsd !== null ? catalog : measured && measured.costUsd !== null ? measured : exact;
       file(withFigure(base, chosen));
@@ -256,7 +257,7 @@ export function captureProviderJob(provider: ProviderId, job: ProviderJob, task:
     file(
       withFigure(
         base,
-        resolveCatalogRate(findModel(provider, job.modelId), typeof rawDuration === 'number' ? rawDuration : undefined, 1, {
+        resolveCatalogRate(withKling4FlashSale(findModel(provider, job.modelId), job.createdAt), typeof rawDuration === 'number' ? rawDuration : undefined, 1, {
           audio: controls.audio === true,
           size: typeof controls.size === 'string' ? controls.size : undefined,
           inputMode: job.inputMode,

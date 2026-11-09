@@ -2,7 +2,7 @@ import type { DraftValue } from '@/lib/draft/carry-over';
 import type { CloudJobRequest, CloudProvider } from '@/lib/account/contracts';
 import { jobModelLabel } from '@/lib/account/job-label';
 import { studioLocationForJob } from '@/lib/account/job-location';
-import { findGeminiVideoModel } from '@/lib/engines/gemini-video-catalog';
+import { findGeminiVideoModel, pastGeminiVideoModel } from '@/lib/engines/gemini-video-catalog';
 import { useDraftStore } from '@/store/useDraftStore';
 
 /** What a saved result remembers about the run that made it. Browser records
@@ -26,7 +26,7 @@ const INPUT_MODES: readonly CloudJobRequest['inputMode'][] = ['text', 'image', '
  */
 export function resultModelLabel(run: Pick<SavedRun, 'provider' | 'modelId' | 'mediaType'>): string | null {
   if (!run.modelId) return null;
-  if (run.provider === 'gemini' && run.mediaType === 'video') return findGeminiVideoModel(run.modelId)?.label ?? run.modelId;
+  if (run.provider === 'gemini' && run.mediaType === 'video') return (findGeminiVideoModel(run.modelId) ?? pastGeminiVideoModel(run.modelId))?.label ?? run.modelId;
   return jobModelLabel(run.provider as CloudProvider, run.modelId);
 }
 

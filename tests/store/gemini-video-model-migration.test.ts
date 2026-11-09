@@ -29,10 +29,22 @@ describe('a stored Gemini video model migrates to Omni', () => {
     expect(useAppStore.getState().apiKey).toBe('k');
   });
 
+  it('maps a stored Omni 1.1 id onto Omni 1.2 for a version 3 blob', async () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ state: { geminiVideoModel: 'gemini-omni-1.1-flash', apiKey: 'k' }, version: 3 })
+    );
+
+    await useAppStore.persist.rehydrate();
+
+    expect(useAppStore.getState().geminiVideoModel).toBe('gemini-omni-1.2-flash');
+    expect(useAppStore.getState().apiKey).toBe('k');
+  });
+
   it('leaves a stored Omni id alone', async () => {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ state: { geminiVideoModel: DEFAULT_GEMINI_VIDEO_MODEL }, version: 2 })
+      JSON.stringify({ state: { geminiVideoModel: DEFAULT_GEMINI_VIDEO_MODEL }, version: 3 })
     );
 
     await useAppStore.persist.rehydrate();

@@ -172,7 +172,7 @@ describe('VideoWorkspace provider selection', () => {
     await userEvent.click(screen.getByRole('radio', { name: /^Google Gemini$/ }));
 
     expect(useAppStore.getState().videoEngine).toBe('gemini');
-    expect(screen.getByRole('heading', { name: 'Google Gemini · Omni Flash' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Google Gemini · Omni 1.2 Flash' })).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: 'Add your Google Gemini key' })
     ).toBeInTheDocument();

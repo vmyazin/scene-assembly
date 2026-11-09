@@ -77,7 +77,7 @@ describe('Gemini video workspace image-to-video', () => {
     useAppStore.setState({
       apiKey: 'gemini-test-key',
       videoEngine: 'gemini',
-      geminiVideoModel: 'gemini-omni-1.1-flash',
+      geminiVideoModel: 'gemini-omni-1.2-flash',
     });
     useDraftStore.getState().reset();
     useSeedFrameStore.getState().clearSeedFrame();
@@ -138,8 +138,8 @@ describe('Gemini video workspace image-to-video', () => {
     renderTextWorkspace();
     expect(screen.queryByText(/coming in the next update/i)).toBeNull();
     expect(screen.queryByText(/use other providers for video generation/i)).toBeNull();
-    expect(screen.getByRole('heading', { name: /Omni Flash/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Generate video/ })).toHaveTextContent(/~\$0\.81/);
+    expect(screen.getByRole('heading', { name: /Omni 1.2 Flash/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Generate video/ })).toHaveTextContent(/~\$0\.56/);
   });
 
   it('renders duration and resolution through the shared fal-style controls', () => {
@@ -179,8 +179,8 @@ describe('Gemini video workspace image-to-video', () => {
       )
     ).toEqual(['3', '4', '5', '6', '7', '8', '9', '10']);
     expect(screen.getByRole('combobox', { name: 'Duration' })).toHaveDisplayValue('8');
-    expect(screen.getByRole('button', { name: /^Generate video/ })).toHaveTextContent(/price unknown/);
-    expect(screen.getByText(/Price unknown for 1080p/)).toHaveTextContent(/at least ~\$0\.81/);
+    expect(screen.getByRole('button', { name: /^Generate video/ })).toHaveTextContent('~$0.83');
+    expect(screen.queryByText(/Price unknown/)).not.toBeInTheDocument();
   });
 
   it('submits a catalog duration chosen from the compact select', async () => {
@@ -241,7 +241,7 @@ describe('Gemini video workspace image-to-video', () => {
         prompt: 'The cat leaps forward',
         image: expect.any(String),
         imageMimeType: 'image/png',
-        model: 'gemini-omni-1.1-flash',
+        model: 'gemini-omni-1.2-flash',
       })
     );
     const image = geminiGenerateVideoMock.mock.calls[0][0].image as string;
@@ -255,7 +255,7 @@ describe('Gemini video workspace image-to-video', () => {
     expect(useSpendStore.getState().entries[0]).toMatchObject({
       provider: 'gemini',
       kind: 'video',
-      modelId: 'gemini-omni-1.1-flash',
+      modelId: 'gemini-omni-1.2-flash',
       galleryRecordId: useGalleryStore.getState().records[0].id,
     });
   });
@@ -439,7 +439,7 @@ describe('Gemini video workspace image-to-video', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Download failed');
     expect(useSpendStore.getState().entries).toHaveLength(1);
     expect(useSpendStore.getState().entries[0]).toMatchObject({
-      provider: 'gemini', kind: 'video', modelId: 'gemini-omni-1.1-flash',
+      provider: 'gemini', kind: 'video', modelId: 'gemini-omni-1.2-flash',
     });
     expect(useGalleryStore.getState().records).toHaveLength(0);
     expect(screen.queryByRole('button', { name: 'Cancel automatic retry' })).toBeNull();
