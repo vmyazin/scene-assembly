@@ -75,7 +75,7 @@ describe.each(WORKSPACES)('$name with no key', ({ label, render: renderWorkspace
     const { container } = render(renderWorkspace());
 
     expect(
-      screen.getByRole('heading', { name: `Add your ${label} key` })
+      screen.getByRole('heading', { name: `Generating needs your own ${label} API key` })
     ).toBeInTheDocument();
     // The header's own connect button steps aside, so the ask is made once.
     expect(

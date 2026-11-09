@@ -24,7 +24,6 @@ export default function ConnectionGate({
   storage = 'browser',
   needsKey,
   onConnect,
-  alternative,
   children,
 }: {
   provider: EngineId;
@@ -34,14 +33,12 @@ export default function ConnectionGate({
   /** No key stored for this provider, so nothing here can be submitted yet. */
   needsKey: boolean;
   onConnect: () => void;
-  /** Passed to the callout: a keyless way forward, when the workspace has one. */
-  alternative?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <>
       {needsKey && (
-        <ConnectKeyCallout provider={provider} label={label} storage={storage} onConnect={onConnect} alternative={alternative} />
+        <ConnectKeyCallout provider={provider} label={label} storage={storage} onConnect={onConnect} />
       )}
       <div>{children}</div>
     </>

@@ -18,4 +18,5 @@ Do not modify: `store/useDraftStore.ts`, `lib/providers/catalog.ts`, `lib/engine
 - [x] Ask for the key at Generate once a prompt exists, across all five workspaces. Verify: `pnpm exec vitest run tests/generation-interface.test.tsx tests/fal/workspace.test.tsx tests/providers/workspace.test.tsx`
 - [x] Hide retired models from picker rows unless selected. Verify: `pnpm exec vitest run tests/models/retired.test.ts`
 - [x] List what an account adds on sign-up. Verify: `pnpm exec vitest run tests/account/account-access-return.test.tsx`
+- [x] Follow-up (SA-01): make `ConnectKeyCallout` say what is needed, why, and the two steps, and remove the unused `alternative` prop. Verify: `pnpm exec vitest run tests/providers/connect-key-callout.test.tsx tests/api-key-focus.test.tsx`
 - [x] Full suite, typecheck and lint against unmodified main. Verify: `pnpm exec vitest run`, `pnpm exec tsc --noEmit`, `pnpm lint`

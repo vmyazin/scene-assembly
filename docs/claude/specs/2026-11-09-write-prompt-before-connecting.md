@@ -3,6 +3,10 @@
 Status: Approved design (the owner's comments on the onboarding UX review, 2026-11-09)
 Findings: SA-05, SA-08, SA-10. SA-02 is declined: free engines exist to test that the product works, are low quality, and do not become the first path.
 
+## Follow-up decision (2026-11-09): SA-01
+
+The owner declined the free shortcut SA-01 proposed. Make the key gate clearer instead: `ConnectKeyCallout` says what is needed and why, and gives two steps, a link to the vendor's key page and pasting the key into Connections. `Connect key` already opens that dialog with the provider's field focused, and validation and storage live there, so there is no second paste field. `alternative`, which had no caller, is removed. The provider order does not change.
+
 ## Context
 
 A guest with no provider key saw a dimmed, inert workspace, so they could not write a prompt until they had fetched a paid key. The owner's direction is to get the commitment after the prompt is typed, and to let that same prompt run on a provider the person does have a key for. The sign-up page never said what an account adds. Retired models appeared in first-run model lists at twice their successor's price.

@@ -726,7 +726,7 @@ describe('GenerationInterface fal image generation', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderInterface(textToImage, { onOpenConnections });
 
-    expect(screen.getByText('Add your fal.ai key')).toBeTruthy();
+    expect(screen.getByText('Generating needs your own fal.ai API key')).toBeTruthy();
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A paper city' } });
     fireEvent.click(screen.getByRole('button', { name: 'Connect fal.ai key to generate' }));
 
@@ -1676,7 +1676,7 @@ describe('GenerationInterface without a key', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderInterface(textToImage, { apiKey: '', onOpenConnections });
 
-    expect(screen.getByText('Add your Google Gemini key')).toBeTruthy();
+    expect(screen.getByText('Generating needs your own Google Gemini API key')).toBeTruthy();
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A paper city' } });
     fireEvent.click(screen.getByRole('button', { name: 'Connect Google Gemini key to generate' }));
 
@@ -1708,6 +1708,18 @@ describe('GenerationInterface without a key', () => {
     expect(useAppStore.getState().engine).toBe('pollinations');
   });
 
+  it('says what the Create image gate needs and links Google\'s key page (SA-01)', () => {
+    const onOpenConnections = vi.fn();
+    renderInterface(textToImage, { apiKey: '', onOpenConnections });
+
+    expect(screen.getByRole('heading', { name: 'Generating needs your own Google Gemini API key' })).toBeTruthy();
+    expect(screen.getByText(/run on your Google Gemini account and are billed there/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: /aistudio\.google\.com\/apikey/ }).getAttribute('href')).toBe('https://aistudio.google.com/apikey');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connect key' }));
+    expect(onOpenConnections).toHaveBeenCalledWith('gemini');
+  });
+
   it('leaves the free engines to the rail rather than the key card', () => {
     renderInterface(textToImage, { apiKey: '' });
 
@@ -1716,7 +1728,7 @@ describe('GenerationInterface without a key', () => {
     chooseEngine(/Pollinations/);
 
     expect(useAppStore.getState().engine).toBe('pollinations');
-    expect(screen.queryByText('Add your Google Gemini key')).toBeNull();
+    expect(screen.queryByText('Generating needs your own Google Gemini API key')).toBeNull();
   });
 
   it('drops the last press\'s error when the engine changes', async () => {

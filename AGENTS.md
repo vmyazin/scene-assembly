@@ -146,9 +146,10 @@
 
 - **No key for the image workspace's engine, or a stale error after switching** →
   `GenerationInterface` wraps its layout in the shared `ConnectionGate` (the engine row
-  stays outside it, so switching is always possible) and passes `alternative`: a
-  "Use Pollinations instead · free, no key" button, offered only in the browser, since a
-  background Pollinations job still needs a saved connection. Every keyed engine is
+  stays outside it, so switching is always possible). Do not add a free-engine shortcut to
+  the key callout: the free engines exist to test that the product works and are low
+  quality (owner's decision on SA-01 and SA-02, 2026-11-09). `ConnectKeyCallout` says what is
+  needed and links the vendor's key page from `KEY_SOURCES`. Every keyed engine is
   checked before the request, Gemini included; without that check a guest's first press
   came back "API key is required" twice with no way forward (UX audit H1). Engine and
   model changes call `clearSubmissionFeedback`, which also resets the mutation and any

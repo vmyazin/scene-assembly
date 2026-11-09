@@ -21,6 +21,14 @@ describe('the API connections dialog opened for one provider', () => {
     );
   });
 
+  it('aims at the Gemini field when the Create image gate opens it (SA-01)', async () => {
+    render(<ApiKeyConfig open onOpenChange={() => undefined} focusProvider="gemini" />);
+
+    expect(document.querySelector('[data-provider="gemini"]')).toHaveClass('border-2');
+    await waitFor(() => expect(screen.getByLabelText('Gemini API key')).toHaveFocus());
+    expect(screen.getByRole('link', { name: /aistudio\.google\.com\/apikey/ })).toHaveAttribute('href', 'https://aistudio.google.com/apikey');
+  });
+
   it('leaves every card plain when opened from the header', async () => {
     render(<ApiKeyConfig open onOpenChange={() => undefined} />);
 
