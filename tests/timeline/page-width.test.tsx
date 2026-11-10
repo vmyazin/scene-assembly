@@ -43,16 +43,26 @@ afterEach(() => {
 /**
  * The timeline used to widen this page to the account console's 110rem column.
  * It runs on /timeline with a shell of its own now — a fixed three-band editor
- * rather than a document — so the studio is back to one width, and the only
- * thing left here is the way in and the way old links get there.
+ * rather than a document — so the studio is back to one width. The header row
+ * above it is capped separately, at that same 110rem.
  */
 describe('studio page column', () => {
   it.each([null, 'video'])('keeps the %s workspace on the studio column', (workspace) => {
-    const { main, header } = renderAt(workspace);
+    const { main } = renderAt(workspace);
 
     expect(main.className).toContain('max-w-7xl');
     expect(main.className).not.toContain('max-w-[110rem]');
-    expect(header.className).toContain('max-w-7xl');
+  });
+
+  it.each([null, 'video'])('runs the %s header row wider than the column beneath it', (workspace) => {
+    // The header's cap is its own, not the studio's: the row reaches the
+    // account console's 110rem so the identity control sits near the screen's
+    // edge, and the workspaces stay where they were.
+    const { main, header } = renderAt(workspace);
+
+    expect(header.className).toContain('max-w-[110rem]');
+    expect(header.className).not.toContain('max-w-7xl');
+    expect(main.className).not.toContain('max-w-[110rem]');
   });
 });
 

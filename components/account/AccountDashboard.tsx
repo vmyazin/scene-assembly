@@ -7,7 +7,8 @@ import AccountConsole from './AccountConsole';
 import AccountPageShell from './AccountPageShell';
 import { AccountSurface } from './AccountSurface';
 import ApiKeyConfig from '@/components/ApiKeyConfig';
-import { accountChanged, refreshAccount } from '@/lib/account/session';
+import { refreshAccount } from '@/lib/account/session';
+import { signOut as signOutAccount } from '@/lib/account/sign-out';
 import { useAccountStore } from '@/store/useAccountStore';
 
 export default function AccountDashboard() {
@@ -52,17 +53,9 @@ export default function AccountDashboard() {
     setBusyScope(capturedScope);
     setErrorState(null);
     try {
-      const response = await fetch('/api/account/sign-out', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Account-Id': ownerId },
-        body: JSON.stringify({ returnTo: '/account' }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? 'Could not sign out.');
-      if (currentScope() !== capturedScope) return;
-      accountChanged(true);
-      await refreshAccount().catch(() => undefined);
-      router.replace('/sign-in');
+      // /account has nothing to show a guest, so this caller moves on to
+      // sign-in. The studio header shares the helper and stays put.
+      if (await signOutAccount(ownerId, ownerEpoch, '/account')) router.replace('/sign-in');
     } catch (reason) {
       if (currentScope() === capturedScope) setErrorState({ scope: capturedScope, message: reason instanceof Error ? reason.message : 'Could not sign out.' });
     } finally {

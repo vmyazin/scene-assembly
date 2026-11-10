@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // Same mocks as tests/spend/entry-points.test.tsx, which also renders Home.
@@ -58,8 +58,10 @@ describe('the footer account link', () => {
 
     renderHome();
 
-    expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/sign-in');
-    expect(screen.queryByRole('link', { name: 'Account' })).not.toBeInTheDocument();
+    // Scoped to the footer: the studio header carries a Sign in link of its own.
+    const footer = within(screen.getByRole('contentinfo'));
+    expect(footer.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/sign-in');
+    expect(footer.queryByRole('link', { name: 'Account' })).not.toBeInTheDocument();
   });
 
   it('waits for a definite answer before offering to sign anyone in', () => {

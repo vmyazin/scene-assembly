@@ -67,7 +67,8 @@ export default function Studio() {
   // The timeline used to widen this column to the account console's 110rem,
   // because a horizontal track beside the export panel is the widest thing in
   // the app. It runs on /timeline now with a shell of its own, so the studio is
-  // back to one width.
+  // back to one width. This is `main` only: the header caps its own row (wider,
+  // at the account console's 110rem) and is not handed this value.
   const columnWidth = 'max-w-7xl';
 
   const selectWorkspace = (nextWorkspace: 'image' | 'video') => {
@@ -119,7 +120,6 @@ export default function Studio() {
       <StudioHeader
         active={isHome ? 'home' : activeWorkspace}
         onSelectWorkspace={selectWorkspace}
-        columnWidth={columnWidth}
       />
 
       {/* Main Content */}

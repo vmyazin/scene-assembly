@@ -1,5 +1,9 @@
 # Optional accounts and durable cloud generation
 
+## Follow-up (2026-11) — one identity control in the studio header
+
+The "no new account calls to action in the existing layout" rule below is narrowed to account *promotion*: no sign-up banners, upsell copy, or account prompts inside workspaces. The studio header carries exactly one identity control at its right edge: for signed-in users an account menu (Account, Spend, Connections, Connected agents, MCP docs, Interface sounds, Sign out); for guests a quiet, secondary "Sign in" link that is never styled as a primary button. Signing out from that menu leaves the person on the page as a guest; signing out on `/account` still goes to `/sign-in`.
+
 ## Follow-up decision — 2026-09-05 dedicated account dashboard
 
 The user requested `/account` for signed-in account data. This supersedes placing the signed-in management panels on `/sign-in` and `/sign-up`: those remain authentication entry pages and route authenticated users to `/account`. The new page owns identity, sign-out, library/storage/jobs, saved connections, explicit imports, and account deletion by composing existing shared components. Guests resolve to `/sign-in`; loading or service-unavailable states must not be mistaken for guests. Successful sign-in returns to `/account`. No new studio/global account calls to action are authorized by this change.

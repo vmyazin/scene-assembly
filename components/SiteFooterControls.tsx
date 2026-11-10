@@ -91,9 +91,10 @@ export function FooterLinks() {
 /**
  * A studio preference rather than an account one, so it lives with the page
  * whose sounds it governs. The footer specifically: it is the only place
- * reachable without signing in AND at every width — the header's toggle is
- * `sm:`-gated and the command palette needs a keyboard, which between them left
- * a guest on a phone with no way to silence the studio.
+ * reachable without signing in AND at every width — the header's switch is in
+ * the account menu, which a guest does not have, and the command palette needs
+ * a keyboard, which between them would leave a guest on a phone with no way to
+ * silence the studio.
  */
 export function FooterSoundToggle() {
   const uiSoundsEnabled = useAppStore((s) => s.uiSoundsEnabled);
@@ -106,7 +107,7 @@ export function FooterSoundToggle() {
         onChange={(event) => setUiSoundsEnabled(event.target.checked)}
         className="h-3.5 w-3.5 accent-[var(--neon-cyan)]"
       />
-      {/* Follows the state, the way the header's button already does. */}
+      {/* Follows the state, the way the account menu's row does. */}
       {uiSoundsEnabled ? <Volume2 size={13} aria-hidden="true" /> : <VolumeX size={13} aria-hidden="true" />}
       Interface sounds
     </label>
