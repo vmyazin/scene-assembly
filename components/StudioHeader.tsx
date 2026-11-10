@@ -4,14 +4,14 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Check, Command as CommandIcon, Key, Library as LibraryIcon, Volume2, VolumeX } from 'lucide-react';
+import { Check, Command as CommandIcon, Key, Library as LibraryIcon } from 'lucide-react';
 
 import ApiKeyConfig from '@/components/ApiKeyConfig';
 import { BrandWordmark } from '@/components/BrandMark';
 import { CommandPalette } from '@/components/CommandPalette';
+import HeaderAccountMenu from '@/components/HeaderAccountMenu';
 import LibraryOverlay from '@/components/LibraryOverlay';
 import { brand } from '@/lib/brand';
-import { setUiSoundsEnabled } from '@/lib/notify/chime';
 import { useAccountStore } from '@/store/useAccountStore';
 import { useAppStore } from '@/store/useAppStore';
 import { useConnectionsDialog } from '@/store/useConnectionsDialog';
@@ -34,11 +34,21 @@ interface StudioHeaderProps {
    * beneath it — the same rule `AccountPageShell` follows for the console.
    */
   fullBleed?: boolean;
-  /** The column the studio centres on. Ignored when `fullBleed`. */
-  columnWidth?: string;
   /**
-   * The generation chime. A studio control: it announces that a *generation*
-   * finished, and the editor generates nothing.
+   * The cap on the header's own row. Ignored when `fullBleed`.
+   *
+   * Deliberately not the studio's content column: the row runs to the 110rem
+   * `/account` already uses, so the identity control sits near the screen's
+   * right edge, while `main` below stays at 7xl. `Studio` used to pass its
+   * column width in here, which is why the two are separate props now —
+   * changing only this default would have left the homepage header at 7xl.
+   */
+  headerWidth?: string;
+  /**
+   * Whether the account menu offers the Interface sounds switch. A studio
+   * control: the chime announces that a *generation* finished, and the editor
+   * generates nothing. The header's own sound button is gone; guests keep the
+   * footer's control and the ⌘K command.
    */
   showChime?: boolean;
   /** Workspace-specific controls, rendered before the shared cluster. */
@@ -64,7 +74,7 @@ export default function StudioHeader({
   active,
   onSelectWorkspace,
   fullBleed = false,
-  columnWidth = 'max-w-7xl',
+  headerWidth = 'max-w-[110rem]',
   showChime = true,
   actions,
 }: StudioHeaderProps) {
@@ -133,7 +143,6 @@ export default function StudioHeader({
   );
   const savedConnections = useAccountStore((s) => s.session?.connections?.length ?? 0);
   const hasHydrated = useAppStore((s) => s.hasHydrated);
-  const uiSoundsEnabled = useAppStore((s) => s.uiSoundsEnabled);
   const hasKey = hasHydrated && (hasBrowserKey || savedConnections > 0);
 
   const keyDialogOpen = useConnectionsDialog((s) => s.open);
@@ -163,12 +172,21 @@ export default function StudioHeader({
       <header ref={headerRef} className="relative top-0 z-50 shrink-0 sm:sticky border-b border-[var(--border)] bg-[hsl(var(--tint-hue)_38%_5%/0.72)] backdrop-blur-xl">
         <div
           className={`w-full px-4 py-3 sm:px-8 sm:py-3.5 md:px-12 md:py-4 lg:px-16 ${
-            fullBleed ? '' : `${columnWidth} mx-auto`
+            fullBleed ? '' : `${headerWidth} mx-auto`
           }`}
         >
           {/* Wraps below `sm`: the workspace tabs drop to a full-width second
-              row. In one row at 375px the logo slid under the Image tab. */}
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 sm:flex-nowrap">
+              row. In one row at 375px the logo slid under the Image tab.
+
+              From `sm` up the row packs from the left: the tabs sit beside the
+              wordmark and only the last cluster is pushed right (`sm:ml-auto`
+              on it). Three items under `justify-between` put the tabs wherever
+              the leftover space happened to split, which was fine while a
+              tagline filled the left side and the row stopped at 7xl; at
+              110rem without it they floated almost, but not quite, in the
+              centre. `justify-between` stays below `sm`, where it is what
+              separates the wordmark from the buttons on row one. */}
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 sm:flex-nowrap sm:justify-start lg:gap-x-8">
             <Link
               href="/"
               aria-label="Go to Scene Assembly home"
@@ -189,8 +207,6 @@ export default function StudioHeader({
                   <span className="sr-only">{brand.name}</span>
                   <BrandWordmark className="h-8 w-auto flex-shrink-0 text-[var(--foreground)] sm:h-9" />
                 </span>
-                <span className="hidden h-3.5 w-px bg-[var(--border-hover)] md:inline-block" />
-                <span className="eyebrow hidden md:inline">{brand.tagline}</span>
               </motion.div>
             </Link>
 
@@ -248,7 +264,7 @@ export default function StudioHeader({
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.05 }}
-              className="flex flex-shrink-0 items-center gap-2"
+              className="flex flex-shrink-0 items-center gap-2 sm:ml-auto"
             >
               {actions}
 
@@ -261,18 +277,6 @@ export default function StudioHeader({
                 <LibraryIcon size={13} />
                 <span className="hidden sm:inline">Library</span>
               </button>
-
-              {showChime && (
-                <button
-                  onClick={() => setUiSoundsEnabled(!uiSoundsEnabled)}
-                  className="hidden items-center rounded-[9px] border border-[var(--border)] px-2.5 py-2 text-[var(--foreground-muted)] transition-colors hover:border-[var(--border-hover)] hover:text-[var(--foreground)] sm:inline-flex"
-                  title={uiSoundsEnabled ? 'Mute interface sounds' : 'Play interface sounds'}
-                  aria-label={uiSoundsEnabled ? 'Mute interface sounds' : 'Play interface sounds'}
-                  aria-pressed={uiSoundsEnabled}
-                >
-                  {uiSoundsEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
-                </button>
-              )}
 
               <button
                 onClick={() => setPaletteOpen(true)}
@@ -291,6 +295,9 @@ export default function StudioHeader({
                 {hasKey ? <Check size={15} className="text-emerald-400" /> : <Key size={15} />}
                 <span>Connections</span>
               </button>
+
+              {/* Last, so identity is where people look for it: the far right. */}
+              <HeaderAccountMenu showSounds={showChime} />
             </motion.div>
           </div>
         </div>
