@@ -81,8 +81,9 @@ describe('the header identity slot for a guest', () => {
     // No fill, no border, neither shared button style: account promotion is
     // what AGENTS.md rules out, and a filled button is promotion.
     expect(link.className).not.toMatch(/btn-primary|btn-secondary|\bbg-|\bborder\b/);
-    // The text hides below `sm`, where the label is all that names the icon.
-    expect(within(link).getByText('Sign in').className).toContain('hidden sm:inline');
+    // The text hides below `lg` (the one-row header has no room for it at
+    // 768), where the label is all that names the icon.
+    expect(within(link).getByText('Sign in').className).toContain('hidden lg:inline');
   });
 
   it('leaves Connections as the primary action and offers no account menu', () => {
@@ -345,6 +346,31 @@ describe('the trimmed header', () => {
     expect(within(header).getByRole('button', { name: 'Connections' })).toBeInTheDocument();
     expect(within(header).getByTitle('Open command menu (⌘K)')).toBeInTheDocument();
     expect(within(within(header).getByRole('navigation', { name: 'Workspace' })).getAllByText(/^(Image|Video|Timeline)$/)).toHaveLength(3);
+  });
+
+  it('puts the workspace tabs beside the wordmark, not in the middle of the row', () => {
+    // Three items under `justify-between` left the tabs floating near the
+    // centre once the row widened to 110rem and lost its tagline. From `sm` up
+    // the row packs left and only the last cluster is pushed to the right.
+    renderHeader();
+    const home = screen.getByRole('link', { name: 'Go to Scene Assembly home' });
+    const tabs = screen.getByRole('navigation', { name: 'Workspace' });
+    const row = home.parentElement!;
+    const cluster = screen.getByRole('button', { name: 'Connections' }).parentElement!;
+
+    expect(Array.from(row.children)).toEqual([home, tabs, cluster]);
+    expect(row.className).toContain('sm:justify-start');
+    expect(row.className).not.toMatch(/sm:justify-between/);
+    expect(cluster.className).toContain('sm:ml-auto');
+    expect(tabs.className).not.toMatch(/m[lx]-auto/);
+    // Phones keep two rows: wordmark and buttons apart on the first, the tabs
+    // full width on the second.
+    expect(row.className).toContain('flex-wrap');
+    expect(row.className).toContain('justify-between');
+    expect(tabs.className).toContain('order-last');
+    expect(tabs.className).toContain('w-full');
+    expect(tabs.className).toContain('sm:order-none');
+    expect(tabs.className).toContain('sm:w-auto');
   });
 
   it('leaves the footer its sound control, for guests who have no menu', () => {

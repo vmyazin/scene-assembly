@@ -73,10 +73,13 @@ export default function HeaderAccountMenu({ showSounds = true }: { showSounds?: 
         href="/sign-in"
         aria-label="Sign in"
         data-account-slot="guest"
-        className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-full px-2 text-sm text-[var(--foreground-muted)] transition-colors hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neon-cyan)] sm:px-2.5"
+        className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-full px-2 text-sm text-[var(--foreground-muted)] transition-colors hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neon-cyan)] lg:px-2.5"
       >
         <UserRound size={16} aria-hidden="true" />
-        <span className="hidden sm:inline">Sign in</span>
+        {/* From `lg`, not `sm`: with the words the one-row header is 11px too
+            wide at 768, and the wordmark gave up the difference until it
+            touched the Image tab. The label names the icon below that. */}
+        <span className="hidden lg:inline">Sign in</span>
       </Link>
     );
   }

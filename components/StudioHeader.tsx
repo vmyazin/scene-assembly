@@ -176,8 +176,17 @@ export default function StudioHeader({
           }`}
         >
           {/* Wraps below `sm`: the workspace tabs drop to a full-width second
-              row. In one row at 375px the logo slid under the Image tab. */}
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 sm:flex-nowrap">
+              row. In one row at 375px the logo slid under the Image tab.
+
+              From `sm` up the row packs from the left: the tabs sit beside the
+              wordmark and only the last cluster is pushed right (`sm:ml-auto`
+              on it). Three items under `justify-between` put the tabs wherever
+              the leftover space happened to split, which was fine while a
+              tagline filled the left side and the row stopped at 7xl; at
+              110rem without it they floated almost, but not quite, in the
+              centre. `justify-between` stays below `sm`, where it is what
+              separates the wordmark from the buttons on row one. */}
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 sm:flex-nowrap sm:justify-start lg:gap-x-8">
             <Link
               href="/"
               aria-label="Go to Scene Assembly home"
@@ -255,7 +264,7 @@ export default function StudioHeader({
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.05 }}
-              className="flex flex-shrink-0 items-center gap-2"
+              className="flex flex-shrink-0 items-center gap-2 sm:ml-auto"
             >
               {actions}
 
