@@ -2,6 +2,8 @@
 
 Status: Approved design
 
+**Follow-up decision, 2026-11-12:** Seedream 5.5 and Seedream 5.5 Edit are added ahead of Seedream 5.0 Pro. See `docs/claude/specs/2026-11-12-seedream-5-5.md` for the ids, the calculator quotes and why every input image is billed. Nothing below is overridden.
+
 ## Context
 
 Extend the Atlas provider from PR #15 with Kling 4.0 multi-keyframe on the existing first-and-last mode, three video edits, and the cheaper image models Atlas actually sells. Newsletter prices were checked against Atlas’s public calculator (`POST https://api.atlascloud.ai/api/v1/model/calculate`) and each model’s schema on 2026-11-03. A headline that disagreed with the calculator is not the catalog rate.

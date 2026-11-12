@@ -15,11 +15,12 @@ export interface Feature {
 export interface GenerationConfig {
   // Only ratios the Gemini image model supports (per @google/genai ImageConfig).
   aspectRatio?: '1:1' | '2:3' | '3:2' | '3:4' | '4:3' | '9:16' | '16:9' | '21:9';
-  imageSize?: '1K' | '2K' | '4K';
+  /** `1.5K` is Atlas Seedream 5.5's middle tier; no other engine publishes it. */
+  imageSize?: '1K' | '1.5K' | '2K' | '4K';
   useGoogleSearch?: boolean;
   /** fal Nano Banana 2.1 `thinking_level`. Medium is the vendor default. */
   thinkingLevel?: 'minimal' | 'medium' | 'high';
-  /** GPT Image and Seedream Flash. Absent leaves the vendor default. */
+  /** GPT Image, Seedream Flash and Seedream 5.5. Absent leaves the vendor default. */
   background?: 'auto' | 'opaque' | 'transparent';
 }
 

@@ -207,8 +207,11 @@ function compactUsd(usd: number): string {
 
 const RATE_UNITS: Record<ProviderRate['per'], string> = { second: '/s', image: '/img', video: '/clip' };
 
-function rateFrom(rate: ProviderRate): string {
-  const usd = rate.usd ?? Math.min(...Object.values(rate.usdByResolution));
+function rateFrom(rate: ProviderRate, requiredInputs = 0): string {
+  const usd = (rate.usd ?? Math.min(...Object.values(rate.usdByResolution)))
+    // An edit-only model cannot run without a reference, so where every input
+    // is billed the cheapest real run includes one (Seedream 5.5 Edit).
+    + requiredInputs * (rate.inputImageUsd ?? 0);
   return `${compactUsd(usd)}${RATE_UNITS[rate.per]}`;
 }
 
@@ -226,8 +229,8 @@ export function rateStartLabel(rate: string | null): string | undefined {
   return rate.replace(/^(\$[\d.]+)[–-]\$?[\d.]+/, '$1').replace(/\s*\/\s*/g, '/');
 }
 
-function fromCell(model: Pick<ProviderModel, 'rate' | 'price'>): SpecCell {
-  if (model.rate) return text(rateFrom(model.rate));
+function fromCell(model: Pick<ProviderModel, 'rate' | 'price'>, requiredInputs = 0): SpecCell {
+  if (model.rate) return text(rateFrom(model.rate, requiredInputs));
   if (!model.price) return DASH;
   if (model.price === 'metered') return text('metered', 'subtle');
   return text(compactPrice(model.price));
@@ -275,7 +278,7 @@ export function providerVideoSpecs(model: ProviderModel, inputMode?: string, at 
 /** Aggregator image rows: From · Refs · Edit. */
 export function providerImageSpecs(model: ProviderModel): SpecCell[] {
   return [
-    fromCell(model),
+    fromCell(model, model.modes.includes('text') ? 0 : 1),
     model.maxInputImages === undefined ? DASH : text(String(model.maxInputImages)),
     { kind: 'mark', on: model.modes.includes('image'), label: 'Takes a reference image' },
   ];

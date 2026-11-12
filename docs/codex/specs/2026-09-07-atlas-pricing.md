@@ -2,6 +2,8 @@
 
 Status: Approved design
 
+**Follow-up decision, 2026-11-12:** the $0.003 rule below (first reference included) is Seedream 5.0 Pro's only. Seedream 5.5 bills every input image, through `inputImageUsd`. See `docs/claude/specs/2026-11-12-seedream-5-5.md`.
+
 ## Context and goals
 
 The requested correction replaces Seedance Mini/Fast starting prices that were

@@ -1143,6 +1143,66 @@ function kling40(): ProviderModel[] {
 }
 
 /**
+ * Seedream 5.5 (ByteDance version 261028, GA 2026-11-10): the current Seedream.
+ * On Atlas, not Runware. Read 2026-11-12:
+ *
+ * - Ids and bodies: https://www.atlascloud.ai/models/bytedance/seedream-v5.5/text-to-image
+ *   and https://www.atlascloud.ai/models/bytedance/seedream-v5.5/edit, with
+ *   their schemas under static.atlascloud.ai/model/schema/.
+ * - Rates: Atlas's public calculator (`POST /api/v1/model/calculate`), the same
+ *   source as Seedream 5.0 Pro's $0.036. It quotes `discount: "80"` on the
+ *   page's SKU table: $0.016 up to 2.61 MP (list $0.02), $0.028 above it
+ *   (list $0.035), and $0.0064 per input image (list $0.008). The SKU table is
+ *   the list price; `SEEDREAM_55_LIST_USD` keeps it for the day the discount ends.
+ * - Every input image is billed, the first included. That is not Seedream 5.0
+ *   Pro's rule (first included, $0.003 per extra), so the rate carries
+ *   `inputImageUsd`, not `extraInputImageUsd`.
+ * - Runware lists `bytedance:seedream@5.5` at the list prices and marks the
+ *   model page `coming-soon`, so there is no second copy of this model there.
+ *
+ * 2K is first because it is the vendor default (`2048*2048`): a request with
+ * no size renders, and is priced at, 2K. Layer decomposition is a separate
+ * endpoint and is not offered.
+ */
+export const SEEDREAM_55_LIST_USD = { '2k': 0.035, '1.5k': 0.02, '1k': 0.02, inputImage: 0.008 } as const;
+
+function seedream55(): ProviderModel[] {
+  const tiers = { '2k': 0.028, '1.5k': 0.016, '1k': 0.016 };
+  const shared = {
+    kind: 'image' as const,
+    sizes: ['2K', '1.5K', '1K'].map((label) => ({ label, preset: label.toLowerCase() })),
+    backgrounds: [
+      { label: 'Auto', value: 'auto' as const },
+      { label: 'Opaque', value: 'opaque' as const },
+      { label: 'Transparent', value: 'transparent' as const },
+    ],
+  };
+  return [
+    {
+      ...shared,
+      id: 'bytedance/seedream-v5.5/text-to-image',
+      label: 'Seedream 5.5',
+      fileCode: 'seedream-v5_5',
+      modes: ['text'],
+      price: '$0.016 / image @ 1K–1.5K · $0.028 @ 2K',
+      rate: { usdByResolution: tiers, per: 'image' },
+      note: 'The current Seedream. 1K and 1.5K cost $0.016, 2K costs $0.028 (20% under Atlas’s $0.02 / $0.035 list). Transparent backgrounds are PNG. Seedream v5.0 Pro stays below as a fallback.',
+    },
+    {
+      ...shared,
+      id: 'bytedance/seedream-v5.5/edit',
+      label: 'Seedream 5.5 Edit',
+      fileCode: 'seedream-v5_5-edit',
+      modes: ['image'],
+      price: '$0.016 / image @ 1K–1.5K · $0.028 @ 2K + $0.0064 / input image',
+      rate: { usdByResolution: tiers, per: 'image', inputImageUsd: 0.0064 },
+      maxInputImages: 10,
+      note: 'Editing only — it needs at least one reference. Up to 10, and every one adds $0.0064, the first included. The picture keeps the shape you choose, not the reference’s.',
+    },
+  ];
+}
+
+/**
  * Seedream 5.0 Flash. Calculator, 2026-11-03: $0.018 at every published size,
  * including 2048×2048 and 3136×1344. The edit takes 1–10 images and
  * `background` of opaque or transparent. Transparent cannot be JPEG, so the
@@ -1371,6 +1431,8 @@ const ATLAS_MODELS: ProviderModel[] = [
     rate: { usd: 0.04, per: 'image' },
     maxInputImages: 1,
   },
+  // Ahead of 5.0 Pro so the current Seedream is the first one in the list.
+  ...seedream55(),
   {
     id: 'bytedance/seedream-v5.0-pro/text-to-image',
     label: 'Seedream v5.0 Pro',
@@ -1381,7 +1443,7 @@ const ATLAS_MODELS: ProviderModel[] = [
     // studio imageSize setting. Do not charge the unused 2K tier here.
     price: '$0.036 / image @ 1.5K',
     rate: { usd: 0.036, per: 'image' },
-    note: "ByteDance's flagship — the best prompt adherence and in-image typography here.",
+    note: 'The previous Seedream flagship, kept as a fallback for Seedream 5.5. Strong prompt adherence and in-image typography, at one 1.5K size.',
   },
   {
     id: 'bytedance/seedream-v5.0-pro/edit',
@@ -1394,7 +1456,7 @@ const ATLAS_MODELS: ProviderModel[] = [
     // First input is included; additional inputs are charged (read 2026-09-07).
     rate: { usd: 0.036, per: 'image', extraInputImageUsd: 0.003 },
     maxInputImages: 10,
-    note: 'Editing only — it needs at least one reference. The first is included in the price; each one after it adds $0.003.',
+    note: 'The previous Seedream editor, kept as a fallback for Seedream 5.5 Edit. It needs at least one reference. The first is included in the price; each one after it adds $0.003.',
   },
   {
     id: 'ltx-2.3-quality/text-to-video',

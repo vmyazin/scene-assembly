@@ -40,6 +40,13 @@
   `docs/codex/specs/2026-11-03-atlas-models.md`. fal promotions resolve at call
   time and saved job time, because a running Worker can outlive the sale.
 
+- **Seedream 5.5, or which Seedream is current** → first read
+  `docs/claude/specs/2026-11-12-seedream-5-5.md`. It is on Atlas at the
+  calculator's quote, 20% under the page's SKU table. Its edit bills every
+  input image through `inputImageUsd`; 5.0 Pro includes the first through
+  `extraInputImageUsd`, and merging the two fields misprices one of them.
+  Saved 5.0 Pro selections are never migrated, because no default ever chose it.
+
 - **Runware P-Video-Edit sale pricing** → first read
   `docs/codex/specs/2026-09-11-p-video-edit.md` (the 2026-11-03 follow-up).
   The catalog keeps list prices; `lib/providers/p-video-edit-promo.ts` applies

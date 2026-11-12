@@ -242,6 +242,49 @@ export const ATLAS_SEEDREAM_FLASH_DIMENSIONS: Record<string, Dimensions> = {
 };
 
 /**
+ * Seedream 5.5 publishes 24 sizes: eight shapes in each of three tiers. The
+ * tier is a billing boundary (2K is above 2.61 MP, 1.5K and 1K are below it),
+ * so the table is keyed by tier first and the catalog's size preset picks it.
+ * Every pair is in the `size` enum of both the text-to-image and edit schemas,
+ * read 2026-11-12.
+ */
+export const ATLAS_SEEDREAM_55_DIMENSIONS: Record<string, Record<string, Dimensions>> = {
+  '2k': {
+    '1:1': [2048, 2048],
+    '16:9': [2816, 1584],
+    '9:16': [1584, 2816],
+    '4:3': [2368, 1776],
+    '3:4': [1776, 2368],
+    '3:2': [2496, 1664],
+    '2:3': [1664, 2496],
+    '21:9': [3136, 1344],
+  },
+  '1.5k': {
+    '1:1': [1536, 1536],
+    '16:9': [2048, 1152],
+    '9:16': [1152, 2048],
+    '4:3': [1792, 1344],
+    '3:4': [1344, 1792],
+    '3:2': [1872, 1248],
+    '2:3': [1248, 1872],
+    '21:9': [2352, 1008],
+  },
+  '1k': {
+    '1:1': [1024, 1024],
+    '16:9': [1424, 800],
+    '9:16': [800, 1424],
+    '4:3': [1152, 864],
+    '3:4': [864, 1152],
+    '3:2': [1248, 832],
+    '2:3': [832, 1248],
+    '21:9': [1568, 672],
+  },
+};
+
+/** The tier a request with no size, or a size this model does not publish, renders: the vendor default. */
+export const ATLAS_SEEDREAM_55_DEFAULT_TIER = '2k';
+
+/**
  * MAI-Image-2.6: each edge is 768–2346 and width × height is at most 2,359,296.
  * These pairs sit on that ceiling where the ratio allows it.
  */
@@ -329,6 +372,9 @@ export const ATLAS_GPT_IMAGE_DIMENSIONS: Record<string, Dimensions> = {
 /** Atlas picks a table per model, since not every model shares one. */
 export const isSeedream = (model: string) => model.startsWith('bytedance/seedream-');
 
+/** Seedream 5.5 has three size tiers and its own body. It must not inherit Pro's pairs either. */
+export const isSeedream55 = (model: string) => model.startsWith('bytedance/seedream-v5.5/');
+
 /** Flash has its own size enum. It must not inherit Pro's pairs. */
 export const isSeedreamFlash = (model: string) => model.startsWith('bytedance/seedream-v5.0-flash');
 
@@ -353,12 +399,20 @@ export const isLumaUni = (model: string) => model.startsWith('luma/uni-');
 
 /**
  * The pixel table an Atlas image model actually sends, or null when this app
- * has no pair to show. Flash is checked before Seedream because it shares that
- * prefix. MAI edit takes `size: 'default'` and no ratio, so it has no table.
+ * has no pair to show. Seedream 5.5 and Flash are checked before Seedream
+ * because they share that prefix. MAI edit takes `size: 'default'` and no ratio, so it has no table.
  */
-export function atlasDimensionTable(modelId: string | undefined): Record<string, Dimensions> | null {
+export function atlasDimensionTable(
+  modelId: string | undefined,
+  /** Size label or preset (`2K`, `1.5k`). Only Seedream 5.5 has a table per tier. */
+  tier?: string
+): Record<string, Dimensions> | null {
   if (modelId && (isNanoBanana2(modelId) || isNanoBanana21(modelId) || isLumaUni(modelId))) return null;
   if (modelId && isMaiImage(modelId) && modelId.endsWith('/edit')) return null;
+  if (modelId && isSeedream55(modelId)) {
+    return ATLAS_SEEDREAM_55_DIMENSIONS[tier?.toLowerCase() ?? ATLAS_SEEDREAM_55_DEFAULT_TIER]
+      ?? ATLAS_SEEDREAM_55_DIMENSIONS[ATLAS_SEEDREAM_55_DEFAULT_TIER];
+  }
   if (modelId && isSeedreamFlash(modelId)) return ATLAS_SEEDREAM_FLASH_DIMENSIONS;
   if (modelId && isMaiImage(modelId)) return ATLAS_MAI_DIMENSIONS;
   if (modelId && isSeedream(modelId)) return ATLAS_SEEDREAM_DIMENSIONS;
@@ -409,13 +463,15 @@ export function ratioDimensions(
 export function imageDimensions(
   engine: string,
   modelId: string | undefined,
-  aspectRatio: string | undefined
+  aspectRatio: string | undefined,
+  /** The selected size tier, for a model whose pixels depend on it. */
+  tier?: string
 ): Dimensions | null {
   if (engine === 'runware') return ratioDimensions(RUNWARE_IMAGE_DIMENSIONS, aspectRatio);
   if (engine === 'comet') return ratioDimensions(COMET_IMAGE_DIMENSIONS, aspectRatio);
   if (engine === 'pollinations') return ratioDimensions(POLLINATIONS_IMAGE_DIMENSIONS, aspectRatio);
   if (engine === 'atlas') {
-    const table = atlasDimensionTable(modelId);
+    const table = atlasDimensionTable(modelId, tier);
     return table ? ratioDimensions(table, aspectRatio) : null;
   }
   return null;
