@@ -326,7 +326,8 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
   /**
    * Atlas publishes a resolution tier per *model*, not per engine: Nano Banana 2
    * takes 1K/2K/4K at one flat price, its Lite tier publishes 1K alone, and the
-   * FLUX, Seedream and GPT Image models take no tier at all. So the control
+   * FLUX, Seedream 5.0 and GPT Image models take no tier at all, and Seedream
+   * 5.5 takes 2K/1.5K/1K at two prices. So the control
    * follows the catalog entry there rather than `supportsImageSize`, which can
    * only answer for a whole engine.
    */
@@ -358,7 +359,9 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
     ? geminiImageSize(activeGeminiModel, config.imageSize)
     : providerImageSizes
       ? (providerImageSizes.find((size) => size.label === config.imageSize) ?? providerImageSizes[0]).label
-      : config.imageSize ?? '1K';
+      // Seedream 5.5's 1.5K is not a size any other engine takes. Left in the
+      // shared setting after a switch, it would be sent to PiAPI or fal as written.
+      : RESOLUTION_OPTIONS.some((option) => option.value === config.imageSize) ? config.imageSize! : '1K';
 
   /**
    * The ratio list, told what each ratio actually resolves to.
@@ -377,7 +380,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
   const optionDimensions = (ratio: string) =>
     pollinationsFree
       ? pollinationsFreeDimensions(ratio)
-      : imageDimensions(activeEngineId, activeProviderModel ?? undefined, ratio);
+      : imageDimensions(activeEngineId, activeProviderModel ?? undefined, ratio, providerImageSizes ? selectedImageSize : undefined);
   // Ten options and a table lookup: cheap enough to derive each render.
   const aspectRatioOptions = ASPECT_RATIO_OPTIONS.map((option) => ({
     value: option.value,

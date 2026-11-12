@@ -18,6 +18,11 @@ describe('provider catalog rates', () => {
       'bytedance/seedance-v1-pro-fast/image-to-video': { usd: 0.009, per: 'second' },
       'bytedance/seedream-v5.0-pro/text-to-image': { usd: 0.036, per: 'image' },
       'bytedance/seedream-v5.0-pro/edit': { usd: 0.036, per: 'image', extraInputImageUsd: 0.003 },
+      // Seedream 5.5: calculator quote 2026-11-12, 80% of the $0.02 / $0.035 /
+      // $0.008 SKU table. Every input is billed, so the edit carries
+      // inputImageUsd rather than 5.0 Pro's extraInputImageUsd.
+      'bytedance/seedream-v5.5/text-to-image': { usdByResolution: { '2k': 0.028, '1.5k': 0.016, '1k': 0.016 }, per: 'image' },
+      'bytedance/seedream-v5.5/edit': { usdByResolution: { '2k': 0.028, '1.5k': 0.016, '1k': 0.016 }, per: 'image', inputImageUsd: 0.0064 },
       'bytedance/seedance-2.0-mini/text-to-video': { usdByResolution: { '480p': 0.0113, '720p': 0.0242, '1080p-SR': 0.0435 }, per: 'second' },
       'bytedance/seedance-2.0-mini/image-to-video': { usdByResolution: { '480p': 0.0113, '720p': 0.0242, '1080p-SR': 0.0435 }, per: 'second' },
       'bytedance/seedance-2.0-mini/reference-to-video': { usdByResolution: { '480p': 0.0113, '720p': 0.0242, '1080p-SR': 0.0435 }, per: 'second' },
@@ -208,7 +213,11 @@ function figuresOf(rate: NonNullable<ProviderModel['rate']>): number[] {
     ...Object.values(rate.audioUsdByResolution ?? {}),
     ...(rate.minimumUsd !== undefined ? [rate.minimumUsd] : []),
   ];
-  return rate.extraInputImageUsd === undefined ? base : [...base, rate.extraInputImageUsd];
+  return [
+    ...base,
+    ...(rate.extraInputImageUsd === undefined ? [] : [rate.extraInputImageUsd]),
+    ...(rate.inputImageUsd === undefined ? [] : [rate.inputImageUsd]),
+  ];
 }
 
 /**

@@ -140,6 +140,16 @@ export function resolveCatalogRate(
     }
     inputCost = Math.max(0, count - 1) * rate.extraInputImageUsd;
   }
+  // Seedream 5.5 bills every input image, the first included. Kept apart from
+  // the branch above: folding the two together would give one of them the
+  // other's first-image rule.
+  if (rate.inputImageUsd !== undefined) {
+    const count = controls.inputImages;
+    if (count === undefined || !Number.isInteger(count) || count < 0) {
+      return unknownFigure('catalog-rate', 'The reference count is required to estimate this model.');
+    }
+    inputCost += count * rate.inputImageUsd;
+  }
   if (rate.per === 'second') {
     if (durationSeconds === undefined || !Number.isFinite(durationSeconds) || !(durationSeconds > 0)) return unknownFigure('catalog-rate');
     const variable = usd * durationSeconds + inputCost;

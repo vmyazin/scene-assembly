@@ -149,6 +149,11 @@ export type ProviderRate = {
   per: 'image' | 'second' | 'video';
   /** The first reference is included; subsequent references are billed once per request. */
   extraInputImageUsd?: number;
+  /**
+   * Every reference is billed, the first included (Seedream 5.5: `count × rate`).
+   * Not the same rule as `extraInputImageUsd`, and a rate sets one or the other.
+   */
+  inputImageUsd?: number;
   audioUsdByResolution?: Record<string, number>;
   /**
    * Floor applied after `usd × seconds`. Aleph 2 publishes $0.224/s and still
@@ -342,7 +347,7 @@ export interface ImageRequest {
   /** Reference images as data URLs (`data:image/png;base64,…`). */
   images?: string[];
   aspectRatio?: string;
-  /** GPT Image and Seedream Flash `background`. Absent leaves the vendor default. */
+  /** GPT Image, Seedream Flash and Seedream 5.5 `background`. Absent leaves the vendor default. */
   background?: 'auto' | 'opaque' | 'transparent';
   /** Which input field this model's references belong in. */
   imageInput?: 'seed' | 'reference';

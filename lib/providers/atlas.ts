@@ -21,6 +21,7 @@ import {
   isNanoBanana2,
   isNanoBanana21,
   isSeedream,
+  isSeedream55,
   isSeedreamFlash,
   ratioDimensions,
 } from './output-size';
@@ -141,6 +142,23 @@ function atlasImageFields(
       n: 1,
       ...imageBackground(request),
       ...(images.length ? { images } : {}),
+    };
+  }
+
+  if (isSeedream55(model)) {
+    // The schema names `size`, `background`, `output_format` and, on the edit
+    // endpoint, `reference_images` (not 5.0's `images`, which would be dropped
+    // in silence). It has no `num_images`: one request is one image. The tier
+    // is resolved through the catalog, so an absent or unknown choice lands on
+    // the first published size, the vendor's own 2K default, and that is also
+    // the tier the ledger prices.
+    const tier = resolveSize('atlas', model, request.resolution)?.preset;
+    const [width, height] = ratioDimensions(atlasDimensionTable(model, tier) ?? ATLAS_IMAGE_DIMENSIONS, request.aspectRatio);
+    return {
+      ...base,
+      size: `${width}*${height}`,
+      ...imageBackground(request),
+      ...(model.endsWith('/edit') && images.length ? { reference_images: images } : {}),
     };
   }
 
