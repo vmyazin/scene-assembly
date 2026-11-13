@@ -48,6 +48,11 @@ it('accepts the Runway CloudFront distribution Comet Aleph returns, but not all 
   expect(jobView(await blocked('https://cloudfront.net/output.mp4')).canRetrySave).toBe(false);
 });
 
+it('re-opens a Kling 4.0 job blocked on Atlas\'s temp bucket, but not one on a sibling bucket',async()=>{
+  expect(jobView(await blocked('https://temp-24h-m4x2.oss-accelerate-overseas.aliyuncs.com/kling/out.mp4?Expires=1&Signature=x')).canRetrySave).toBe(true);
+  expect(jobView(await blocked('https://temp-24h-zz99.oss-accelerate-overseas.aliyuncs.com/out.mp4')).canRetrySave).toBe(false);
+});
+
 it('offers owner-requested manual links for unknown hosts without fetching them or enabling capture',async()=>{
   const url='https://new-provider-cdn.example.com/result.mp4?signature=private';
   const job=await blocked(url);

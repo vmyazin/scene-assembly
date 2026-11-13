@@ -9,8 +9,12 @@
  * allowed by exact host, for the same reason as Atlas's bucket above.
  * Atlas's Seedance 2.0 Fast hands back ByteDance's ModelArk bucket on Volcengine
  * TOS (seen on a live job on 2026-10-23); that bucket is allowed by exact host,
- * never volces.com, where anybody can create a bucket. */
-const RESULT_DOMAINS = ['fal.media', 'fal.ai', 'kie.ai', 'kieai.redpandaai.co', 'tempfile.ai', 'tempfile.redpandaai.co', 'redpandaai.co', 'runware.ai', 'atlascloud.ai', 'atlas-media.oss-us-west-1.aliyuncs.com', 'cometapi.com', 'filesystem.site', 'piapi.ai', 'theapi.app', 'dnznrvs05pmza.cloudfront.net', 'dashscope-463f.oss-accelerate.aliyuncs.com', 'ark-acg-ap-southeast-1.tos-ap-southeast-1.volces.com'];
+ * never volces.com, where anybody can create a bucket.
+ * Atlas's Kling 4.0 reference-to-video started handing back a 24-hour temp
+ * bucket on Alibaba's overseas OSS accelerate endpoint (seen on a live job on
+ * 2026-11-13); that one bucket is allowed by exact host, never the endpoint,
+ * whose other temp-24h-* buckets belong to whoever created them. */
+const RESULT_DOMAINS = ['fal.media', 'fal.ai', 'kie.ai', 'kieai.redpandaai.co', 'tempfile.ai', 'tempfile.redpandaai.co', 'redpandaai.co', 'runware.ai', 'atlascloud.ai', 'atlas-media.oss-us-west-1.aliyuncs.com', 'cometapi.com', 'filesystem.site', 'piapi.ai', 'theapi.app', 'dnznrvs05pmza.cloudfront.net', 'dashscope-463f.oss-accelerate.aliyuncs.com', 'ark-acg-ap-southeast-1.tos-ap-southeast-1.volces.com', 'temp-24h-m4x2.oss-accelerate-overseas.aliyuncs.com'];
 
 /** Browser navigation only. This MUST NOT authorize a Worker fetch: an unknown
  * public-looking hostname can resolve or redirect anywhere. Links are shown

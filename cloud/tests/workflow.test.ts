@@ -74,6 +74,10 @@ describe('background generation and capture',()=>{
     expect(safeResultUrl('https://ark-acg-ap-southeast-1.tos-ap-southeast-1.volces.com/doubao-seedance-2-0/out.mp4').hostname).toBe('ark-acg-ap-southeast-1.tos-ap-southeast-1.volces.com');
     for(const url of ['https://someone-else.tos-ap-southeast-1.volces.com/file','https://tos-ap-southeast-1.volces.com/file','https://volces.com/file'])expect(()=>safeResultUrl(url)).toThrow();
   });
+  it('accepts the temp bucket Atlas Kling 4.0 delivers from, and no sibling bucket on the overseas accelerate endpoint',()=>{
+    expect(safeResultUrl('https://temp-24h-m4x2.oss-accelerate-overseas.aliyuncs.com/kling/out.mp4').hostname).toBe('temp-24h-m4x2.oss-accelerate-overseas.aliyuncs.com');
+    for(const url of ['https://temp-24h-a1b2.oss-accelerate-overseas.aliyuncs.com/file','https://oss-accelerate-overseas.aliyuncs.com/file','https://temp-24h-m4x2.oss-accelerate.aliyuncs.com/file'])expect(()=>safeResultUrl(url)).toThrow();
+  });
 });
 
 describe('private video range downloads',()=>{
