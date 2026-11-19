@@ -394,6 +394,9 @@ export const isNanoBanana2 = (model: string) => /^google\/nano-banana-2(?:-lite)
 /** Nano Banana 2.1. Atlas hangs `-developer` off the model, then the mode. */
 export const isNanoBanana21 = (model: string) => model.startsWith('google/nano-banana-2.1');
 
+/** Kling Image 4.0 takes a ratio and a tier (`2k`/`4k`) and publishes no pixel pair. */
+export const isKlingImage4 = (model: string) => model.startsWith('kwaivgi/kling-image-v4.0/');
+
 /** Luma Uni 1 takes a ratio from its own enum and publishes no pixels either. */
 export const isLumaUni = (model: string) => model.startsWith('luma/uni-');
 
@@ -407,7 +410,7 @@ export function atlasDimensionTable(
   /** Size label or preset (`2K`, `1.5k`). Only Seedream 5.5 has a table per tier. */
   tier?: string
 ): Record<string, Dimensions> | null {
-  if (modelId && (isNanoBanana2(modelId) || isNanoBanana21(modelId) || isLumaUni(modelId))) return null;
+  if (modelId && (isNanoBanana2(modelId) || isNanoBanana21(modelId) || isLumaUni(modelId) || isKlingImage4(modelId))) return null;
   if (modelId && isMaiImage(modelId) && modelId.endsWith('/edit')) return null;
   if (modelId && isSeedream55(modelId)) {
     return ATLAS_SEEDREAM_55_DIMENSIONS[tier?.toLowerCase() ?? ATLAS_SEEDREAM_55_DEFAULT_TIER]

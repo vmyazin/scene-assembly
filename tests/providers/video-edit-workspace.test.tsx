@@ -147,7 +147,7 @@ it('does not carry P-Video-Edit Draft mode onto Seedance', () => {
   useDraftStore.setState({ prompt: '', references: [], controlValues: {} });
   render(<ProviderVideoWorkspace provider="runware" label="Runware" inputMode="edit" onBack={()=>{}} onOpenConnections={()=>{}}/>);
   fireEvent.click(screen.getByRole('checkbox', { name: 'Draft mode' }));
-  fireEvent.click(screen.getByRole('option', { name: /Seedance 2\.5/ }));
+  fireEvent.click(screen.getByRole('option', { name: 'Seedance 2.5' }));
   expect(screen.getByRole('checkbox', { name: 'Draft' })).not.toBeChecked();
 });
 
@@ -196,7 +196,7 @@ it.each(['browser', 'account'] as const)('keeps the edit result when switching m
   const result = () => container.querySelector('video');
   expect(result()?.getAttribute('src')).toContain(url);
   const originalVideo = result();
-  for (const name of [/Seedance 2.5/, /P-Video-Edit/]) {
+  for (const name of ['Seedance 2.5', /P-Video-Edit/]) {
     fireEvent.click(screen.getByRole('option',{name}));
     expect(result()).toBe(originalVideo);
     expect(result()?.getAttribute('src')).toContain(url);

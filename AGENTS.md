@@ -47,6 +47,14 @@
   `extraInputImageUsd`, and merging the two fields misprices one of them.
   Saved 5.0 Pro selections are never migrated, because no default ever chose it.
 
+- **A dated vendor sale, or HeyGen Video 1.0, Kling Image 4.0, Seedance 2.5
+  Flash, Atlas Kling 4.0 Flash** → first read
+  `docs/claude/specs/2026-11-19-four-models.md`. The catalog keeps list prices;
+  a sale with a published end goes in `lib/providers/model-promotions.ts` and
+  every price surface calls `withModelSale(model, at)`, because a Worker loaded
+  during a sale outlives it. An Atlas discount with no end date is not a rate
+  and gets no window. Atlas's calculator, not its headline, is the list price.
+
 - **Runware P-Video-Edit sale pricing** → first read
   `docs/codex/specs/2026-09-11-p-video-edit.md` (the 2026-11-03 follow-up).
   The catalog keeps list prices; `lib/providers/p-video-edit-promo.ts` applies

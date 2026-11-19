@@ -121,7 +121,7 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
   if (aspectRatio !== undefined && !['1:1','16:9','9:16','4:3','3:4','3:2','2:3','21:9'].includes(String(aspectRatio))) return invalid(`"${String(aspectRatio)}" is not an aspect ratio ${model.label} accepts.`);
   if (size !== undefined && (typeof size !== 'string' || !model.sizes?.some(s => s.label === size))) return invalid(`"${String(size)}" is not an output size ${model.label} publishes. Pick one from the list.`);
   if (r.values.draft === true && (!model.draftPreview || typeof size !== 'string' || !isSeedanceDraftSize(size))) return invalid('A Seedance draft is 480p only. Pick a 480p size, or turn Draft off.');
-  if (durationSeconds !== undefined && (typeof durationSeconds !== 'number' || resolveDuration(r.provider, r.modelId, durationSeconds) !== durationSeconds)) return invalid(`${String(durationSeconds)} seconds is not a length ${model.label} publishes. Pick one from the list.`);
+  if (durationSeconds !== undefined && (typeof durationSeconds !== 'number' || resolveDuration(r.provider, r.modelId, durationSeconds, r.inputMode) !== durationSeconds)) return invalid(`${String(durationSeconds)} seconds is not a length ${model.label} publishes. Pick one from the list.`);
   const relaxable = moderationCapability({ provider: r.provider, modelId: r.modelId }).relaxable;
   const accepted = r.provider === 'piapi'
     ? ['aspectRatio','size','durationSeconds','resolution','audio']
@@ -292,7 +292,7 @@ export const aggregatorAdapter: GenerationAdapter = {
       const result = await create({
         ...common, inputMode: r.inputMode, ...(provider === 'piapi' || model.supportsAudio ? {audio: r.values.audio === true} : {}),
         inputField: resolveVideoInput(provider, r.modelId, r.inputMode)?.field,
-        durationSeconds: resolveDuration(provider, r.modelId, r.values.durationSeconds as number | undefined),
+        durationSeconds: resolveDuration(provider, r.modelId, r.values.durationSeconds as number | undefined, r.inputMode),
         width: size?.width, height: size?.height, resolution: size?.preset,
         ...(referenceVideos.length > 0 ? {referenceVideos} : {}),
         ...(referenceAudios.length > 0 ? {referenceAudios} : {}),

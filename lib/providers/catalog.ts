@@ -1,8 +1,10 @@
 // lib/providers/catalog.ts
 import { P_VIDEO_EDIT_MODEL } from './p-video-edit-promo';
 import {
+  ATLAS_SEEDANCE_25_FLASH_REFERENCE_CLIPS,
   ATLAS_SEEDANCE_25_REFERENCE_CLIPS,
   SEEDANCE_20_REFERENCE_CLIPS,
+  SEEDANCE_25_FLASH_REFERENCE_CLIPS,
   SEEDANCE_25_REFERENCE_CLIPS,
 } from './reference-clips';
 import type {
@@ -226,6 +228,123 @@ const RUNWARE_MODELS: ProviderModel[] = [
     note: 'Up to 30 seconds in one pass, with native audio. Address images as @Image1, videos as @Video1, and audio as @Audio1. Frame images cannot be combined with reference video. Draft is a 480p preview you can finalize at 1080p; finalize does not send the clips again.',
   },
   {
+    // Read 2026-11-19 from https://runware.ai/docs/models/bytedance-seedance-2-5-flash
+    // (released on Runware 2026-11-15). Seedance 2.5 with a 720p ceiling, 10
+    // reference images instead of 30, 5 reference videos and 5 audio clips
+    // instead of 10, and no draft: the page has no settings.draft and no
+    // inputs.draftId, so draftPreview stays off and finalize never sees this id.
+    // Text/Image to Video is $0.0678 at 480p and $0.152 at 720p; Video-to-Video
+    // is $0.0833 and $0.187. No sale is shown on the page.
+    // "When inputs.frameImages or inputs.video is provided, width/height cannot
+    // be used", so frame runs send the resolution tier (tierWithInputs).
+    id: 'bytedance:seedance@2.5-flash',
+    label: 'Seedance 2.5 Flash',
+    fileCode: 'seedance-2_5-flash',
+    kind: 'video',
+    modes: ['text', 'image', 'frames', 'reference', 'edit'],
+    videoEdit: { minSeconds: 4, maxSeconds: 30, sourceBounds: {minEdge: 300, maxEdge: 6000, minPixels: 407696, minRatio: 0.4, maxRatio: 2.5}, sizes: [{label: '720p', preset: '720p'}, {label: '480p', preset: '480p'}], rate: {per: 'second', usdByResolution: {'480p': 0.0833, '720p': 0.187}}, maxImages: 5 },
+    price: '$0.0678 / s @ 480p · $0.152 @ 720p',
+    rate: { usdByResolution: { '480p': 0.0678, '720p': 0.152 }, per: 'second' },
+    maxInputImages: 10,
+    videoInputs: {
+      image: { field: 'frameImages', maxImages: 1 },
+      frames: { field: 'frameImages', maxImages: 2 },
+      reference: {
+        field: 'referenceImages',
+        maxImages: 10,
+        clientMaxImages: 5,
+        promptSyntax: 'at-image-index',
+      },
+    },
+    referenceClips: SEEDANCE_25_FLASH_REFERENCE_CLIPS,
+    tierWithInputs: 'frames',
+    duration: { type: 'range', min: 4, max: 30, default: 5 },
+    // The vendor's dimension table, verbatim. Same pairs as Seedance 2.5's
+    // first two tiers; there is no 1080p row.
+    sizes: [
+      { label: '480p · 16:9', width: 854, height: 480 },
+      { label: '480p · 9:16', width: 480, height: 854 },
+      { label: '480p · 1:1', width: 640, height: 640 },
+      { label: '480p · 4:3', width: 752, height: 560 },
+      { label: '480p · 3:4', width: 560, height: 752 },
+      { label: '480p · 21:9', width: 992, height: 432 },
+      { label: '720p · 16:9', width: 1280, height: 720 },
+      { label: '720p · 9:16', width: 720, height: 1280 },
+      { label: '720p · 1:1', width: 960, height: 960 },
+      { label: '720p · 4:3', width: 1112, height: 834 },
+      { label: '720p · 3:4', width: 834, height: 1112 },
+      { label: '720p · 21:9', width: 1470, height: 630 },
+    ],
+    note: 'The lower-cost Seedance 2.5: up to 30 seconds with native audio, at 480p or 720p. Up to 10 reference images, 5 videos and 5 audio clips, cited as @Image1, @Video1 and @Audio1. With a first frame the clip keeps that image’s shape. No draft preview.',
+  },
+  {
+    // Read 2026-11-19 from https://runware.ai/docs/models/heygen-video-1-0.
+    // These are LIST prices. The page shows "50% OFF until November 30, 2026";
+    // that sale is applied at call time by withModelSale (model-promotions.ts).
+    // Baking it in here would keep the discount after a Worker that loaded
+    // during the sale outlived it.
+    //
+    // From text or an image, per second: $0.02 at 480p, $0.036 at 768p, $0.10
+    // at 1080p and at 2K. From references: $0.07, $0.10, $0.18, $0.18, plus
+    // $0.04 for each reference image after the first two.
+    //
+    // Reference video is not offered: each second of it is billed on top of
+    // the output at the reference rate, and this estimate has no input length.
+    // Reference audio is not offered either: it needs an image or a video with
+    // it, and the page publishes a 32 MB cap and no length bounds for the clip
+    // limits this app checks before a job is reserved. That leaves reference
+    // images, 9 of the vendor's 12 references.
+    //
+    // frameImages cannot be sent with width/height, and the reference example
+    // sends `resolution`, so any run with input media sends the tier and the
+    // input sets the shape (tierWithInputs). Text sends the pixel pair.
+    // Audio is always generated; the page has no audio switch.
+    id: 'heygen:video@1.0',
+    label: 'HeyGen Video 1.0',
+    fileCode: 'heygen-video-1_0',
+    kind: 'video',
+    modes: ['text', 'image', 'reference'],
+    price: '$0.02 / s @ 480p · $0.036 @ 768p · $0.10 @ 1080p and 2K',
+    rate: { usdByResolution: { '480p': 0.02, '768p': 0.036, '1080p': 0.10, '2K': 0.10 }, per: 'second' },
+    referenceRate: {
+      usdByResolution: { '480p': 0.07, '768p': 0.10, '1080p': 0.18, '2K': 0.18 },
+      per: 'second',
+      extraInputImageUsd: 0.04,
+      includedInputImages: 2,
+    },
+    maxInputImages: 9,
+    videoInputs: {
+      image: { field: 'frameImages', maxImages: 1 },
+      reference: { field: 'referenceImages', maxImages: 9, clientMaxImages: 5 },
+    },
+    tierWithInputs: 'media',
+    // 5–30 from text or a first frame. "When inputs.referenceImages … is
+    // provided, duration must be at most 15."
+    duration: { type: 'range', min: 5, max: 30, default: 5 },
+    maxSecondsByMode: { reference: 15 },
+    // The vendor's dimension table, verbatim. 1080p and 2K publish 16:9 and
+    // 9:16 only, and most pairs are only approximately their named ratio.
+    sizes: [
+      { label: '480p · 16:9', width: 832, height: 480 },
+      { label: '480p · 9:16', width: 480, height: 832 },
+      { label: '480p · 1:1', width: 480, height: 480 },
+      { label: '480p · 4:3', width: 640, height: 480 },
+      { label: '480p · 3:4', width: 480, height: 640 },
+      { label: '480p · 21:9', width: 960, height: 416 },
+      { label: '768p · 16:9', width: 1344, height: 768 },
+      { label: '768p · 9:16', width: 768, height: 1344 },
+      { label: '768p · 1:1', width: 768, height: 768 },
+      { label: '768p · 4:3', width: 1024, height: 768 },
+      { label: '768p · 3:4', width: 768, height: 1024 },
+      { label: '768p · 21:9', width: 1536, height: 672 },
+      { label: '1080p · 16:9', width: 1890, height: 1080 },
+      { label: '1080p · 9:16', width: 1080, height: 1890 },
+      { label: '2K · 16:9', width: 2856, height: 1632 },
+      { label: '2K · 9:16', width: 1632, height: 2856 },
+    ],
+    note: 'Video with dialogue, ambience and sound effects generated in the same pass. 5–30 seconds from text or a first frame; up to 15 seconds from reference images. With an image or references, the output keeps the input’s shape and only the resolution tier is sent. References cost more: $0.07 / s at 480p, $0.10 at 768p, $0.18 at 1080p and 2K, plus $0.04 for each image after the first two. Reference video and audio are not offered here.',
+  },
+  {
     id: 'bytedance:seedance@2.0-mini',
     label: 'Seedance 2.0 Mini',
     fileCode: 'seedance-2_0-mini',
@@ -426,7 +545,8 @@ const RUNWARE_MODELS: ProviderModel[] = [
     // Read 2026-11-09 from https://runware.ai/docs/models/klingai-video-4-0-flash
     // (released 2026-11-04, confirmed in https://runware.ai/docs/changelog).
     // These are list prices: $0.094/s without video input and $0.126/s with it.
-    // The sale that ends Nov 10 is applied at call time by withKling4FlashSale.
+    // The sale that ends Nov 10 is applied at call time by withKling4FlashSale,
+    // which withModelSale (model-promotions.ts) calls for every price surface.
     // Reference video is not offered: it moves a reference run onto the
     // video-input rate, and this entry prices that mode from images alone.
     // The vendor allows 10 referenceImages; edit stays at the 4 every other
@@ -1391,6 +1511,195 @@ function flux3EditVideo(): ProviderModel {
   };
 }
 
+/**
+ * Seedance 2.5 Flash on Atlas, read 2026-11-19 from
+ * `https://www.atlascloud.ai/models/bytedance/seedance-2.5-flash/{mode}/llms.txt`
+ * and the public catalog at `https://api.atlascloud.ai/api/v1/models`.
+ * Same three endpoints and the same `ratio` / `@Image1` dialect as 2.5, with
+ * 480p and 720p only, 10 images, 5 videos and 5 audio clips, and no draft.
+ *
+ * **These are LIST prices, and they are the calculator's, not the headline's.**
+ * llms.txt and the catalog print one flat $0.109/s (35% off $0.167). Atlas's
+ * own quote endpoint (`POST /api/v1/model/calculate`, read-only, no key) does
+ * not: it meters tokens (`estimate_reason: settles_on_usage`) at $11.20 per
+ * million before the discount, which is $0.24446/s at 720p and $0.11296/s at
+ * 480p for the largest frame (`adaptive`, 10 s). 16:9 is under 1% lower. This
+ * is the 2026-10-26 rule again: a headline that disagrees with the calculator
+ * is not the catalog rate, so an estimate never understates the quote.
+ *
+ * The 35% sale ("through Nov 30") is applied at call time by `withModelSale`
+ * in `model-promotions.ts`, never stored here.
+ */
+function seedance25Flash(): ProviderModel[] {
+  const usdByResolution = { '480p': 0.113, '720p': 0.2445 };
+  const shared = {
+    label: 'Seedance 2.5 Flash',
+    kind: 'video' as const,
+    price: '$0.113 / s @ 480p · $0.2445 @ 720p',
+    rate: { usdByResolution, per: 'second' as const },
+    duration: { type: 'range' as const, min: 4, max: 30, default: 5 },
+    sizes: [
+      { label: '480p', preset: '480p' },
+      { label: '720p', preset: '720p' },
+    ],
+  };
+  // `adaptive` is left out for the Worker reason given on Seedance 2.5.
+  const aspectRatios = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'];
+  const pricing = 'List price is the quote from Atlas’s calculator, which meters tokens: about $0.113 / s at 480p and $0.2445 at 720p. Atlas’s page prints a flat $0.167.';
+
+  return [
+    {
+      ...shared,
+      id: 'bytedance/seedance-2.5-flash/text-to-video',
+      fileCode: 'seedance-2_5-flash-t2v',
+      modes: ['text'],
+      aspectRatios,
+      note: `The lower-cost Seedance 2.5: up to 30 seconds with native audio, at 480p or 720p. ${pricing}`,
+    },
+    {
+      ...shared,
+      id: 'bytedance/seedance-2.5-flash/image-to-video',
+      fileCode: 'seedance-2_5-flash-i2v',
+      // `last_image` is optional, so one still opens the clip and two bookend it.
+      modes: ['image', 'frames'],
+      maxInputImages: 2,
+      videoInputs: {
+        image: { field: 'frameImages', maxImages: 1 },
+        frames: { field: 'frameImages', maxImages: 2 },
+      },
+      // No `aspectRatios`: this endpoint lists `adaptive` alone, as 2.5's does.
+      note: `The lower-cost Seedance 2.5 from a first frame, or a first and last frame. The clip keeps the image’s shape. ${pricing}`,
+    },
+    {
+      ...shared,
+      id: 'bytedance/seedance-2.5-flash/reference-to-video',
+      fileCode: 'seedance-2_5-flash-r2v',
+      modes: ['reference'],
+      maxInputImages: 10,
+      aspectRatios,
+      videoInputs: {
+        reference: {
+          field: 'referenceImages',
+          maxImages: 10,
+          clientMaxImages: 5,
+          promptSyntax: 'at-image-index',
+        },
+      },
+      referenceClips: ATLAS_SEEDANCE_25_FLASH_REFERENCE_CLIPS,
+      note: `Up to 10 images, 5 videos and 5 audio clips, cited as @Image1, @Video1 and @Audio1. Audio can be used on its own. Native audio. ${pricing}`,
+    },
+  ];
+}
+
+/**
+ * Kling 4.0 Flash on Atlas, read 2026-11-19 from
+ * `/models/kwaivgi/kling-v4.0-flash/{text,image,reference}-to-video/llms.txt`,
+ * their schemas under static.atlascloud.ai/model/schema/, and the catalog API.
+ * 720p only, 3–20 seconds, default 10. Image mode is one first frame with no
+ * `aspect_ratio`; reference mode takes 10 images cited as `@image_1`.
+ *
+ * **The rate is the LIST price, and no sale is applied.** Three figures are
+ * published and none carries an end date:
+ * - llms.txt and the catalog API: $0.066/s, `discount: "70"` on $0.094.
+ * - The home page card: "standard price of $0.094 per second".
+ * - The calculator (`POST /api/v1/model/calculate`): 5 s is $0.42861 on an
+ *   origin of $0.6123, so $0.085722/s on $0.12246/s. That is the same 1.2988×
+ *   over the headline that Kling 4.0's quote carries.
+ * An undated discount is not a catalog rate (the P-Video-Edit lesson), and a
+ * headline that disagrees with the calculator is not one either, so this
+ * stores the calculator's origin price. While Atlas's 30% runs, a job costs
+ * less than the estimate. Give `model-promotions.ts` a window only when Atlas
+ * publishes an end date.
+ *
+ * Not offered: `video-edit` (input seconds are billed and the formula is
+ * unpublished, as on Kling 4.0 Edit), reference videos (billed as input),
+ * subjects and voices.
+ */
+export const ATLAS_KLING_40_FLASH_QUOTED_USD = 0.085722;
+
+function kling40Flash(): ProviderModel[] {
+  const shared = {
+    kind: 'video' as const,
+    label: 'Kling 4.0 Flash',
+    price: '$0.12246 / s',
+    rate: { per: 'second' as const, usd: 0.12246 },
+    duration: { type: 'range' as const, min: 3, max: 20, default: 10 },
+    sizes: [{ label: '720p', preset: '720p' }],
+    // 26,000 English / 11,000 non-English characters, as on Kling 4.0.
+    maxPromptLength: 11_000,
+  };
+  const pricing = 'List price from Atlas’s calculator is $0.12246 / s. Atlas currently quotes 30% off ($0.0857 / s) with no end date, so a run can cost less than this estimate. Its page prints $0.094 / s.';
+  return [
+    {
+      ...shared,
+      id: 'kwaivgi/kling-v4.0-flash/text-to-video',
+      fileCode: 'kling-4_0-flash-t2v',
+      modes: ['text'],
+      aspectRatios: ['16:9', '9:16', '1:1', '21:9'],
+      note: `Fast 720p Kling in 3–20 second clips. ${pricing}`,
+    },
+    {
+      ...shared,
+      id: 'kwaivgi/kling-v4.0-flash/image-to-video',
+      aspectRatios: [], // The output shape comes from the first frame.
+      fileCode: 'kling-4_0-flash-i2v',
+      modes: ['image'],
+      maxInputImages: 1,
+      videoInputs: { image: { field: 'frameImages', maxImages: 1 } },
+      note: `Fast 720p Kling from one first frame, which sets the output shape. ${pricing}`,
+    },
+    {
+      ...shared,
+      id: 'kwaivgi/kling-v4.0-flash/reference-to-video',
+      fileCode: 'kling-4_0-flash-r2v',
+      modes: ['reference'],
+      maxInputImages: 10,
+      aspectRatios: ['16:9', '9:16', '1:1', '21:9'],
+      videoInputs: { reference: { field: 'referenceImages', maxImages: 10, clientMaxImages: 10, promptSyntax: 'at-image-underscore-index' } },
+      note: `Up to 10 image references, cited as @image_1. Atlas’s 15-reference limit includes videos and subjects; this integration accepts images. ${pricing}`,
+    },
+  ];
+}
+
+/**
+ * Kling Image 4.0 on Atlas, read 2026-11-19 from
+ * `/models/kwaivgi/kling-image-v4.0/text-to-image/llms.txt`, its schema and
+ * its readme under static.atlascloud.ai/model/. There is no `/edit` endpoint:
+ * `text-to-image` itself takes up to 10 `reference_images`, so one entry
+ * covers both modes. The body is `resolution` (`2k`/`4k`/`8k`), `aspect_ratio`
+ * and `num_images`, with no pixel pair.
+ *
+ * **These are LIST prices**, from the readme's rate table and the calculator's
+ * `origin_price`: $0.063 at 2K, $0.094 at 4K, and $0.003 per reference image,
+ * every one billed (one reference at 2K quotes $0.066, three quote $0.072).
+ * Atlas currently takes 10% off all of it (`discount: "90"`: $0.0567, $0.0846,
+ * $0.0027; llms.txt rounds 2K to $0.057) and names no end date, so the
+ * discount is not stored. `KLING_IMAGE_40_QUOTED_USD` keeps what was quoted.
+ *
+ * Not offered: 8K ($0.157 list), `image-set` (2–10 related images in one
+ * request; every image path here returns one result) and `long-image`.
+ * Runware lists the same model as `klingai:kling-image@4.0` at the same list
+ * prices, so there is no second copy of it there.
+ */
+export const KLING_IMAGE_40_QUOTED_USD = { '2k': 0.0567, '4k': 0.0846, inputImage: 0.0027 } as const;
+
+function klingImage40(): ProviderModel[] {
+  return [
+    {
+      id: 'kwaivgi/kling-image-v4.0/text-to-image',
+      label: 'Kling Image 4.0',
+      fileCode: 'kling-image-4_0',
+      kind: 'image',
+      modes: ['text', 'image'],
+      price: '$0.063 / image @ 2K · $0.094 @ 4K + $0.003 / input image',
+      rate: { usdByResolution: { '2k': 0.063, '4k': 0.094 }, per: 'image', inputImageUsd: 0.003 },
+      sizes: [{ label: '2K', preset: '2k' }, { label: '4K', preset: '4k' }],
+      maxInputImages: 10,
+      note: 'Kling’s image model: legible text in the picture and up to 10 references, cited as @image_1. List price is $0.063 at 2K and $0.094 at 4K, plus $0.003 for every reference. Atlas currently quotes 10% off with no end date, so a run can cost a little less. Image sets and 8K are not offered here.',
+    },
+  ];
+}
+
 const ATLAS_MODELS: ProviderModel[] = [
   {
     id: 'black-forest-labs/flux-schnell',
@@ -1496,6 +1805,8 @@ const ATLAS_MODELS: ProviderModel[] = [
   ...seedance20Tier('mini'),
   ...seedance20Tier('fast'),
   ...seedance25(),
+  // The cheaper 2.5 lane. List rates; its dated sale is applied at call time.
+  ...seedance25Flash(),
   // Developer editions — same weights, cheaper ids. See the block above.
   ...nanoBanana21Developer(),
   ...nanoBanana2Developer('full'),
@@ -1504,8 +1815,10 @@ const ATLAS_MODELS: ProviderModel[] = [
   ...gptImage25Developer('flare'),
   ...seedream50Flash(),
   ...maiImage26(),
+  ...klingImage40(),
   ...minimaxH3Developer(),
   ...kling40(),
+  ...kling40Flash(),
   // Added 2026-09-29 from Atlas's LTX-2 / Luma drop. See each block above.
   ...ltx2('2.3', 'fast'),
   ...ltx2('2.3', 'pro'),
@@ -1985,6 +2298,21 @@ export function resolveVideoInput(
 }
 
 /**
+ * The duration control as one input mode sees it. Only a `range` narrows, and
+ * only where the model names a tighter ceiling for that mode: HeyGen Video 1.0
+ * is 5–30 seconds from text and 5–15 from references.
+ */
+export function modeDuration(
+  model: Pick<ProviderModel, 'duration' | 'maxSecondsByMode'> | undefined,
+  mode?: ProviderMode
+): ProviderModel['duration'] {
+  const duration = model?.duration;
+  const cap = mode ? model?.maxSecondsByMode?.[mode] : undefined;
+  if (duration?.type !== 'range' || cap === undefined || cap >= duration.max) return duration;
+  return { ...duration, max: cap, default: Math.min(duration.default, cap) };
+}
+
+/**
  * The clip length to actually send. A model that lists lengths rejects anything
  * outside the list, so a stale or foreign value snaps to the closest one it
  * does accept rather than failing at the vendor. `undefined` means this model
@@ -1993,10 +2321,12 @@ export function resolveVideoInput(
 export function resolveDuration(
   provider: ProviderId,
   modelId: string,
-  requested?: number
+  requested?: number,
+  /** The input mode, for a model whose ceiling depends on it. */
+  mode?: ProviderMode
 ): number | undefined {
   const metadata = findModel(provider, modelId);
-  const duration = metadata?.duration;
+  const duration = modeDuration(metadata, mode);
   if (duration?.type === 'options' && duration.values.length > 0) {
     if (requested === undefined) return duration.values[0];
     return duration.values.reduce((best, value) =>

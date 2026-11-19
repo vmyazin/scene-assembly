@@ -327,7 +327,8 @@ export async function POST(request: NextRequest) {
       durationSeconds: resolveDuration(
         body.provider,
         model,
-        requestedDuration
+        requestedDuration,
+        inputMode
       ),
       width: size?.width,
       height: size?.height,

@@ -9,6 +9,8 @@ import {
   type VideoRequest,
 } from './types';
 import { RUNWARE_IMAGE_DIMENSIONS, ratioDimensions, type Dimensions } from './output-size';
+import { findModel } from './catalog';
+import { sizeTier } from './types';
 import {
   SEEDANCE_25_MODEL,
   seedanceDraftDimensionError,
@@ -60,6 +62,35 @@ const VEO_LITE_DIMENSIONS: Record<string, '720p' | '1080p'> = {
   '1920x1080': '1080p',
   '1080x1920': '1080p',
 };
+
+/** https://runware.ai/docs/models/bytedance-seedance-2-5-flash — 2.5 without draft, 480p and 720p only. */
+export const RUNWARE_SEEDANCE_25_FLASH_MODEL = 'bytedance:seedance@2.5-flash';
+
+/** Edit resolutions per Seedance model. Flash publishes no 1080p. */
+const SEEDANCE_EDIT_RESOLUTIONS: Record<string, readonly string[]> = {
+  [SEEDANCE_25_MODEL]: ['480p', '720p', '1080p'],
+  [RUNWARE_SEEDANCE_25_FLASH_MODEL]: ['480p', '720p'],
+};
+
+/**
+ * Some models refuse `width`/`height` once the request carries input media and
+ * take the `resolution` tier instead, because the input fixes the shape.
+ * Seedance 2.5 Flash does that for frame images; HeyGen Video 1.0 for frame
+ * images and, in its own reference example, for reference images too. The
+ * catalog says which (`tierWithInputs`), and the tier is read off the size the
+ * caller resolved, lower-cased the way both pages spell it (`768p`, `2k`).
+ */
+function applyTierWithInputs(task: Record<string, unknown>, request: VideoRequest): void {
+  const rule = findModel('runware', request.model)?.tierWithInputs;
+  if (!rule || !(request.images?.length)) return;
+  if (rule === 'frames' && request.inputField === 'referenceImages') return;
+  if (typeof task.width !== 'number' || typeof task.height !== 'number') return;
+  const size = findModel('runware', request.model)?.sizes?.find((entry) => entry.width === task.width && entry.height === task.height);
+  if (!size) return;
+  delete task.width;
+  delete task.height;
+  task.resolution = sizeTier(size.label).toLowerCase();
+}
 
 const CAPACITY_CODES = new Set(['noAvailableServer', 'modelUnavailable', 'modelNotReady', 'modelDisabled']);
 
@@ -293,7 +324,9 @@ export async function runwareCreateVideo(request: VideoRequest, uuid = taskUUID(
   }
   if (request.inputMode === 'edit') {
     const draft = request.draft === true;
-    if ((request.draft !== undefined && typeof request.draft !== 'boolean') || request.model !== SEEDANCE_25_MODEL || !request.sourceVideo || !['480p', '720p', '1080p'].includes(request.resolution ?? '')) throw new ProviderError('Invalid video edit settings.', 400, 'runware');
+    const editResolutions = SEEDANCE_EDIT_RESOLUTIONS[request.model];
+    if ((request.draft !== undefined && typeof request.draft !== 'boolean') || !editResolutions || !request.sourceVideo || !editResolutions.includes(request.resolution ?? '')) throw new ProviderError('Invalid video edit settings.', 400, 'runware');
+    if (draft && request.model !== SEEDANCE_25_MODEL) throw new ProviderError('Draft preview is only available for Seedance 2.5.', 400, 'runware');
     if (draft && request.resolution !== '480p') throw new ProviderError('A Seedance draft edit is 480p only.', 400, 'runware');
     await runwareFetch(request.apiKey, [{
       taskType: 'videoInference', taskUUID: uuid, model: request.model,
@@ -345,6 +378,7 @@ export async function runwareCreateVideo(request: VideoRequest, uuid = taskUUID(
   if (referenceAudios.length > 0) inputs.referenceAudios = referenceAudios;
   if (Object.keys(inputs).length > 0) task.inputs = inputs;
   if (request.model === RUNWARE_VEO_LITE_MODEL) applyVeoLiteTask(task, request, width, height);
+  applyTierWithInputs(task, request);
   if (request.draft === true) {
     if (request.model !== SEEDANCE_25_MODEL) throw new ProviderError('Draft preview is only available for Seedance 2.5.', 400, 'runware');
     const draftError = seedanceDraftDimensionError(
