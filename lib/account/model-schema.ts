@@ -14,8 +14,8 @@ import type { CloudJobRequest, CloudProvider } from './contracts';
 import { SINGLE_IMAGE_MODELS, SINGLE_IMAGE_MODEL_LABELS } from './models';
 import { FAL_IMAGE_MODELS, FAL_VIDEO_MODELS } from '../fal/catalog';
 import { KIE_MODELS } from '../kie/catalog';
-import { findModel, PROVIDER_MODELS, resolveVideoInput } from '../providers/catalog';
-import { withKling4FlashSale } from '../providers/kling-4-flash-promo';
+import { findModel, modeDuration, PROVIDER_MODELS, resolveVideoInput } from '../providers/catalog';
+import { withModelSale } from '../providers/model-promotions';
 import { isSeedanceDraftSize } from '../providers/seedance-draft';
 import type { EditReferenceSpec, ProviderId, ProviderModel } from '../providers/types';
 import { GEMINI_IMAGE_MODELS } from '../engines/gemini-catalog';
@@ -167,13 +167,14 @@ function aggregatorImageFields(provider: ProviderId, model: ProviderModel): Mode
   return fields;
 }
 
-function aggregatorVideoFields(provider: ProviderId, model: ProviderModel): ModelField[] {
+function aggregatorVideoFields(provider: ProviderId, model: ProviderModel, mode?: InputMode): ModelField[] {
   const fields: ModelField[] = [];
   // An explicit empty list means the source defines the shape. Undefined
   // retains the legacy generic ratio choices for older catalog entries.
   if (model.aspectRatios?.length !== 0 && !(model.aspectRatios?.length && sizeNamesAspect(model))) fields.push(aspectRatioField(provider, model));
   if (model.sizes?.length) fields.push(select('size', 'Output size', model.sizes.map(size => size.label), { default: model.sizes[0].label }));
-  const duration = model.duration;
+  // HeyGen's reference mode stops at 15 seconds where its text mode runs to 30.
+  const duration = modeDuration(model, mode);
   if (duration?.type === 'options' && duration.values.length) fields.push(select('durationSeconds', 'Duration (seconds)', duration.values, { default: duration.values[0] }));
   else if (duration?.type === 'range') fields.push({ key: 'durationSeconds', label: 'Duration (seconds)', type: 'number', min: duration.min, max: duration.max, step: 1, default: duration.default });
   else if (model.durations?.length) fields.push(select('durationSeconds', 'Duration (seconds)', model.durations, { default: model.durations[0] }));
@@ -261,7 +262,7 @@ function aggregatorModes(provider: ProviderId, model: ProviderModel): ModeDescri
     const clips = clipDescriptor(model, mode);
     modes.push({
       mode, sourceVideo: false, references,
-      fields: model.kind === 'image' ? aggregatorImageFields(provider, model) : aggregatorVideoFields(provider, model),
+      fields: model.kind === 'image' ? aggregatorImageFields(provider, model) : aggregatorVideoFields(provider, model, mode),
       ...(clips ? { clips } : {}),
     });
   }
@@ -269,7 +270,7 @@ function aggregatorModes(provider: ProviderId, model: ProviderModel): ModeDescri
 }
 
 function aggregatorModels(provider: ProviderId): ModelDescriptor[] {
-  return PROVIDER_MODELS[provider].map(listed => withKling4FlashSale(listed)).map(model => ({
+  return PROVIDER_MODELS[provider].map(listed => withModelSale(listed)).map(model => ({
     provider, modelId: model.id, label: model.label, mediaType: model.kind,
     ...(model.price ? { price: model.price } : {}), ...(model.note ? { note: model.note } : {}),
     ...(model.deprecated ? { deprecated: true } : {}),

@@ -150,6 +150,11 @@ export type ProviderRate = {
   /** The first reference is included; subsequent references are billed once per request. */
   extraInputImageUsd?: number;
   /**
+   * How many references `extraInputImageUsd` leaves unbilled. Absent means one.
+   * HeyGen Video 1.0 includes the first two.
+   */
+  includedInputImages?: number;
+  /**
    * Every reference is billed, the first included (Seedream 5.5: `count × rate`).
    * Not the same rule as `extraInputImageUsd`, and a rate sets one or the other.
    */
@@ -195,6 +200,12 @@ export interface ProviderModel {
    * cover only verified tiers; unsupported settings record as unknown.
    */
   rate?: ProviderRate;
+  /**
+   * Published rate for a run made from references, when the vendor prices it
+   * apart from text and first-frame runs (HeyGen Video 1.0). Absent means
+   * `rate` covers reference mode too.
+   */
+  referenceRate?: ProviderRate;
   /**
    * Seedance 2.5 draft preview: 480p now, finalize later by draft ID at 1080p.
    * Not `videoEdit.draftRate`, which is a cheaper render with no second step.
@@ -327,6 +338,17 @@ export interface ProviderModel {
   duration?:
     | { type: 'options'; values: number[] }
     | { type: 'range'; min: number; max: number; default: number };
+  /**
+   * A tighter ceiling on a `range` duration in one input mode. HeyGen Video
+   * 1.0 renders 30 seconds from text or a first frame and 15 from references.
+   */
+  maxSecondsByMode?: Partial<Record<ProviderMode, number>>;
+  /**
+   * Runware only. With frame images the vendor refuses `width`/`height` and
+   * takes the `resolution` tier, because the first frame fixes the shape.
+   * `media` extends that to reference images. Absent keeps the pixel pair.
+   */
+  tierWithInputs?: 'frames' | 'media';
   /**
    * Output sizes this model accepts, verbatim from the vendor's table. Runware
    * rejects an unlisted width/height with "Unsupported width/height combination

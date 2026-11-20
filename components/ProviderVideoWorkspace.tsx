@@ -48,8 +48,8 @@ import { downloadFilenameBase } from '@/lib/download-name';
 import { requestPromptSlug } from '@/lib/micro-ai/browser';
 import { getProviderVideoStatus, pollDelayMs, releaseRunwareMedia, submitProviderVideo } from '@/lib/providers/browser';
 import { followProviderVideo } from '@/lib/providers/follow-video';
-import { findModel, generatedEditSeconds, modelsFor } from '@/lib/providers/catalog';
-import { withKling4FlashSale } from '@/lib/providers/kling-4-flash-promo';
+import { findModel, generatedEditSeconds, modeDuration, modelsFor } from '@/lib/providers/catalog';
+import { withModelSale } from '@/lib/providers/model-promotions';
 import ModelListbox from '@/components/ModelListbox';
 import { PROVIDER_VIDEO_COLUMNS, providerVideoSpecs } from '@/lib/models/listbox-specs';
 import { frameSlotLabel, keyframeSlotLabel } from '@/lib/providers/frames';
@@ -245,13 +245,14 @@ export default function ProviderVideoWorkspace({
     [inputMode, provider]
   );
   // Same object until the sale closes, so effects keyed on it do not re-run.
-  const selectedModel = withKling4FlashSale(models.find((model) => model.id === preference) ?? models[0]);
+  const selectedModel = withModelSale(models.find((model) => model.id === preference) ?? models[0]);
   const modelKey = `${provider}:${inputMode}:${selectedModel?.id ?? 'none'}`;
   const isEdit = inputMode === 'edit';
   const fields = useMemo(() => {
     const draftField = {key: 'draftPreview', label: 'Draft', type: 'boolean' as const, defaultValue: false, description: '480p preview. Finalize the one you like at 1080p.'};
     if (!isEdit || !selectedModel?.videoEdit) {
-      const next = controlFieldsFor(selectedModel);
+      // A mode can carry a tighter length ceiling than the model (HeyGen references: 15s).
+      const next = controlFieldsFor(selectedModel && { ...selectedModel, duration: modeDuration(selectedModel, inputMode) });
       if (selectedModel?.draftPreview) next.push(draftField);
       return next;
     }
@@ -286,7 +287,7 @@ export default function ProviderVideoWorkspace({
       });
     }
     return fields;
-  }, [selectedModel, isEdit]);
+  }, [selectedModel, isEdit, inputMode]);
   const epoch = useAccountStore(state => state.epoch);
   const [selectedSource, setSelectedSource] = useState<SourceVideo | null>(null);
   const [anchorById, setAnchorById] = useState<Record<string, { choice: FrameAnchorChoice; timestamp: string }>>({});
@@ -458,7 +459,7 @@ export default function ProviderVideoWorkspace({
     selectedModel,
     pricedSeconds,
     1,
-    { inputMode, draft: values.draft === true || values.draftPreview === true, size: pricedSize, audio: values.audio === true }
+    { inputMode, draft: values.draft === true || values.draftPreview === true, size: pricedSize, audio: values.audio === true, inputImages: references.length }
   );
   // Same clock as the button figure. Null after the sale, and for every other model.
   const editSaleNote = isEdit ? pVideoEditPromotionNote(selectedModel?.id) : null;
@@ -897,7 +898,7 @@ export default function ProviderVideoWorkspace({
                 id: model.id,
                 label: model.label,
                 deprecated: model.deprecated,
-                cells: providerVideoSpecs(withKling4FlashSale(model), inputMode),
+                cells: providerVideoSpecs(withModelSale(model), inputMode),
               }))}
               value={selectedModel?.id}
               onChange={(id) => {

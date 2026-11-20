@@ -82,6 +82,27 @@ export const ATLAS_SEEDANCE_25_REFERENCE_CLIPS: ReferenceClipsCapability = {
   audio: SEEDANCE_25_AUDIO,
 };
 
+/**
+ * Seedance 2.5 Flash takes half as many clips as 2.5: 5 videos and 5 audio.
+ * Lengths, pixels and ratios are 2.5's. Read 2026-11-19 from
+ * https://runware.ai/docs/models/bytedance-seedance-2-5-flash and
+ * https://www.atlascloud.ai/models/bytedance/seedance-2.5-flash/reference-to-video/llms.txt
+ */
+export const SEEDANCE_25_FLASH_REFERENCE_CLIPS: ReferenceClipsCapability = {
+  modes: ['text', 'reference'],
+  audioRequiresVisual: false,
+  video: { ...SEEDANCE_25_VIDEO, max: 5 },
+  audio: { ...SEEDANCE_25_AUDIO, max: 5 },
+};
+
+/** Atlas Seedance 2.5 Flash reference-to-video, with the pixel and frame-rate bounds its page publishes. */
+export const ATLAS_SEEDANCE_25_FLASH_REFERENCE_CLIPS: ReferenceClipsCapability = {
+  modes: ['reference'],
+  audioRequiresVisual: false,
+  video: { ...SEEDANCE_25_VIDEO, max: 5, minPixels: 409_600, maxPixels: 8_295_044, minFps: 24, maxFps: 60 },
+  audio: { ...SEEDANCE_25_AUDIO, max: 5 },
+};
+
 /** Atlas Seedance 2.0 reference-to-video. Audio is refused unless an image or video is attached. */
 export const SEEDANCE_20_REFERENCE_CLIPS: ReferenceClipsCapability = {
   modes: ['reference'],

@@ -33,6 +33,11 @@ describe('provider catalog rates', () => {
       'bytedance/seedance-2.5/text-to-video': { usd: 0.134, per: 'second' },
       'bytedance/seedance-2.5/image-to-video': { usd: 0.134, per: 'second' },
       'bytedance/seedance-2.5/reference-to-video': { usd: 0.134, per: 'second' },
+      // 2.5 Flash: LIST prices from the calculator's origin quote, 2026-11-19.
+      // The 35% sale through Nov 30 is applied at call time, never stored.
+      'bytedance/seedance-2.5-flash/text-to-video': { usdByResolution: { '480p': 0.113, '720p': 0.2445 }, per: 'second' },
+      'bytedance/seedance-2.5-flash/image-to-video': { usdByResolution: { '480p': 0.113, '720p': 0.2445 }, per: 'second' },
+      'bytedance/seedance-2.5-flash/reference-to-video': { usdByResolution: { '480p': 0.113, '720p': 0.2445 }, per: 'second' },
       // Developer editions. 2.1 and full Nano Banana 2 are tiered (calculator,
       // 2026-11-03). Lite stays $0.014 and publishes 1K only.
       'google/nano-banana-2.1-developer/text-to-image': { usdByResolution: { '1k': 0.0175, '2k': 0.02625, '4k': 0.049 }, per: 'image' },
@@ -45,6 +50,8 @@ describe('provider catalog rates', () => {
       'bytedance/seedream-v5.0-flash/edit': { usd: 0.018, per: 'image' },
       'microsoft/mai-image-2.6/text-to-image': { usd: 0.0792, per: 'image' },
       'microsoft/mai-image-2.6/edit': { usd: 0.0891, per: 'image' },
+      // Kling Image 4.0: list. Atlas's undated 10% discount is not stored.
+      'kwaivgi/kling-image-v4.0/text-to-image': { usdByResolution: { '2k': 0.063, '4k': 0.094 }, per: 'image', inputImageUsd: 0.003 },
       // Pinned to the 1K tier, so the $0.03 on the card is the tier charged.
       'openai/gpt-image-2.5-sunburst-developer/text-to-image': { usd: 0.03, per: 'image' },
       'openai/gpt-image-2.5-sunburst-developer/edit': { usd: 0.03, per: 'image' },
@@ -57,6 +64,11 @@ describe('provider catalog rates', () => {
       'kwaivgi/kling-v4.0/image-to-video': { per: 'second', usdByResolution: { '720p': 0.14287, '1080p': 0.21385, '1080p-esr': 0.182, '2k-esr': 0.273, '4k-esr': 0.364 } },
       'kwaivgi/kling-v4.0/reference-to-video': { per: 'second', usdByResolution: { '720p': 0.14287, '1080p': 0.21385, '1080p-esr': 0.182, '2k-esr': 0.273, '4k-esr': 0.364 } },
       'kwaivgi/kling-v4.0/video-edit': undefined,
+      // Kling 4.0 Flash: the calculator's origin price. The undated 30%
+      // discount ($0.085722) and the $0.094 headline are not the rate.
+      'kwaivgi/kling-v4.0-flash/text-to-video': { per: 'second', usd: 0.12246 },
+      'kwaivgi/kling-v4.0-flash/image-to-video': { per: 'second', usd: 0.12246 },
+      'kwaivgi/kling-v4.0-flash/reference-to-video': { per: 'second', usd: 0.12246 },
       'minimax/h3-developer/text-to-video': { usdByResolution: { '480P': 0.015, '768P': 0.015 }, per: 'second' },
       'minimax/h3-developer/image-to-video': { usdByResolution: { '480P': 0.015, '768P': 0.015 }, per: 'second' },
       'minimax/h3-developer/reference-to-video': { usdByResolution: { '480P': 0.015, '768P': 0.015 }, per: 'second' },

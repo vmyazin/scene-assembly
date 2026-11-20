@@ -113,7 +113,11 @@ export function resolveCatalogRate(
   const editRate = controls.draft
     ? (sale?.draftRate ?? model?.videoEdit?.draftRate)
     : (sale?.rate ?? model?.videoEdit?.rate);
-  const rate = controls.inputMode === 'edit' ? editRate : model?.rate;
+  // HeyGen prices a run made from references apart from text and first-frame
+  // runs. Every other model has no referenceRate and keeps `rate`.
+  const rate = controls.inputMode === 'edit'
+    ? editRate
+    : (controls.inputMode === 'reference' && model?.referenceRate) || model?.rate;
   if (!rate) return unknownFigure('catalog-rate');
   // Only search when a size was actually given. `size.preset === undefined`
   // is true for every size that has no preset, so with no size chosen this
@@ -138,7 +142,7 @@ export function resolveCatalogRate(
     if (count === undefined || !Number.isInteger(count) || count < 0) {
       return unknownFigure('catalog-rate', 'The reference count is required to estimate this model.');
     }
-    inputCost = Math.max(0, count - 1) * rate.extraInputImageUsd;
+    inputCost = Math.max(0, count - (rate.includedInputImages ?? 1)) * rate.extraInputImageUsd;
   }
   // Seedream 5.5 bills every input image, the first included. Kept apart from
   // the branch above: folding the two together would give one of them the

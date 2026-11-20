@@ -2,6 +2,9 @@
 
 Status: Approved design
 
+## Follow-up decision — 2026-11-19 (Atlas Kling 4.0 Flash)
+`kwaivgi/kling-v4.0-flash/{text,image,reference}-to-video` sit after the Kling 4.0 block at the calculator's origin price, $0.12246/s. Atlas's $0.066 headline and its $0.085722 quote are an undated 30% discount and are not stored; no sale window is applied. The Runware entry and `kling-4-flash-promo.ts` are unchanged, and `withModelSale` in `lib/providers/model-promotions.ts` now applies that window alongside the newer dated sales. See `docs/claude/specs/2026-11-19-four-models.md`.
+
 ## Follow-up decision — 2026-11-09 (Runware Kling VIDEO 4.0 Flash)
 `klingai:kling-video@4.0-flash` stores list prices: $0.094/s without video input and $0.126/s with a source video. Runware shows 15% off until November 10, 2026 with no timezone, so `lib/providers/kling-4-flash-promo.ts` applies $0.0799/s and $0.107/s through the end of that UTC day and lists from 2026-11-11T00:00:00Z, read at call time and from the submission time for saved jobs. Reference video is not offered, because it would move a reference run onto the video-input rate. Edit sends `settings.preserveAudio` through the `kling-preserve-audio` transport, not the O1/O3 `providerSettings.klingai.keepOriginalSound`.
 

@@ -2,6 +2,8 @@
 
 Status: Approved design
 
+**Follow-up decision, 2026-11-19:** Kling Image 4.0, Seedance 2.5 Flash and Kling 4.0 Flash are added at list prices from the calculator. Only Seedance 2.5 Flash has a dated sale, applied at call time. See `docs/claude/specs/2026-11-19-four-models.md`. Nothing below is overridden.
+
 **Follow-up decision, 2026-11-12:** Seedream 5.5 and Seedream 5.5 Edit are added ahead of Seedream 5.0 Pro. See `docs/claude/specs/2026-11-12-seedream-5-5.md` for the ids, the calculator quotes and why every input image is billed. Nothing below is overridden.
 
 ## Context

@@ -16,6 +16,7 @@ import {
   ATLAS_IMAGE_DIMENSIONS,
   atlasDimensionTable,
   isGptImage25,
+  isKlingImage4,
   isLumaUni,
   isMaiImage,
   isNanoBanana2,
@@ -113,6 +114,24 @@ function atlasImageFields(
       ...base,
       ...(request.aspectRatio ? { aspect_ratio: request.aspectRatio } : {}),
       ...(tier ? { resolution: tier } : {}),
+      ...(images.length ? { reference_images: images } : {}),
+    };
+  }
+
+  if (isKlingImage4(model)) {
+    // Schema read 2026-11-19: `resolution` (`2k`/`4k`/`8k`), `aspect_ratio`,
+    // `num_images` (1–9) and `reference_images` (up to 10) on the one
+    // text-to-image endpoint. `num_images` is pinned to 1 because every image
+    // path here returns one result and the ledger prices one. The tier comes
+    // from the catalog, so an absent choice is the first published size, 2K,
+    // which is also the vendor default. The vendor's ratio default is `auto`;
+    // no ratio means square here, as for every other image model.
+    const tier = resolveSize('atlas', model, request.resolution)?.preset;
+    return {
+      ...base,
+      aspect_ratio: request.aspectRatio ?? '1:1',
+      ...(tier ? { resolution: tier } : {}),
+      num_images: 1,
       ...(images.length ? { reference_images: images } : {}),
     };
   }
@@ -425,6 +444,12 @@ export function atlasEditBody(request: VideoRequest): Record<string, unknown> {
   return body;
 }
 
+/** Image-to-video endpoints whose schema has no `aspect_ratio`: the first frame sets the shape. */
+const SHAPE_FROM_FIRST_FRAME = new Set([
+  'kwaivgi/kling-v4.0/image-to-video',
+  'kwaivgi/kling-v4.0-flash/image-to-video',
+]);
+
 export async function atlasCreateVideo(request: VideoRequest): Promise<{ taskId: string }> {
   if (request.inputMode === 'edit') {
     const taskId = await submit(request.apiKey, 'generateVideo', atlasEditBody(request));
@@ -436,7 +461,7 @@ export async function atlasCreateVideo(request: VideoRequest): Promise<{ taskId:
     ...videoImageFields(request.model, request.inputField, request.images ?? []),
     ...(request.durationSeconds ? { duration: request.durationSeconds } : {}),
     ...(request.resolution ? { resolution: request.resolution } : {}),
-    ...(request.aspectRatio && request.model !== 'kwaivgi/kling-v4.0/image-to-video' ? { [ratioField(request.model)]: request.aspectRatio } : {}),
+    ...(request.aspectRatio && !SHAPE_FROM_FIRST_FRAME.has(request.model) ? { [ratioField(request.model)]: request.aspectRatio } : {}),
     ...(request.referenceVideos?.length ? { reference_videos: request.referenceVideos } : {}),
     ...(request.referenceAudios?.length ? { reference_audios: request.referenceAudios } : {}),
   });

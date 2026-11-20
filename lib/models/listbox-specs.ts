@@ -9,7 +9,7 @@
  * listbox itself only ever sees cells.
  */
 import { pVideoEditRates } from '@/lib/providers/p-video-edit-promo';
-import type { ProviderModel, ProviderRate, ProviderSize } from '@/lib/providers/types';
+import type { ProviderMode, ProviderModel, ProviderRate, ProviderSize } from '@/lib/providers/types';
 import { sizeTier } from '@/lib/providers/types';
 import type { FalInputMode, FalModelDefinition } from '@/lib/fal/types';
 import { defaultFalValues, resolveFalVariant } from '@/lib/fal/catalog';
@@ -266,12 +266,17 @@ export function providerVideoSpecs(model: ProviderModel, inputMode?: string, at 
       rate ? fromCell({ rate }) : fromCell({ price: model.price ?? 'price unknown' }),
     ];
   }
+  // A mode with its own ceiling or its own rate shows that one: HeyGen's
+  // reference mode stops at 15 seconds and costs more per second.
+  const modeCap = inputMode ? model.maxSecondsByMode?.[inputMode as ProviderMode] : undefined;
+  const longest = maxSeconds(model);
+  const referencePriced = inputMode === 'reference' && model.referenceRate;
   return [
     // A video model with no seconds control fixes its own length (LTX 2.3 counts frames).
-    lengthCell(maxSeconds(model), text('fixed', 'subtle')),
+    lengthCell(longest !== undefined && modeCap !== undefined ? Math.min(longest, modeCap) : longest, text('fixed', 'subtle')),
     topTier(model.sizes) ? text(topTier(model.sizes)!) : DASH,
     shapesCell(model.sizes, model.aspectRatios),
-    fromCell(model),
+    referencePriced ? fromCell({ rate: referencePriced }) : fromCell(model),
   ];
 }
 
