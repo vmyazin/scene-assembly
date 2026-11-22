@@ -16,6 +16,17 @@
  * whose other temp-24h-* buckets belong to whoever created them. */
 const RESULT_DOMAINS = ['fal.media', 'fal.ai', 'kie.ai', 'kieai.redpandaai.co', 'tempfile.ai', 'tempfile.redpandaai.co', 'redpandaai.co', 'runware.ai', 'atlascloud.ai', 'atlas-media.oss-us-west-1.aliyuncs.com', 'cometapi.com', 'filesystem.site', 'piapi.ai', 'theapi.app', 'dnznrvs05pmza.cloudfront.net', 'dashscope-463f.oss-accelerate.aliyuncs.com', 'ark-acg-ap-southeast-1.tos-ap-southeast-1.volces.com', 'temp-24h-m4x2.oss-accelerate-overseas.aliyuncs.com'];
 
+/** Hosts trusted by exact name only: unlike `RESULT_DOMAINS`, no subdomain of
+ * these is accepted. Kie's docs show finished Market, Runway and Veo results on
+ * `tempfile.aiquickdraw.com` (`resultUrls` examples on about 80 pages, and the
+ * download-url example); a paid video job ended `result_location` on it
+ * (owner's report, 2026-11-22). `file.aiquickdraw.com` is the documented host
+ * of Veo 4K results and of Z-Image's `resultUrls` example. `aiquickdraw.com`
+ * as a whole is not a name this app can vouch for, so neither it nor any other
+ * host under it is trusted. Sources and the hosts left out are in
+ * `docs/claude/specs/2026-11-22-kie-tempfile-aiquickdraw-host.md`. */
+const RESULT_HOSTS = ['tempfile.aiquickdraw.com', 'file.aiquickdraw.com'];
+
 /** Browser navigation only. This MUST NOT authorize a Worker fetch: an unknown
  * public-looking hostname can resolve or redirect anywhere. Links are shown
  * only after an owner asks, with their hostname and no referrer or opener. */
@@ -33,5 +44,6 @@ export function providerBrowserUrl(value: unknown): URL | null {
 
 export function acceptedResultUrl(value: unknown): URL | null {
   const url = providerBrowserUrl(value);
-  return url && RESULT_DOMAINS.some(domain => url.hostname === domain || url.hostname.endsWith(`.${domain}`)) ? url : null;
+  if (!url) return null;
+  return RESULT_HOSTS.includes(url.hostname) || RESULT_DOMAINS.some(domain => url.hostname === domain || url.hostname.endsWith(`.${domain}`)) ? url : null;
 }

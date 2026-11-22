@@ -79,6 +79,33 @@ describe('POST /api/download-video', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('proxies a Kie result from its temporary download host', async () => {
+    const bytes = new Uint8Array([0, 1, 2, 3]);
+    fetchMock.mockResolvedValue(videoResponse(bytes));
+
+    const response = await POST(request({
+      url: 'https://tempfile.aiquickdraw.com/f/task/clip.mp4',
+      filenameBase: 'clip',
+    }));
+
+    expect(response.status).toBe(200);
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://tempfile.aiquickdraw.com/f/task/clip.mp4');
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+  });
+
+  it.each([
+    'http://tempfile.aiquickdraw.com/clip.mp4',
+    'https://tempfile.aiquickdraw.com.evil.test/clip.mp4',
+    'https://eviltempfile.aiquickdraw.com/clip.mp4',
+    'https://aiquickdraw.com.evil/clip.mp4',
+    'https://aiquickdraw.com/clip.mp4',
+  ])('refuses the look-alike %s without fetching it', async (url) => {
+    const response = await POST(request({ url, filenameBase: 'clip' }));
+
+    expect(response.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('refuses a request posted from another site', async () => {
     const response = await POST(request(
       { url: 'https://v3.fal.media/clip.mp4', filenameBase: 'clip' },
