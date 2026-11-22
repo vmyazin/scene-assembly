@@ -279,7 +279,10 @@
 - **A completed result blocked by its download address** → first read
   `docs/codex/specs/2026-10-01-provider-result-recovery.md`. Capture's host policy lives
   in `lib/account/result-location.ts`; `canRetryResultLocation` re-evaluates old failures
-  against it, because approving a host must also unblock existing jobs. Browser-only
+  against it, because approving a host must also unblock existing jobs. A host that
+  must not bring its subdomains with it goes in `RESULT_HOSTS` (exact name), not
+  `RESULT_DOMAINS`; Kie's `tempfile.aiquickdraw.com` and `file.aiquickdraw.com` are there, see
+  `docs/claude/specs/2026-11-22-kie-tempfile-aiquickdraw-host.md`. Browser-only
   recovery links are exposed by the owner-authenticated `/jobs/:id/recovery` read,
   never by job lists or a server fetch proxy. `ProviderResultRecovery` guards the
   account epoch, because a late response can otherwise expose another account's file.
