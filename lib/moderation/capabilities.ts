@@ -54,6 +54,12 @@ const kieChecker = (id: string) =>
 
 const kieImagen = (id: string) => id === 'imagen-4-ultra' || id === 'google/imagen4-ultra';
 
+/** Catalog id (`gpt-image-2-6-sunburst`) or the vendor id (`gpt-image-2-6/sunburst-text-to-image`). */
+const kieGptImage26 = (id: string) => id.startsWith('gpt-image-2-6');
+
+/** Comet's two GPT Image 2.6 weights. GPT Image 2 left the catalog ahead of its 2027-02-10 retirement. */
+const cometGptImage26 = (id: string) => id === 'gpt-image-2.6-sunburst' || id === 'gpt-image-2.6-flare';
+
 const RULES: RouteRule[] = [
   {
     provider: 'fal',
@@ -105,12 +111,24 @@ const RULES: RouteRule[] = [
     label: 'Kie Imagen 4 Ultra',
   },
   {
-    provider: 'comet',
-    test: (id) => id === 'gpt-image-2',
+    // Kie documents `moderation: auto | low` with `low` as its own default.
+    // Standard therefore writes `auto`: leaving the key out would send every
+    // Standard request at the vendor's loosest setting.
+    provider: 'kie',
+    test: kieGptImage26,
     relaxable: true,
     key: 'moderation',
     relaxedValue: 'low',
-    label: 'Comet GPT Image 2',
+    standardValue: 'auto',
+    label: 'Kie GPT Image 2.6',
+  },
+  {
+    provider: 'comet',
+    test: cometGptImage26,
+    relaxable: true,
+    key: 'moderation',
+    relaxedValue: 'low',
+    label: 'Comet GPT Image 2.6',
   },
   {
     provider: 'atlas',
@@ -142,7 +160,7 @@ export function moderationCapability(route: ModerationRoute): ModerationCapabili
 
 /** Named in refusal copy for routes that have no knob of their own. */
 export const RELAXABLE_ENGINE_LIST =
-  'fal Nano Banana 2, fal Veo 3.1, fal Wan 2.7, Kie FLUX.2 Pro, Kie Z-Image, Comet GPT Image 2, and Atlas FLUX.1 schnell';
+  'fal Nano Banana 2, fal Veo 3.1, fal Wan 2.7, Kie FLUX.2 Pro, Kie Z-Image, Kie GPT Image 2.6, Comet GPT Image 2.6, and Atlas FLUX.1 schnell';
 
 export interface ApplyModerationArgs {
   provider: string;

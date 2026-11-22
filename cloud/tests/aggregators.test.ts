@@ -64,7 +64,7 @@ describe('durable aggregator adapters', () => {
   it('stages Comet base64 with its documented output MIME and supports recovery',async()=>{
     env.CLOUD_GENERATION_PROVIDERS='comet';env.ASSETS=memoryBucket().bucket;await saveConnection(env,'owner','comet',{apiKey:'comet-test-secret'});
     const fetchMock=vi.fn().mockResolvedValue(Response.json({output_format:'jpeg',data:[{b64_json:'AQID'}]}));vi.stubGlobal('fetch',fetchMock);
-    const r:CloudJobRequest={...request,provider:'comet',modelId:'gpt-image-2'};
+    const r:CloudJobRequest={...request,provider:'comet',modelId:'gpt-image-2.6-sunburst'};
     validateRequest(env,r);const job=await acceptJob(env,'owner','comet-image-token',r),provider=adapterFor(env,'comet');
     const result=await provider.submit(env,job);
     expect(result.result?.sources[0]).toMatchObject({mimeType:'image/jpeg',objectKey:`accounts/owner/jobs/${job.id}/0`});

@@ -92,7 +92,7 @@ describe('captureImageResult', () => {
   it('files an aggregator image with the response cost or the catalog rate', () => {
     captureImageResult({ engine: 'runware', modelId: 'runware:z-image@turbo', prompt: 'p', inputImages: 0, cost: 0.003 });
     captureImageResult({ engine: 'atlas', modelId: 'z-image/turbo', prompt: 'p', inputImages: 0 });
-    captureImageResult({ engine: 'comet', modelId: 'gpt-image-2', prompt: 'p', inputImages: 0 });
+    captureImageResult({ engine: 'comet', modelId: 'gpt-image-2.6-sunburst', prompt: 'p', inputImages: 0 });
     expect(entries().map((e) => [e.provider, e.costUsd, e.confidence])).toEqual([
       ['comet', null, 'unknown'],
       ['atlas', 0.005, 'estimated'],

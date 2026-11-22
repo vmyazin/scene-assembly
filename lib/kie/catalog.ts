@@ -111,6 +111,46 @@ const paired = (
   },
 ];
 
+/**
+ * GPT Image 2.6 on Kie, read 2026-11-21 from
+ * `https://docs.kie.ai/market/gpt/gpt-image-2-6-{sunburst,flare}-{text-to-image,image-to-image}.md`.
+ * It replaces GPT Image 2, which OpenAI retires on 2027-02-10.
+ *
+ * The request schema is closed (`additionalProperties: false`), so only fields
+ * it names are listed: GPT Image 2's `seed` is not one of them. `quality` is
+ * sent explicitly because Kie bills this family by token
+ * (https://kie.ai/gpt-image-2-6: image output $27.00 per million, the same for
+ * both weights) and quality is what moves the token count. `auto` is left out:
+ * it lets the vendor pick the tier the user pays for.
+ *
+ * Kie's own `moderation` default is `low`, so the Standard `auto` is written by
+ * `lib/moderation/capabilities.ts`, not left to the vendor.
+ *
+ * Kie also sells a flat-price 1K "Economy" endpoint with a different schema.
+ * It is not listed here.
+ */
+function gptImage26(variant: 'sunburst' | 'flare'): KieModelDefinition {
+  const name = variant === 'sunburst' ? 'Sunburst' : 'Flare';
+  return {
+    id: `gpt-image-2-6-${variant}`,
+    label: `GPT Image 2.6 ${name}`,
+    fileCode: `gpt-image-2_6-${variant}`,
+    provider: 'OpenAI',
+    description:
+      variant === 'sunburst'
+        ? 'Text to image, or editing from up to 16 reference images. Detailed compositions and precise edits.'
+        : 'Text to image, or editing from up to 16 reference images. The faster of the two.',
+    mediaType: 'image',
+    variants: paired(
+      `gpt-image-2-6/${variant}-text-to-image`,
+      `gpt-image-2-6/${variant}-image-to-image`,
+      'input_urls',
+      [aspectRatios, imageResolution, selectField('quality', 'Quality', 'medium', ['low', 'medium', 'high', 'xhigh', 'max'])],
+      16
+    ),
+  };
+}
+
 export const KIE_MODELS: KieModelDefinition[] = [
   {
     id: 'nano-banana-pro',
@@ -142,21 +182,7 @@ export const KIE_MODELS: KieModelDefinition[] = [
       8
     ),
   },
-  {
-    id: 'gpt-image-2',
-    label: 'GPT Image 2',
-    fileCode: 'gpt-image-2',
-    provider: 'OpenAI',
-    description: 'Text to image, or editing from up to 16 reference images.',
-    mediaType: 'image',
-    variants: paired(
-      'gpt-image-2-text-to-image',
-      'gpt-image-2-image-to-image',
-      'input_urls',
-      [aspectRatios, imageResolution, seed],
-      16
-    ),
-  },
+  ...(['sunburst', 'flare'] as const).map(gptImage26),
   {
     id: 'flux-2-pro',
     label: 'FLUX.2 Pro',
@@ -470,6 +496,32 @@ export const KIE_MODELS: KieModelDefinition[] = [
     ),
   },
 ];
+
+/**
+ * Models that have left this catalog. Saved jobs, library cards and stored
+ * settings still name them, so the label and filename code are kept; none is
+ * selectable, and a stored selection moves to `replacedBy`.
+ *
+ * GPT Image 2 (`gpt-image-2-text-to-image` / `gpt-image-2-image-to-image`) is
+ * retired by OpenAI on 2027-02-10 and was replaced here on 2026-11-21.
+ */
+const PAST_KIE_MODELS: Record<string, Pick<KieModelDefinition, 'label' | 'fileCode'> & { replacedBy: string }> = {
+  'gpt-image-2': { label: 'GPT Image 2', fileCode: 'gpt-image-2', replacedBy: 'gpt-image-2-6-sunburst' },
+};
+
+export function pastKieModel(modelId: string | undefined) {
+  return modelId ? PAST_KIE_MODELS[modelId] : undefined;
+}
+
+/** The name a job was run under, whether or not the model is still offered. */
+export function kieModelLabel(modelId: string): string {
+  return KIE_MODELS.find((model) => model.id === modelId)?.label ?? pastKieModel(modelId)?.label ?? modelId;
+}
+
+/** A stored selection, moved to its successor when the model has left the catalog. */
+export function currentKieModelId(modelId: string): string {
+  return pastKieModel(modelId)?.replacedBy ?? modelId;
+}
 
 export function modelsForKieMode(mediaType: MediaType, inputMode: KieInputMode): KieModelDefinition[] {
   return KIE_MODELS.filter(

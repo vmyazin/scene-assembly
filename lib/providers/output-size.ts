@@ -369,6 +369,19 @@ export const ATLAS_GPT_IMAGE_DIMENSIONS: Record<string, Dimensions> = {
   '21:9': [1536, 1024],
 };
 
+/**
+ * GPT Image 2.6 publishes real wide and tall sizes, so the three shapes 2.5
+ * has to snap are exact here. Every pair is in the endpoint's `size` enum, and
+ * each quotes at or under 1024x1024 at medium quality (calculator, 2026-11-21),
+ * so the one rate on the card covers all of them.
+ */
+export const ATLAS_GPT_IMAGE_26_DIMENSIONS: Record<string, Dimensions> = {
+  ...ATLAS_GPT_IMAGE_DIMENSIONS,
+  '16:9': [2048, 1152],
+  '9:16': [1152, 2048],
+  '21:9': [2560, 1088],
+};
+
 /** Atlas picks a table per model, since not every model shares one. */
 export const isSeedream = (model: string) => model.startsWith('bytedance/seedream-');
 
@@ -382,6 +395,9 @@ export const isSeedreamFlash = (model: string) => model.startsWith('bytedance/se
 export const isMaiImage = (model: string) => model.startsWith('microsoft/mai-image-2.6');
 
 export const isGptImage25 = (model: string) => model.startsWith('openai/gpt-image-2.5-');
+
+/** GPT Image 2.6. Same `size` / `n` / `background` dialect as 2.5, with a wider size enum. */
+export const isGptImage26 = (model: string) => model.startsWith('openai/gpt-image-2.6-');
 
 /**
  * Nano Banana 2 takes a ratio and a tier (`1k`/`2k`/`4k`) and publishes no
@@ -419,6 +435,7 @@ export function atlasDimensionTable(
   if (modelId && isSeedreamFlash(modelId)) return ATLAS_SEEDREAM_FLASH_DIMENSIONS;
   if (modelId && isMaiImage(modelId)) return ATLAS_MAI_DIMENSIONS;
   if (modelId && isSeedream(modelId)) return ATLAS_SEEDREAM_DIMENSIONS;
+  if (modelId && isGptImage26(modelId)) return ATLAS_GPT_IMAGE_26_DIMENSIONS;
   if (modelId && isGptImage25(modelId)) return ATLAS_GPT_IMAGE_DIMENSIONS;
   return ATLAS_IMAGE_DIMENSIONS;
 }

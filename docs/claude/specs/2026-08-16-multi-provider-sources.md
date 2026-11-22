@@ -152,9 +152,10 @@ Comet's catalog is public too: `GET https://api.cometapi.com/api/models`.
 | Atlas | `bytedance/seedance-2.5/{text,image,reference}-to-video` | text→video, image→video, first+last frame, reference→video | $0.134 / s, every resolution |
 | Atlas | `google/nano-banana-2/{text-to-image,edit}-developer` | text→image, image→image (14 refs) | $0.028 / image, every tier |
 | Atlas | `google/nano-banana-2-lite/{text-to-image,edit}-developer` | text→image, image→image (14 refs) | $0.014 / image, 1K only |
+| Atlas | `openai/gpt-image-2.6-{sunburst,flare}/{text-to-image,edit}` | text→image, image→image (16 refs) | $0.0146 / image @ medium + $0.0256 / input image |
 | Atlas | `openai/gpt-image-2.5-{sunburst,flare}-developer/{text-to-image,edit}` | text→image, image→image (16 refs) | $0.03 / image @ 1K |
 | Atlas | `minimax/h3-developer/{text,image,reference}-to-video` | text→video, image→video, first+last frame, reference→video | $0.015 / s @ 480P and 768P |
-| Comet | `gpt-image-2` | text→image | metered |
+| Comet | `gpt-image-2.6-sunburst`, `gpt-image-2.6-flare` (replaced `gpt-image-2` on 2026-11-21) | text→image | metered |
 | Comet | `qwen-image` | text→image (n must be 1) | metered |
 | Comet | `seedance-2-5`, `doubao-seedance-2-0-mini` | text→video, image→video | metered |
 | Comet | `veo3.1-fast`, `veo3.1` | text→video, image→video | metered |

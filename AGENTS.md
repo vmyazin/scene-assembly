@@ -47,6 +47,14 @@
   `extraInputImageUsd`, and merging the two fields misprices one of them.
   Saved 5.0 Pro selections are never migrated, because no default ever chose it.
 
+- **GPT Image 2 or 2.6, or a model that has left a catalog** → first read
+  `docs/claude/specs/2026-11-21-gpt-image-2-6.md`. GPT Image 2.6 replaced GPT
+  Image 2 on Kie and Comet ahead of OpenAI's 2027-02-10 retirement. A removed
+  id goes in `PAST_KIE_MODELS` or `PAST_PROVIDER_MODELS` with its label,
+  filename code and successor, because saved jobs still name it and a stored
+  selection must not fall to an unrelated first row. Kie's 2.6 defaults
+  `moderation` to `low`, so Standard writes `auto`.
+
 - **A dated vendor sale, or HeyGen Video 1.0, Kling Image 4.0, Seedance 2.5
   Flash, Atlas Kling 4.0 Flash** → first read
   `docs/claude/specs/2026-11-19-four-models.md`. The catalog keeps list prices;

@@ -16,7 +16,7 @@ describe('Kie task client', () => {
     await expect(
       createKieTask({
         apiKey,
-        variant: resolveKieVariant('gpt-image-2', 'text'),
+        variant: resolveKieVariant('gpt-image-2-6-sunburst', 'text'),
         prompt: 'Studio photo of a banana',
         values: { aspect_ratio: '1:1', resolution: '2K' },
         uploadUrls: [],
@@ -29,8 +29,9 @@ describe('Kie task client', () => {
         method: 'POST',
         headers: expect.objectContaining({ Authorization: `Bearer ${apiKey}` }),
         body: JSON.stringify({
-          model: 'gpt-image-2-text-to-image',
-          input: { prompt: 'Studio photo of a banana', aspect_ratio: '1:1', resolution: '2K' },
+          model: 'gpt-image-2-6/sunburst-text-to-image',
+          // Standard writes `auto`: Kie's own default for this family is `low`.
+          input: { prompt: 'Studio photo of a banana', aspect_ratio: '1:1', resolution: '2K', moderation: 'auto' },
         }),
       })
     );

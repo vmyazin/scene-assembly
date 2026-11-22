@@ -52,6 +52,12 @@ describe('provider catalog rates', () => {
       'microsoft/mai-image-2.6/edit': { usd: 0.0891, per: 'image' },
       // Kling Image 4.0: list. Atlas's undated 10% discount is not stored.
       'kwaivgi/kling-image-v4.0/text-to-image': { usdByResolution: { '2k': 0.063, '4k': 0.094 }, per: 'image', inputImageUsd: 0.003 },
+      // GPT Image 2.6 is token-metered: the medium-quality calculator quote,
+      // and every edit input billed (2026-11-21).
+      'openai/gpt-image-2.6-sunburst/text-to-image': { usd: 0.0146, per: 'image' },
+      'openai/gpt-image-2.6-sunburst/edit': { usd: 0.0146, per: 'image', inputImageUsd: 0.0256 },
+      'openai/gpt-image-2.6-flare/text-to-image': { usd: 0.0146, per: 'image' },
+      'openai/gpt-image-2.6-flare/edit': { usd: 0.0146, per: 'image', inputImageUsd: 0.0256 },
       // Pinned to the 1K tier, so the $0.03 on the card is the tier charged.
       'openai/gpt-image-2.5-sunburst-developer/text-to-image': { usd: 0.03, per: 'image' },
       'openai/gpt-image-2.5-sunburst-developer/edit': { usd: 0.03, per: 'image' },
