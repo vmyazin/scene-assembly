@@ -3,9 +3,9 @@ import { ENGINES } from '@/lib/engines/registry';
 import { findGeminiImageModel } from '@/lib/engines/gemini-catalog';
 import { findGeminiVideoModel, pastGeminiVideoModel } from '@/lib/engines/gemini-video-catalog';
 import { FAL_IMAGE_MODELS, FAL_VIDEO_MODELS } from '@/lib/fal/catalog';
-import { KIE_MODELS } from '@/lib/kie/catalog';
+import { KIE_MODELS, pastKieModel } from '@/lib/kie/catalog';
 import { fallbackFilenameBase, type DownloadMediaType } from '@/lib/media-download';
-import { PROVIDER_MODELS } from '@/lib/providers/catalog';
+import { PROVIDER_MODELS, pastProviderModel } from '@/lib/providers/catalog';
 import type { ProviderId } from '@/lib/providers/types';
 
 /**
@@ -43,6 +43,9 @@ export function modelFileCode(provider?: string, modelId?: string): string | und
           : PROVIDER_MODELS[provider as ProviderId];
     const known = catalog?.find((model) => model.id === modelId);
     if (known) return known.fileCode;
+    // A model that left its catalog keeps the code its files were saved under.
+    const past = provider === 'kie' ? pastKieModel(modelId) : provider === 'fal' ? undefined : pastProviderModel(provider as ProviderId, modelId);
+    if (past) return past.fileCode;
   }
 
   // Engines that run one fixed model (Gemini, Pollinations, Cloudflare) name it

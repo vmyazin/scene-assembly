@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import ReferenceStack from '@/components/ReferenceStack';
 import { requestPromptSlug } from '@/lib/micro-ai/browser';
 import { fetchKieCredits, submitKieJob, uploadKieFiles } from '@/lib/kie/browser';
-import { defaultKieValues, modelsForKieMode, resolveKieVariant, validateKieInput } from '@/lib/kie/catalog';
+import { currentKieModelId, defaultKieValues, kieModelLabel, modelsForKieMode, resolveKieVariant, validateKieInput } from '@/lib/kie/catalog';
 import { CLOUD_EDIT_REFERENCE_CAP, editPromptMode } from '@/lib/providers/edit-references';
 import { prepareSubmissionMedia } from '@/lib/providers/edit-submission';
 import ModelListbox from '@/components/ModelListbox';
@@ -126,7 +126,8 @@ export default function KieGenerationWorkspace({
 
   const models = useMemo(() => modelsForKieMode(mediaType, inputMode), [inputMode, mediaType]);
   const preference = mediaType === 'image' ? kieImageModel : kieVideoModel;
-  const selectedModel = models.find((model) => model.id === preference) ?? models[0];
+  // A stored GPT Image 2 selection opens on GPT Image 2.6, not on the first row.
+  const selectedModel = models.find((model) => model.id === currentKieModelId(preference)) ?? models[0];
   const variant = resolveKieVariant(selectedModel.id, inputMode);
   const variantKey = `${selectedModel.id}:${inputMode}`;
   const isEdit = inputMode === 'edit';
@@ -655,7 +656,7 @@ export default function KieGenerationWorkspace({
         actions={generateActions}
         results={cloudWorkspace.cloud ? <CloudJobPanel provider="kie" mediaType={mediaType} inputMode={inputMode} onContinueFromFrame={onContinueFromFrame} /> :
           <ResultPanel
-            modelLabel={latestJob ? models.find(model => model.id === latestJob.modelId)?.label ?? latestJob.modelId : undefined}
+            modelLabel={latestJob ? kieModelLabel(latestJob.modelId) : undefined}
             status={latestJob && {
               tone: latestJob.state === 'fail' ? 'danger' : latestJob.state === 'success' ? 'success' : 'warning',
               label: latestJob.state === 'queuing' ? 'Queued' : latestJob.state === 'success' ? 'Done' : latestJob.state === 'fail' ? 'Failed' : 'Generating',

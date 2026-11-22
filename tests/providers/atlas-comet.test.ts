@@ -541,7 +541,7 @@ describe('cometapi', () => {
 
     const result = await cometGenerateImage({
       apiKey: 'cm-key',
-      model: 'gpt-image-2',
+      model: 'gpt-image-2.6-sunburst',
       prompt: 'a paper crane',
       aspectRatio: '1:1',
     });
@@ -549,7 +549,7 @@ describe('cometapi', () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('https://api.cometapi.com/v1/images/generations');
     expect(JSON.parse(init.body as string)).toEqual({
-      model: 'gpt-image-2',
+      model: 'gpt-image-2.6-sunburst',
       prompt: 'a paper crane',
       n: 1,
       size: '1024x1024',

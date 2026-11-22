@@ -12,10 +12,12 @@ import {
   type VideoRequest,
 } from './types';
 import {
+  ATLAS_GPT_IMAGE_26_DIMENSIONS,
   ATLAS_GPT_IMAGE_DIMENSIONS,
   ATLAS_IMAGE_DIMENSIONS,
   atlasDimensionTable,
   isGptImage25,
+  isGptImage26,
   isKlingImage4,
   isLumaUni,
   isMaiImage,
@@ -146,6 +148,21 @@ function atlasImageFields(
       ...base,
       ...(request.aspectRatio ? { aspect_ratio: request.aspectRatio } : {}),
       ...(tier ? { resolution: tier } : {}),
+      ...(images.length ? { images } : {}),
+    };
+  }
+
+  if (isGptImage26(model)) {
+    // 2.5's dialect, plus an explicit `quality`: this family is billed by token
+    // and the catalog rate is the medium quote. Atlas's default is medium
+    // today, but a changed default would change the charge with no change here.
+    const [width, height] = ratioDimensions(ATLAS_GPT_IMAGE_26_DIMENSIONS, request.aspectRatio);
+    return {
+      ...base,
+      size: `${width}x${height}`,
+      quality: 'medium',
+      n: 1,
+      ...imageBackground(request),
       ...(images.length ? { images } : {}),
     };
   }

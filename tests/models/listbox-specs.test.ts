@@ -80,7 +80,7 @@ describe('listbox spec derivation', () => {
   it('gives image models a price, a reference count and an edit mark', () => {
     expect(providerImageSpecs(findModel('runware', 'runware:108@22')!).map(textOf)).toEqual(['$0.0166/1024²', '3', true]);
     // Text-only, no references: the cells say so rather than hide.
-    expect(providerImageSpecs(findModel('comet', 'gpt-image-2')!).map(textOf)).toEqual(['metered', '—', false]);
+    expect(providerImageSpecs(findModel('comet', 'gpt-image-2.6-sunburst')!).map(textOf)).toEqual(['metered', '—', false]);
     expect(providerImageSpecs(findModel('atlas', 'black-forest-labs/flux-schnell')!).map(textOf)).toEqual(['$0.003/img', '1', true]);
   });
 

@@ -149,7 +149,7 @@ describe('provider payloads', () => {
     ).toEqual({ prompt: 'x', enableFallback: false });
   });
 
-  it('sends Comet moderation low only for GPT Image 2 text, and omits it on Standard', async () => {
+  it('sends Comet moderation low only for GPT Image 2.6 text, and omits it on Standard', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -157,14 +157,14 @@ describe('provider payloads', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await cometGenerateImage({ apiKey: 'cm', model: 'gpt-image-2', prompt: 'a paper crane', aspectRatio: '1:1' });
+    await cometGenerateImage({ apiKey: 'cm', model: 'gpt-image-2.6-sunburst', prompt: 'a paper crane', aspectRatio: '1:1' });
     const standard = JSON.parse(fetchMock.mock.calls[0][1].body as string);
-    expect(standard).toEqual({ model: 'gpt-image-2', prompt: 'a paper crane', n: 1, size: '1024x1024' });
+    expect(standard).toEqual({ model: 'gpt-image-2.6-sunburst', prompt: 'a paper crane', n: 1, size: '1024x1024' });
     expect(standard).not.toHaveProperty('moderation');
 
     await cometGenerateImage({
       apiKey: 'cm',
-      model: 'gpt-image-2',
+      model: 'gpt-image-2.6-sunburst',
       prompt: 'a paper crane',
       aspectRatio: '1:1',
       moderation: 'relaxed',
@@ -173,7 +173,7 @@ describe('provider payloads', () => {
 
     await cometGenerateImage({
       apiKey: 'cm',
-      model: 'gpt-image-2',
+      model: 'gpt-image-2.6-sunburst',
       prompt: 'a paper crane',
       aspectRatio: '1:1',
       moderation: 'relaxed',

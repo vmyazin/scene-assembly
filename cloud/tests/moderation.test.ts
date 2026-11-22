@@ -50,7 +50,7 @@ describe('cloud moderation validators', () => {
     expect(
       validateRequest(env, base({
         provider: 'comet',
-        modelId: 'gpt-image-2',
+        modelId: 'gpt-image-2.6-flare',
         values: { moderation: 'relaxed' },
       })).values.moderation
     ).toBe('relaxed');

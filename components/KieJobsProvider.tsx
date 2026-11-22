@@ -3,7 +3,7 @@
 
 import { trackQueuedTerminal } from '@/lib/analytics/generation-result';
 import { getKieJobStatus } from '@/lib/kie/browser';
-import { KIE_MODELS } from '@/lib/kie/catalog';
+import { kieModelLabel } from '@/lib/kie/catalog';
 import { isKieJobTerminal, KIE_JOB_TIMEOUT_MS, nextKiePollDelay } from '@/lib/kie/queue';
 import type { KieJob, KieTask } from '@/lib/kie/types';
 import { useAppStore } from '@/store/useAppStore';
@@ -19,7 +19,7 @@ function reportKieTerminal(job: KieJob, succeeded: boolean, error?: string): voi
   trackQueuedTerminal({
     engine: 'kie',
     route: job.modelId,
-    model: KIE_MODELS.find((model) => model.id === job.modelId)?.label ?? job.modelId,
+    model: kieModelLabel(job.modelId),
     media: job.mediaType,
     controlValues: job.controlValues,
     succeeded,

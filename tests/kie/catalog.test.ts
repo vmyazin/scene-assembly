@@ -9,8 +9,8 @@ import {
 } from '../../lib/kie/catalog';
 
 describe('Kie model catalog', () => {
-  it('contains the approved eight image and seven video model families', () => {
-    expect(KIE_MODELS.filter((model) => model.mediaType === 'image')).toHaveLength(8);
+  it('contains nine image and seven video model families (GPT Image 2.6 is two: Sunburst and Flare)', () => {
+    expect(KIE_MODELS.filter((model) => model.mediaType === 'image')).toHaveLength(9);
     expect(KIE_MODELS.filter((model) => model.mediaType === 'video')).toHaveLength(7);
   });
 
@@ -25,8 +25,8 @@ describe('Kie model catalog', () => {
   });
 
   it('selects the documented model variant for image input', () => {
-    expect(resolveKieVariant('gpt-image-2', 'image')).toMatchObject({
-      modelId: 'gpt-image-2-image-to-image',
+    expect(resolveKieVariant('gpt-image-2-6-sunburst', 'image')).toMatchObject({
+      modelId: 'gpt-image-2-6/sunburst-image-to-image',
       protocol: 'market',
     });
   });

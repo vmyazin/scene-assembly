@@ -917,6 +917,65 @@ function gptImage25Developer(variant: 'sunburst' | 'flare'): ProviderModel[] {
 }
 
 /**
+ * GPT Image 2.6 on Atlas, read 2026-11-21 from
+ * `https://www.atlascloud.ai/models/openai/gpt-image-2.6-{sunburst,flare}/{text-to-image,edit}/llms.txt`.
+ * There is no `-developer` id for 2.6 (those four addresses return 404).
+ *
+ * **Token-metered, and the rate is the calculator's quote.** llms.txt prints
+ * "$0.007 per image" (edit: $0.008), which is the floor. Atlas's read-only
+ * quote endpoint (`POST /api/v1/model/calculate`) answers
+ * `estimate_reason: settles_on_usage` and, at `quality: medium` with a short
+ * prompt, $0.014536 for 1024x1024, the dearest size this card sends (1536x1024
+ * $0.012232, 1024x768 $0.011224, 2048x1152 $0.012808, 2560x1088 $0.010912).
+ * That figure already carries Atlas's `discount: "80"`, which has no published
+ * end, so it is the rate and not a dated sale; before it the quote is $0.01817.
+ * Rounding up to $0.0146 keeps an estimate from understating the quote.
+ *
+ * The edit adds $0.0256 for every input image, the first included: one is
+ * $0.040136, two $0.065736, four $0.116936. Transparent does not move the
+ * quote. Sunburst and Flare quote the same.
+ *
+ * `quality` is pinned to `medium` in `atlas.ts`. `high` is $0.046 and `max`
+ * $0.173 at 1024x1024, and `auto` quotes as `max`, so an unpinned request
+ * could cost twelve times the card. A long prompt adds text tokens on top.
+ */
+function gptImage26(variant: 'sunburst' | 'flare'): ProviderModel[] {
+  const name = variant === 'sunburst' ? 'Sunburst' : 'Flare';
+  const shared = {
+    kind: 'image' as const,
+    backgrounds: [
+      { label: 'Auto', value: 'auto' as const },
+      { label: 'Opaque', value: 'opaque' as const },
+      { label: 'Transparent', value: 'transparent' as const },
+    ],
+  };
+
+  return [
+    {
+      ...shared,
+      id: `openai/gpt-image-2.6-${variant}/text-to-image`,
+      label: `GPT Image 2.6 ${name}`,
+      fileCode: `gpt-image-2_6-${variant}-t2i`,
+      modes: ['text'],
+      price: '$0.0146 / image @ medium quality',
+      rate: { usd: 0.0146, per: 'image' },
+      note: 'The current GPT Image. Billed by token: about $0.0146 at medium quality, which is what this sends. A very long prompt costs a little more. Prompts up to 32,000 characters.',
+    },
+    {
+      ...shared,
+      id: `openai/gpt-image-2.6-${variant}/edit`,
+      label: `GPT Image 2.6 ${name} Edit`,
+      fileCode: `gpt-image-2_6-${variant}-edit`,
+      modes: ['image'],
+      price: '$0.0146 / image @ medium quality + $0.0256 / input image',
+      rate: { usd: 0.0146, per: 'image', inputImageUsd: 0.0256 },
+      maxInputImages: 16,
+      note: 'Editing only — it needs at least one reference. Up to 16, and every one adds about $0.0256, the first included. Billed by token at medium quality.',
+    },
+  ];
+}
+
+/**
  * MiniMax H3 Developer. Three endpoints, one set of controls, same shape as the
  * Seedance families above — but almost every field name differs from theirs,
  * and Atlas drops a name a model does not know in silence, so the wire mapping
@@ -1811,6 +1870,8 @@ const ATLAS_MODELS: ProviderModel[] = [
   ...nanoBanana21Developer(),
   ...nanoBanana2Developer('full'),
   ...nanoBanana2Developer('lite'),
+  ...gptImage26('sunburst'),
+  ...gptImage26('flare'),
   ...gptImage25Developer('sunburst'),
   ...gptImage25Developer('flare'),
   ...seedream50Flash(),
@@ -1975,16 +2036,28 @@ const ATLAS_MODELS: ProviderModel[] = [
   },
 ];
 
+/**
+ * GPT Image 2.6 on Comet, read 2026-11-21 from the public catalog at
+ * `https://api.cometapi.com/api/models`. It lists `gpt-image-2.6-sunburst` on
+ * `/v1/images/generations` and `/v1/images/edits`, and its pricing note names
+ * `gpt-image-2.6-flare` beside it at the same token rates: text input $4.00,
+ * image input $6.40 and image output $24.00 per million, 20% under OpenAI's.
+ * No per-image price is published, so these stay `metered` with no rate, as
+ * GPT Image 2 was. It replaces GPT Image 2, which OpenAI retires on 2027-02-10.
+ */
+const cometGptImage26 = (variant: 'sunburst' | 'flare'): ProviderModel => ({
+  id: `gpt-image-2.6-${variant}`,
+  label: `GPT Image 2.6 ${variant === 'sunburst' ? 'Sunburst' : 'Flare'}`,
+  fileCode: `gpt-image-2_6-${variant}`,
+  kind: 'image',
+  modes: ['text'],
+  price: 'metered',
+  note: `${variant === 'sunburst' ? 'Detailed compositions.' : 'The faster of the two.'} Billed by token: $24 per million image-output tokens. Returns base64 directly rather than a URL.`,
+});
+
 const COMET_MODELS: ProviderModel[] = [
-  {
-    id: 'gpt-image-2',
-    label: 'GPT Image 2',
-    fileCode: 'gpt-image-2',
-    kind: 'image',
-    modes: ['text'],
-    price: 'metered',
-    note: 'Returns base64 directly rather than a URL.',
-  },
+  cometGptImage26('sunburst'),
+  cometGptImage26('flare'),
   {
     id: 'qwen-image',
     label: 'Qwen-Image',
@@ -2254,9 +2327,27 @@ export const PROVIDER_MODELS: Record<ProviderId, ProviderModel[]> = {
 export const DEFAULT_MODELS: Record<ProviderId, Record<MediaKind, string>> = {
   runware: { image: 'runware:z-image@turbo', video: 'lightricks:ltx@2.5-fast' },
   atlas: { image: 'black-forest-labs/flux-schnell', video: 'ltx-2.3-quality/text-to-video' },
-  comet: { image: 'gpt-image-2', video: 'seedance-2-5' },
+  comet: { image: 'gpt-image-2.6-sunburst', video: 'seedance-2-5' },
   piapi: { image: 'nano-banana-2', video: 'veo-3.1-fast' },
 };
+
+/**
+ * Models that have left a catalog. Saved jobs, library cards and stored
+ * settings still name them, so the label and filename code are kept; none is
+ * selectable, and `resolveModel` sends a stored selection to `replacedBy`.
+ *
+ * Comet's `gpt-image-2` is retired by OpenAI on 2027-02-10 and was replaced
+ * here on 2026-11-21.
+ */
+const PAST_PROVIDER_MODELS: Partial<Record<ProviderId, Record<string, Pick<ProviderModel, 'label' | 'fileCode'> & { replacedBy: string }>>> = {
+  comet: {
+    'gpt-image-2': { label: 'GPT Image 2', fileCode: 'gpt-image-2', replacedBy: 'gpt-image-2.6-sunburst' },
+  },
+};
+
+export function pastProviderModel(provider: ProviderId, id: string | undefined) {
+  return id ? PAST_PROVIDER_MODELS[provider]?.[id] : undefined;
+}
 
 export function modelsFor(provider: ProviderId, kind: MediaKind): ProviderModel[] {
   return PROVIDER_MODELS[provider].filter((model) => model.kind === kind);
@@ -2370,7 +2461,8 @@ export function resolveSize(
 }
 
 export function resolveModel(provider: ProviderId, kind: MediaKind, requested?: string): string {
-  const known = requested && findModel(provider, requested);
+  const current = requested && (pastProviderModel(provider, requested)?.replacedBy ?? requested);
+  const known = current && findModel(provider, current);
   if (known && known.kind === kind) return known.id;
   return DEFAULT_MODELS[provider][kind];
 }
