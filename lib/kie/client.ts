@@ -120,6 +120,13 @@ export async function createKieTask(args: {
   values: Record<string, string | number | boolean | undefined>;
   references?: EditReferenceInput;
 }): Promise<{ taskId: string; protocol: KieProtocol }> {
+  // A stale browser or queued job can still hold a retired option.
+  for (const field of args.variant.fields) {
+    const value = args.values[field.key];
+    if (field.options && value !== undefined && value !== '' && !field.options.some(option => option.value === value)) {
+      throw new KieApiError(`Choose a supported ${field.label.toLowerCase()} for this Kie model.`, 400);
+    }
+  }
   const input = buildKieInput(args.variant, {
     prompt: args.prompt,
     uploadUrls: args.uploadUrls,

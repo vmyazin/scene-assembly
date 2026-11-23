@@ -1,3 +1,4 @@
+import { KieApiError } from '../../lib/kie/client';
 import { recordAccountSpend } from './spend';
 import type { Env } from './security';
 import { AccountError, finishJob, getJob, recordFailure, setJobState, type JobRow } from './jobs';
@@ -43,9 +44,16 @@ export async function runGeneration(env:Env,jobId:string,step:DurableStep,overri
       // `sanitizeProviderMessage`, and never the Workflow's own error store.
       const result=await adapter().submit(env,current).catch(async error=>{
         const {reason,detail}=providerFailureReason(error);
+        // Kie's create endpoint can return HTTP 200 with a validation error in
+        // its envelope. The client preserves that code before the Workflow boundary.
+        if (error instanceof KieApiError && (error.status === 400 || error.status === 422)) {
+          await finishJob(env,jobId,'failed','provider_failed',{reason,detail});
+          return null;
+        }
         await recordFailure(env,jobId,reason,detail).catch(()=>{});
         throw new Error('Provider submission could not be confirmed');
       });
+      if(result === null)return;
       if(!result.handle&&!result.result)throw new Error('submission_ambiguous');
       await env.DB.prepare("UPDATE account_jobs SET provider_task = ?, result_json = ?, state = ?, updated_at = ? WHERE id = ? AND deleted = 0 AND state NOT IN ('saved','failed','cancelled')")
         .bind(result.handle?JSON.stringify(result.handle):null,result.result?JSON.stringify(result.result):null,result.result?'saving':'running',Date.now(),jobId).run();

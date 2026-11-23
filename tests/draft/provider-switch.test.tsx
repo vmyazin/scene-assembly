@@ -118,11 +118,11 @@ describe('carrying user input across providers and modes', () => {
   });
 
   it('falls back to the default when the next model cannot express the choice', () => {
-    // Kie's Wan offers 21:9; fal's Veo Fast only 16:9 and 9:16.
+    // Kie's Wan offers 4:3; fal's Veo Fast only 16:9 and 9:16.
     useAppStore.setState({ kieVideoModel: 'wan-2-7' });
     const kie = renderKie();
-    choose('Aspect ratio', '21:9');
-    expect(useDraftStore.getState().controlValues.aspect_ratio).toBe('21:9');
+    choose('Aspect ratio', '4:3');
+    expect(useDraftStore.getState().controlValues.aspect_ratio).toBe('4:3');
     kie.unmount();
 
     renderFal();

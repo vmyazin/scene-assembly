@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { adapter } from './database';
 import { LOCAL_SCHEMA } from '../src/schema';
 import { saveConnection } from '../src/vault';
-import { acceptJob } from '../src/jobs';
+import { acceptJob, getJob } from '../src/jobs';
+import { runGeneration, type DurableStep } from '../src/generation-runner';
 import { adapterFor, validateRequest } from '../src/providers';
 import { modelsForFalMode } from '../../lib/fal/catalog';
 import { KIE_MODELS } from '../../lib/kie/catalog';
@@ -27,6 +28,31 @@ describe('queued native adapters',()=>{
     expect(validateRequest(env,request)).toEqual(request);
     for(const patch of [{modelId:'unlisted-model'},{mediaType:'video'},{inputMode:'image'}])expect(()=>validateRequest(env,{...request,...patch})).toThrow();
   });
+  it('rejects stale Wan resolution settings during request validation', () => {
+    const wan: CloudJobRequest = { ...request, modelId: 'wan-2-7', mediaType: 'video', inputMode: 'image', referenceIds: ['frame'] };
+    expect(validateRequest(env, { ...wan, values: { resolution: '720p' } }).modelId).toBe(wan.modelId);
+    expect(() => validateRequest(env, { ...wan, values: { resolution: '480p' } })).toThrowError(expect.objectContaining({ code: 'invalid_settings' }));
+  });
+
+  it.each([
+    { code: 422, state: 'failed', reason: 'provider_rejected' },
+    { code: 500, state: 'needs_attention', reason: 'submit_unconfirmed' },
+    { code: 200, state: 'needs_attention', reason: 'submit_unconfirmed' }, // success without a task ID
+  ])('records a Kie create response with code $code without resubmitting', async ({ code, state, reason }) => {
+    const msg = 'resolution is not within the range of allowed options';
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ code, msg }));
+    vi.stubGlobal('fetch', fetchMock);
+    const job = await acceptJob(env, 'owner', 'wan-validation-response', { ...request, modelId: 'wan-2-7', mediaType: 'video' });
+    const step: DurableStep = { do: async (_name, _config, run) => run(), sleep: async () => {} };
+    await runGeneration(env, job.id, step);
+    await runGeneration(env, job.id, step);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(await getJob(env, job.id)).toMatchObject({
+      state, failure_reason: reason,
+      ...(code === 422 ? { failure_detail: msg, reservation_accounted: 0, error_code: 'provider_failed' } : { error_code: 'submission_ambiguous' }),
+    });
+  });
+
   it('submits once and polls the saved task using the encrypted owner connection',async()=>{
     const fetchMock=vi.fn().mockResolvedValueOnce(Response.json({code:200,data:{taskId:'kie-task-1'}})).mockResolvedValueOnce(Response.json({code:200,data:{taskId:'kie-task-1',state:'success',resultJson:JSON.stringify({resultUrls:['https://tempfile.ai/result.png']})}}));
     vi.stubGlobal('fetch',fetchMock);

@@ -61,7 +61,8 @@ describe('Kie model catalog', () => {
 
         expect(input.prompt).toBe(`${model.label} test prompt`);
         for (const field of variant.fields.filter((field) => field.defaultValue !== undefined)) {
-          expect(input[field.key]).toBe(field.defaultValue);
+          const option = field.options?.find(option => option.value === field.defaultValue);
+          expect(input[field.wireKey ?? field.key]).toBe(option?.wireValue ?? field.defaultValue);
         }
         if (variant.inputMode === 'image') {
           expect(input[variant.imageInputKey ?? 'image_url']).toBeDefined();

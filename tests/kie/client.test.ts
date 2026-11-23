@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createKieTask, getKieTask } from '../../lib/kie/client';
-import { resolveKieVariant } from '../../lib/kie/catalog';
+import { defaultKieValues, resolveKieVariant } from '../../lib/kie/catalog';
 
 const apiKey = 'kie_test_key';
 
@@ -35,6 +35,29 @@ describe('Kie task client', () => {
         }),
       })
     );
+  });
+
+  it.each(['image', 'text'] as const)('sends the documented Wan 2.7 %s-to-video payload', async mode => {
+    const variant = resolveKieVariant('wan-2-7', mode);
+    const frame = 'https://files.example/frame.png';
+    const fetchMock = vi.fn().mockImplementation(async () => Response.json({ code: 200, data: { taskId: 'wan-task' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const args = {
+      apiKey, variant, prompt: 'Tilt down slowly', uploadUrls: mode === 'image' ? [frame] : [],
+      values: { ...defaultKieValues(variant), aspect_ratio: '4:3', enable_prompt_expansion: false },
+    };
+    await expect(createKieTask({ ...args, values: { ...args.values, resolution: '480p' } })).rejects.toMatchObject({ status: 400 });
+    expect(fetchMock).not.toHaveBeenCalled();
+    for (const resolution of ['720p', '1080p']) {
+      await createKieTask({ ...args, values: { ...args.values, resolution } });
+      expect(JSON.parse(fetchMock.mock.lastCall![1].body)).toEqual({
+        model: `wan/2-7-${mode}-to-video`,
+        input: {
+          prompt: args.prompt, resolution, duration: 5, prompt_extend: false, seed: 0,
+          ...(mode === 'image' ? { first_frame_url: frame } : { ratio: '4:3' }),
+        },
+      });
+    }
   });
 
   it('uses the dedicated Veo endpoint and normalizes its completion response', async () => {

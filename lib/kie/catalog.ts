@@ -91,6 +91,21 @@ const selectField = (
   options: options.map((value) => ({ label: value.replaceAll('_', ' '), value })),
 });
 
+// https://docs.kie.ai/market/wan/2-7-image-to-video
+// Keep saved duration strings and the shared prompt toggle usable across models.
+const wanVideoFields: KieFieldDefinition[] = [
+  {
+    ...duration,
+    options: Array.from({ length: 14 }, (_, i) => {
+      const seconds = i + 2;
+      return { label: `${seconds} seconds`, value: String(seconds), wireValue: seconds };
+    }),
+  },
+  selectField('resolution', 'Resolution', '720p', ['720p', '1080p']),
+  { ...boolField('enable_prompt_expansion', 'Expand prompt', true), wireKey: 'prompt_extend' },
+  seed,
+];
+
 const paired = (
   textModelId: string,
   imageModelId: string,
@@ -349,14 +364,24 @@ export const KIE_MODELS: KieModelDefinition[] = [
     description: 'Text to video, or animates one image. Expands short prompts.',
     mediaType: 'video',
     variants: [
-      ...paired(
-        'wan/2-7-text-to-video',
-        'wan/2-7-image-to-video',
-        'image_url',
-        [aspectRatios, duration, videoResolution, boolField('enable_prompt_expansion', 'Expand prompt', true), seed],
-        1,
-        false
-      ),
+      {
+        modelId: 'wan/2-7-text-to-video',
+        protocol: 'market',
+        inputMode: 'text',
+        fields: [
+          { ...selectField('aspect_ratio', 'Aspect ratio', '16:9', ['16:9', '9:16', '1:1', '4:3', '3:4']), wireKey: 'ratio' },
+          ...wanVideoFields,
+        ],
+      },
+      {
+        modelId: 'wan/2-7-image-to-video',
+        protocol: 'market',
+        inputMode: 'image',
+        imageInputKey: 'first_frame_url',
+        imageInputMultiple: false,
+        maxInputImages: 1,
+        fields: wanVideoFields,
+      },
       // https://docs.kie.ai/market/wan/2-7-videoedit (read 2026-10-16).
       // video_url required. reference_image is one optional URL.
       // Source 2–10s, 240–4096px, aspect 1:8–8:1, ≤100MB, mp4/mov.
@@ -603,7 +628,10 @@ export function buildKieInput(
 
   for (const field of variant.fields) {
     const value = args.values[field.key];
-    if (value !== undefined && value !== '') input[field.key] = value;
+    if (value !== undefined && value !== '') {
+      const option = field.options?.find(option => option.value === value);
+      input[field.wireKey ?? field.key] = option?.wireValue ?? value;
+    }
   }
 
   const hasReferences = args.uploadUrls.length > 0;

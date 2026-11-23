@@ -9,10 +9,14 @@ export type KieFieldType = 'text' | 'number' | 'boolean' | 'select' | 'file';
 export interface KieFieldOption {
   label: string;
   value: string | number;
+  /** Provider representation when saved controls use a different type. */
+  wireValue?: number;
 }
 
 export interface KieFieldDefinition {
   key: string;
+  /** Provider spelling when it differs from the shared control key. */
+  wireKey?: string;
   label: string;
   type: KieFieldType;
   description?: string;
