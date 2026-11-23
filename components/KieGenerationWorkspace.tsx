@@ -39,6 +39,7 @@ import ImageWorkspaceLayout, { ImageMainStack } from '@/components/ImageWorkspac
 import { ImageRailCard, ImageRailStrip } from '@/components/ImageRail';
 import ChipPopover from '@/components/ChipPopover';
 import ChoiceChip from '@/components/ChoiceChip';
+import MenuChip from '@/components/MenuChip';
 import RelaxedFilterControl from '@/components/RelaxedFilterControl';
 import GenerateActions from '@/components/GenerateActions';
 import ResultPanel from '@/components/ResultPanel';
@@ -474,7 +475,6 @@ export default function KieGenerationWorkspace({
     const shapeField = controlFields.find((field) => field.key === 'aspect_ratio');
     const sizeField = controlFields.find((field) => field.key === 'resolution');
     const otherFields = controlFields.filter((field) => field !== shapeField && field !== sizeField);
-    const chipValue = (key: string) => (values[key] === undefined || values[key] === '' ? undefined : String(values[key]));
     const latestFailed = latestJob?.state === 'fail';
     return (
       <div className="mx-auto w-full max-w-[1400px] space-y-3.5 sm:space-y-4">
@@ -533,10 +533,14 @@ export default function KieGenerationWorkspace({
               chips={
                 <>
                   {shapeField && (
-                    <ChipPopover label="Shape" panelLabel="Aspect ratio" value={chipValue('aspect_ratio')} wide>
-                      <ModelControls namespace={`kie-${variantKey}-shape`} fields={[shapeField]} values={values} onChange={updateValues} />
-                      <AspectMismatchNote reference={references[0]} candidates={aspectCandidates} current={values.aspect_ratio} />
-                    </ChipPopover>
+                    <MenuChip
+                      label="Shape"
+                      panelLabel={shapeField.label}
+                      value={typeof values[shapeField.key] === 'boolean' ? undefined : (values[shapeField.key] as string | number | undefined)}
+                      options={(shapeField.options ?? []).map((option) => ({ ...option, label: option.label === 'auto' ? 'Auto' : option.label, ratio: String(option.value) }))}
+                      onChange={(value) => updateValues(shapeField.key, value)}
+                      footer={<AspectMismatchNote reference={references[0]} candidates={aspectCandidates} current={values.aspect_ratio} />}
+                    />
                   )}
                   {sizeField && (
                     <ChoiceChip

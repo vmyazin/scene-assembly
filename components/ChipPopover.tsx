@@ -74,6 +74,26 @@ export default function ChipPopover({
     };
   }, [open, field]);
 
+  // A chip's panel hangs from the chip's left edge, so a chip near the right
+  // of a narrow row pushed it past the screen. Shift it back inside the
+  // viewport, keeping the same 16px gutter the panel width assumes.
+  const [shift, setShift] = useState(0);
+  useLayoutEffect(() => {
+    if (!open || field) return;
+    const measure = () => {
+      const panel = panelRef.current;
+      if (!panel) return;
+      const box = panel.getBoundingClientRect();
+      const right = box.right - shift;
+      setShift(Math.min(0, window.innerWidth - 16 - right));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+    // `shift` is read to undo the current offset, not to re-run on it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, field]);
+
   // Waits for the panel to be placed: it renders hidden while it is measured,
   // and a hidden element cannot take focus.
   const placed = place !== null;
@@ -157,7 +177,9 @@ export default function ChipPopover({
       </button>
       {open && !field && (
         <div
+          ref={panelRef}
           id={panelId}
+          style={shift ? { transform: `translateX(${shift}px)` } : undefined}
           role="group"
           aria-label={panelLabel ?? label}
           className={`absolute left-0 top-full z-30 mt-1.5 space-y-3 rounded-(--radius) border border-[var(--border-hover)] bg-[var(--background-elevated)] p-3.5 shadow-[var(--shadow-md)] ${

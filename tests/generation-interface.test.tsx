@@ -91,6 +91,21 @@ function openChip(name: RegExp) {
   if (chip.getAttribute('aria-expanded') !== 'true') fireEvent.click(chip);
 }
 
+/** The Shape chip's menu: one row per ratio, named by its full label. */
+function shapeMenu() {
+  openChip(/^Shape/);
+  return screen.getByRole('group', { name: 'Aspect ratio' });
+}
+function shapeChoices() {
+  return within(shapeMenu()).getAllByRole('button').map((row) => row.getAttribute('aria-label') ?? '');
+}
+function selectedShape() {
+  return within(shapeMenu()).getByRole('button', { pressed: true }).getAttribute('aria-label');
+}
+function pickShape(ratio: string) {
+  fireEvent.click(within(shapeMenu()).getByRole('button', { name: new RegExp(`^≈?${ratio}( |$)`) }));
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -466,10 +481,7 @@ describe('GenerationInterface fal image generation', () => {
       if (feature.id !== 'style-transfer') {
         fireEvent.change(screen.getByRole('textbox'), { target: { value: prompt } });
       }
-      openChip(/^Shape/);
-      fireEvent.change(screen.getByRole('combobox', { name: 'Aspect Ratio' }), {
-        target: { value: '3:4' },
-      });
+      pickShape('3:4');
       openChip(/^Size/);
       fireEvent.click(screen.getByRole('radio', { name: '2K' }));
       if (feature.id === 'search-grounding') {
@@ -1442,8 +1454,7 @@ describe('GenerationInterface aspect ratio default', () => {
     // The thumbnail shape is the Viral Thumbnail Generator's job, not the
     // default for the most general mode in the app. The chip states it folded.
     expect(screen.getByRole('button', { name: /^Shape 1:1/ })).toBeTruthy();
-    openChip(/^Shape/);
-    expect(screen.getByRole('combobox', { name: 'Aspect Ratio' })).toHaveValue('1:1');
+    expect(selectedShape()).toMatch(/^1:1 /);
   });
 
   it('keeps a shape the user already chose', () => {
@@ -1452,8 +1463,7 @@ describe('GenerationInterface aspect ratio default', () => {
     renderInterface();
 
     expect(screen.getByRole('button', { name: /^Shape 16:9/ })).toBeTruthy();
-    openChip(/^Shape/);
-    expect(screen.getByRole('combobox', { name: 'Aspect Ratio' })).toHaveValue('16:9');
+    expect(selectedShape()).toMatch(/^16:9 /);
   });
 });
 
@@ -1581,11 +1591,7 @@ describe('GenerationInterface result stack', () => {
 describe('what the image aspect control promises for the active engine', () => {
   const LEGEND = '“≈” marks a ratio the pixels come close to without being exactly it.';
 
-  const optionsOf = () => {
-    openChip(/^Shape/);
-    return [...screen.getByRole('combobox', { name: 'Aspect Ratio' }).querySelectorAll('option')]
-      .map((option) => option.textContent);
-  };
+  const optionsOf = shapeChoices;
 
   beforeEach(() => {
     useDraftStore.getState().reset();
@@ -1606,8 +1612,7 @@ describe('what the image aspect control promises for the active engine', () => {
     expect(optionsOf()).toContain('1:1 (Square - Instagram Post) · 1024 × 1024');
     expect(optionsOf()).toContain('≈9:16 (Story/Reels) · 768 × 1344');
     expect(optionsOf()).toContain('≈16:9 (YouTube Thumbnail) · 1344 × 768');
-    openChip(/^Shape/);
-    expect(screen.getByRole('combobox', { name: 'Aspect Ratio' })).toHaveAccessibleDescription(LEGEND);
+    expect(shapeMenu()).toHaveTextContent(LEGEND);
   });
 
   it('names what keyless Pollinations really returns, and why (M6)', () => {
@@ -1827,10 +1832,7 @@ describe('Ideogram 4.6 on Runware', () => {
   };
   const radios = (name: string) => within(group(name)).getAllByRole('radio').map((radio) => radio.textContent);
   const pick = (name: string, option: string) => fireEvent.click(within(group(name)).getByRole('radio', { name: option }));
-  const shapes = () => {
-    openChip(/^Shape/);
-    return [...screen.getByRole('combobox', { name: 'Aspect Ratio' }).querySelectorAll('option')].map((option) => option.textContent);
-  };
+  const shapes = shapeChoices;
 
   beforeEach(() => {
     useDraftStore.getState().reset();

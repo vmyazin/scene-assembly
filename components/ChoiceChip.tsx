@@ -1,6 +1,6 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
+import { useId, useSyncExternalStore, type ReactNode } from 'react';
 import ChipPopover from '@/components/ChipPopover';
 import SegmentedToggleGroup, { type SegmentedToggleOption } from '@/components/SegmentedToggleGroup';
 
@@ -30,6 +30,7 @@ export default function ChoiceChip({
   options,
   value,
   onChange,
+  note,
 }: {
   /** What the setting is: "Size". */
   label: string;
@@ -38,8 +39,15 @@ export default function ChoiceChip({
   options: readonly SegmentedToggleOption[];
   value: string | number | undefined;
   onChange: (value: string | number) => void;
+  /**
+   * A line about the choice (what it costs, what it changes). Shown under the
+   * choices in the popover; inline there is no room for it in the row, so it
+   * becomes the hover title and the choices' accessible description.
+   */
+  note?: ReactNode;
 }) {
   const wide = useSyncExternalStore(subscribe, isWide, () => false);
+  const noteId = useId();
   const current = options.find((option) => Object.is(option.value, value)) ?? options[0];
 
   if (options.length <= 1) {
@@ -53,9 +61,20 @@ export default function ChoiceChip({
 
   if (wide) {
     return (
-      <div className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-[var(--border-hover)] py-0.5 pl-2.5 pr-0.5 text-xs text-[var(--foreground-muted)]">
+      <div
+        title={typeof note === 'string' ? note : undefined}
+        className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-[var(--border-hover)] py-0.5 pl-2.5 pr-0.5 text-xs text-[var(--foreground-muted)]"
+      >
         <span aria-hidden="true">{label}</span>
-        <SegmentedToggleGroup size="compact" label={panelLabel} options={options} value={current?.value ?? ''} onChange={onChange} />
+        <SegmentedToggleGroup
+          size="compact"
+          label={panelLabel}
+          ariaDescribedBy={note ? noteId : undefined}
+          options={options}
+          value={current?.value ?? ''}
+          onChange={onChange}
+        />
+        {note && <span id={noteId} className="sr-only">{note}</span>}
       </div>
     );
   }
@@ -65,6 +84,7 @@ export default function ChoiceChip({
       <div className="space-y-2">
         <span className="block text-sm font-medium text-[var(--foreground)]">{panelLabel}</span>
         <SegmentedToggleGroup label={panelLabel} options={options} value={current?.value ?? ''} onChange={onChange} />
+        {note && <span className="block text-xs text-[var(--foreground-subtle)]">{note}</span>}
       </div>
     </ChipPopover>
   );

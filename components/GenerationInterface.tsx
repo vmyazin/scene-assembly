@@ -11,7 +11,7 @@ import CloudJobPanel from '@/components/account/CloudJobPanel';
 import ImageWorkspaceLayout, { ImageMainStack } from '@/components/ImageWorkspaceLayout';
 import ChipPopover from '@/components/ChipPopover';
 import ChoiceChip from '@/components/ChoiceChip';
-import SegmentedToggleGroup from '@/components/SegmentedToggleGroup';
+import MenuChip from '@/components/MenuChip';
 import { EngineField, ImageRailCard, ImageRailStrip } from '@/components/ImageRail';
 import { motion } from 'framer-motion';
 import { useMutation } from '@tanstack/react-query';
@@ -1385,93 +1385,54 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
         chips={
           <>
             {activeEngine.supportsAspectRatio && offersAspectRatio && (
-              <ChipPopover
+              <MenuChip
                 label="Shape"
                 panelLabel="Aspect ratio"
-                value={shapeChipValue}
-                wide
-              >
-                <div>
-                  <label htmlFor="image-aspect-ratio" className="block text-sm font-medium mb-2 text-[var(--foreground)]">
-                    Aspect Ratio
-                  </label>
-                  <select
-                    id="image-aspect-ratio"
-                    aria-describedby={aspectRatioApproximates ? 'image-aspect-ratio-legend' : undefined}
-                    value={config.aspectRatio}
-                    onChange={(e) => applyConfig({ ...config, aspectRatio: e.target.value as NonNullable<GenerationConfig['aspectRatio']> })}
-                    className="w-full"
-                  >
-                    {aspectRatioOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                  {aspectRatioApproximates && (
-                    <span
-                      id="image-aspect-ratio-legend"
-                      className="mt-1.5 block text-xs text-[var(--foreground-subtle)]"
-                    >
-                      {APPROXIMATE_LEGEND}
-                    </span>
-                  )}
-                  {pollinationsFree && (
-                    <span className="mt-1.5 block text-xs text-[var(--foreground-subtle)]">
-                      The free tier returns about 0.6 MP (768 × 768 for a square) and adds a small pollinations.ai mark.
-                    </span>
-                  )}
-                </div>
-              </ChipPopover>
+                value={config.aspectRatio}
+                chipValue={shapeChipValue}
+                options={aspectRatioOptions.map((option) => {
+                  // The label carries the ratio, its name and what it resolves
+                  // to; the pixels sit apart on the right of the row.
+                  const [name, ...rest] = option.label.split(' · ');
+                  return { value: option.value, label: name, detail: rest.join(' · ') || undefined, ratio: option.value };
+                })}
+                onChange={(value) => applyConfig({ ...config, aspectRatio: value as NonNullable<GenerationConfig['aspectRatio']> })}
+                footer={(aspectRatioApproximates || pollinationsFree) && (
+                  <div className="space-y-1.5 border-t border-[var(--border)] pt-2.5 text-xs text-[var(--foreground-subtle)]">
+                    {aspectRatioApproximates && <p>{APPROXIMATE_LEGEND}</p>}
+                    {pollinationsFree && (
+                      <p>The free tier returns about 0.6 MP (768 × 768 for a square) and adds a small pollinations.ai mark.</p>
+                    )}
+                  </div>
+                )}
+              />
             )}
 
             {backgrounds && selectedBackground && (
-              <ChipPopover
+              <ChoiceChip
                 label="Background"
                 panelLabel="Background"
-                value={backgrounds.find((option) => option.value === selectedBackground)?.label ?? selectedBackground}
-              >
-                <div className="space-y-2">
-                  <span className="block text-sm font-medium text-[var(--foreground)]">
-                    Background
-                  </span>
-                  <SegmentedToggleGroup
-                    label="Background"
-                    options={backgrounds.map((option) => ({ label: option.label, value: option.value }))}
-                    value={selectedBackground}
-                    onChange={(value) => applyConfig({
-                      ...config,
-                      background: value as NonNullable<GenerationConfig['background']>,
-                    })}
-                  />
-                  <span className="block text-xs text-[var(--foreground-subtle)]">
-                    Transparent backgrounds are saved as PNG.
-                  </span>
-                </div>
-              </ChipPopover>
+                options={backgrounds.map((option) => ({ label: option.label, value: option.value }))}
+                value={selectedBackground}
+                onChange={(value) => applyConfig({
+                  ...config,
+                  background: value as NonNullable<GenerationConfig['background']>,
+                })}
+                note="Transparent backgrounds are saved as PNG."
+              />
             )}
 
             {qualities && selectedQuality && (
-              <ChipPopover
+              <ChoiceChip
                 label="Quality"
                 panelLabel="Quality"
-                value={qualities.options.find((option) => option.value === selectedQuality)?.label ?? selectedQuality}
-              >
-                <div className="space-y-2">
-                  <span className="block text-sm font-medium text-[var(--foreground)]">
-                    Quality
-                  </span>
-                  <SegmentedToggleGroup
-                    label="Quality"
-                    options={qualities.options.map((option) => ({ label: option.label, value: option.value }))}
-                    value={selectedQuality}
-                    onChange={(value) => applyConfig({ ...config, quality: String(value) })}
-                  />
-                  <span className="block text-xs text-[var(--foreground-subtle)]">
-                    {activeProviderCatalogModel?.sizes?.length
-                      ? 'The price follows the quality and the size. Very low renders up to 2K.'
-                      : 'The price follows the quality and the size of the first image. Very low returns at most 4.19 MP.'}
-                  </span>
-                </div>
-              </ChipPopover>
+                options={qualities.options.map((option) => ({ label: option.label, value: option.value }))}
+                value={selectedQuality}
+                onChange={(value) => applyConfig({ ...config, quality: String(value) })}
+                note={activeProviderCatalogModel?.sizes?.length
+                  ? 'The price follows the quality and the size. Very low renders up to 2K.'
+                  : 'The price follows the quality and the size of the first image. Very low returns at most 4.19 MP.'}
+              />
             )}
 
             {(activeEngine.supportsImageSize || providerImageSizes) && (

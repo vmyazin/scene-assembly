@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -210,7 +210,7 @@ describe('carrying user input across providers and modes', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^Shape/ }));
 
-    expect(screen.getByRole('combobox', { name: /Aspect Ratio/i })).toHaveValue('9:16');
+    expect(within(screen.getByRole('group', { name: 'Aspect ratio' })).getByRole('button', { pressed: true })).toHaveAccessibleName(/^9:16 /);
   });
 
   it('leaves the image studio on its default when the video choice has no equivalent', () => {
@@ -225,7 +225,7 @@ describe('carrying user input across providers and modes', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^Shape/ }));
 
-    expect(screen.getByRole('combobox', { name: /Aspect Ratio/i })).toHaveValue('1:1');
+    expect(within(screen.getByRole('group', { name: 'Aspect ratio' })).getByRole('button', { pressed: true })).toHaveAccessibleName(/^1:1 /);
   });
 
   it('drops the extra reference when the next model accepts fewer', async () => {
