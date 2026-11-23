@@ -208,7 +208,12 @@ function compactUsd(usd: number): string {
 const RATE_UNITS: Record<ProviderRate['per'], string> = { second: '/s', image: '/img', video: '/clip' };
 
 function rateFrom(rate: ProviderRate, requiredInputs = 0): string {
-  const usd = (rate.usd ?? Math.min(...Object.values(rate.usdByResolution)))
+  // The cheapest published figure, across qualities where the model has them.
+  const tiered = [
+    ...Object.values(rate.usdByResolution ?? {}),
+    ...Object.values(rate.usdByQuality ?? {}).flatMap((table) => Object.values(table)),
+  ];
+  const usd = (rate.usd ?? Math.min(...tiered))
     // An edit-only model cannot run without a reference, so where every input
     // is billed the cheapest real run includes one (Seedream 5.5 Edit).
     + requiredInputs * (rate.inputImageUsd ?? 0);

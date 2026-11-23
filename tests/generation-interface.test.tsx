@@ -1811,3 +1811,115 @@ describe('GenerationInterface rail collapse', () => {
     expect(screen.queryByRole('button', { name: 'Expand provider and model rail' })).toBeNull();
   });
 });
+
+
+/**
+ * Ideogram 4.6 on Runware prices by rendering quality and by size tier, so the
+ * rail, the chips and the cost line all have to follow the same two choices.
+ */
+describe('Ideogram 4.6 on Runware', () => {
+  const imageEditing = FEATURES.find((feature) => feature.id === 'image-editing')!;
+  // One chip is open at a time, so every read opens the chip it needs first.
+  const CHIP: Record<string, RegExp> = { Quality: /^Quality/, Resolution: /^Size/ };
+  const group = (name: string) => {
+    openChip(CHIP[name]);
+    return screen.getByRole('radiogroup', { name });
+  };
+  const radios = (name: string) => within(group(name)).getAllByRole('radio').map((radio) => radio.textContent);
+  const pick = (name: string, option: string) => fireEvent.click(within(group(name)).getByRole('radio', { name: option }));
+  const shapes = () => {
+    openChip(/^Shape/);
+    return [...screen.getByRole('combobox', { name: 'Aspect Ratio' }).querySelectorAll('option')].map((option) => option.textContent);
+  };
+
+  beforeEach(() => {
+    useDraftStore.getState().reset();
+    useAppStore.setState({ engine: 'runware', runwareApiKey: 'rw_test_key', runwareImageModel: 'ideogram:4.6@0' });
+  });
+
+  it('lists both models in the Runware image picker, from their cheapest price', () => {
+    renderInterface(textToImage);
+
+    const rack = screen.getByRole('listbox', { name: 'Model' });
+    const rows = within(rack).getAllByRole('option').map((row) => row.textContent);
+    expect(rows).toHaveLength(6);
+    expect(within(rack).getByRole('option', { name: 'Ideogram 4.6' }).textContent).toContain('$0.008');
+    expect(within(rack).getByRole('option', { name: 'Ideogram 4.6 Precise Edit' }).textContent).toContain('$0.008');
+    expect(within(rack).getByRole('option', { name: 'Ideogram 4.6' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('opens on medium at 2K and prices the press from the quality and the size', () => {
+    renderInterface(textToImage);
+
+    expect(screen.getByRole('button', { name: /^Quality/ })).toHaveTextContent('Medium');
+    expect(screen.getByRole('button', { name: /^Size/ })).toHaveTextContent('2K');
+    expect(screen.getByText('Est. ≈ $0.06 / image · Ideogram 4.6')).toBeInTheDocument();
+
+    expect(radios('Quality')).toEqual(['Very low', 'Low', 'Medium', 'High']);
+    pick('Quality', 'High');
+    expect(screen.getByText('Est. ≈ $0.1 / image · Ideogram 4.6')).toBeInTheDocument();
+
+    expect(radios('Resolution')).toEqual(['2K', '4K']);
+    pick('Resolution', '4K');
+    expect(screen.getByText('Est. ≈ $0.2 / image · Ideogram 4.6')).toBeInTheDocument();
+  });
+
+  it('names the pixels each tier sends, exact on every shape', () => {
+    renderInterface(textToImage);
+
+    expect(shapes()).toContain('16:9 (YouTube Thumbnail) · 2560 × 1440');
+    expect(shapes()).toContain('1:1 (Square - Instagram Post) · 2048 × 2048');
+    expect(shapes().some((label) => label?.includes('≈'))).toBe(false);
+
+    pick('Resolution', '4K');
+    expect(shapes()).toContain('16:9 (YouTube Thumbnail) · 4096 × 2304');
+  });
+
+  it('takes 4K away while very low is selected, and brings the size back to 2K', () => {
+    renderInterface(textToImage);
+
+    pick('Resolution', '4K');
+    pick('Quality', 'Very low');
+
+    expect(screen.getByText(/Very low renders up to 2K/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Size/ })).toHaveTextContent('2K');
+    expect(screen.getByText('Est. ≈ $0.008 / image · Ideogram 4.6')).toBeInTheDocument();
+    expect(radios('Resolution')).toEqual(['2K']);
+  });
+
+  it('gives Precise Edit a quality and no shape or size, and prices an unmeasured source as a ceiling', () => {
+    useAppStore.setState({ runwareImageModel: 'ideogram:4.6@precise-edit' });
+    renderInterface(imageEditing);
+
+    expect(screen.getByRole('button', { name: /^Quality/ })).toHaveTextContent('Medium');
+    expect(screen.queryByRole('button', { name: /^Shape/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Size/ })).toBeNull();
+    expect(screen.getByText('Up to $0.2 / image · Ideogram 4.6 Precise Edit')).toBeInTheDocument();
+
+    pick('Quality', 'Very low');
+    expect(screen.getByText('Up to $0.008 / image · Ideogram 4.6 Precise Edit')).toBeInTheDocument();
+  });
+
+  it('prices Precise Edit from the first image once its size is known', () => {
+    useAppStore.setState({ runwareImageModel: 'ideogram:4.6@precise-edit' });
+    const reference = (width: number, height: number) => ({
+      id: `ref-${width}`, file: new File(['x'], 'source.png', { type: 'image/png' }), previewUrl: 'blob:source', width, height,
+    });
+    useDraftStore.setState({ references: [reference(1600, 1200)] });
+    const view = renderInterface(imageEditing);
+    expect(screen.getByText('Est. ≈ $0.06 / image · Ideogram 4.6 Precise Edit')).toBeInTheDocument();
+    view.unmount();
+
+    useDraftStore.setState({ references: [reference(4000, 3000)] });
+    renderInterface(imageEditing);
+    expect(screen.getByText('Est. ≈ $0.2 / image · Ideogram 4.6 Precise Edit')).toBeInTheDocument();
+  });
+
+  it('shows no quality control for a model that publishes none', () => {
+    useAppStore.setState({ runwareImageModel: 'runware:z-image@turbo' });
+    renderInterface(textToImage);
+
+    expect(screen.queryByRole('button', { name: /^Quality/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Size/ })).toBeNull();
+  });
+});

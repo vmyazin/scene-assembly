@@ -8,8 +8,8 @@ import {
   type ProviderTask,
   type VideoRequest,
 } from './types';
-import { RUNWARE_IMAGE_DIMENSIONS, ratioDimensions, type Dimensions } from './output-size';
-import { findModel } from './catalog';
+import { RUNWARE_IMAGE_DIMENSIONS, ratioDimensions, runwareDimensionTable, type Dimensions } from './output-size';
+import { findModel, imageSizesForQuality, resolveImageQuality } from './catalog';
 import { sizeTier } from './types';
 import {
   SEEDANCE_25_MODEL,
@@ -188,23 +188,39 @@ function taskUUID(): string {
 }
 
 function imageTask(request: ImageRequest, uuid: string): Record<string, unknown> {
-  const [width, height] = dimensionsFor(request.aspectRatio);
-  const references = (request.images ?? []).slice(0, 4);
+  const model = findModel('runware', request.model);
+  // Four is what the older checkpoints document. A model that publishes more
+  // (Ideogram 4.6 takes five) is read from the catalog.
+  const references = (request.images ?? []).slice(0, Math.max(4, model?.maxInputImages ?? 4));
+  // Only a model that lists qualities gets `settings.quality`, and it always
+  // gets one: the price follows the quality, so the vendor's default is never
+  // left to decide what a run costs.
+  const quality = resolveImageQuality(model, request.quality);
+  // A quality can stop short of the largest size (Ideogram 4.6 very low is
+  // 4.19 MP at most). The size then falls back to one that quality renders,
+  // rather than sending a pair the vendor refuses.
+  const sizes = imageSizesForQuality(model, quality);
+  const tier = sizes
+    ? (sizes.find((size) => size.label === request.resolution || size.preset === request.resolution) ?? sizes[0]).preset
+    : undefined;
+  // Null means the model takes no dimensions: Precise Edit returns the source
+  // image at its own size.
+  const table = runwareDimensionTable(request.model, tier);
   const task: Record<string, unknown> = {
     taskType: 'imageInference',
     taskUUID: uuid,
     model: request.model,
     positivePrompt: request.prompt,
-    width,
-    height,
+    ...(table ? { width: ratioDimensions(table, request.aspectRatio)[0], height: ratioDimensions(table, request.aspectRatio)[1] } : {}),
     numberResults: 1,
     includeCost: true,
   };
 
   if (references.length > 0) {
     // Two different input shapes, per model: the editing models (FLUX.2,
-    // FLUX 3 Image Klein, Qwen-Image-Edit-Plus) require referenceImages and have no seedImage,
-    // while the older checkpoints start from seedImage and treat the rest as
+    // FLUX 3 Image Klein, Qwen-Image-Edit-Plus, Ideogram 4.6) require
+    // referenceImages and have no seedImage, while the older checkpoints and
+    // Ideogram 4.6 Precise Edit start from seedImage and treat the rest as
     // reference. Sending the wrong field is rejected outright.
     task.inputs =
       request.imageInput === 'reference'
@@ -214,6 +230,10 @@ function imageTask(request: ImageRequest, uuid: string): Record<string, unknown>
             ...(references.length > 1 ? { referenceImages: references.slice(1) } : {}),
           };
   }
+
+  // Ideogram's `settings.magicPrompt` is refused once reference images are
+  // attached. This adapter never writes it, so neither mode can trip that rule.
+  if (quality) task.settings = { quality };
 
   return task;
 }

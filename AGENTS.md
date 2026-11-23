@@ -63,6 +63,15 @@
   during a sale outlives it. An Atlas discount with no end date is not a rate
   and gets no window. Atlas's calculator, not its headline, is the list price.
 
+- **Ideogram 4.6, an image model priced by quality, or a sale that is about
+  to end** → first read `docs/claude/specs/2026-11-23-ideogram-4-6.md`. Runware's
+  Ideogram 4.6 and Precise Edit list `qualities`; the rate is `usdByQuality` by
+  size tier, with `referenceRate` for image-to-image and `pixelTiers` where the
+  source fixes the size. Very low stops at 2K. A sale ends at the instant the
+  vendor's page carries, not the end of the UTC day, and a screen that shows a
+  sale price calls `useSaleClock`, because nothing else re-renders a tab left
+  open across the end.
+
 - **Runware P-Video-Edit sale pricing** → first read
   `docs/codex/specs/2026-09-11-p-video-edit.md` (the 2026-11-03 follow-up).
   The catalog keeps list prices; `lib/providers/p-video-edit-promo.ts` applies

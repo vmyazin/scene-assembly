@@ -153,14 +153,22 @@ async function handleProviderRequest(provider: ProviderId, body: Record<string, 
       // PiAPI takes the studio's label as written; Atlas resolves it through the
       // catalog, because only some of its models publish a tier at all and the
       // ones that do spell it lowercase. Either way the label is what travels.
+      // A Runware model sends a tier only when its entry lists sizes
+      // (Ideogram 4.6); the adapter resolves the label against that list.
       ...(provider === 'piapi' || provider === 'atlas'
         ? {resolution: typeof config.imageSize === 'string' ? config.imageSize : '1K'}
-        : {}),
+        : provider === 'runware' && catalogModel?.sizes?.length && typeof config.imageSize === 'string'
+          ? {resolution: config.imageSize}
+          : {}),
       aspectRatio: typeof config.aspectRatio === 'string' ? config.aspectRatio : undefined,
       ...(catalogModel?.backgrounds?.some((option) => option.value === config.background)
         ? { background: config.background as 'auto' | 'opaque' | 'transparent' }
         : {}),
       imageInput: catalogModel?.imageInput,
+      // Only a quality the model lists travels; anything else is the adapter's default.
+      ...(catalogModel?.qualities?.options.some((option) => option.value === config.quality)
+        ? { quality: config.quality as string }
+        : {}),
       ...(moderation === 'relaxed' ? { moderation } : {}),
     });
 

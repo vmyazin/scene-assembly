@@ -53,7 +53,7 @@ export interface ModelDescriptor {
 /** The ratios both background validators accept (aggregators.ts, synchronous.ts). */
 export const ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'] as const;
 /** Background image caps per aggregator, as `validateAggregatorRequest` applies them. */
-const AGGREGATOR_IMAGE_CAP: Record<ProviderId, number> = { piapi: 14, atlas: 16, runware: 4, comet: 1 };
+const AGGREGATOR_IMAGE_CAP: Record<ProviderId, number> = { piapi: 14, atlas: 16, runware: 5, comet: 1 };
 const NO_REFERENCES = { min: 0, max: 0 };
 
 export function providerLabel(provider: AgentProvider): string {
@@ -160,9 +160,12 @@ function aggregatorImageFields(provider: ProviderId, model: ProviderModel): Mode
   // keeps the generic choices older image entries rely on.
   const fields: ModelField[] = model.aspectRatios?.length === 0 ? [] : [aspectRatioField(provider, model)];
   if (provider === 'piapi') fields.push(select('resolution', 'Resolution', ['1K', '2K', '4K'], { default: '1K' }));
-  else if (provider === 'atlas' && model.sizes?.length) fields.push(select('resolution', 'Resolution', model.sizes.map(size => size.label), { default: model.sizes[0].label }));
+  else if ((provider === 'atlas' || provider === 'runware') && model.sizes?.length) fields.push(select('resolution', 'Resolution', model.sizes.map(size => size.label), { default: model.sizes[0].label }));
   if (model.backgrounds?.length) {
     fields.push(select('background', 'Background', model.backgrounds.map(option => option.value), { default: model.backgrounds[0].value }));
+  }
+  if (model.qualities) {
+    fields.push(select('quality', 'Quality', model.qualities.options.map(option => option.value), { default: model.qualities.default }));
   }
   return fields;
 }

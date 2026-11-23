@@ -60,6 +60,132 @@ const KLING_O1_EDIT: NonNullable<ProviderModel['videoEdit']> = {
   note: 'Edits the source clip in place. The page publishes no duration or pixel cap, and no duration control is sent. This app stops at 30 seconds and trims a longer upload. Up to 4 reference images. Keep original sound is sent with the clip. The per-second edit price is not published.',
 };
 
+export const IDEOGRAM_46_MODEL = 'ideogram:4.6@0';
+export const IDEOGRAM_46_PRECISE_EDIT_MODEL = 'ideogram:4.6@precise-edit';
+
+/**
+ * "Up to 2K (4.19 MP)" on Runware's rate tables. The boundary is 2048 × 2048:
+ * the page's own 2048×2048 example bills the 2K rate, and Precise Edit names
+ * 4,194,304 pixels as the very-low ceiling.
+ */
+export const IDEOGRAM_46_2K_PIXELS = 4_194_304;
+
+/**
+ * Ideogram 4.6 and Ideogram 4.6 Precise Edit on Runware. Read 2026-11-23 from
+ * https://runware.ai/docs/models/ideogram-4-6,
+ * https://runware.ai/docs/models/ideogram-4-6-precise-edit and the same
+ * figures in the page data of https://runware.ai/pricing. Released 2026-11-19.
+ * No sale is shown on either page, so these are list prices and there is no
+ * window in `model-promotions.ts`.
+ *
+ * Both price per image by `settings.quality` and by output size, where "2K" is
+ * up to 4.19 MP and "4K" is above it:
+ *
+ *                      very low   low            medium         high
+ *   text to image      $0.008     $0.03 / $0.06  $0.06 / $0.12  $0.10 / $0.20
+ *   image to image     $0.008     $0.03 / $0.06  $0.06 / $0.20  $0.22 / $0.60
+ *   Precise Edit       $0.008     $0.03 / $0.06  $0.06 / $0.20  $0.22 / $0.60
+ *
+ * 4.6 takes `width` and `height` on a 32-pixel grid (256–4096, 1:6 to 6:1)
+ * and 1–5 `inputs.referenceImages`, the first being the image that is edited.
+ * Very low renders at most 4.19 MP, so it is offered at 2K only. Precise Edit
+ * takes `inputs.seedImage` plus up to 4 reference images and no dimensions:
+ * the result keeps the source's size, so its tier follows the source's pixels.
+ *
+ * Medium is the selected quality because it is the vendor's default: a
+ * request that names no quality (an agent that leaves the field out) is billed
+ * what this card shows. Low is half the price and one press away.
+ *
+ * Not offered: `settings.magicPrompt` (refused once reference images are
+ * attached, so it is never written), `settings.background`, `seed`, and
+ * Precise Edit's `inputs.maskImage` and `settings.editRegion` box. No Runware
+ * image model here has a mask input.
+ */
+function ideogram46(): ProviderModel[] {
+  const options = [
+    { label: 'Very low', value: 'very_low' },
+    { label: 'Low', value: 'low' },
+    { label: 'Medium', value: 'medium' },
+    { label: 'High', value: 'high' },
+  ];
+  const editTable = {
+    very_low: { '2k': 0.008 },
+    low: { '2k': 0.03, '4k': 0.06 },
+    medium: { '2k': 0.06, '4k': 0.20 },
+    high: { '2k': 0.22, '4k': 0.60 },
+  };
+  return [
+    {
+      id: IDEOGRAM_46_MODEL,
+      label: 'Ideogram 4.6',
+      fileCode: 'ideogram-4_6',
+      kind: 'image',
+      modes: ['text', 'image'],
+      price: '$0.06 / image @ medium · $0.008 very low · $0.03 low · $0.10 high, up to 2K · at 4K $0.06 low · $0.12 medium · $0.20 high',
+      rate: {
+        per: 'image',
+        usdByResolution: { '2k': 0.06, '4k': 0.12 },
+        usdByQuality: {
+          very_low: { '2k': 0.008 },
+          low: { '2k': 0.03, '4k': 0.06 },
+          medium: { '2k': 0.06, '4k': 0.12 },
+          high: { '2k': 0.10, '4k': 0.20 },
+        },
+      },
+      referenceRate: { per: 'image', usdByResolution: editTable.medium, usdByQuality: editTable },
+      sizes: [{ label: '2K', preset: '2k' }, { label: '4K', preset: '4k' }],
+      qualities: {
+        default: 'medium',
+        options: options.map((option) => (option.value === 'very_low' ? { ...option, sizes: ['2K'] } : option)),
+      },
+      maxInputImages: 5,
+      imageInput: 'reference',
+      maxPromptLength: 10_000,
+      note: 'Strong with lettering and layout inside the picture. Text-to-image, or an edit from up to 5 images: the first is the one edited, the rest guide it. Priced by quality and size: medium is $0.06 up to 2K and $0.12 at 4K, or $0.20 at 4K with images attached. Very low is $0.008 and stops at 2K.',
+    },
+    {
+      id: IDEOGRAM_46_PRECISE_EDIT_MODEL,
+      label: 'Ideogram 4.6 Precise Edit',
+      fileCode: 'ideogram-4_6-precise-edit',
+      kind: 'image',
+      modes: ['image'],
+      price: '$0.06 / image @ medium · $0.008 very low · $0.03 low · $0.22 high, up to 2K · above 2K $0.06 low · $0.20 medium · $0.60 high',
+      rate: {
+        per: 'image',
+        usdByResolution: editTable.medium,
+        // Very low is one price: the vendor scales a larger source down to 4.19 MP.
+        usdByQuality: { ...editTable, very_low: { '2k': 0.008, '4k': 0.008 } },
+        pixelTiers: [{ key: '2k', maxPixels: IDEOGRAM_46_2K_PIXELS }, { key: '4k' }],
+      },
+      qualities: { default: 'medium', options },
+      maxInputImages: 5,
+      imageInput: 'seed',
+      // Empty on purpose: the result keeps the first image's own dimensions.
+      aspectRatios: [],
+      maxPromptLength: 10_000,
+      note: 'Editing only. It changes what the prompt names and returns the first image at its own size; up to 4 more images guide the edit. Priced by quality and by the size of that first image: medium is $0.06 up to 2K (4.19 MP) and $0.20 above it. Very low is $0.008 and returns at most 4.19 MP.',
+    },
+  ];
+}
+
+/** The quality a request will send: the asked-for one when the model lists it, else its default. */
+export function resolveImageQuality(model: Pick<ProviderModel, 'qualities'> | undefined, requested?: unknown): string | undefined {
+  const qualities = model?.qualities;
+  if (!qualities) return undefined;
+  return qualities.options.some((option) => option.value === requested) ? (requested as string) : qualities.default;
+}
+
+/**
+ * The size tiers a quality can render. Ideogram 4.6 caps very low at 4.19 MP,
+ * so 4K leaves the list while it is selected rather than being refused later.
+ */
+export function imageSizesForQuality(model: Pick<ProviderModel, 'qualities' | 'sizes'> | undefined, quality: string | undefined): ProviderSize[] | undefined {
+  const sizes = model?.sizes;
+  if (!sizes?.length) return undefined;
+  const allowed = model?.qualities?.options.find((option) => option.value === quality)?.sizes;
+  return allowed ? sizes.filter((size) => allowed.includes(size.label)) : sizes;
+}
+
 const RUNWARE_MODELS: ProviderModel[] = [
   {
     id: 'runware:z-image@turbo',
@@ -109,6 +235,7 @@ const RUNWARE_MODELS: ProviderModel[] = [
     imageInput: 'reference',
     note: 'Editing only — it needs at least one reference image.',
   },
+  ...ideogram46(),
   {
     id: 'alibaba:wan@3.0',
     label: 'Wan 3.0',

@@ -212,6 +212,64 @@ export const RUNWARE_IMAGE_DIMENSIONS: Record<string, Dimensions> = {
   '21:9': [1536, 640],
 };
 
+/**
+ * Ideogram 4.6 on Runware takes any width and height on a 32-pixel grid, each
+ * edge 256–4096, between 1:6 and 6:1. Its price has two size tiers, split at
+ * 4.19 MP (2048 × 2048), so the table is keyed by tier and the catalog's size
+ * preset picks it. Every 2K pair is at or under 4,194,304 pixels and every 4K
+ * pair is above it, so the tier on the card is the tier billed. Each pair is
+ * the largest exact form of its ratio that fits the grid and the tier.
+ * 4096 × 2304 and 2048 × 2048 are the sizes the page's own examples send.
+ */
+export const RUNWARE_IDEOGRAM_46_DIMENSIONS: Record<string, Record<string, Dimensions>> = {
+  '2k': {
+    '1:1': [2048, 2048],
+    '16:9': [2560, 1440],
+    '9:16': [1440, 2560],
+    '4:3': [2304, 1728],
+    '3:4': [1728, 2304],
+    '3:2': [2496, 1664],
+    '2:3': [1664, 2496],
+    '21:9': [2688, 1152],
+  },
+  '4k': {
+    '1:1': [4096, 4096],
+    '16:9': [4096, 2304],
+    '9:16': [2304, 4096],
+    '4:3': [4096, 3072],
+    '3:4': [3072, 4096],
+    '3:2': [4032, 2688],
+    '2:3': [2688, 4032],
+    '21:9': [4032, 1728],
+  },
+};
+
+/** The tier a request with no size, or a size this model does not publish, renders. */
+export const RUNWARE_IDEOGRAM_46_DEFAULT_TIER = '2k';
+
+/** Ideogram 4.6, the generation and reference-edit model. Not Precise Edit. */
+export const isIdeogram46 = (model: string) => model === 'ideogram:4.6@0';
+
+/** Precise Edit returns the source image's own dimensions and takes no width or height. */
+export const isIdeogram46PreciseEdit = (model: string) => model === 'ideogram:4.6@precise-edit';
+
+/**
+ * The pixel table a Runware image model sends, or null when the request
+ * carries no dimensions at all (Ideogram 4.6 Precise Edit).
+ */
+export function runwareDimensionTable(
+  modelId: string | undefined,
+  /** Size label or preset (`2K`, `4k`). Only Ideogram 4.6 has a table per tier. */
+  tier?: string
+): Record<string, Dimensions> | null {
+  if (modelId && isIdeogram46PreciseEdit(modelId)) return null;
+  if (modelId && isIdeogram46(modelId)) {
+    return RUNWARE_IDEOGRAM_46_DIMENSIONS[tier?.toLowerCase() ?? RUNWARE_IDEOGRAM_46_DEFAULT_TIER]
+      ?? RUNWARE_IDEOGRAM_46_DIMENSIONS[RUNWARE_IDEOGRAM_46_DEFAULT_TIER];
+  }
+  return RUNWARE_IMAGE_DIMENSIONS;
+}
+
 /** Atlas writes these with a star, not an x: `1024*1024`. */
 export const ATLAS_IMAGE_DIMENSIONS: Record<string, Dimensions> = {
   '1:1': [1024, 1024],
@@ -487,7 +545,10 @@ export function imageDimensions(
   /** The selected size tier, for a model whose pixels depend on it. */
   tier?: string
 ): Dimensions | null {
-  if (engine === 'runware') return ratioDimensions(RUNWARE_IMAGE_DIMENSIONS, aspectRatio);
+  if (engine === 'runware') {
+    const table = runwareDimensionTable(modelId, tier);
+    return table ? ratioDimensions(table, aspectRatio) : null;
+  }
   if (engine === 'comet') return ratioDimensions(COMET_IMAGE_DIMENSIONS, aspectRatio);
   if (engine === 'pollinations') return ratioDimensions(POLLINATIONS_IMAGE_DIMENSIONS, aspectRatio);
   if (engine === 'atlas') {
