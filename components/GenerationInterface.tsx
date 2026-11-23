@@ -10,6 +10,8 @@ import MasterPromptEditor from '@/components/MasterPromptEditor';
 import CloudJobPanel from '@/components/account/CloudJobPanel';
 import ImageWorkspaceLayout, { ImageMainStack } from '@/components/ImageWorkspaceLayout';
 import ChipPopover from '@/components/ChipPopover';
+import ChoiceChip from '@/components/ChoiceChip';
+import SegmentedToggleGroup from '@/components/SegmentedToggleGroup';
 import { EngineField, ImageRailCard, ImageRailStrip } from '@/components/ImageRail';
 import { motion } from 'framer-motion';
 import { useMutation } from '@tanstack/react-query';
@@ -50,7 +52,6 @@ import { APPROXIMATE_LEGEND, formatDimensions, imageDimensions, isApproximateLab
 import { isValueCompatible, type CarryOverField } from '@/lib/draft/carry-over';
 import { enginesForFeature, type EngineId } from '@/lib/engines/registry';
 import KieGenerationWorkspace from '@/components/KieGenerationWorkspace';
-import SegmentedToggleGroup from '@/components/SegmentedToggleGroup';
 import StoredImagePicker from '@/components/StoredImagePicker';
 import ImageFormatControl from '@/components/ImageFormatControl';
 import RelaxedFilterControl from '@/components/RelaxedFilterControl';
@@ -1474,22 +1475,16 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
             )}
 
             {(activeEngine.supportsImageSize || providerImageSizes) && (
-              <ChipPopover label="Size" panelLabel="Resolution" value={selectedImageSize}>
-                <div className="space-y-2">
-                  <span className="block text-sm font-medium text-[var(--foreground)]">
-                    Resolution
-                  </span>
-                  <SegmentedToggleGroup
-                    label="Resolution"
-                    options={resolutionOptions}
-                    value={selectedImageSize}
-                    onChange={(value) => applyConfig({
-                      ...config,
-                      imageSize: value as NonNullable<GenerationConfig['imageSize']>,
-                    })}
-                  />
-                </div>
-              </ChipPopover>
+              <ChoiceChip
+                label="Size"
+                panelLabel="Resolution"
+                options={resolutionOptions}
+                value={selectedImageSize}
+                onChange={(value) => applyConfig({
+                  ...config,
+                  imageSize: value as NonNullable<GenerationConfig['imageSize']>,
+                })}
+              />
             )}
 
             {/* A switch rather than a menu: it is on or off, and the chip

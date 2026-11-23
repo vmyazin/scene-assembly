@@ -521,6 +521,12 @@
       "port": 3349
     },
     {
+      "name": "Inline size chip",
+      "runtimeExecutable": "env",
+      "runtimeArgs": ["ACCOUNT_WORKER_PORT=8951", "npm", "run", "dev", "--", "--port", "3351"],
+      "port": 3351
+    },
+    {
       "name": "UI terminology cleanup",
       "type": "node-terminal",
       "request": "launch",

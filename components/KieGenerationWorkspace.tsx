@@ -38,6 +38,7 @@ import GenerationWorkspaceLayout from '@/components/GenerationWorkspaceLayout';
 import ImageWorkspaceLayout, { ImageMainStack } from '@/components/ImageWorkspaceLayout';
 import { ImageRailCard, ImageRailStrip } from '@/components/ImageRail';
 import ChipPopover from '@/components/ChipPopover';
+import ChoiceChip from '@/components/ChoiceChip';
 import RelaxedFilterControl from '@/components/RelaxedFilterControl';
 import GenerateActions from '@/components/GenerateActions';
 import ResultPanel from '@/components/ResultPanel';
@@ -538,9 +539,13 @@ export default function KieGenerationWorkspace({
                     </ChipPopover>
                   )}
                   {sizeField && (
-                    <ChipPopover label="Size" panelLabel="Resolution" value={chipValue('resolution')}>
-                      <ModelControls namespace={`kie-${variantKey}-size`} fields={[sizeField]} values={values} onChange={updateValues} />
-                    </ChipPopover>
+                    <ChoiceChip
+                      label="Size"
+                      panelLabel={sizeField.label}
+                      options={sizeField.options ?? []}
+                      value={typeof values[sizeField.key] === 'boolean' ? undefined : (values[sizeField.key] as string | number | undefined)}
+                      onChange={(value) => updateValues(sizeField.key, value)}
+                    />
                   )}
                   {(otherFields.length > 0 || relaxed.offered) && (
                     <ChipPopover label="More settings" wide>

@@ -343,10 +343,10 @@ describe('GenerationInterface engine selection', () => {
 
     fireEvent.click(within(screen.getByRole('listbox', { name: 'Model' })).getByRole('option', { name: 'Gemini 3.1 Flash Lite Image' }));
 
-    openChip(/^Size/);
-    const resolution = screen.getByRole('radiogroup', { name: 'Resolution' });
-    expect(within(resolution).getAllByRole('radio').map((choice) => choice.textContent)).toEqual(['1K']);
-    expect(screen.getByRole('radio', { name: '1K' }).getAttribute('aria-checked')).toBe('true');
+    // One resolution is not a choice: the chip states it as plain text.
+    expect(screen.queryByRole('button', { name: /^Size/ })).toBeNull();
+    expect(screen.queryByRole('radiogroup', { name: 'Resolution' })).toBeNull();
+    expect(screen.getByText('Size').parentElement?.textContent).toBe('Size 1K');
     expect(screen.getByText(/Est\. ≈ \$0\.034 \/ image · Gemini 3.1 Flash Lite Image/)).toBeTruthy();
   });
 
@@ -1882,9 +1882,11 @@ describe('Ideogram 4.6 on Runware', () => {
     pick('Quality', 'Very low');
 
     expect(screen.getByText(/Very low renders up to 2K/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Size/ })).toHaveTextContent('2K');
     expect(screen.getByText('Est. ≈ $0.008 / image · Ideogram 4.6')).toBeInTheDocument();
-    expect(radios('Resolution')).toEqual(['2K']);
+    // 2K is the only size left, so the chip states it rather than offering it.
+    expect(screen.queryByRole('button', { name: /^Size/ })).toBeNull();
+    expect(screen.queryByRole('radiogroup', { name: 'Resolution' })).toBeNull();
+    expect(screen.getByText('Size').parentElement?.textContent).toBe('Size 2K');
   });
 
   it('gives Precise Edit a quality and no shape or size, and prices an unmeasured source as a ceiling', () => {
