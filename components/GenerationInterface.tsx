@@ -36,7 +36,7 @@ import AutoExpandingPrompt from '@/components/AutoExpandingPrompt';
 import PromptPanel from '@/components/PromptPanel';
 import SavedPromptsButton from '@/components/SavedPromptsButton';
 import { useAppStore } from '@/store/useAppStore';
-import { DEFAULT_MODELS, modelsFor, resolveModel } from '@/lib/providers/catalog';
+import { DEFAULT_MODELS, imageSizesForQuality, modelsFor, resolveImageQuality, resolveModel } from '@/lib/providers/catalog';
 import { hideRetiredModels } from '@/lib/models/retired';
 import ModelListbox from '@/components/ModelListbox';
 import { GEMINI_IMAGE_COLUMNS, PROVIDER_IMAGE_COLUMNS, falImageSpecs, geminiImageSpecs, providerImageSpecs, railTags } from '@/lib/models/listbox-specs';
@@ -331,9 +331,12 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
    * follows the catalog entry there rather than `supportsImageSize`, which can
    * only answer for a whole engine.
    */
-  const providerImageSizes = activeProviderCatalogModel?.sizes?.length
-    ? activeProviderCatalogModel.sizes
-    : undefined;
+  // Ideogram 4.6 prices by rendering quality. The control follows the catalog
+  // entry, and a quality that stops short of the largest size (very low is
+  // 2K at most) takes that size off the list while it is selected.
+  const qualities = activeProviderCatalogModel?.qualities;
+  const selectedQuality = resolveImageQuality(activeProviderCatalogModel, config.quality);
+  const providerImageSizes = imageSizesForQuality(activeProviderCatalogModel, selectedQuality);
   const backgrounds = activeProviderCatalogModel?.backgrounds;
   // An empty list means the model ignores a ratio. MAI-Image-2.6 edit sends
   // `size: 'default'`, so a shape chip would label pixels the request never sends.
@@ -593,7 +596,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
           prompt: finalPrompt,
           ...relaxed.attach(),
           images: images.map((image) => image.dataUrl.split(',')[1]), // strip data: prefix
-          config: selectedBackground ? { ...config, background: selectedBackground } : config,
+          config: { ...config, ...(selectedBackground ? { background: selectedBackground } : {}), ...(selectedQuality ? { quality: selectedQuality } : {}) },
           featureId: feature.id,
           apiKey: activeProvider ? providerKeys[activeProvider] : apiKey,
           model: activeProviderModel ?? (isGemini ? activeGeminiModel.id : undefined),
@@ -823,13 +826,20 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
       inputImages: images.length,
     }
   );
+  const firstReference = feature.requiresImage ? references[0] : undefined;
+  const sourcePixels = firstReference?.width && firstReference.height ? firstReference.width * firstReference.height : undefined;
   const tieredProviderEstimate = activeProviderCatalogModel?.rate?.usdByResolution
     ? resolveCatalogRate(activeProviderCatalogModel, undefined, 1, {
         inputMode: cloudInputMode,
         inputImages: images.length,
         ...(providerImageSizes ? { size: selectedImageSize } : {}),
+        ...(selectedQuality ? { quality: selectedQuality } : {}),
+        ...(sourcePixels ? { outputPixels: sourcePixels } : {}),
       })
     : undefined;
+  // Precise Edit bills by the first image's size. Until that image is measured
+  // the figure is the dearest tier, so it reads as a ceiling, not an estimate.
+  const estimateIsCeiling = Boolean(activeProviderCatalogModel?.rate?.pixelTiers) && !sourcePixels;
   const costLine =
     activeEngine.id === 'pollinations'
       ? cloudWorkspace.cloud ? 'Provider usage rates apply · Pollinations (FLUX)' : 'Free · Pollinations (FLUX)'
@@ -842,7 +852,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
           // the fact anyway.
           ? `${falImageCost ? `Est. ≈ $${falImageCost.costUsd.toFixed(3)} / image` : 'fal usage rates apply'} · ${activeFalImageModel.label}`
           : activeProviderCatalogModel
-            ? `${tieredProviderEstimate?.costUsd != null ? `Est. ≈ $${formatUsdTrimmed(tieredProviderEstimate.costUsd)} / image` : activeProviderCatalogModel.price ?? 'Usage rates apply'} · ${activeProviderCatalogModel.label}`
+            ? `${tieredProviderEstimate?.costUsd != null ? `${estimateIsCeiling ? 'Up to' : 'Est. ≈'} $${formatUsdTrimmed(tieredProviderEstimate.costUsd)} / image` : activeProviderCatalogModel.price ?? 'Usage rates apply'} · ${activeProviderCatalogModel.label}`
             // Three decimals, not two: Lite is $0.034 an image and "$0.03"
             // rounds away the very difference the picker exists to show.
             : `Est. ≈ $${estCost.toFixed(3)} / image · ${activeGeminiModel.label}`;
@@ -900,7 +910,7 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
         const values: Record<string,string|number|boolean> = activeEngine.id === 'fal'
           ? falImageValues(config, falThinkingLevel, relaxed.attach())
           : activeProvider || activeEngine.id === 'pollinations'
-            ? {...(offersAspectRatio ? {aspectRatio:config.aspectRatio ?? DEFAULT_ASPECT_RATIO} : {}), ...(activeProvider === 'piapi' || providerImageSizes ? {resolution:selectedImageSize} : {}), ...(selectedBackground ? {background:selectedBackground} : {}), ...relaxed.attach()}
+            ? {...(offersAspectRatio ? {aspectRatio:config.aspectRatio ?? DEFAULT_ASPECT_RATIO} : {}), ...(activeProvider === 'piapi' || providerImageSizes ? {resolution:selectedImageSize} : {}), ...(selectedBackground ? {background:selectedBackground} : {}), ...(selectedQuality ? {quality:selectedQuality} : {}), ...relaxed.attach()}
             : activeEngine.id === 'cloudflare' ? {}
               : {aspectRatio:config.aspectRatio ?? DEFAULT_ASPECT_RATIO,imageSize:selectedImageSize,useGoogleSearch:Boolean(config.useGoogleSearch) && activeGeminiModel.supportsGoogleSearch};
         await cloudWorkspace.submit({modelId:cloudModelId,mediaType:'image',inputMode:cloudInputMode,prompt:cloudPrompt,values},feature.requiresImage ? references.map(reference => reference.file) : [],prompt);
@@ -1433,6 +1443,31 @@ export default function GenerationInterface({ feature, apiKey, onBack, onOpenCon
                   />
                   <span className="block text-xs text-[var(--foreground-subtle)]">
                     Transparent backgrounds are saved as PNG.
+                  </span>
+                </div>
+              </ChipPopover>
+            )}
+
+            {qualities && selectedQuality && (
+              <ChipPopover
+                label="Quality"
+                panelLabel="Quality"
+                value={qualities.options.find((option) => option.value === selectedQuality)?.label ?? selectedQuality}
+              >
+                <div className="space-y-2">
+                  <span className="block text-sm font-medium text-[var(--foreground)]">
+                    Quality
+                  </span>
+                  <SegmentedToggleGroup
+                    label="Quality"
+                    options={qualities.options.map((option) => ({ label: option.label, value: option.value }))}
+                    value={selectedQuality}
+                    onChange={(value) => applyConfig({ ...config, quality: String(value) })}
+                  />
+                  <span className="block text-xs text-[var(--foreground-subtle)]">
+                    {activeProviderCatalogModel?.sizes?.length
+                      ? 'The price follows the quality and the size. Very low renders up to 2K.'
+                      : 'The price follows the quality and the size of the first image. Very low returns at most 4.19 MP.'}
                   </span>
                 </div>
               </ChipPopover>

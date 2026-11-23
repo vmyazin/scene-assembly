@@ -17,7 +17,7 @@
  * `startsAt` is the first day the offer was read on the vendor's page, not the
  * day it began: a later read must not invent a discount for an older job.
  */
-import { withKling4FlashSale } from './kling-4-flash-promo';
+import { KLING_4_FLASH_PROMOTION, withKling4FlashSale } from './kling-4-flash-promo';
 import type { ProviderModel, ProviderRate } from './types';
 
 export interface ModelPromotion {
@@ -39,15 +39,19 @@ export const HEYGEN_VIDEO_MODEL = 'heygen:video@1.0';
 
 /**
  * Read 2026-11-19 from https://runware.ai/docs/models/heygen-video-1-0:
- * "50% OFF until November 30, 2026", with every rate on the page halved. The
- * page names no timezone, the same gap as the Kling VIDEO 4.0 Flash and fal H3
- * offers, so this keeps the sale through the end of that UTC day and returns
- * to list at December 1, 00:00 UTC.
+ * "50% OFF until November 30, 2026", with every rate on the page halved.
+ *
+ * The visible text names no timezone, and until 2026-11-23 this window ran to
+ * December 1, 00:00 UTC on that reading. The page does carry the instant: the
+ * script beside the notice removes it once `expiresAt =
+ * "2026-11-30T23:00:00.000Z"` has passed (midnight in UTC+1). That instant is
+ * used as published, the same rule as Atlas's countdown below. It is an hour
+ * earlier, so the last hour of Nov 30 UTC estimates at list, never under it.
  */
 export const HEYGEN_VIDEO_PROMOTION: ModelPromotion = {
   modelIds: [HEYGEN_VIDEO_MODEL],
   startsAt: Date.parse('2026-11-19T00:00:00Z'),
-  endsAt: Date.parse('2026-12-01T00:00:00Z'),
+  endsAt: Date.parse('2026-11-30T23:00:00Z'),
   price: '$0.01 / s @ 480p · $0.018 @ 768p · $0.05 @ 1080p and 2K',
   rate: { usdByResolution: { '480p': 0.01, '768p': 0.018, '1080p': 0.05, '2K': 0.05 }, per: 'second' },
   referenceRate: {
@@ -98,6 +102,21 @@ export function modelPromotionAt(modelId: string | undefined, at = Date.now()): 
   if (!modelId) return undefined;
   return MODEL_PROMOTIONS.find((promotion) =>
     promotion.modelIds.includes(modelId) && at >= promotion.startsAt && at < promotion.endsAt);
+}
+
+/**
+ * The next instant after `at` at which some model's price changes: a window
+ * opening or closing. Undefined once every window is behind `at`. A screen
+ * that shows a sale price uses it to draw again when the sale ends, because
+ * nothing else re-renders a tab that is left open across that instant.
+ */
+export function nextPromotionBoundary(at = Date.now()): number | undefined {
+  const instants = [
+    ...MODEL_PROMOTIONS.flatMap((promotion) => [promotion.startsAt, promotion.endsAt]),
+    KLING_4_FLASH_PROMOTION.startsAt,
+    KLING_4_FLASH_PROMOTION.endsAt,
+  ].filter((instant) => instant > at);
+  return instants.length ? Math.min(...instants) : undefined;
 }
 
 const saleCopies = new WeakMap<ProviderModel, ProviderModel>();

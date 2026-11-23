@@ -170,8 +170,8 @@ describe('HeyGen Video 1.0 sale', () => {
   const cost = (at: number, seconds: number, controls: Parameters<typeof resolveCatalogRate>[3]) =>
     resolveCatalogRate(withModelSale(model, at), seconds, 1, controls).costUsd;
 
-  it('runs through the end of Nov 30 UTC', () => {
-    expect(endsAt).toBe(Date.parse('2026-12-01T00:00:00Z'));
+  it('ends at the instant the page publishes, 2026-11-30 23:00 UTC', () => {
+    expect(endsAt).toBe(Date.parse('2026-11-30T23:00:00Z'));
     expect(modelPromotionAt(HEYGEN_VIDEO_MODEL, startsAt - 1)).toBeUndefined();
     expect(modelPromotionAt(HEYGEN_VIDEO_MODEL, startsAt)).toBe(HEYGEN_VIDEO_PROMOTION);
     expect(modelPromotionAt(HEYGEN_VIDEO_MODEL, endsAt - 1)).toBe(HEYGEN_VIDEO_PROMOTION);

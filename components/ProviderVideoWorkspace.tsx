@@ -50,6 +50,7 @@ import { getProviderVideoStatus, pollDelayMs, releaseRunwareMedia, submitProvide
 import { followProviderVideo } from '@/lib/providers/follow-video';
 import { findModel, generatedEditSeconds, modeDuration, modelsFor } from '@/lib/providers/catalog';
 import { withModelSale } from '@/lib/providers/model-promotions';
+import { useSaleClock } from '@/lib/providers/use-sale-clock';
 import ModelListbox from '@/components/ModelListbox';
 import { PROVIDER_VIDEO_COLUMNS, providerVideoSpecs } from '@/lib/models/listbox-specs';
 import { frameSlotLabel, keyframeSlotLabel } from '@/lib/providers/frames';
@@ -244,6 +245,9 @@ export default function ProviderVideoWorkspace({
     () => modelsFor(provider, 'video').filter((model) => model.modes.includes(inputMode)),
     [inputMode, provider]
   );
+  // Draws again when a dated sale opens or closes, so a tab left open across
+  // the end of one stops showing the sale price without waiting for a press.
+  useSaleClock();
   // Same object until the sale closes, so effects keyed on it do not re-run.
   const selectedModel = withModelSale(models.find((model) => model.id === preference) ?? models[0]);
   const modelKey = `${provider}:${inputMode}:${selectedModel?.id ?? 'none'}`;

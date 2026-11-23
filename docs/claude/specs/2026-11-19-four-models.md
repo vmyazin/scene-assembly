@@ -2,6 +2,16 @@
 
 Status: Implemented, awaiting review
 
+**Follow-up decision, 2026-11-23.** The HeyGen window ended at 2026-12-01
+00:00 UTC, on the reading that "until November 30, 2026" names no timezone.
+The page carries the instant: its script removes the sale notice once
+`expiresAt = "2026-11-30T23:00:00.000Z"` has passed. The window now ends
+there, the rule already used for Atlas's countdown, so the last hour of Nov 30
+UTC estimates at list. A video workspace left open across the end of a sale
+also re-renders at that instant (`useSaleClock`). This overrides the HeyGen
+row of the sale table below. Details and tests:
+`docs/claude/specs/2026-11-23-ideogram-4-6.md`.
+
 ## Context
 
 Four additions from the 2026-11-16 and 2026-11-19 model watch: HeyGen Video 1.0
@@ -70,7 +80,7 @@ P-Video-Edit lesson applied to Atlas.
 
 | Model | Catalog (list) | Sale | Window |
 | --- | --- | --- | --- |
-| Runware HeyGen Video 1.0 | $0.02 / $0.036 / $0.10 / $0.10 per second; references $0.07 / $0.10 / $0.18 / $0.18 + $0.04 per image after two | Half of each | 2026-11-19 00:00 UTC to 2026-12-01 00:00 UTC. The page says "until November 30, 2026" with no timezone, so the sale runs through the end of that UTC day, the convention the Kling VIDEO 4.0 Flash and fal H3 offers use. |
+| Runware HeyGen Video 1.0 | $0.02 / $0.036 / $0.10 / $0.10 per second; references $0.07 / $0.10 / $0.18 / $0.18 + $0.04 per image after two | Half of each | 2026-11-19 00:00 UTC to **2026-11-30 23:00 UTC** (changed 2026-11-23, see the follow-up at the top). |
 | Atlas Seedance 2.5 Flash | $0.113 at 480p, $0.2445 at 720p | $0.0734 and $0.1589 | 2026-11-19 00:00 UTC to 2026-11-30 15:59:00 UTC, the countdown instant Atlas publishes. |
 | Runware Seedance 2.5 Flash | $0.0678 at 480p, $0.152 at 720p; edit $0.0833 and $0.187 | None published | — |
 | Atlas Kling 4.0 Flash | $0.12246 per second | None applied. Atlas quotes 30% off with no end date. | — |

@@ -134,6 +134,8 @@ Comet's catalog is public too: `GET https://api.cometapi.com/api/models`.
 | Runware | `runware:z-image@turbo` | text→image | ~$0.0032 / 1024² |
 | Runware | `runware:400@1` | text→image, image→image (FLUX.2 dev) | $0.0077 / 1024² |
 | Runware | `runware:108@22` | image→image (Qwen-Image-Edit-Plus) | $0.0166 / 1024² |
+| Runware | `ideogram:4.6@0` | text→image, image→image (Ideogram 4.6, added 2026-11-23) | By quality and size: $0.008 very low, $0.03 low, $0.06 medium, $0.10 high up to 2K; 4K and image→image tables in `docs/claude/specs/2026-11-23-ideogram-4-6.md` |
+| Runware | `ideogram:4.6@precise-edit` | image→image (Ideogram 4.6 Precise Edit, added 2026-11-23) | $0.008 very low, $0.03 low, $0.06 medium, $0.22 high up to 2K; $0.06 / $0.20 / $0.60 above |
 | Runware | `lightricks:ltx@2.5-fast` | text→video, image→video, first+last frame | $0.09 / s @720p |
 | Runware | `bytedance:seedance@2.0-mini` | text→video, image→video | $0.036/s @480p, $0.081/s @720p |
 | Runware | `bytedance:seedance@2.5` | text→video, image→video, first+last frame, reference→video | $0.102/s @480p, $0.23/s @720p, $0.614/s @1080p |

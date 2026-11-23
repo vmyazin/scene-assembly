@@ -103,7 +103,7 @@ export function resolveCatalogRate(
   model: ProviderModel | undefined,
   durationSeconds?: number,
   outputImages = 1,
-  controls: { size?: string; inputImages?: number; audio?: boolean; draft?: boolean; inputMode?: string; pricedAt?: number } = {}
+  controls: { size?: string; inputImages?: number; audio?: boolean; draft?: boolean; inputMode?: string; pricedAt?: number; quality?: string; outputPixels?: number } = {}
 ): SpendFigure {
   // Edit rates resolve here, not at import. P-Video-Edit's sale replaces the
   // catalog list price only inside its window; pricedAt keeps a saved job on
@@ -114,10 +114,11 @@ export function resolveCatalogRate(
     ? (sale?.draftRate ?? model?.videoEdit?.draftRate)
     : (sale?.rate ?? model?.videoEdit?.rate);
   // HeyGen prices a run made from references apart from text and first-frame
-  // runs. Every other model has no referenceRate and keeps `rate`.
+  // runs, and Ideogram 4.6 prices image-to-image apart from text-to-image.
+  // Every other model has no referenceRate and keeps `rate`.
   const rate = controls.inputMode === 'edit'
     ? editRate
-    : (controls.inputMode === 'reference' && model?.referenceRate) || model?.rate;
+    : ((controls.inputMode === 'reference' || (controls.inputMode === 'image' && model?.kind === 'image')) && model?.referenceRate) || model?.rate;
   if (!rate) return unknownFigure('catalog-rate');
   // Only search when a size was actually given. `size.preset === undefined`
   // is true for every size that has no preset, so with no size chosen this
@@ -128,8 +129,22 @@ export function resolveCatalogRate(
     : (controls.inputMode === 'edit' ? model?.videoEdit?.sizes : model?.sizes)?.find(size => size.label === controls.size || size.preset === controls.size);
   // Preset first, then the label's leading tier: Atlas keys its table by API
   // preset, Runware publishes only labels — see sizeRateKey.
-  const resolution = chosen ? sizeRateKey(chosen) : undefined;
-  const table = controls.audio && rate.audioUsdByResolution ? rate.audioUsdByResolution : rate.usdByResolution;
+  // A model that returns its source's own size has no size to name. Its tier
+  // comes from the output's pixel count, and an unknown count prices at the
+  // last, dearest tier so the figure is never under the charge.
+  const pixelTier = rate.pixelTiers?.length
+    ? (controls.outputPixels !== undefined && controls.outputPixels > 0
+      ? rate.pixelTiers.find(tier => tier.maxPixels === undefined || controls.outputPixels! <= tier.maxPixels)
+      : undefined) ?? rate.pixelTiers[rate.pixelTiers.length - 1]
+    : undefined;
+  const resolution = chosen ? sizeRateKey(chosen) : pixelTier?.key;
+  // A named quality reads its own table. An unlisted quality is not priced at
+  // the default's rate: that would file a high run at the medium price.
+  const qualityTable = controls.quality !== undefined && rate.usdByQuality
+    ? (rate.usdByQuality[controls.quality] ?? {})
+    : undefined;
+  const table = qualityTable
+    ?? (controls.audio && rate.audioUsdByResolution ? rate.audioUsdByResolution : rate.usdByResolution);
   const usd = table
     ? (resolution ? table[resolution] : undefined)
     : rate.usd;

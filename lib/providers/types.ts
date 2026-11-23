@@ -165,6 +165,21 @@ export type ProviderRate = {
    * charges $0.448 for a clip shorter than two seconds.
    */
   minimumUsd?: number;
+  /**
+   * A table per rendering quality, keyed by the quality's wire value and then
+   * by size tier like `usdByResolution`. Ideogram 4.6 prices four qualities at
+   * two sizes. A request that names no quality reads `usdByResolution`, which
+   * is the vendor default quality's table. A quality that does not publish a
+   * tier (very low above 2K) leaves it out, and that run prices as unknown.
+   */
+  usdByQuality?: Record<string, Record<string, number>>;
+  /**
+   * The tier is decided by the output's pixel count, not by a size the caller
+   * names (Ideogram 4.6 Precise Edit returns the source's own dimensions).
+   * Ascending; the first entry whose `maxPixels` covers the output wins, and
+   * the last has none. An unknown pixel count prices at the last, dearest tier.
+   */
+  pixelTiers?: readonly { key: string; maxPixels?: number }[];
 } & (
   | { usd: number; usdByResolution?: never }
   | { usd?: never; usdByResolution: Record<string, number> }
@@ -203,7 +218,9 @@ export interface ProviderModel {
   /**
    * Published rate for a run made from references, when the vendor prices it
    * apart from text and first-frame runs (HeyGen Video 1.0). Absent means
-   * `rate` covers reference mode too.
+   * `rate` covers reference mode too. On an image model it prices the `image`
+   * input mode: Ideogram 4.6 publishes an image-to-image table beside its
+   * text-to-image one.
    */
   referenceRate?: ProviderRate;
   /**
@@ -326,6 +343,17 @@ export interface ProviderModel {
    */
   backgrounds?: readonly { label: string; value: 'auto' | 'opaque' | 'transparent' }[];
   /**
+   * Rendering qualities the image endpoint publishes, cheapest first, sent as
+   * `settings.quality`. `default` is the one selected until someone changes
+   * it, and it is always written to the request so the estimate and the
+   * charge name the same tier. `sizes` lists the size labels a quality can
+   * render when that is not all of them: Ideogram 4.6 stops very low at 2K.
+   */
+  qualities?: {
+    default: string;
+    options: readonly { label: string; value: string; sizes?: readonly string[] }[];
+  };
+  /**
    * Clip lengths in seconds this model actually accepts, verbatim from the
    * vendor's parameter reference. Video models reject a length they do not
    * list — Runware's LTX-2 Fast takes only 6, 8 or 10 — so this is a whitelist,
@@ -373,6 +401,8 @@ export interface ImageRequest {
   background?: 'auto' | 'opaque' | 'transparent';
   /** Which input field this model's references belong in. */
   imageInput?: 'seed' | 'reference';
+  /** Rendering quality, for a model whose catalog entry lists `qualities`. */
+  quality?: string;
   /**
    * Standard omits provider moderation keys. Relaxed asks the adapter to add
    * the one documented key for this model. References force Standard.

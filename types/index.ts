@@ -22,6 +22,8 @@ export interface GenerationConfig {
   thinkingLevel?: 'minimal' | 'medium' | 'high';
   /** GPT Image, Seedream Flash and Seedream 5.5. Absent leaves the vendor default. */
   background?: 'auto' | 'opaque' | 'transparent';
+  /** Runware Ideogram 4.6 `settings.quality`. Absent means the catalog default. */
+  quality?: string;
 }
 
 export interface GenerationRequest {

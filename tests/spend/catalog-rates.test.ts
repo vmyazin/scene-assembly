@@ -229,6 +229,8 @@ function figuresOf(rate: NonNullable<ProviderModel['rate']>): number[] {
   const base = [
     ...(rate.usd !== undefined ? [rate.usd] : Object.values(rate.usdByResolution)),
     ...Object.values(rate.audioUsdByResolution ?? {}),
+    // Ideogram 4.6 prices per quality; every figure in those tables is in the string too.
+    ...Object.values(rate.usdByQuality ?? {}).flatMap(table => Object.values(table)),
     ...(rate.minimumUsd !== undefined ? [rate.minimumUsd] : []),
   ];
   return [
@@ -265,8 +267,12 @@ describe('hand-written prices and rates agree', () => {
     for (const model of priced) {
       const table = model.rate?.usdByResolution;
       if (!table) continue;
-      const reachable = new Set((model.sizes ?? []).map(sizeRateKey));
+      // A model that returns its source's own size reaches a tier by pixel count instead.
+      const reachable = new Set([...(model.sizes ?? []).map(sizeRateKey), ...(model.rate?.pixelTiers ?? []).map(tier => tier.key)]);
       for (const key of Object.keys(table)) expect(reachable).toContain(key);
+      for (const qualityTable of Object.values(model.rate?.usdByQuality ?? {})) {
+        for (const key of Object.keys(qualityTable)) expect(reachable).toContain(key);
+      }
     }
   });
 });

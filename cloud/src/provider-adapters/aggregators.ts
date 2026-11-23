@@ -4,7 +4,7 @@ import { referenceClipCountError, referenceClipSetError, referenceClipsFor } fro
 import { editHasControl, editPromptImageTokenError, editPromptLengthError, editSettingsError, framePinsFor, isRunwayEditProtocol } from '../../../lib/providers/video-edit';
 import { isSeedance25, isSeedanceDraftSize, isSeedanceFinalizeValues, seedanceFinalizeValuesError } from '../../../lib/providers/seedance-draft';
 import { piapiCreateImage, piapiCreateVideo, piapiPollTask } from '../../../lib/providers/piapi';
-import { findModel, resolveDuration, resolveSize, resolveVideoInput } from '../../../lib/providers/catalog';
+import { findModel, resolveDuration, resolveImageQuality, resolveSize, resolveVideoInput } from '../../../lib/providers/catalog';
 import { atlasCreateImage, atlasCreateVideo, atlasPollVideo } from '../../../lib/providers/atlas';
 import { runwareCreateImage, runwareCreateVideo, runwarePollImage, runwarePollVideo, runwareStoreMedia, runwareDeleteMedia } from '../../../lib/providers/runware';
 import { cometGenerateImage, cometCreateVideo, cometPollVideo, cometPollRunway } from '../../../lib/providers/comet';
@@ -94,7 +94,7 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
     // as the `images` array the endpoints document. Capping Atlas at one here
     // would make the limit on the model card a lie in cloud mode. 16 is the
     // ceiling `validateCloudJobRequest` already puts on `referenceIds`.
-    const maxImages = Math.min(model.maxInputImages ?? 1, r.provider === 'piapi' ? 14 : r.provider === 'atlas' ? 16 : r.provider === 'runware' ? 4 : 1);
+    const maxImages = Math.min(model.maxInputImages ?? 1, r.provider === 'piapi' ? 14 : r.provider === 'atlas' ? 16 : r.provider === 'runware' ? 5 : 1);
     if (count > maxImages) return invalid(`${model.label} takes up to ${maxImages} input image${maxImages === 1 ? '' : 's'} in a background job. Remove ${count - maxImages}.`);
   } else if (r.inputMode !== 'text') {
     const capability = resolveVideoInput(r.provider, r.modelId, r.inputMode);
@@ -117,6 +117,14 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
   // Only some Atlas image models publish a tier, so the catalog entry is what
   // says whether one is accepted and which labels are real.
   if (r.provider === 'atlas' && resolution !== undefined && (r.mediaType !== 'image' || !model.sizes?.some(s => s.label === String(resolution)))) return invalid(`"${String(resolution)}" is not a resolution ${model.label} publishes. Pick one from the list.`);
+  // A Runware image model takes a tier or a quality only when its catalog
+  // entry lists them (Ideogram 4.6), and very low stops at 2K there.
+  const runwareImage = r.provider === 'runware' && r.mediaType === 'image';
+  if (runwareImage && resolution !== undefined && !model.sizes?.some(s => s.label === String(resolution))) return invalid(`"${String(resolution)}" is not a resolution ${model.label} publishes. Pick one from the list.`);
+  const quality = r.values.quality;
+  if (quality !== undefined && !model.qualities?.options.some(option => option.value === quality)) return invalid(`"${String(quality)}" is not a quality ${model.label} publishes. Pick one from the list.`);
+  const qualitySizes = model.qualities?.options.find(option => option.value === resolveImageQuality(model, quality))?.sizes;
+  if (qualitySizes && resolution !== undefined && !qualitySizes.includes(String(resolution))) return invalid(`${model.label} renders ${String(quality).replace('_', ' ')} quality at ${qualitySizes.join(' or ')} only. Pick that size or a higher quality.`);
   if (r.values.background !== undefined && !model.backgrounds?.some(option => option.value === r.values.background)) return invalid('Choose a background this model publishes.');
   if (aspectRatio !== undefined && !['1:1','16:9','9:16','4:3','3:4','3:2','2:3','21:9'].includes(String(aspectRatio))) return invalid(`"${String(aspectRatio)}" is not an aspect ratio ${model.label} accepts.`);
   if (size !== undefined && (typeof size !== 'string' || !model.sizes?.some(s => s.label === size))) return invalid(`"${String(size)}" is not an output size ${model.label} publishes. Pick one from the list.`);
@@ -126,7 +134,8 @@ export function validateAggregatorRequest(r: CloudJobRequest) {
   const accepted = r.provider === 'piapi'
     ? ['aspectRatio','size','durationSeconds','resolution','audio']
     : r.provider === 'atlas' ? ['aspectRatio','size','durationSeconds','resolution', ...(model.backgrounds?.length ? ['background'] : [])]
-      : ['aspectRatio','size','durationSeconds'];
+      : ['aspectRatio','size','durationSeconds', ...(runwareImage && model.sizes?.length ? ['resolution'] : [])];
+  if (model.qualities) accepted.push('quality');
   if (model.draftPreview) accepted.push('draft');
   if (relaxable) accepted.push('moderation');
   if (model.supportsAudio && !accepted.includes('audio')) accepted.push('audio');
@@ -171,7 +180,8 @@ export const aggregatorAdapter: GenerationAdapter = {
       const result = await create({
         ...common,
         imageInput: model.imageInput,
-        ...(provider === 'piapi' || provider === 'atlas' ? {resolution: r.values.resolution as string | undefined} : {}),
+        ...(provider === 'piapi' || provider === 'atlas' || provider === 'runware' ? {resolution: r.values.resolution as string | undefined} : {}),
+        ...(typeof r.values.quality === 'string' ? { quality: r.values.quality } : {}),
         ...(provider === 'atlas' && (background === 'auto' || background === 'opaque' || background === 'transparent') ? { background } : {}),
       });
       return {handle: {id: result.taskId}};
