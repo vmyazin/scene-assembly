@@ -448,7 +448,8 @@
   button, named `<provider label> key connected`, so the same ask is not made
   twice. Vendor key pages come from `lib/providers/key-source.ts`, and the dialog
   opens through `onOpenConnections(<engine id>)` so `ApiKeyConfig`'s
-  `focusProvider` outlines that card and focuses its field.
+  `focusProvider` outlines that card and focuses its field. To smoke-test a gated
+  workspace past the gate, seed faux keys (see "Local development" below).
 - **A `<video>` a viewer can rest a pointer on** → spread `useHoverPlay()` from
   `lib/media/use-hover-play.ts` onto it (`<video {...hoverPlay} />`), never a local
   hover timer. One hook keeps the rule the same everywhere: a second of rest before
@@ -658,6 +659,35 @@ symlinked worktree cannot verify the production build.
   mid-test.
 - Document the local *divergences* explicitly: which services aren't shared between
   processes, which auth paths have no bypass, and which features need a real key.
+- **Seed faux provider keys before smoke-testing a provider workspace as a guest.**
+  Without a key, `ConnectionGate` dims and `inert`s the workspace, so model controls,
+  chips and the Generate row cannot be clicked or seen in their live state, and a
+  smoke test of that page proves nothing. Browser keys live in the
+  `scene-assembly-store` localStorage blob (`store/useAppStore.ts`, `partialize`).
+  Paste this into DevTools on the dev server's page. localStorage belongs to one
+  origin, so every port and worktree needs its own seed:
+
+  ```js
+  const k = 'scene-assembly-store';
+  const blob = JSON.parse(localStorage.getItem(k) ?? '{"state":{}}');
+  Object.assign(blob.state, {
+    apiKey: 'AIza' + 'FAUXKEY'.padEnd(35, '0'), // Gemini: the dialog rejects anything not "AIza…" ≥ 39 chars
+    cfAccountId: 'faux-account', cfToken: 'faux-cloudflare',
+    kieApiKey: 'faux-kie', falApiKey: 'faux-fal', runwareApiKey: 'faux-runware',
+    atlasApiKey: 'faux-atlas', cometApiKey: 'faux-comet', piapiApiKey: 'faux-piapi',
+  });
+  localStorage.setItem(k, JSON.stringify(blob));
+  location.reload();
+  ```
+
+  Seed only the providers the test needs, so the rest still show their
+  not-connected state. A faux key opens the UI and nothing more: Generate sends it
+  to the real vendor, which answers 401. Smoke-test a submission signed in with
+  `DEV_FAKE_GENERATION=1` instead, because the cloud path reads account
+  connections, never the browser key. Seed localhost only, never a deployed origin,
+  where a faux key would sit beside a person's real ones. Remove them in the
+  Connections dialog; `localStorage.removeItem('scene-assembly-store')` also works
+  but resets every saved studio setting with them.
 
 ## Spec → plan → execute
 
